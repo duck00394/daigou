@@ -2,7 +2,7 @@
 import { test, expect } from "@playwright/test";
 import { login } from "./helpers";
 
-const PAGES = ["/", "/orders", "/paste", "/import", "/buyers", "/products", "/categories", "/inventory", "/payments", "/shipping", "/reports", "/settings", "/tags", "/groupbuys", "/sales", "/inventory?tab=batches", "/suppliers", "/operators"];
+const PAGES = ["/", "/purchase", "/inventory?tab=stock", "/orders", "/paste", "/import", "/buyers", "/products", "/categories", "/inventory", "/payments", "/shipping", "/reports", "/settings", "/tags", "/groupbuys", "/sales", "/inventory?tab=batches", "/suppliers", "/operators"];
 
 test("手機版主要頁面沒有整頁橫向捲動，底部導覽可用", async ({ page }) => {
   await login(page);
@@ -28,9 +28,23 @@ test("手機版主要頁面沒有整頁橫向捲動，底部導覽可用", async
   await page.keyboard.press("Escape");
   await page.screenshot({ path: "test-results/mobile_home_quick.png", fullPage: false });
   await page.goto("/");
-  await page.getByRole("navigation", { name: "常用功能" }).getByRole("link", { name: "貼上加單" }).click();
+  // 首頁看得到錢：還要付代購、手上庫存成本、本月賺多少
+  await expect(page.getByText("還要付代購")).toBeVisible();
+  await expect(page.getByText("手上庫存成本")).toBeVisible();
+  // 底部導覽：最常用的直接按，不用進「全部功能」
+  const bar = page.getByRole("navigation", { name: "常用功能" });
+  await bar.getByRole("link", { name: "＋ 採購" }).click();
+  await expect(page).toHaveURL(/\/purchase$/);
+  await bar.getByRole("link", { name: "庫存" }).click();
+  await expect(page).toHaveURL(/tab=stock/);
+  await expect(bar.getByRole("link", { name: "庫存" })).toHaveAttribute("aria-current", "page");
+  await bar.getByRole("link", { name: "活動" }).click();
+  await expect(page).toHaveURL(/\/categories$/);
+  // 接單、設定等放在「全部功能」
+  await page.getByRole("button", { name: "全部功能" }).click();
+  await page.getByRole("link", { name: "貼上加單" }).click();
   await expect(page).toHaveURL(/\/paste$/);
   await page.getByRole("button", { name: "全部功能" }).click();
-  await page.getByRole("link", { name: "成本與利潤" }).click();
+  await page.getByRole("link", { name: "完整報表" }).click();
   await expect(page).toHaveURL(/\/reports$/);
 });

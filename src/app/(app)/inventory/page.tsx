@@ -16,15 +16,16 @@ import { productSearchWhere } from "@/server/services/catalog";
 import { formatTwd } from "@/lib/money";
 import { fmtDate, fmtDay, formatRateLabel } from "./util";
 import { batchStage, batchStageLabel } from "@/lib/labels";
+import { batchPaySummary } from "@/server/services/batch-ops";
 
 export const metadata = { title: "庫存與採購" };
 
 const TABS = [
-  ["stock", "庫存總覽"],
-  ["demand", "待下單"],
-  ["batches", "採購團"],
-  ["receive", "到貨登記"],
+  ["stock", "庫存"],
+  ["batches", "採購團・收貨"],
+  ["receive", "依商品收貨"],
   ["adjust", "盤點調整"],
+  ["demand", "待下單"],
 ] as const;
 
 export default async function Inventory({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
@@ -33,7 +34,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
   const tab = sp.tab ?? "stock";
   return (
     <div className="space-y-4">
-      <PageHeader title="庫存與採購" sub="實際在庫 = 到貨 ± 盤點 − 出貨（含現貨出售）− 自留；可售 = 實際在庫 − 已保留給買家。" actions={<LinkButton href="/api/export/inventory">匯出庫存流水</LinkButton>} />
+      <PageHeader title={tab === "batches" ? "採購團・收貨" : "庫存"} actions={<><LinkButton href="/purchase" primary small>＋ 新增採購</LinkButton><LinkButton href="/api/export/inventory" small>匯出</LinkButton></>} />
       <nav aria-label="庫存分頁" className="-mx-3 flex gap-1 overflow-x-auto px-3 sm:mx-0 sm:px-0">
         {TABS.map(([k, l]) => (
           <Link key={k} href={`/inventory?tab=${k}`} aria-current={tab === k ? "page" : undefined} className={`shrink-0 rounded-lg px-3 py-1.5 text-sm ${tab === k ? "bg-ink text-white" : "bg-white text-ink-2 hover:bg-line-2"}`}>
@@ -98,8 +99,8 @@ async function StockTab({ q, only }: { q?: string; only?: string }) {
                   <Link href={`/products/${p.id}`} className="font-medium hover:underline">{p.name}</Link>
                   {s.shortage > 0 && <Badge tone="bad">缺 {s.shortage}</Badge>}
                 </div>
-                <dl className="mt-1.5 grid grid-cols-4 gap-1 text-center">
-                  {([["可售", s.available, true], ["已保留", s.reserved], ["自留", s.kept], ["待到貨", s.incoming]] as [string, number, boolean?][]).map(([k, v, strong]) => (
+                <dl className={`mt-1.5 grid ${s.reserved ? "grid-cols-4" : "grid-cols-3"} gap-1 text-center`}>
+                  {([["可賣", s.available, true], ...(s.reserved ? [["已保留", s.reserved]] : []), ["自留", s.kept], ["還沒到", s.incoming]] as [string, number, boolean?][]).map(([k, v, strong]) => (
                     <div key={k} className="rounded-lg bg-[#fafbfc] py-1">
                       <dt className="text-[11px] text-mute">{k}</dt>
                       <dd className={`num ${strong ? "text-[17px] font-semibold" : "text-[15px]"}`}>{v}</dd>
@@ -107,9 +108,11 @@ async function StockTab({ q, only }: { q?: string; only?: string }) {
                   ))}
                 </dl>
                 {val.get(p.id)?.avgUnitCost != null && (
-                  <p className="mt-1 text-[12px] text-mute">
-                    平均成本 {formatTwd(val.get(p.id)!.avgUnitCost)}／件{val.get(p.id)!.tentative ? "（含暫估）" : ""}
-                    {p.salePriceTwd != null ? `・參考售價 ${formatTwd(p.salePriceTwd)}` : ""}
+                  <p className="mt-1 text-[13px] text-ink-2" data-testid="cost-line">
+                    成本 <span className="num font-semibold">{formatTwd(val.get(p.id)!.avgUnitCost)}</span>／件
+                    {(val.get(p.id)!.freeValue + val.get(p.id)!.keptValue) > 0 && <>・手上共 <span className="num">{formatTwd(val.get(p.id)!.freeValue + val.get(p.id)!.keptValue)}</span></>}
+                    {val.get(p.id)!.tentative ? <span className="text-mute">（含預估）</span> : ""}
+                    {p.salePriceTwd != null ? <span className="text-mute">・想賣 {formatTwd(p.salePriceTwd)}</span> : ""}
                   </p>
                 )}
                 {ownersOf(p.id).length > 0 && (
@@ -118,7 +121,7 @@ async function StockTab({ q, only }: { q?: string; only?: string }) {
                 <div className="mt-2 flex flex-wrap gap-2">
                   <SellButton primary me={me} product={{ id: p.id, name: p.name, salePriceTwd: p.salePriceTwd, available: s.available, avgCost: val.get(p.id)?.avgUnitCost ?? null, owners: ownersOf(p.id) }} />
                   <KeepButton productId={p.id} name={p.name} available={s.available} kept={s.kept} owners={ownersOf(p.id)} me={me} />
-                  <Link href={`/inventory?tab=receive&productId=${p.id}`} className="rounded-lg border border-line px-3 py-1.5 text-sm text-ai">登記到貨</Link>
+                  <Link href={`/products/${p.id}`} className="rounded-lg border border-line px-3 py-1.5 text-sm text-ai">買在哪幾團</Link>
                 </div>
               </li>
             ))}
@@ -167,7 +170,7 @@ async function StockTab({ q, only }: { q?: string; only?: string }) {
           </div>
         </>
       )}
-      <p className="px-4 py-3 text-[12px] text-mute">可售 = 實際在庫 − 已保留給買家（自留的已不在可售裡）。平均成本含分攤運費等費用，* 表示含暫估。缺貨 = 未分配需求 − 可售 − 待到貨（不小於 0）。已取消的數量不計入任何需求。</p>
+      <p className="px-4 py-3 text-[12px] text-mute">成本＝每件平均成本，已含分攤的運費、代購費（* 或「含預估」表示還有團沒確認實際價格）。自留的不算在可賣裡。</p>
     </Section>
   );
 }
@@ -231,8 +234,9 @@ async function BatchesTab({ cat, open }: { cat?: string; open?: string }) {
   const chip = (on: boolean) => `shrink-0 rounded-full border px-3 py-1.5 text-sm ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
   const href = (c?: string, o?: string) => `/inventory?tab=batches${c ? `&cat=${c}` : ""}${o === "0" ? "&open=0" : ""}`;
   const today = new Date();
+  const pay = await tx((t) => batchPaySummary(t, batches.map((b) => b.id)));
   return (
-    <Section title="採購團" pad={false} actions={<LinkButton href={`/purchase${cat && cat !== "none" ? `?categoryId=${cat}` : ""}`} primary small>新增採購</LinkButton>}>
+    <Section title="採購團" pad={false}>
       <div className="flex gap-1.5 overflow-x-auto border-b border-line-2 px-4 py-2.5">
         <Link href={href(cat, onlyOpen ? "0" : undefined)} className={chip(!onlyOpen)}>{onlyOpen ? "顯示已完成" : "含已完成"}</Link>
         <Link href={href(undefined, open)} className={chip(!cat)}>全部活動</Link>
@@ -263,6 +267,12 @@ async function BatchesTab({ cat, open }: { cat?: string; open?: string }) {
                     </div>
                     <span className="num shrink-0 text-[13px]">到貨 {rec}／{ordered}</span>
                   </div>
+                  {pay.get(b.id) && pay.get(b.id)!.totalTwd > 0 && (
+                    <div className="mt-1.5 flex items-baseline justify-between text-[13px]" data-testid="batch-card-money">
+                      <span className="text-ink-2">總額 <span className="num font-semibold">{formatTwd(pay.get(b.id)!.totalTwd)}</span></span>
+                      {pay.get(b.id)!.dueTwd > 0 ? <span className="num font-semibold text-bad">還要付 {formatTwd(pay.get(b.id)!.dueTwd)}</span> : <span className="text-good">已付清</span>}
+                    </div>
+                  )}
                   {b.expectedAt && <div className={`mt-1 text-[12px] ${late ? "text-bad" : "text-mute"}`}>預計到貨 {fmtDay(b.expectedAt)}{late ? "（已超過）" : ""}</div>}
                 </Link>
               </li>
@@ -281,7 +291,7 @@ async function ReceiveTab({ productId }: { productId?: string }) {
     tx((t) => listOperators(t)),
   ]);
   return (
-    <Section title="到貨登記">
+    <Section title="依商品登記到貨">
       <ReceiveForm
         initialProduct={p ? { ...p, categories: p.categories.map((c) => c.category) } : null}
         batchItems={items.map((i) => ({ id: i.id, productId: i.productId, label: `${i.batch.code} ${i.batch.name}`, remaining: i.qty - i.cancelledQty - i.movements.reduce((s, m) => s + m.onHandDelta, 0), defaultReceiver: i.batch.receivingResponsibleById }))}

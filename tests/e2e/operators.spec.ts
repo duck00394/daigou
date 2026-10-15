@@ -44,9 +44,8 @@ test("桌面：A 下單、A 付訂金 B 付尾款、A B 分批收貨，對帳依
   await cell(page, 0, 4).fill("3");
   await cell(page, 1, 2).fill("990");
   await cell(page, 1, 4).fill("2");
-  await page.getByRole("button", { name: "批次新增 2 列" }).click();
-  await page.getByRole("button", { name: "確認新增 2 列" }).click();
-  await page.getByRole("button", { name: "知道了" }).click();
+  await page.getByRole("button", { name: "儲存 2 項" }).click();
+  await toast(page, /已新增 2 個採購品項/);
 
   // 4. A 付訂金（日幣、填實際匯率），B 付尾款（日幣、未填匯率）
   const payForm = () => page.getByRole("form", { name: "登記付款" });

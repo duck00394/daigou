@@ -4,20 +4,19 @@ import { requireUser } from "@/server/auth";
 import { dashboard, stockValuation, unrealizedEstimate } from "@/server/services/reports";
 import { inventorySummary } from "@/server/services/inventory";
 import { listQuickSales } from "@/server/services/quick-sale";
-import { Section, Stat, Twd, Empty, StatusBadge } from "@/components/ui";
-import { batchStatus, fmtDate, fmtDay } from "@/lib/labels";
+import { Section, Stat, Twd, Empty, StatusBadge, Badge } from "@/components/ui";
+import { batchStage, batchStageLabel, batchStatus, fmtDate, fmtDay } from "@/lib/labels";
+import { batchPaySummary } from "@/server/services/batch-ops";
+import { formatTwd } from "@/lib/money";
 
 export const metadata = { title: "首頁" };
 
+// 首頁快捷：最常做的四件事，第一次用也看得懂
 const QUICK = [
-  { href: "/paste", label: "貼上加單", main: true },
-  { href: "/purchase", label: "新增採購", main: true },
-  { href: "/inventory?tab=batches", label: "登記收貨／採購團" },
-  { href: "/orders/new", label: "新增訂單" },
-  { href: "/payments", label: "待收款" },
-  { href: "/shipping", label: "待出貨" },
-  { href: "/inventory?tab=stock", label: "庫存與自留" },
-  { href: "/sales?new=1", label: "出售現貨" },
+  { href: "/purchase", label: "＋ 新增採購", hint: "買了什麼、哪一團", main: true },
+  { href: "/sales?new=1", label: "出售現貨", hint: "賣掉手上的東西", main: true },
+  { href: "/inventory?tab=batches", label: "收到貨了", hint: "到哪一團登記" },
+  { href: "/inventory?tab=stock", label: "庫存・自留", hint: "手上有什麼、成本" },
 ];
 
 export default async function Home() {
@@ -39,6 +38,19 @@ export default async function Home() {
     prisma.purchaseBatch.count({ where: { status: { in: ["ORDERED", "PARTIAL_RECEIVED"] } } }),
   ]);
   const incoming = [...inv.values()].reduce((s, v) => s + v.incoming, 0);
+  // 還要付代購：所有沒取消的團，總額 − 已付
+  const live = await prisma.purchaseBatch.findMany({
+    where: { status: { not: "CANCELLED" } },
+    select: { id: true, code: true, name: true, status: true, progress: true, ownership: true, orderedBy: { select: { name: true } } },
+  });
+  const pay = await tx((t) => batchPaySummary(t, live.map((b) => b.id)));
+  const dueList = live
+    .map((b) => ({ ...b, due: pay.get(b.id)?.dueTwd ?? 0 }))
+    .filter((b) => b.due > 0)
+    .sort((a, b) => b.due - a.due);
+  const dueTotal = dueList.reduce((s, b) => s + b.due, 0);
+  // 有在用「接單」（訂單／買家）才顯示訂單相關數字
+  const usesOrders = (await prisma.order.count({ where: { source: { not: "QUICK" } } })) > 0;
   const today = new Date();
   const todo = [
     { n: d.pendingConfirm, text: "張訂單待確認", href: "/orders?status=PENDING_CONFIRM" },
@@ -58,33 +70,52 @@ export default async function Home() {
           <Link
             key={q.href}
             href={q.href}
-            className={`rounded-xl border px-3 py-3 text-[15px] font-medium ${q.main ? "border-ai bg-ai text-white hover:bg-ai-2" : "border-line bg-white hover:border-ai"}`}
+            className={`rounded-xl border px-3.5 py-3 ${q.main ? "border-ai bg-ai text-white hover:bg-ai-2" : "border-line bg-white hover:border-ai"}`}
           >
-            {q.label}
+            <span className="block text-[16px] font-semibold">{q.label}</span>
+            <span className={`block text-[12px] ${q.main ? "text-white/80" : "text-mute"}`}>{q.hint}</span>
           </Link>
         ))}
       </nav>
 
       <div>
-        <h2 className="mb-2 text-[15px] font-semibold">我的庫存</h2>
+        <h2 className="mb-2 text-[15px] font-semibold">錢與庫存</h2>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <Stat label="可售" value={`${val.total.free} 件`} note={`成本 ${val.total.freeValue.toLocaleString()} 元${val.total.tentative ? "（含暫估）" : ""}`} href="/inventory?tab=stock" />
-          <Stat label="自留收藏" value={`${val.total.kept} 件`} note={`成本 ${val.total.keptValue.toLocaleString()} 元`} href="/inventory?tab=stock" />
-          <Stat label="待到貨" value={`${incoming} 件`} note={`${openBatches} 個採購團進行中`} href="/inventory?tab=batches" />
-          <Stat label="已保留給買家" value={`${val.total.reserved} 件`} note="待出貨" href="/shipping" />
-        </div>
-        <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <Stat label="本月現貨出售" value={`${sales.total.qty} 件`} note={`收入 ${sales.total.revenue.toLocaleString()} 元`} href="/sales" />
-          <Stat label="本月出售毛利" value={<Twd v={sales.total.profit} />} note={sales.total.tentative ? "成本含暫估" : "收入 − 商品成本"} href="/sales" tone={sales.total.profit < 0 ? "bad" : undefined} />
-          {(unpaidSales._sum.balanceCache ?? 0) > 0 && <Stat label="出售未收款" value={<Twd v={unpaidSales._sum.balanceCache ?? 0} />} note={`${unpaidSales._count} 筆`} href="/payments" tone="warn" />}
-          {val.total.unknownCostUnits > 0 && <Stat label="沒有成本的庫存" value={`${val.total.unknownCostUnits} 件`} note="手動入庫未填成本" href="/inventory?tab=stock" tone="warn" />}
+          <Stat label="還要付代購" value={<span data-testid="home-due" className={dueTotal ? "text-bad" : ""}>{formatTwd(dueTotal)}</span>} note={dueTotal ? `${dueList.length} 團還沒付清` : "都付清了"} href="#due" tone={dueTotal ? "bad" : undefined} />
+          <Stat label="手上庫存成本" value={<Twd v={val.total.freeValue + val.total.keptValue} />} note={`可賣 ${val.total.free} 件・自留 ${val.total.kept} 件${val.total.tentative ? "（含暫估）" : ""}`} href="/inventory?tab=stock" />
+          <Stat label="本月賣出賺" value={<Twd v={sales.total.profit} />} note={`賣 ${sales.total.qty} 件・收入 ${sales.total.revenue.toLocaleString()} 元`} href="/sales" tone={sales.total.profit < 0 ? "bad" : undefined} />
+          <Stat label="還沒到的貨" value={`${incoming} 件`} note={`${openBatches} 團還在路上`} href="/inventory?tab=batches" />
+          {(unpaidSales._sum.balanceCache ?? 0) > 0 && <Stat label="賣出還沒收到錢" value={<Twd v={unpaidSales._sum.balanceCache ?? 0} />} note={`${unpaidSales._count} 筆`} href="/sales" tone="warn" />}
+          {val.total.unknownCostUnits > 0 && <Stat label="沒填成本的庫存" value={`${val.total.unknownCostUnits} 件`} note="手動入庫未填成本" href="/inventory?tab=stock" tone="warn" />}
+          {usesOrders && val.total.reserved > 0 && <Stat label="已保留給買家" value={`${val.total.reserved} 件`} note="待出貨" href="/shipping" />}
         </div>
       </div>
 
+      {dueList.length > 0 && (
+        <Section title="還要付的團" pad={false}>
+          <ul id="due" className="divide-y divide-line-2" aria-label="還要付的團">
+            {dueList.slice(0, 8).map((b) => {
+              const [label, tone] = batchStageLabel[batchStage(b)];
+              return (
+                <li key={b.id}>
+                  <Link href={`/inventory/batches/${b.id}`} className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-[#fafbfd]">
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{b.name}</span>
+                      <span className="text-[12px] text-mute">{b.ownership === "JOINT" ? "合資" : b.orderedBy ? `${b.orderedBy.name}的` : "未指定"}・<Badge tone={tone}>{label}</Badge></span>
+                    </span>
+                    <span className="num shrink-0 font-semibold text-bad">{formatTwd(b.due)}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+          {dueList.length > 8 && <p className="px-4 py-2 text-[13px] text-mute">還有 {dueList.length - 8} 團，到「活動總表」看全部。</p>}
+        </Section>
+      )}
+
+      {todo.length > 0 && (
       <Section title="今日待辦" pad={false}>
-        {todo.length === 0 ? (
-          <Empty>目前沒有待處理的事項。</Empty>
-        ) : (
+        {(
           <ul className="divide-y divide-line-2">
             {todo.map((t) => (
               <li key={t.href + t.text}>
@@ -97,7 +128,10 @@ export default async function Home() {
           </ul>
         )}
       </Section>
+      )}
 
+      {usesOrders && (
+        <>
       <div>
         <h2 className="mb-2 text-[15px] font-semibold">本月（{d.ym}）</h2>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -115,10 +149,13 @@ export default async function Home() {
         <Stat label="預估未實現利潤" value={<Twd v={un.profit} />} note={un.unknownCostUnits > 0 ? `${un.unknownCostUnits} 件沒有預估成本` : "未出貨部分，以預估成本計"} href="/reports" />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Section title="即將截止的代購團" pad={false} actions={<Link href="/groupbuys" className="text-sm text-ai">全部</Link>}>
+        </>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {usesOrders && <Section title="即將截止的開團" pad={false} actions={<Link href="/groupbuys" className="text-sm text-ai">全部</Link>}>
           {d.closingGroupBuys.length === 0 ? (
-            <Empty>7 天內沒有截止的代購團。</Empty>
+            <Empty>7 天內沒有截止的開團。</Empty>
           ) : (
             <ul className="divide-y divide-line-2 text-sm">
               {d.closingGroupBuys.map((g) => (
@@ -131,10 +168,11 @@ export default async function Home() {
               ))}
             </ul>
           )}
-        </Section>
-        <Section title="待到貨的採購團" pad={false} actions={<Link href="/inventory?tab=batches" className="text-sm text-ai">全部</Link>}>
+        </Section>}
+        {d.incomingBatches.length > 0 && (
+        <Section title="還沒到的團" pad={false} actions={<Link href="/inventory?tab=batches" className="text-sm text-ai">全部</Link>}>
           {d.incomingBatches.length === 0 ? (
-            <Empty>沒有待到貨的批次。</Empty>
+            <Empty>全部都到了。</Empty>
           ) : (
             <ul className="divide-y divide-line-2 text-sm">
               {d.incomingBatches.map((b) => (
@@ -149,6 +187,8 @@ export default async function Home() {
             </ul>
           )}
         </Section>
+        )}
+        {d.upcomingProducts.length > 0 && (
         <Section title="近期預計到貨的商品" pad={false}>
           {d.upcomingProducts.length === 0 ? (
             <Empty>14 天內沒有預計到貨的商品。</Empty>
@@ -165,6 +205,7 @@ export default async function Home() {
             </ul>
           )}
         </Section>
+        )}
       </div>
     </div>
   );

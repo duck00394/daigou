@@ -66,14 +66,13 @@ test("桌面：批次新增 4 個角色（含新角色與貼上），再批次�
   await expect(page.getByText("數量必須是正整數")).toBeVisible();
   await page.getByRole("button", { name: "刪除第 5 列" }).click();
 
-  await expect(page.getByText(/有效 4 列｜共 10 件/)).toBeVisible();
-  await page.getByRole("button", { name: "批次新增 4 列" }).click();
-  await expect(page.getByRole("heading", { name: "確認批次新增" })).toBeVisible();
+  await expect(page.getByText(/共 10 件/)).toBeVisible();
+  await page.getByRole("button", { name: "儲存 4 項" }).click();
+  // 有新角色才會多確認一次
+  await expect(page.getByRole("heading", { name: "確認一下" })).toBeVisible();
   await expect(page.getByText("（新角色）")).toBeVisible();
-  await page.getByRole("button", { name: "確認新增 4 列" }).click();
-  await expect(page.getByRole("heading", { name: "批次新增結果" })).toBeVisible();
-  await expect(page.getByText(/已新增：吉伊卡哇 兔兔 吊娃/)).toBeVisible();
-  await page.getByRole("button", { name: "知道了" }).click();
+  await page.getByRole("button", { name: "沒問題，儲存 4 項" }).click();
+  await toast(page, "已新增 4 個採購品項");
 
   // 採購品項表格（按「編輯」才會出現可修改的表格）
   await page.getByRole("button", { name: "編輯", exact: true }).click();
@@ -114,9 +113,8 @@ test("桌面：第二團套用上次使用的角色，價格帶入上次設定�
   await expect(cell(page, 2, 2)).toHaveValue("420");
   await cell(page, 0, 2).fill("390");
   for (const r of [0, 1, 2]) await cell(page, r, 4).fill("1");
-  await page.getByRole("button", { name: "批次新增 3 列" }).click();
-  await page.getByRole("button", { name: "確認新增 3 列" }).click();
-  await page.getByRole("button", { name: "知道了" }).click();
+  await page.getByRole("button", { name: "儲存 3 項" }).click();
+  await toast(page, /已新增 3 個採購品項/);
   // 回到第一團確認價格沒變
   await page.goto("/inventory?tab=batches");
   await page.getByRole("link", { name: /E2E 批次團/ }).first().click(); // 清單依建立時間由新到舊

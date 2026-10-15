@@ -9,9 +9,8 @@ async function addRow(page: Page, character: string, price: string, qty: string)
   const r1 = page.getByRole("table", { name: "批次新增採購品項" }).getByRole("row").filter({ hasText: "第 1 列" });
   await r1.getByLabel("單價").fill(price);
   await r1.getByLabel("數量").fill(qty);
-  await page.getByRole("button", { name: "批次新增 1 列" }).click();
-  await page.getByRole("button", { name: "確認新增 1 列" }).click();
-  await page.getByRole("button", { name: "知道了" }).click();
+  await page.getByRole("button", { name: "儲存 1 項" }).click();
+  await toast(page, /已新增 1 個採購品項/);
 }
 
 async function newSupplier(page: Page, name: string) {

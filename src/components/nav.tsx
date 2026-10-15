@@ -1,43 +1,59 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-export const NAV: { href: string; label: string; group: string }[] = [
-  { href: "/", label: "首頁", group: "日常" },
-  { href: "/paste", label: "貼上加單", group: "日常" },
-  { href: "/import", label: "Excel 匯入", group: "日常" },
-  { href: "/orders", label: "訂單", group: "日常" },
-  { href: "/payments", label: "收款與退款", group: "日常" },
-  { href: "/shipping", label: "出貨", group: "日常" },
-  { href: "/sales", label: "出售紀錄", group: "日常" },
-  { href: "/buyers", label: "買家", group: "資料" },
-  { href: "/products", label: "商品", group: "資料" },
-  { href: "/series", label: "系列與角色", group: "資料" },
-  { href: "/categories", label: "活動與分類", group: "資料" },
-  { href: "/groupbuys", label: "代購團", group: "資料" },
-  { href: "/tags", label: "標籤", group: "資料" },
-  { href: "/inventory", label: "庫存與採購", group: "營運" },
-  { href: "/suppliers", label: "供應商", group: "營運" },
-  { href: "/operators", label: "經營者對帳", group: "營運" },
-  { href: "/reports", label: "成本與利潤", group: "營運" },
-  { href: "/settings", label: "匯出、備份與設定", group: "營運" },
+// 常用：收藏轉售每天會用到的；其他：接單（LINE／訂單）與資料設定
+export const NAV: { href: string; label: string; group: string; hint?: string }[] = [
+  { href: "/", label: "首頁", group: "常用", hint: "今天要做什麼、還要付多少" },
+  { href: "/purchase", label: "＋ 新增採購", group: "常用", hint: "買了什麼、哪一團" },
+  { href: "/categories", label: "活動總表", group: "常用", hint: "每個活動花多少、誰還沒付" },
+  { href: "/inventory?tab=batches", label: "採購團・收貨", group: "常用", hint: "東西到了沒、登記收到" },
+  { href: "/inventory?tab=stock", label: "庫存・賣出・自留", group: "常用", hint: "手上有什麼、成本多少" },
+  { href: "/sales", label: "賺多少", group: "常用", hint: "賣出的收入、成本、毛利" },
+  { href: "/paste", label: "貼上加單", group: "接單" },
+  { href: "/orders", label: "訂單", group: "接單" },
+  { href: "/payments", label: "收款與退款", group: "接單" },
+  { href: "/shipping", label: "出貨", group: "接單" },
+  { href: "/buyers", label: "買家", group: "接單" },
+  { href: "/groupbuys", label: "開團（接單用）", group: "接單" },
+  { href: "/import", label: "Excel 匯入", group: "接單" },
+  { href: "/products", label: "商品", group: "資料與設定" },
+  { href: "/series", label: "系列與角色", group: "資料與設定" },
+  { href: "/suppliers", label: "供應商・代購", group: "資料與設定" },
+  { href: "/operators", label: "經營者對帳", group: "資料與設定" },
+  { href: "/reports", label: "完整報表", group: "資料與設定" },
+  { href: "/tags", label: "標籤", group: "資料與設定" },
+  { href: "/settings", label: "匯出、備份與設定", group: "資料與設定" },
 ];
 
 const BOTTOM = [
   { href: "/", label: "首頁" },
-  { href: "/orders", label: "訂單" },
-  { href: "/paste", label: "貼上加單", main: true },
-  { href: "/shipping", label: "出貨" },
-  { href: "/buyers", label: "買家" },
+  { href: "/categories", label: "活動" },
+  { href: "/purchase", label: "＋ 採購", main: true },
+  { href: "/inventory?tab=stock", label: "庫存" },
+  { href: "/sales", label: "賺多少" },
 ];
 
-function active(path: string, href: string) {
-  return href === "/" ? path === "/" : path === href || path.startsWith(href + "/");
+function active(path: string, href: string, tab?: string | null) {
+  const [base, q] = href.split("?");
+  if (base === "/") return path === "/";
+  if (!(path === base || path.startsWith(base + "/"))) return false;
+  if (!q) return true;
+  const want = new URLSearchParams(q).get("tab");
+  // 採購團頁（/inventory/batches/…）算在「採購團・收貨」
+  if (path.startsWith("/inventory/batches")) return want === "batches";
+  return (tab ?? "stock") === want;
+}
+
+function useTab() {
+  const sp = useSearchParams();
+  return sp.get("tab");
 }
 
 export function Sidebar() {
   const path = usePathname();
+  const tab = useTab();
   const groups = [...new Set(NAV.map((n) => n.group))];
   return (
     <nav aria-label="主要功能" className="no-print sticky top-0 hidden h-dvh w-52 shrink-0 flex-col overflow-y-auto border-r border-line bg-white px-3 py-4 md:flex">
@@ -52,8 +68,8 @@ export function Sidebar() {
             <Link
               key={n.href}
               href={n.href}
-              aria-current={active(path, n.href) ? "page" : undefined}
-              className={`block rounded-lg px-2.5 py-1.5 text-[14px] ${active(path, n.href) ? "bg-peach font-semibold text-peach-ink" : "text-ink-2 hover:bg-line-2"}`}
+              aria-current={active(path, n.href, tab) ? "page" : undefined}
+              className={`block rounded-lg px-2.5 py-1.5 text-[14px] ${active(path, n.href, tab) ? "bg-peach font-semibold text-peach-ink" : "text-ink-2 hover:bg-line-2"}`}
             >
               {n.label}
             </Link>
@@ -69,9 +85,10 @@ export function Sidebar() {
 
 export function MobileBar() {
   const path = usePathname();
+  const tab = useTab();
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [path]);
-  const current = NAV.find((n) => active(path, n.href) && n.href !== "/") ?? NAV[0];
+  const current = NAV.find((n) => active(path, n.href, tab) && n.href !== "/") ?? NAV[0];
   return (
     <>
       <header className="no-print sticky top-0 z-40 flex items-center justify-between border-b border-line bg-white/95 px-4 py-2.5 backdrop-blur md:hidden">
@@ -84,20 +101,30 @@ export function MobileBar() {
       </header>
       {open && (
         <div className="fixed inset-0 z-50 bg-black/30 md:hidden" onClick={() => setOpen(false)}>
-          <div className="absolute inset-x-0 top-0 rounded-b-2xl bg-white px-4 pt-3 pb-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="absolute inset-x-0 top-0 max-h-dvh overflow-y-auto rounded-b-2xl bg-white px-4 pt-3 pb-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm text-mute">目前：{current.label}</span>
               <button type="button" onClick={() => setOpen(false)} className="px-2 py-1 text-mute" aria-label="關閉">
                 ✕
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              {NAV.map((n) => (
-                <Link key={n.href} href={n.href} className={`rounded-lg border px-3 py-2.5 text-[15px] ${active(path, n.href) ? "border-peach bg-peach text-peach-ink" : "border-line"}`}>
-                  {n.label}
-                </Link>
-              ))}
-            </div>
+            {[...new Set(NAV.map((n) => n.group))].map((g) => (
+              <div key={g} className="mb-3">
+                <div className="mb-1 text-[12px] text-mute">{g}</div>
+                <div className="grid grid-cols-2 gap-2">
+                  {NAV.filter((n) => n.group === g).map((n) => (
+                    <Link
+                      key={n.href}
+                      href={n.href}
+                      className={`rounded-lg border px-3 ${n.hint ? "py-2" : "py-2"} text-[15px] ${active(path, n.href, tab) ? "border-peach bg-peach text-peach-ink" : "border-line"} ${g === "常用" ? "font-medium" : "text-ink-2"}`}
+                    >
+                      {n.label}
+                      {n.hint && <span className="block text-[11.5px] font-normal text-mute">{n.hint}</span>}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
             <form action="/logout" method="post" className="mt-4 text-right">
               <button className="text-sm text-mute">登出</button>
             </form>
@@ -109,10 +136,10 @@ export function MobileBar() {
           <Link
             key={b.href}
             href={b.href}
-            aria-current={active(path, b.href) ? "page" : undefined}
-            className={`flex flex-col items-center justify-center py-2.5 text-[12.5px] ${b.main ? "font-semibold" : ""} ${active(path, b.href) ? "text-ai" : "text-ink-2"}`}
+            aria-current={active(path, b.href, tab) ? "page" : undefined}
+            className={`flex flex-col items-center justify-center py-2.5 text-[12.5px] ${b.main ? "font-semibold" : ""} ${active(path, b.href, tab) ? "text-ai" : "text-ink-2"}`}
           >
-            {b.main ? <span className={`rounded-full px-3 py-1 ${active(path, b.href) ? "bg-ai text-white" : "bg-peach text-peach-ink"}`}>{b.label}</span> : b.label}
+            {b.main ? <span className={`rounded-full px-3 py-1 ${active(path, b.href, tab) ? "bg-ai text-white" : "bg-peach text-peach-ink"}`}>{b.label}</span> : b.label}
           </Link>
         ))}
       </nav>

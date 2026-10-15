@@ -20,6 +20,13 @@ test("手機：卡片式表格可新增、修改、刪除列並確認儲存", as
   const r2 = cards.filter({ hasText: "第 2 列" });
   await r1.getByLabel("單價").fill("350");
   await r1.getByLabel("數量").fill("2");
+  // 手機數量可以直接按 ＋／−
+  await r1.getByRole("button", { name: "第 1 列多一件" }).click();
+  await expect(r1.getByLabel("數量")).toHaveValue("3");
+  await r1.getByRole("button", { name: "第 1 列少一件" }).click();
+  await expect(r1.getByLabel("數量")).toHaveValue("2");
+  // 不常用的欄位先收起來
+  await expect(r1.getByLabel("想賣價（台幣）")).toBeHidden();
   await r2.getByLabel("單價").fill("420");
   await r2.getByLabel("數量").fill("1");
   // 複製一列再刪除
@@ -32,9 +39,9 @@ test("手機：卡片式表格可新增、修改、刪除列並確認儲存", as
   expect(overflow).toBeLessThanOrEqual(1);
   await page.screenshot({ path: "test-results/mobile_bulk_add.png", fullPage: true });
 
-  await page.getByRole("button", { name: "批次新增 2 列" }).click();
-  await page.getByRole("button", { name: "確認新增 2 列" }).click();
-  await page.getByRole("button", { name: "知道了" }).click();
+  await page.getByRole("button", { name: "儲存 2 項" }).click();
+
+  await toast(page, /已新增 2 個採購品項/);
   // 一打開先看品項清單與合計；要改才按「編輯」
   await expect(page.getByRole("list", { name: "品項清單" })).toContainText("吉伊卡哇 吉伊 吊娃");
   await expect(page.getByTestId("batch-total")).toBeVisible();

@@ -33,9 +33,8 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
   await cell(page, 0, 4).fill("3");
   await cell(page, 1, 2).fill("350");
   await cell(page, 1, 4).fill("2");
-  await page.getByRole("button", { name: "批次新增 2 列" }).click();
-  await page.getByRole("button", { name: "確認新增 2 列" }).click();
-  await page.getByRole("button", { name: "知道了" }).click();
+  await page.getByRole("button", { name: "儲存 2 項" }).click();
+  await toast(page, /已新增 2 個採購品項/);
   // 新增完回到品項清單（只看不改），要改才按「編輯」
   await expect(page.getByRole("list", { name: "品項清單" })).toContainText("吉伊卡哇 小八 吊娃");
   await expect(page.getByTestId("items-total")).toHaveText("NT$1,750");

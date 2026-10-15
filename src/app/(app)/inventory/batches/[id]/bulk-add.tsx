@@ -32,6 +32,7 @@ type RowState = {
   serverError?: string;
   touched?: boolean; // 使用者已經點進價格欄位：背景帶入的參考價不再覆蓋或接在後面
   loading?: boolean; // 正在讀取參考價：價格欄暫停輸入，避免讀到的數字和正在打的字混在一起
+  more?: boolean; // 手機：展開規格、幣別、想賣價
 };
 type Result = { rowKey: string; ok: boolean; already?: boolean; error?: string; productName?: string };
 
@@ -320,8 +321,9 @@ export function BulkAddGrid({
         return;
       }
       const d = res.data;
-      setResults(d.results);
       setConfirm(false);
+      // 全部成功：不用再按「知道了」，直接跳提示；有失敗才列出結果
+      if (d.failed > 0) setResults(d.results);
       const okKeys = new Set(d.results.filter((x) => x.ok).map((x) => x.rowKey));
       const errs = new Map(d.results.filter((x) => !x.ok).map((x) => [x.rowKey, x.error ?? "建立失敗"]));
       setRows((rs) => {
@@ -329,6 +331,7 @@ export function BulkAddGrid({
         return left.length ? left : [blankRow(supplierCurrency)];
       });
       onSaved?.(targetId, d.created + d.already);
+      if (d.failed === 0) onClosed?.(true);
       if (d.failed === 0) {
         idem.renew();
         toast(`已新增 ${d.created} 個採購品項${d.already ? `（${d.already} 列先前已建立）` : ""}`);
@@ -466,7 +469,7 @@ export function BulkAddGrid({
           <span role="columnheader" className="text-right">單價</span>
           <span role="columnheader">幣別</span>
           <span role="columnheader" className="text-right">數量</span>
-          <span role="columnheader" className="text-right">對客售價</span>
+          <span role="columnheader" className="text-right">想賣價</span>
           <span role="columnheader" className="text-right">小計</span>
           <span role="columnheader"><span className="sr-only">操作</span></span>
         </div>
@@ -477,6 +480,7 @@ export function BulkAddGrid({
           const sub = q !== null && c !== null && Number.isInteger(q) && Number.isInteger(c) ? q * c : null;
           const cell = (col: number) => ({ "data-row": i, "data-col": col, onKeyDown: (e: React.KeyboardEvent) => onKeyDown(e, i, col), onPaste: (e: React.ClipboardEvent) => onPaste(e, i, col) });
           const lbl = "mb-0.5 block text-[12px] text-mute md:sr-only";
+          const extra = r.more || r.spec.trim() || r.salePrice.trim() || r.currency !== supplierCurrency ? "" : "hidden md:block";
           return (
             <div
               key={r.key}
@@ -519,7 +523,7 @@ export function BulkAddGrid({
                   <input className={`${inputCls} mt-1`} value={r.newName} onChange={(e) => update(r.key, { newName: e.target.value })} placeholder="新角色名稱" aria-label="新角色名稱" {...cell(0)} />
                 )}
               </div>
-              <div className="col-span-2 md:col-span-1" role="cell">
+              <div className={`col-span-2 md:col-span-1 ${extra}`} role="cell">
                 <label className={lbl} htmlFor={`s-${r.key}`}>規格（選填）</label>
                 <input id={`s-${r.key}`} {...cell(1)} className={inputCls} value={r.spec} onChange={(e) => update(r.key, { spec: e.target.value })} placeholder="例：萬聖節款" />
               </div>
@@ -528,7 +532,7 @@ export function BulkAddGrid({
                 <input id={`u-${r.key}`} {...cell(2)} className={`${inputCls} num text-right`} inputMode="numeric" disabled={r.loading} placeholder={r.loading ? "讀取中…" : undefined} value={r.unitCost} onFocus={() => !r.touched && update(r.key, { touched: true })} onChange={(e) => update(r.key, { unitCost: e.target.value, hint: "", touched: true })} />
                 {r.hint && <span className="mt-0.5 block text-[11px] leading-tight text-mute">{r.hint}</span>}
               </div>
-              <div role="cell">
+              <div role="cell" className={extra}>
                 <label className={lbl} htmlFor={`cur-${r.key}`}>幣別</label>
                 <select id={`cur-${r.key}`} {...cell(3)} className={inputCls} value={r.currency} onChange={(e) => update(r.key, { currency: e.target.value as Currency })}>
                   <option value="JPY">日幣</option>
@@ -537,10 +541,14 @@ export function BulkAddGrid({
               </div>
               <div role="cell">
                 <label className={lbl} htmlFor={`q-${r.key}`}>數量</label>
-                <input id={`q-${r.key}`} {...cell(4)} className={`${inputCls} num text-right`} inputMode="numeric" value={r.qty} onChange={(e) => update(r.key, { qty: e.target.value })} />
+                <div className="flex items-center gap-1">
+                  <button type="button" className="h-10 w-10 shrink-0 rounded-lg border border-line text-[18px] md:hidden" aria-label={`第 ${i + 1} 列少一件`} onClick={() => update(r.key, { qty: String(Math.max(1, (toInt(r.qty) ?? 1) - 1)) })}>−</button>
+                  <input id={`q-${r.key}`} {...cell(4)} className={`${inputCls} num text-center md:text-right`} inputMode="numeric" value={r.qty} onChange={(e) => update(r.key, { qty: e.target.value })} />
+                  <button type="button" className="h-10 w-10 shrink-0 rounded-lg border border-line text-[18px] md:hidden" aria-label={`第 ${i + 1} 列多一件`} onClick={() => update(r.key, { qty: String((toInt(r.qty) ?? 0) + 1) })}>＋</button>
+                </div>
               </div>
-              <div role="cell">
-                <label className={lbl} htmlFor={`p-${r.key}`}>對客售價（台幣）</label>
+              <div role="cell" className={extra}>
+                <label className={lbl} htmlFor={`p-${r.key}`}>想賣價（台幣）</label>
                 <input id={`p-${r.key}`} {...cell(5)} className={`${inputCls} num text-right`} inputMode="numeric" disabled={r.loading} value={r.salePrice} onFocus={() => !r.touched && update(r.key, { touched: true })} onChange={(e) => update(r.key, { salePrice: e.target.value, touched: true })} placeholder="選填" />
               </div>
               <div role="cell" className="flex items-center justify-between md:block md:pt-2.5 md:text-right">
@@ -548,6 +556,7 @@ export function BulkAddGrid({
                 <span className="num font-medium">{sub === null ? "—" : r.currency === "JPY" ? formatJpy(sub) : formatTwd(sub)}</span>
               </div>
               <div role="cell" className="col-span-2 flex justify-end gap-1 md:col-span-1 md:pt-1">
+                {extra && <button type="button" className="mr-auto rounded-md px-2 py-1 text-[13px] text-ink-2 md:hidden" onClick={() => update(r.key, { more: true })}>＋ 規格／日幣／想賣價</button>}
                 <button type="button" className="rounded-md px-2 py-1 text-[13px] text-ai hover:bg-ai-soft" onClick={() => duplicateRow(r.key)} title="複製這一列的單價、幣別、數量到下一列（Ctrl+D）">複製</button>
                 <button type="button" className="rounded-md px-2 py-1 text-[13px] text-bad hover:bg-bad-soft" onClick={() => removeRow(r.key)} aria-label={`刪除第 ${i + 1} 列`}>刪除</button>
               </div>
@@ -558,14 +567,14 @@ export function BulkAddGrid({
       </div>
       <div className="flex flex-wrap gap-2">
         <Button onClick={addRow}>新增一列</Button>
-        <Button onClick={() => setRows([blankRow(supplierCurrency)])} variant="ghost">清空表格</Button>
+        <Button onClick={() => setRows([blankRow(supplierCurrency)])} variant="ghost">清空</Button>
       </div>
-      <p className="text-[12px] text-mute">可以從 Excel 複製「角色、規格、單價、幣別、數量、對客售價」整塊貼到任一格；Enter 或 ↓ 移到下一列，Tab 切換欄位，Ctrl+D 複製這一列。空白列不會建立。</p>
+      <p className="hidden text-[12px] text-mute md:block">可以從 Excel 複製「角色、規格、單價、幣別、數量、對客售價」整塊貼到任一格；Enter 或 ↓ 移到下一列，Tab 切換欄位，Ctrl+D 複製這一列。空白列不會建立。</p>
 
       {/* 6：統計與送出 */}
       <div className="no-print sticky bottom-16 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-white px-4 py-3 shadow-sm md:bottom-4">
         <div className="text-sm">
-          有效 <b className="num">{stats.valid}</b> 列｜共 <b className="num">{stats.qty}</b> 件｜
+          共 <b className="num">{stats.qty}</b> 件　
           {stats.jpy > 0 && <span className="num">{formatJpy(stats.jpy)} </span>}
           {stats.twd > 0 && <span className="num">{formatTwd(stats.twd)} </span>}
           {stats.jpy > 0 && <span className="text-mute">（約 {formatTwd(stats.approxTwd)}）</span>}
@@ -578,14 +587,22 @@ export function BulkAddGrid({
             setShowErrors(true);
             if (stats.valid === 0) return notify(stats.invalid ? "還有資料需要修正" : "請至少填寫一列");
             if (dupKeys.size) return notify("有重複的角色與規格，請修正後再送出");
-            setConfirm(true);
+            // 一般情況直接存；有新角色、單價特別高或有不完整的列，才多確認一次
+            const ok = rows.filter((r) => !isBlank(r) && !rowError(r));
+            const risky = stats.invalid > 0 || ok.some((r) => r.characterId === "__new__" || (r.currency === "JPY" ? toInt(r.unitCost)! >= 100000 : toInt(r.unitCost)! >= 20000));
+            if (risky) setConfirm(true);
+            else submit();
           }}
+          loading={busy && !confirm}
         >
-          批次新增 {stats.valid} 列
+          儲存 {stats.valid} 項
         </Button>
       </div>
 
       {seriesId && (
+        <details className="text-[13px] text-ink-2">
+          <summary className="cursor-pointer select-none text-mute">常買同一組角色？存成範本</summary>
+          <div className="mt-2">
         <form
           className="flex flex-wrap items-end gap-2"
           onSubmit={async (e) => {
@@ -600,27 +617,29 @@ export function BulkAddGrid({
           }}
         >
           <label className="text-[13px] text-ink-2">
-            把目前的角色組合存成範本（只存角色與規格，不存價格數量）
+            範本名稱（只存角色與規格）
             <input className={`${inputCls} mt-1`} value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder="範本名稱，例：三本柱" />
           </label>
           <Button type="submit" disabled={!tplName.trim()}>儲存範本</Button>
         </form>
+          </div>
+        </details>
       )}
 
       <Modal
         open={confirm}
         onClose={() => !busy && setConfirm(false)}
-        title="確認批次新增"
+        title="確認一下"
         wide
         footer={
           <>
             <Button onClick={() => setConfirm(false)} disabled={busy}>返回修改</Button>
-            <Button variant="primary" loading={busy} onClick={submit}>確認新增 {stats.valid} 列</Button>
+            <Button variant="primary" loading={busy} onClick={submit}>沒問題，儲存 {stats.valid} 項</Button>
           </>
         }
       >
         <p className="mb-2 text-sm text-ink-2">
-          將在這個採購團新增 {stats.valid} 個採購品項，共 {stats.qty} 件。只建立採購品項，不代表已付款或到貨，也不會增加庫存。
+          要存 {stats.valid} 項、共 {stats.qty} 件到這一團（還不算付款或到貨）。
           {stats.invalid > 0 && <span className="text-bad"> 另有 {stats.invalid} 列資料不完整，不會送出。</span>}
         </p>
         <table className="w-full text-sm">
@@ -648,7 +667,7 @@ export function BulkAddGrid({
         </table>
       </Modal>
 
-      <Modal open={!!results} onClose={closeResults} title="批次新增結果" footer={<Button variant="primary" onClick={closeResults}>知道了</Button>}>
+      <Modal open={!!results} onClose={closeResults} title="有幾項沒存成功" footer={<Button variant="primary" onClick={closeResults}>知道了</Button>}>
         {results && (
           <ul className="space-y-1 text-sm">
             {results.map((x) => (

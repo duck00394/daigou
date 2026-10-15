@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { requireUser } from "@/server/auth";
 import { ToastProvider } from "@/components/client";
 import { MobileBar, Sidebar } from "@/components/nav";
@@ -11,9 +12,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <ToastProvider>
       <div className="flex min-h-dvh">
-        <Sidebar />
+        <Suspense><Sidebar /></Suspense>
         <div className="min-w-0 flex-1">
-          <MobileBar />
+          <Suspense><MobileBar /></Suspense>
           <main className="mx-auto w-full max-w-6xl px-3 pt-4 pb-28 sm:px-5 md:pt-6 md:pb-10">{children}</main>
         </div>
       </div>

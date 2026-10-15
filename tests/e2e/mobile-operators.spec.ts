@@ -23,9 +23,8 @@ test("手機：建團選負責人、登記付款與收貨，對帳頁不橫向�
   const r1 = page.getByRole("table", { name: "批次新增採購品項" }).getByRole("row").filter({ hasText: "第 1 列" });
   await r1.getByLabel("單價").fill("420");
   await r1.getByLabel("數量").fill("2");
-  await page.getByRole("button", { name: "批次新增 1 列" }).click();
-  await page.getByRole("button", { name: "確認新增 1 列" }).click();
-  await page.getByRole("button", { name: "知道了" }).click();
+  await page.getByRole("button", { name: "儲存 1 項" }).click();
+  await toast(page, /已新增 1 個採購品項/);
 
   await page.getByRole("button", { name: "＋ 登記付款" }).click();
   const pay = page.getByRole("form", { name: "登記付款" });
@@ -58,8 +57,8 @@ test("手機：庫存以卡片顯示，可直接自留、改回出售與出售",
   await login(page);
   await page.goto(`/inventory?tab=stock&q=${encodeURIComponent(name)}`);
   const card = page.getByRole("listitem").filter({ hasText: name });
-  await expect(card.getByText("可售")).toBeVisible();
-  await expect(card).toContainText("平均成本 NT$300");
+  await expect(card.getByText("可賣", { exact: true })).toBeVisible();
+  await expect(card.getByTestId("cost-line")).toContainText("成本 NT$300／件・手上共 NT$900");
   await card.getByRole("button", { name: /^自留/ }).click();
   const dlg = page.getByRole("dialog");
   await dlg.getByRole("button", { name: "自留 1 件" }).click();
@@ -79,7 +78,7 @@ test("手機：庫存以卡片顯示，可直接自留、改回出售與出售",
   await expect(dlg).toContainText("NT$150");
   await page.screenshot({ path: "test-results/mobile_sell_done.png", fullPage: false });
   await dlg.getByRole("button", { name: "完成" }).click();
-  await expect(card.getByText("可售").locator("..")).toContainText("2");
+  await expect(card.getByText("可賣", { exact: true }).locator("..")).toContainText("2");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
   await page.screenshot({ path: "test-results/mobile_stock.png", fullPage: true });
