@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { checkIntegrity } from "@/server/services/integrity";
 import { prisma, tx } from "@/server/db";
 import { actor, resetDb, seedBasics } from "../helpers";
 import { addCharactersToSeries, bulkAddSeriesItems, bulkUpdateBatchItems, copySeriesRoster, lastUsedRoster, rowDefaults, saveSeries, saveSupplier, saveTemplate, type BulkRow } from "@/server/services/series";
@@ -30,6 +31,12 @@ beforeEach(async () => {
 const row = (k: string, o: Partial<BulkRow>): BulkRow => ({ rowKey: k, characterId: null, unitCost: null, currency: "TWD", qty: null, ...o });
 const add = (rows: BulkRow[], submissionKey = "sub-1", batchId = ctx.batchId) =>
   bulkAddSeriesItems(actor, { batchId, seriesId: ctx.seriesId, productTypeId: ctx.typeId, submissionKey, rows });
+
+
+// 每項測試結束後交叉核對：庫存、訂單快取、到貨、費用分攤、出貨都要和流水一致
+afterEach(async () => {
+  expect(await checkIntegrity(prisma)).toEqual([]);
+});
 
 describe("批次新增系列商品", () => {
   it("1. 一次建立 3 個角色，各自不同單價與數量", async () => {

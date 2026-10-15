@@ -62,6 +62,9 @@ export async function quickSale(t: Tx, actor: Actor, input: QuickSaleInput) {
   const product = await t.product.findUnique({ where: { id: input.productId } });
   if (!product) throw new BizError("找不到商品");
   await lockRows(t, "Product", [product.id]);
+  // 鎖定後再確認一次：同一請求同時送出兩次時，第二個會等第一個完成後在這裡判定為重複
+  const again = await t.order.findUnique({ where: { idempotencyKey: key } });
+  if (again) return { orderId: again.id, duplicated: true, ...(await saleSummary(t, again.id)) };
   const free = (await productLots(t, product.id)).reduce((s, l) => s + Math.max(0, l.free), 0);
   if (free < input.qty) throw new BizError(`「${product.name}」可售庫存只有 ${free} 件（已保留給買家與自留的不能出售）`);
   const buyer = await resolveBuyer(t, actor, input.buyerName);
@@ -149,7 +152,8 @@ export async function voidQuickSale(t: Tx, actor: Actor, orderId: string, reason
       await t.orderItemEvent.create({ data: { orderItemId: it.id, type: "CANCELLED", qtyDelta: -left, note: `作廢出售：${why}`, actorId: actor.userId } });
     }
   }
-  for (const p of order.payments) if (!p.voidedAt) await voidPayment(t, actor, { paymentId: p.id, reason: `作廢出售：${why}` });
+  // 只作廢出售時自動登記的收款；另外手動登記的收款保留，訂單會顯示「應退」，由退款流程處理
+  for (const p of order.payments) if (!p.voidedAt && p.dedupeKey?.startsWith("quick:")) await voidPayment(t, actor, { paymentId: p.id, reason: `作廢出售：${why}` });
   await t.order.update({ where: { id: orderId }, data: { confirmation: "CANCELLED", cancelledAt: new Date(), cancelReason: `作廢出售：${why}` } });
   await recomputeOrder(t, orderId);
   await audit(t, actor, "quickSale.void", "Order", orderId, { reason: why });
@@ -158,6 +162,7 @@ export async function voidQuickSale(t: Tx, actor: Actor, orderId: string, reason
 /** 更正：同一交易內作廢舊的一筆，再建立正確的一筆 */
 export async function correctQuickSale(t: Tx, actor: Actor, orderId: string, input: QuickSaleInput & { reason?: string | null }) {
   const key = `quick:${input.idemKey}`;
+  await lockRows(t, "Order", [orderId]); // 同一筆更正同時送出兩次時，第二個等第一個完成後判定為重複
   const existing = await t.order.findUnique({ where: { idempotencyKey: key } });
   if (existing) return { orderId: existing.id, duplicated: true, ...(await saleSummary(t, existing.id)) };
   await voidQuickSale(t, actor, orderId, input.reason?.trim() || "更正");
@@ -177,12 +182,38 @@ export async function listQuickSales(t: Tx, opts: { q?: string | null; from?: Da
     },
     orderBy: [{ orderedAt: "desc" }, { createdAt: "desc" }],
     take: 300,
-    include: { buyer: { select: { id: true, name: true } }, items: { select: { productId: true, productNameSnapshot: true, qty: true, unitPrice: true } }, payments: { select: { amount: true, voidedAt: true } } },
+    include: {
+      buyer: { select: { id: true, name: true } },
+      items: { select: { id: true, productId: true, productNameSnapshot: true, qty: true, unitPrice: true, estUnitCostTwd: true, cancellations: { select: { qty: true } } } },
+      payments: { select: { amount: true, voidedAt: true } },
+    },
   });
-  const rows = [];
-  for (const o of orders) {
-    const s = await saleSummary(t, o.id);
-    rows.push({
+  // 一次取出所有出貨流水與批次成本，避免每筆各查一次
+  const itemIds = orders.flatMap((o) => o.items.map((i) => i.id));
+  const moves = itemIds.length ? await t.inventoryMovement.findMany({ where: { kind: "SHIP", orderItemId: { in: itemIds } }, select: { orderItemId: true, onHandDelta: true, purchaseBatchItemId: true, unitCostTwd: true } }) : [];
+  const lotIds = [...new Set(moves.map((m) => m.purchaseBatchItemId).filter(Boolean) as string[])];
+  const landed = await landedCosts(t, lotIds);
+  const lotInfo = lotIds.length ? await t.purchaseBatchItem.findMany({ where: { id: { in: lotIds } }, select: { id: true, actualUnitCost: true, batch: { select: { costs: { select: { id: true }, take: 1 } } } } }) : [];
+  const tentativeLot = new Set(lotInfo.filter((b) => b.actualUnitCost === null || b.batch.costs.length === 0).map((b) => b.id));
+  const movesByItem = new Map<string, typeof moves>();
+  for (const m of moves) {
+    const arr = movesByItem.get(m.orderItemId!) ?? [];
+    arr.push(m);
+    movesByItem.set(m.orderItemId!, arr);
+  }
+  const rows = orders.map((o) => {
+    let cost = 0;
+    let tentative = false;
+    for (const it of o.items) {
+      for (const m of movesByItem.get(it.id) ?? []) {
+        const r = costOfMove(landed, { qty: -m.onHandDelta, purchaseBatchItemId: m.purchaseBatchItemId, unitCostTwd: m.unitCostTwd, estUnitCostTwd: it.estUnitCostTwd });
+        cost += r.cost;
+        if (r.estimatedUnits > 0 || (m.purchaseBatchItemId && tentativeLot.has(m.purchaseBatchItemId))) tentative = true;
+      }
+    }
+    const qty = o.items.reduce((a, i) => a + i.qty - i.cancellations.reduce((x, c) => x + c.qty, 0), 0);
+    const revenue = o.items.reduce((a, i) => a + (i.qty - i.cancellations.reduce((x, c) => x + c.qty, 0)) * i.unitPrice, 0);
+    return {
       id: o.id,
       orderNo: o.orderNo,
       soldAt: o.orderedAt,
@@ -194,9 +225,14 @@ export async function listQuickSales(t: Tx, opts: { q?: string | null; from?: Da
       note: o.notes,
       paid: o.payments.filter((p) => !p.voidedAt).reduce((a, p) => a + p.amount, 0),
       cancelReason: o.cancelReason,
-      ...s,
-    });
-  }
+      qty,
+      revenue,
+      cost,
+      profit: revenue - cost,
+      tentative: qty > 0 && tentative,
+      voided: qty === 0,
+    };
+  });
   const live = rows.filter((r) => !r.voided);
   return {
     rows,

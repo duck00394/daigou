@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Button, ConfirmButton, TextField, SelectField, useRun, useToast, inputCls } from "@/components/client";
+import { Button, ConfirmButton, TextField, SelectField, useRun, useToast, useIdemKey, inputCls } from "@/components/client";
 import { setRateAction, addExpenseAction, deleteExpenseAction } from "@/actions/ops";
 import { saveCharacterAction, saveProductTypeAction } from "@/actions/catalog";
 import { verifyBackupAction, restoreBackupAction, logoutAllAction } from "@/actions/system";
@@ -44,10 +44,11 @@ export function NameList({ kind, items }: { kind: "character" | "type"; items: {
 }
 
 export function ExpenseForm() {
+  const expIdem = useIdemKey();
   const [f, setF] = useState({ date: new Date().toISOString().slice(0, 10), kind: "PACKAGING", amount: "", note: "" });
   const { run, pending } = useRun();
   return (
-    <form className="grid gap-2 sm:grid-cols-[10rem_12rem_8rem_1fr_auto] sm:items-end" onSubmit={(e) => { e.preventDefault(); run(() => addExpenseAction({ date: f.date, kind: f.kind as never, amountTwd: Number(f.amount), note: f.note || null }), { success: "已新增費用", onOk: () => setF({ ...f, amount: "", note: "" }) }); }}>
+    <form className="grid gap-2 sm:grid-cols-[10rem_12rem_8rem_1fr_auto] sm:items-end" onSubmit={(e) => { e.preventDefault(); run(() => addExpenseAction({ date: f.date, kind: f.kind as never, amountTwd: Number(f.amount), note: f.note || null, requestKey: expIdem.key }), { success: "已新增費用", onOk: () => { expIdem.renew(); setF({ ...f, amount: "", note: "" }); } }); }}>
       <TextField label="日期" type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} />
       <SelectField label="類型" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })} options={Object.entries(costKind)} />
       <TextField label="金額（台幣）" inputMode="numeric" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} />

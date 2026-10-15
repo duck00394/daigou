@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { checkIntegrity } from "@/server/services/integrity";
 import { prisma, tx } from "@/server/db";
 import { actor, resetDb, seedBasics } from "../helpers";
 import { ensureDefaultOperators, listOperators, responsibilityDefaults, saveOperator, updateBatchResponsibility } from "@/server/services/operators";
@@ -34,6 +35,12 @@ beforeEach(async () => {
 
 const pay = (o: Partial<SupplierPaymentInput>) =>
   tx((t) => addSupplierPayment(t, actor, { batchId, paidById: A, paidAt: new Date("2026-10-10T03:00:00Z"), amount: 1000, currency: "JPY", ...o }));
+
+
+// 每項測試結束後交叉核對：庫存、訂單快取、到貨、費用分攤、出貨都要和流水一致
+afterEach(async () => {
+  expect(await checkIntegrity(prisma)).toEqual([]);
+});
 
 describe("經營者設定", () => {
   it("預設有 A、B 兩位，可新增第三位，停用後不能再被新指定", async () => {

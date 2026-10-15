@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Button, ConfirmButton, Modal, TextField, SelectField, useRun, inputCls, notify } from "@/components/client";
+import { Button, ConfirmButton, Modal, TextField, SelectField, useRun, useIdemKey, inputCls, notify } from "@/components/client";
 import { addBatchCostAction, deleteBatchCostAction, cancelBatchAction } from "@/actions/ops";
 import { allocMethod, costKind } from "@/lib/labels";
 
@@ -8,6 +8,7 @@ export function AddCost({ batchId, items }: { batchId: string; items: { id: stri
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ kind: "INTL_SHIPPING", currency: "TWD", amount: "", method: "BY_QTY", note: "" });
   const [manual, setManual] = useState<Record<string, string>>({});
+  const costIdem = useIdemKey();
   const { run, pending } = useRun();
   return (
     <>
@@ -24,7 +25,7 @@ export function AddCost({ batchId, items }: { batchId: string; items: { id: stri
               const amount = Number(f.amount);
               if (!Number.isInteger(amount) || amount < 0) return notify("金額必須是整數");
               const split = f.method === "MANUAL" ? Object.fromEntries(Object.entries(manual).map(([k, v]) => [k, Number(v) || 0])) : null;
-              run(() => addBatchCostAction({ batchId, kind: f.kind as never, currency: f.currency as never, amount, method: f.method as never, manualSplit: split, note: f.note || null }), { success: "已新增費用並重新分攤", onOk: () => setOpen(false) });
+              run(() => addBatchCostAction({ batchId, kind: f.kind as never, currency: f.currency as never, amount, method: f.method as never, manualSplit: split, note: f.note || null, requestKey: costIdem.key }), { success: "已新增費用並重新分攤", onOk: () => { costIdem.renew(); setOpen(false); } });
             }}
           >
             新增並分攤

@@ -190,6 +190,7 @@ export function CancelItemButton({ itemId, name, max }: { itemId: string; name: 
   const [note, setNote] = useState("");
   const [mark, setMark] = useState(true);
   const [result, setResult] = useState<CancelResult | null>(null);
+  const cancelIdem = useIdemKey();
   const { run, pending } = useRun();
   if (max <= 0) return null;
   const close = () => { setOpen(false); setResult(null); };
@@ -208,7 +209,7 @@ export function CancelItemButton({ itemId, name, max }: { itemId: string; name: 
               variant="danger"
               loading={pending}
               disabled={!reason || n < 1 || n > max || (reason === "OTHER" && !note.trim())}
-              onClick={() => reason && run(() => cancelBatchItemAction(itemId, { qty: n, reason, note: note || null, markShortage: mark }), { success: `已砍單 ${n} 件`, onOk: (d) => setResult(d) })}
+              onClick={() => reason && run(() => cancelBatchItemAction(itemId, { qty: n, reason, note: note || null, markShortage: mark, requestKey: cancelIdem.key }), { success: `已砍單 ${n} 件`, onOk: (d) => { cancelIdem.renew(); setResult(d); } })}
             >
               砍掉 {n} 件
             </Button>

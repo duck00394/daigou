@@ -1,6 +1,7 @@
 "use server";
 import { z } from "zod";
 import { run } from "@/server/action";
+import { claimRequest } from "@/server/services/common";
 import { tx, prisma, BizError } from "@/server/db";
 import * as o from "@/server/services/orders";
 import * as pay from "@/server/services/payments";
@@ -52,12 +53,22 @@ export async function buyerWarningsAction(buyerId: string) {
   }, "read");
 }
 
-export async function appendItemsAction(orderId: string, items: z.infer<typeof itemSchema>[], note: string | null) {
-  return run((a) => tx((t) => o.appendItems(t, a, orderId, z.array(itemSchema).min(1).parse(items), note ?? undefined)).then((r) => r.length));
+export async function appendItemsAction(orderId: string, items: z.infer<typeof itemSchema>[], note: string | null, requestKey?: string) {
+  return run((a) =>
+    tx(async (t) => {
+      await claimRequest(t, requestKey, "order.append");
+      return o.appendItems(t, a, orderId, z.array(itemSchema).min(1).parse(items), note ?? undefined);
+    }).then((r) => r.length),
+  );
 }
 
-export async function cancelItemAction(orderItemId: string, qty: number, reason: string | null) {
-  return run((a) => tx((t) => o.cancelItemQty(t, a, { orderItemId, qty, reason })).then((r) => ({ refundUnscheduled: r.refundUnscheduled, receivableAfter: r.receivableAfter, released: r.released })));
+export async function cancelItemAction(orderItemId: string, qty: number, reason: string | null, requestKey?: string) {
+  return run((a) =>
+    tx(async (t) => {
+      await claimRequest(t, requestKey, "order.cancelItem");
+      return o.cancelItemQty(t, a, { orderItemId, qty, reason });
+    }).then((r) => ({ refundUnscheduled: r.refundUnscheduled, receivableAfter: r.receivableAfter, released: r.released })),
+  );
 }
 
 export async function cancelOrderAction(orderId: string, reason: string | null) {

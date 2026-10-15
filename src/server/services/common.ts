@@ -1,4 +1,4 @@
-import type { Tx } from "@/server/db";
+import { BizError, type Tx } from "@/server/db";
 import { Prisma } from "@prisma/client";
 
 export interface Actor {
@@ -59,4 +59,16 @@ export function emptyToNull(s: string | null | undefined): string | null {
   if (s === null || s === undefined) return null;
   const t = s.trim();
   return t === "" ? null : t;
+}
+
+/**
+ * 一次性請求識別碼：在同一個交易內登記，成功提交後同一碼不能再執行。
+ * 兩個相同請求同時送出時，第二個會等第一個交易結束；第一個成功就判定為重複，失敗則可重新執行。
+ */
+export async function claimRequest(t: Tx, key: string | null | undefined, scope: string) {
+  if (!key) return;
+  if (key.length < 8 || key.length > 120) throw new BizError("送出識別碼格式不正確");
+  const rows = await t.$queryRaw<{ key: string }[]>`
+    INSERT INTO "RequestKey" ("key") VALUES (${`${scope}:${key}`}) ON CONFLICT DO NOTHING RETURNING "key"`;
+  if (rows.length === 0) throw new BizError("這個操作剛剛已經完成，沒有重複執行");
 }

@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { checkIntegrity } from "@/server/services/integrity";
 import { prisma, tx } from "@/server/db";
 import { actor, resetDb, seedBasics } from "../helpers";
 import { addBuyerAlias, addBuyerTag, createBuyer, deleteTag, mergeBuyers, mergePreview, removeBuyerTag, saveTag } from "@/server/services/buyers";
@@ -15,6 +16,12 @@ let s: Awaited<ReturnType<typeof seedBasics>>;
 beforeEach(async () => {
   await resetDb();
   s = await seedBasics();
+});
+
+
+// 每項測試結束後交叉核對：庫存、訂單快取、到貨、費用分攤、出貨都要和流水一致
+afterEach(async () => {
+  expect(await checkIntegrity(prisma)).toEqual([]);
 });
 
 describe("買家辨識與合併", () => {

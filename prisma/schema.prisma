@@ -983,3 +983,10 @@ model ImportRow {
   @@index([batchId, rowNo])
   @@index([rowHash])
 }
+
+// 防重複送出：會累加的操作（砍單、取消、追加、新增費用）送出時帶一次性識別碼，同一碼只會執行一次。
+// 只是防護用的暫存紀錄，不屬於業務資料，不納入備份。
+model RequestKey {
+  key       String   @id
+  createdAt DateTime @default(now())
+}

@@ -5,6 +5,7 @@ import { audit, emptyToNull, nextCode, type Actor } from "./common";
 import { getDefaultRateMicro } from "./settings";
 import { recomputeOrder } from "./recompute";
 import { checkOperator } from "./operators";
+import { refreshBatchStatusById } from "./inventory";
 import type { AllocationMethod, BatchCostKind } from "@prisma/client";
 
 export type Currency = "JPY" | "TWD";
@@ -146,6 +147,7 @@ export async function addBatchItem(t: Tx, actor: Actor, batchId: string, it: Bat
   }
   for (const id of touched) await recomputeOrder(t, id);
   await reallocateBatch(t, batchId);
+  await refreshBatchStatusById(t, batchId);
   return row;
 }
 
@@ -221,6 +223,7 @@ export async function updateBatchItem(
   }
   await t.purchaseBatchItem.update({ where: { id: itemId }, data });
   await reallocateBatch(t, bi.batchId);
+  await refreshBatchStatusById(t, bi.batchId);
   await audit(t, actor, "batch.updateItem", "PurchaseBatch", bi.batchId, { itemId, before, after: input });
 }
 
@@ -234,6 +237,7 @@ export async function deleteBatchItem(t: Tx, actor: Actor, itemId: string) {
   await t.costAllocation.deleteMany({ where: { batchItemId: itemId } });
   await t.purchaseBatchItem.delete({ where: { id: itemId } });
   await reallocateBatch(t, bi.batchId);
+  await refreshBatchStatusById(t, bi.batchId);
   await audit(t, actor, "batch.deleteItem", "PurchaseBatch", bi.batchId, { itemId, productId: bi.productId, qty: bi.qty, estUnitCost: bi.estUnitCost, currency: bi.currency });
 }
 

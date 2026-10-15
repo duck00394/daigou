@@ -63,7 +63,7 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
     }
     if (mode === "APPEND") {
       if (!targetOrder) return notify("請選擇要追加的原訂單");
-      await run(() => appendItemsAction(targetOrder, items, notes || null), { success: "已追加到原訂單", onOk: () => router.push(`/orders/${targetOrder}`) });
+      await run(() => appendItemsAction(targetOrder, items, notes || null, idem.key), { success: "已追加到原訂單", onOk: () => { idem.renew(); router.push(`/orders/${targetOrder}`); } });
       return;
     }
     if (mode === "NEW_LINKED" && !targetOrder) return notify("請選擇原訂單");

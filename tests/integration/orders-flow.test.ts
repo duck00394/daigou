@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { checkIntegrity } from "@/server/services/integrity";
 import { prisma, tx } from "@/server/db";
 import { actor, resetDb, seedBasics } from "../helpers";
 import { appendItems, cancelItemQty, cancelOrder, createOrder } from "@/server/services/orders";
@@ -27,6 +28,12 @@ const order = (o: Partial<Parameters<typeof createOrder>[2]> = {}) =>
       ...o,
     }),
   );
+
+
+// 每項測試結束後交叉核對：庫存、訂單快取、到貨、費用分攤、出貨都要和流水一致
+afterEach(async () => {
+  expect(await checkIntegrity(prisma)).toEqual([]);
+});
 
 describe("訂單建立與金額", () => {
   it("預設售價、應收、可閱讀編號與預估成本快照", async () => {

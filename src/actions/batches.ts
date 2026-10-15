@@ -5,6 +5,7 @@ import { tx } from "@/server/db";
 import * as bo from "@/server/services/batch-ops";
 import { keepStock } from "@/server/services/inventory";
 import { parseDay } from "@/lib/labels";
+import { claimRequest } from "@/server/services/common";
 
 const str = (n: number) => z.string().max(n).nullable().optional();
 
@@ -13,9 +14,14 @@ export async function updateBatchInfoAction(batchId: string, input: { name?: str
   return run((a) => tx((t) => bo.updateBatchInfo(t, a, batchId, { ...v, expectedAt: v.expectedAt === undefined ? undefined : parseDay(v.expectedAt) })).then(() => null));
 }
 
-export async function cancelBatchItemAction(itemId: string, input: { qty: number; reason: string; note?: string | null; markShortage?: boolean }) {
-  const v = z.object({ qty: z.number().int(), reason: z.string().max(30), note: str(200), markShortage: z.boolean().optional() }).parse(input);
-  return run((a) => tx((t) => bo.cancelBatchItem(t, a, itemId, v)));
+export async function cancelBatchItemAction(itemId: string, input: { qty: number; reason: string; note?: string | null; markShortage?: boolean; requestKey?: string }) {
+  const v = z.object({ qty: z.number().int(), reason: z.string().max(30), note: str(200), markShortage: z.boolean().optional(), requestKey: z.string().max(120).optional() }).parse(input);
+  return run((a) =>
+    tx(async (t) => {
+      await claimRequest(t, v.requestKey, "batch.cancelItem");
+      return bo.cancelBatchItem(t, a, itemId, v);
+    }),
+  );
 }
 
 export async function copyBatchItemsAction(input: { fromBatchId: string; toBatchId: string; submissionKey: string; rows: bo.CopyRow[] }) {

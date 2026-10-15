@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { checkIntegrity } from "@/server/services/integrity";
 import { prisma, tx } from "@/server/db";
 import { actor, resetDb, seedBasics } from "../helpers";
 import { addBatchCost, addBatchItem, createBatch } from "@/server/services/purchase";
@@ -8,6 +9,7 @@ import { inventorySummary, keepStock, productLots, reserveForItem } from "@/serv
 import { createOrder } from "@/server/services/orders";
 import { correctQuickSale, listQuickSales, quickSale, voidQuickSale } from "@/server/services/quick-sale";
 import { monthlyReport } from "@/server/services/reports";
+import { addPayment } from "@/server/services/payments";
 
 let s: Awaited<ReturnType<typeof seedBasics>>;
 let itemA: string;
@@ -32,6 +34,12 @@ beforeEach(async () => {
 const sell = (o: Partial<Parameters<typeof quickSale>[2]> = {}) => tx((t) => quickSale(t, actor, { productId: s.p3.id, qty: 1, unitPrice: 250, idemKey: "sale-key-1", ...o }));
 const stock = async () => (await tx((t) => inventorySummary(t, [s.p3.id]))).get(s.p3.id)!;
 const ym = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit" }).format(new Date()).slice(0, 7);
+
+
+// 每項測試結束後交叉核對：庫存、訂單快取、到貨、費用分攤、出貨都要和流水一致
+afterEach(async () => {
+  expect(await checkIntegrity(prisma)).toEqual([]);
+});
 
 describe("現貨直接出售", () => {
   it("扣可售庫存、先進先出取批次成本、記錄收入與毛利；重送不重複", async () => {
@@ -96,5 +104,22 @@ describe("現貨直接出售", () => {
   it("一般訂單不能用現貨出售的作廢功能", async () => {
     const order = await tx((t) => createOrder(t, actor, { buyerId: s.b1.id, items: [{ productId: s.p3.id, qty: 1 }] }));
     await expect(tx((t) => voidQuickSale(t, actor, order.id, "x"))).rejects.toThrow("只有「現貨出售」");
+  });
+
+  it("同一筆出售同時送出兩次，只建立一筆、只扣一次庫存", async () => {
+    const [a, b] = await Promise.all([sell({ qty: 2, idemKey: "same-key-1" }), sell({ qty: 2, idemKey: "same-key-1" })]);
+    expect(a.orderId).toBe(b.orderId);
+    expect([a.duplicated, b.duplicated].sort()).toEqual([false, true]);
+    expect(await prisma.order.count({ where: { source: "QUICK" } })).toBe(1);
+    expect((await stock()).shipped).toBe(2);
+  });
+
+  it("作廢只作廢出售時自動登記的收款；另外手動登記的收款保留並顯示應退", async () => {
+    const r = await sell({ qty: 1, paid: false });
+    await tx((t) => addPayment(t, actor, { orderId: r.orderId, amount: 250, method: "現金", dedupeKey: "manual-pay-1" }));
+    await tx((t) => voidQuickSale(t, actor, r.orderId, "客人退回"));
+    const o = await prisma.order.findUniqueOrThrow({ where: { id: r.orderId }, include: { payments: true } });
+    expect(o.payments.map((p) => p.voidedAt)).toEqual([null]);
+    expect(o.refundDueCache).toBe(250);
   });
 });

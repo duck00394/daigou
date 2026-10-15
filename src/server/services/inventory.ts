@@ -140,8 +140,13 @@ export async function receiveStock(
 
 export async function refreshBatchStatus(t: Tx, batchItemId: string) {
   const bi = await t.purchaseBatchItem.findUniqueOrThrow({ where: { id: batchItemId }, select: { batchId: true } });
+  await refreshBatchStatusById(t, bi.batchId);
+}
+
+/** 依到貨與有效數量重算採購團狀態（新增、修改、刪除、砍單品項或到貨後都要呼叫） */
+export async function refreshBatchStatusById(t: Tx, batchId: string) {
   const items = await t.purchaseBatchItem.findMany({
-    where: { batchId: bi.batchId },
+    where: { batchId },
     include: { movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
   });
   let ordered = 0;
@@ -150,7 +155,7 @@ export async function refreshBatchStatus(t: Tx, batchItemId: string) {
     ordered += it.qty - it.cancelledQty;
     received += it.movements.reduce((s, m) => s + m.onHandDelta, 0);
   }
-  const batch = await t.purchaseBatch.findUniqueOrThrow({ where: { id: bi.batchId } });
+  const batch = await t.purchaseBatch.findUniqueOrThrow({ where: { id: batchId } });
   if (batch.status === "CANCELLED" || batch.status === "DRAFT") return;
   const status = received <= 0 ? "ORDERED" : received >= ordered ? "RECEIVED" : "PARTIAL_RECEIVED";
   if (status !== batch.status) await t.purchaseBatch.update({ where: { id: batch.id }, data: { status } });
@@ -385,6 +390,7 @@ export async function keepStock(t: Tx, actor: Actor, input: { productId: string;
     if (dup) return { duplicated: true };
   }
   await lockRows(t, "Product", [input.productId]);
+  if (input.dedupeKey && (await t.inventoryMovement.findFirst({ where: { dedupeKey: { startsWith: `${input.dedupeKey}#` } } }))) return { duplicated: true };
   const reason = input.delta > 0 ? `自留${input.note ? `：${input.note}` : ""}` : `改回出售${input.note ? `：${input.note}` : ""}`;
   let n = 0;
   const create = (delta: number, lot: string | null) =>

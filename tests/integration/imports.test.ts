@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { checkIntegrity } from "@/server/services/integrity";
 import * as XLSX from "@e965/xlsx";
 import { prisma, tx } from "@/server/db";
 import { actor, resetDb, seedBasics } from "../helpers";
@@ -15,6 +16,12 @@ beforeEach(async () => {
 });
 
 const rowsOf = (batchId: string) => prisma.importRow.findMany({ where: { batchId }, orderBy: [{ rowNo: "asc" }, { seq: "asc" }] });
+
+
+// 每項測試結束後交叉核對：庫存、訂單快取、到貨、費用分攤、出貨都要和流水一致
+afterEach(async () => {
+  expect(await checkIntegrity(prisma)).toEqual([]);
+});
 
 describe("LINE 貼上加單", () => {
   const text = `小美 吉伊吊娃 2、小八 S 娃 1

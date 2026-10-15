@@ -102,6 +102,7 @@ export function ItemActions({
 }) {
   const [mode, setMode] = useState<null | "cancel" | "edit">(null);
   const [cancelQty, setCancelQty] = useState("1");
+  const cancelIdem = useIdemKey();
   const [reason, setReason] = useState("");
   const [edit, setEdit] = useState({ unitPrice: String(item.unitPrice), lineDiscount: String(item.lineDiscount), addQty: "", categoryId: item.categoryId ?? "", specNote: item.specNote ?? "" });
   const { run, pending } = useRun();
@@ -127,7 +128,7 @@ export function ItemActions({
             onClick={() => {
               const q = int(cancelQty);
               if (!Number.isInteger(q) || q <= 0 || q > cancellable) return notify(`請輸入 1 到 ${cancellable} 的整數`);
-              run(() => cancelItemAction(item.id, q, reason || null), {
+              run(() => cancelItemAction(item.id, q, reason || null, cancelIdem.key), {
                 success: (d) => `已取消 ${q} 件，應收變為 ${formatTwd(d.receivableAfter)}${d.refundUnscheduled > 0 ? `，需退款 ${formatTwd(d.refundUnscheduled)}` : ""}`,
                 onOk: () => setMode(null),
               });

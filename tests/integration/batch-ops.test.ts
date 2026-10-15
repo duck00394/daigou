@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { checkIntegrity } from "@/server/services/integrity";
 import { prisma, tx } from "@/server/db";
 import { actor, resetDb, seedBasics } from "../helpers";
 import { addBatchCost, addBatchItem, createBatch, updateBatchItem } from "@/server/services/purchase";
@@ -34,6 +35,12 @@ async function fourBatches() {
     return out;
   });
 }
+
+
+// 每項測試結束後交叉核對：庫存、訂單快取、到貨、費用分攤、出貨都要和流水一致
+afterEach(async () => {
+  expect(await checkIntegrity(prisma)).toEqual([]);
+});
 
 describe("活動總覽與跨團價格", () => {
   it("同一商品在四團價格獨立；修改其中一團不影響其他團；比較表與合計一致", async () => {
@@ -198,5 +205,22 @@ describe("驗收補強", () => {
     expect([inv.kept, inv.available, inv.onHand + inv.kept]).toEqual([0, 5, 5]);
     const lots = await tx((t) => productLots(t, s.p1.id));
     expect(lots.map((l) => l.onHand)).toEqual([5]);
+  });
+
+  it("砍單、取消等會累加的操作：同一個送出識別碼只會執行一次（含同時送出）", async () => {
+    const { claimRequest } = await import("@/server/services/common");
+    const b = await fourBatches();
+    const once = () => tx(async (t) => {
+      await claimRequest(t, "cancel-req-1", "batch.cancelItem");
+      return cancelBatchItem(t, actor, b[1].itemId, { qty: 1, reason: "AGENT_CANCEL" });
+    });
+    const results = await Promise.allSettled([once(), once()]);
+    expect(results.map((r) => r.status).sort()).toEqual(["fulfilled", "rejected"]);
+    expect((results.find((r) => r.status === "rejected") as PromiseRejectedResult).reason.message).toContain("已經完成");
+    expect((await prisma.purchaseBatchItem.findUniqueOrThrow({ where: { id: b[1].itemId } })).cancelledQty).toBe(1);
+    // 失敗的請求不會佔用識別碼，可以重試
+    await expect(tx(async (t) => { await claimRequest(t, "cancel-req-2", "batch.cancelItem"); return cancelBatchItem(t, actor, b[1].itemId, { qty: 99, reason: "AGENT_CANCEL" }); })).rejects.toThrow("最多只能砍");
+    await tx(async (t) => { await claimRequest(t, "cancel-req-2", "batch.cancelItem"); return cancelBatchItem(t, actor, b[1].itemId, { qty: 1, reason: "AGENT_CANCEL" }); });
+    expect((await prisma.purchaseBatchItem.findUniqueOrThrow({ where: { id: b[1].itemId } })).cancelledQty).toBe(2);
   });
 });

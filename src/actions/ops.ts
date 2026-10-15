@@ -7,7 +7,7 @@ import * as pur from "@/server/services/purchase";
 import * as ship from "@/server/services/shipping";
 import { createReceivingRecord } from "@/server/services/receiving";
 import { setDefaultRate } from "@/server/services/settings";
-import { audit } from "@/server/services/common";
+import { audit, claimRequest } from "@/server/services/common";
 import { parseDateTimeInput, parseDay } from "@/lib/labels";
 
 export async function receiveAction(input: { productId: string; qty: number; batchItemId: string | null; unitCostTwd: number | null; reason: string | null; dedupeKey: string; receivedById?: string | null; defectQty?: number }) {
@@ -113,8 +113,15 @@ export async function updateBatchItemAction(
 export async function deleteBatchItemAction(itemId: string) {
   return run((a) => tx((t) => pur.deleteBatchItem(t, a, itemId)));
 }
-export async function addBatchCostAction(input: { batchId: string; kind: "AGENT_FEE" | "JP_DOMESTIC_SHIPPING" | "INTL_SHIPPING" | "TW_DOMESTIC_SHIPPING" | "DUTY" | "PACKAGING" | "PLATFORM_FEE" | "OTHER"; currency: "TWD" | "JPY"; amount: number; method: "BY_QTY" | "BY_WEIGHT" | "BY_VALUE" | "MANUAL"; manualSplit: Record<string, number> | null; note: string | null }) {
-  return run((a) => tx((t) => pur.addBatchCost(t, a, input)).then(() => null));
+export async function addBatchCostAction(input: { batchId: string; kind: "AGENT_FEE" | "JP_DOMESTIC_SHIPPING" | "INTL_SHIPPING" | "TW_DOMESTIC_SHIPPING" | "DUTY" | "PACKAGING" | "PLATFORM_FEE" | "OTHER"; currency: "TWD" | "JPY"; amount: number; method: "BY_QTY" | "BY_WEIGHT" | "BY_VALUE" | "MANUAL"; manualSplit: Record<string, number> | null; note: string | null; requestKey?: string }) {
+  return run((a) =>
+    tx(async (t) => {
+      await claimRequest(t, input.requestKey, "batch.addCost");
+      const { requestKey: _k, ...rest } = input;
+      void _k;
+      return pur.addBatchCost(t, a, rest);
+    }).then(() => null),
+  );
 }
 export async function deleteBatchCostAction(costId: string) {
   return run((a) => tx((t) => pur.deleteBatchCost(t, a, costId)));
@@ -136,9 +143,10 @@ export async function setRateAction(rate: string) {
   return run((a) => tx((t) => setDefaultRate(t, a, rate)).then(() => null), "admin");
 }
 
-export async function addExpenseAction(input: { date: string; kind: "JP_DOMESTIC_SHIPPING" | "INTL_SHIPPING" | "DUTY" | "PACKAGING" | "PLATFORM_FEE" | "OTHER"; amountTwd: number; note: string | null }) {
+export async function addExpenseAction(input: { date: string; kind: "JP_DOMESTIC_SHIPPING" | "INTL_SHIPPING" | "DUTY" | "PACKAGING" | "PLATFORM_FEE" | "OTHER"; amountTwd: number; note: string | null; requestKey?: string }) {
   return run((a) =>
     tx(async (t) => {
+      await claimRequest(t, input.requestKey, "expense.add");
       const date = parseDay(input.date);
       if (!date) throw new BizError("請選擇日期");
       if (!Number.isInteger(input.amountTwd) || input.amountTwd <= 0) throw new BizError("金額必須是正整數");
