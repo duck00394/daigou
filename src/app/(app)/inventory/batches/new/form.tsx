@@ -5,6 +5,7 @@ import { Button, TextField, SelectField, TextArea, useRun, inputCls, notify } fr
 import { OperatorPicker, type OperatorOption } from "@/components/operator-picker";
 import { createBatchAction } from "@/actions/ops";
 import { saveSupplierAction } from "@/actions/series";
+import { saveCategoryAction } from "@/actions/catalog";
 import { toDateTimeInput } from "@/lib/labels";
 
 type Template = {
@@ -40,6 +41,8 @@ export function NewBatchForm({
   const [copiedFrom, setCopiedFrom] = useState<Template | null>(first);
   const [confirmed, setConfirmed] = useState(false);
   const [newSupplier, setNewSupplier] = useState<string | null>(null);
+  const [cats, setCats] = useState(categories);
+  const [newCategory, setNewCategory] = useState<string | null>(null);
   const { run, pending } = useRun();
   const router = useRouter();
   const needConfirm = !!copiedFrom && !confirmed;
@@ -58,9 +61,29 @@ export function NewBatchForm({
       }}
     >
       <TextField label="採購團名稱（必填）" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="例：聖誕 A 團（代購小美）" />
-      {categories.length > 0 && (
-        <SelectField label="所屬活動／系列" value={f.categoryId} onChange={(e) => setF({ ...f, categoryId: e.target.value })} options={[["", "不指定"], ...categories.map((c) => [c.id, c.name] as [string, string])]} hint="同一活動的各團可以在活動頁一起比較價格與進度" />
+      {newCategory === null ? (
+        <div className="flex items-end gap-2">
+          <SelectField className="flex-1" label="所屬活動／系列" value={f.categoryId} onChange={(e) => setF({ ...f, categoryId: e.target.value })} options={[["", "不指定"], ...cats.map((c) => [c.id, c.name] as [string, string])]} />
+          <Button onClick={() => setNewCategory("")}>新增活動</Button>
+        </div>
+      ) : (
+        <div className="flex items-end gap-2">
+          <label className="flex-1 text-[13px] font-medium text-ink-2">
+            新活動名稱
+            <input autoFocus className={`${inputCls} mt-1`} value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="例：吉伊卡哇聖誕系列" />
+          </label>
+          <Button variant="primary" onClick={async () => {
+            if (!newCategory.trim()) return notify("請填寫活動名稱");
+            const r = await saveCategoryAction(null, { name: newCategory.trim(), type: "FESTIVAL", active: true });
+            if (!r.ok) return notify(r.error);
+            setCats((l) => [...l, { id: r.data.id, name: newCategory.trim() }]);
+            setF((x) => ({ ...x, categoryId: r.data.id }));
+            setNewCategory(null);
+          }}>建立</Button>
+          <Button onClick={() => setNewCategory(null)}>取消</Button>
+        </div>
       )}
+      <p className="-mt-2 text-[12px] text-mute">同一活動的各團可以在活動頁一起比較價格與進度。要改名或停用活動，請到「全部功能 → 活動與分類」。</p>
       <div>
         {newSupplier === null ? (
           <div className="flex items-end gap-2">
