@@ -353,8 +353,8 @@ export async function inventorySummary(t: Tx, productIds?: string[]) {
     v.onHand = r._sum.onHandDelta ?? 0;
     v.reserved = r._sum.reservedDelta ?? 0;
   }
-  for (const r of shippedAgg) get(r.productId).shipped = -(r._sum.onHandDelta ?? 0);
-  for (const r of keptAgg) get(r.productId).kept = -(r._sum.onHandDelta ?? 0);
+  for (const r of shippedAgg) get(r.productId).shipped = -(r._sum.onHandDelta ?? 0) || 0;
+  for (const r of keptAgg) get(r.productId).kept = -(r._sum.onHandDelta ?? 0) || 0;
   for (const b of batchItems) {
     const rec = b.movements.reduce((s, m) => s + m.onHandDelta, 0);
     get(b.productId).incoming += Math.max(0, b.qty - b.cancelledQty - rec);

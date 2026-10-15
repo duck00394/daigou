@@ -161,3 +161,42 @@ describe("自留", () => {
     expect(lots.find((l) => l.batchItemId === b[0].itemId)!.onHand).toBe(1);
   });
 });
+
+describe("驗收補強", () => {
+  it("砍單後：待到貨、成本分攤、活動總覽與匯出口徑一致", async () => {
+    const b = await fourBatches();
+    // A 團加運費 90（依件數），砍 1 件後費用改由剩下 2 件分攤
+    await tx((t) => addBatchCost(t, actor, { batchId: b[0].batchId, kind: "INTL_SHIPPING", currency: "TWD", amount: 90, method: "BY_QTY" }));
+    await tx((t) => cancelBatchItem(t, actor, b[0].itemId, { qty: 1, reason: "SELLER_CANCEL" }));
+    const alloc = await prisma.costAllocation.aggregate({ where: { batchItemId: b[0].itemId }, _sum: { amountTwd: true } });
+    expect(alloc._sum.amountTwd).toBe(90);
+    const inv = (await tx((t) => inventorySummary(t, [s.p1.id]))).get(s.p1.id)!;
+    expect(inv.incoming).toBe(2 + 5 + 2 + 4);
+    const o = await tx((t) => categoryOverview(t, s.halloween.id));
+    expect(o.batches[0]).toMatchObject({ qty: 2, cancelled: 1, goodsTwd: 840, feesTwd: 90, totalTwd: 930 });
+    const cell = o.matrix[0].cells[b[0].batchId][0];
+    expect(cell).toMatchObject({ qty: 2, unitTwd: 420, fullUnitTwd: 465 }); // 商品單價與含費用單件成本分開
+    expect(o.total.qty).toBe(13);
+  });
+
+  it("全部砍完、仍有已付款：付款保留為已付，不產生任何退款紀錄", async () => {
+    const b = await fourBatches();
+    await tx((t) => addSupplierPayment(t, actor, { batchId: b[2].batchId, paidById: "op_b", paidAt: new Date(), amount: 800, currency: "TWD" }));
+    const r = await tx((t) => cancelBatchItem(t, actor, b[2].itemId, { qty: 2, reason: "AGENT_CANCEL" }));
+    expect(r.remaining).toBe(0);
+    expect(r.paid).toEqual([{ currency: "TWD", amount: 800 }]);
+    const pays = await prisma.supplierPayment.findMany({ where: { batchId: b[2].batchId } });
+    expect(pays.map((p) => p.status)).toEqual(["PAID"]);
+    expect(await prisma.refund.count()).toBe(0);
+  });
+
+  it("自留與改回出售來回操作，在庫總數始終等於到貨 − 出貨", async () => {
+    const b = await fourBatches();
+    await tx((t) => createReceivingRecord(t, actor, { batchId: b[1].batchId, receivedById: "op_a", lines: [{ batchItemId: b[1].itemId, receivedQty: 5 }] }));
+    for (const d of [3, -2, 1, -2]) await tx((t) => keepStock(t, actor, { productId: s.p1.id, delta: d }));
+    const inv = (await tx((t) => inventorySummary(t, [s.p1.id]))).get(s.p1.id)!;
+    expect([inv.kept, inv.available, inv.onHand + inv.kept]).toEqual([0, 5, 5]);
+    const lots = await tx((t) => productLots(t, s.p1.id));
+    expect(lots.map((l) => l.onHand)).toEqual([5]);
+  });
+});

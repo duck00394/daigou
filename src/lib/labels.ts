@@ -78,7 +78,7 @@ export const groupBuyStatus: Record<string, [string, Tone]> = {
   CANCELLED: ["已取消", "muted"],
 };
 
-export const orderSource: Record<string, string> = { MANUAL: "手動", LINE: "LINE", EXCEL: "Excel", WEB: "網站" };
+export const orderSource: Record<string, string> = { MANUAL: "手動", LINE: "LINE", EXCEL: "Excel", WEB: "網站", QUICK: "現貨出售" };
 
 export const tagKind: Record<string, string> = { RISK: "風險", POSITIVE: "正面", OPERATION: "作業", CUSTOM: "自訂" };
 

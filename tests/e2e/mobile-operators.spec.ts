@@ -60,6 +60,13 @@ test("手機：庫存以卡片顯示，可直接自留與改回出售", async ({
   await dlg.getByRole("radio", { name: /改回出售/ }).click();
   await dlg.getByRole("button", { name: "改回出售 1 件" }).click();
   await toast(page, "已改回出售 1 件");
+  // 卡片上直接出售 1 件，不填買家
+  await card.getByRole("button", { name: "出售" }).click();
+  await dlg.getByLabel("每件售價（台幣）").fill("480");
+  await dlg.getByRole("button", { name: "確認出售 NT$480" }).click();
+  await expect(dlg.getByText("毛利")).toBeVisible();
+  await page.screenshot({ path: "test-results/mobile_sell_done.png", fullPage: false });
+  await dlg.getByRole("button", { name: "完成" }).click();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
   await page.screenshot({ path: "test-results/mobile_stock.png", fullPage: true });

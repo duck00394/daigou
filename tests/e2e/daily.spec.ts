@@ -86,4 +86,32 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
   await toast(page, "已自留 2 件");
   await expect(stockRow.getByRole("cell").nth(4)).toHaveText("2"); // 自留
   await expect(stockRow.getByRole("cell").nth(3)).toHaveText("1"); // 可售
+
+  // 直接出售剩下的 1 件 → 出售紀錄 → 更正售價 → 作廢後庫存回來
+  await stockRow.getByRole("button", { name: "出售" }).click();
+  await dlg.getByLabel("每件售價（台幣）").fill("520");
+  await dlg.getByRole("button", { name: "確認出售 NT$520" }).click();
+  await expect(dlg.getByText("收入")).toBeVisible();
+  await expect(dlg).toContainText("NT$520");
+  await dlg.getByRole("button", { name: "完成" }).click();
+  await expect(stockRow.getByRole("cell").nth(3)).toHaveText("0");
+
+  await page.goto("/sales");
+  const sale = page.getByTestId("sale-row").filter({ hasText: "吉伊卡哇 吉伊 吊娃" }).first();
+  await expect(sale).toContainText("散客");
+  await expect(sale).toContainText("已收款");
+  await sale.getByRole("button", { name: "更正" }).click();
+  await dlg.getByLabel("每件售價（台幣）").fill("550");
+  await dlg.getByLabel("更正原因（必填）").fill("少算 30");
+  await dlg.getByRole("button", { name: "作廢舊紀錄並儲存" }).click();
+  await toast(page, /已更正：收入 NT\$550/);
+  await expect(sale).toContainText("每件 NT$550");
+  await sale.getByRole("button", { name: "作廢" }).click();
+  await dlg.getByLabel("作廢原因（必填）").fill("沒有成交");
+  await dlg.getByRole("button", { name: "作廢" }).click();
+  await toast(page, "已作廢");
+  await page.getByRole("link", { name: "顯示已作廢" }).click();
+  await expect(page.getByTestId("sale-row").filter({ hasText: "已作廢" })).toHaveCount(2);
+  await page.goto("/inventory?tab=stock&q=吉伊卡哇 吉伊 吊娃");
+  await expect(stockRow.getByRole("cell").nth(3)).toHaveText("1");
 });

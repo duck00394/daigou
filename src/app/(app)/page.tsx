@@ -15,7 +15,7 @@ const QUICK = [
   { href: "/payments", label: "待收款" },
   { href: "/shipping", label: "待出貨" },
   { href: "/inventory?tab=stock", label: "庫存與自留" },
-  { href: "/import", label: "Excel 匯入" },
+  { href: "/sales?new=1", label: "出售現貨" },
 ];
 
 export default async function Home() {

@@ -7,6 +7,7 @@ import { listOperators } from "@/server/services/operators";
 import { getDefaultRateMicro } from "@/server/services/settings";
 import { PageHeader, Section, TableWrap, Empty, StatusBadge, LinkButton, Badge } from "@/components/ui";
 import { ReceiveForm, AdjustForm, CreateBatchFromDemand, KeepButton } from "./parts";
+import { SellButton } from "@/components/quick-sale";
 import { batchStatus, fmtDate, fmtDay, formatRateLabel } from "./util";
 
 export const metadata = { title: "庫存與採購" };
@@ -25,7 +26,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
   const tab = sp.tab ?? "stock";
   return (
     <div className="space-y-4">
-      <PageHeader title="庫存與採購" sub="實際在庫 = 到貨 ± 盤點 − 出貨；可用庫存 = 實際在庫 − 已保留給訂單。" actions={<LinkButton href="/api/export/inventory">匯出庫存流水</LinkButton>} />
+      <PageHeader title="庫存與採購" sub="實際在庫 = 到貨 ± 盤點 − 出貨（含現貨出售）− 自留；可售 = 實際在庫 − 已保留給買家。" actions={<LinkButton href="/api/export/inventory">匯出庫存流水</LinkButton>} />
       <nav aria-label="庫存分頁" className="-mx-3 flex gap-1 overflow-x-auto px-3 sm:mx-0 sm:px-0">
         {TABS.map(([k, l]) => (
           <Link key={k} href={`/inventory?tab=${k}`} aria-current={tab === k ? "page" : undefined} className={`shrink-0 rounded-lg px-3 py-1.5 text-sm ${tab === k ? "bg-ink text-white" : "bg-white text-ink-2 hover:bg-line-2"}`}>
@@ -50,14 +51,16 @@ async function StockTab({ q, only }: { q?: string; only?: string }) {
   const products = await prisma.product.findMany({
     where: { archivedAt: null, ...(q ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { code: { contains: q, mode: "insensitive" } }] } : {}) },
     orderBy: { name: "asc" },
-    select: { id: true, code: true, name: true, status: true },
+    select: { id: true, code: true, name: true, status: true, salePriceTwd: true },
   });
   const inv = await tx((t) => inventorySummary(t, products.map((p) => p.id)));
+  const buyerNames = await prisma.buyer.findMany({ where: { mergedIntoId: null }, orderBy: { updatedAt: "desc" }, take: 200, select: { name: true } });
   let rows = products.map((p) => ({ p, s: inv.get(p.id) ?? { onHand: 0, reserved: 0, available: 0, incoming: 0, shipped: 0, kept: 0, activeOrdered: 0, openDemand: 0, unallocated: 0, shortage: 0 } }));
   if (only === "active") rows = rows.filter((r) => r.s.onHand || r.s.incoming || r.s.openDemand || r.s.kept);
   if (only === "short") rows = rows.filter((r) => r.s.shortage > 0);
   return (
     <Section pad={false}>
+      <datalist id="buyer-names">{buyerNames.map((b) => <option key={b.name} value={b.name} />)}</datalist>
       <form className="flex flex-wrap gap-2 border-b border-line-2 px-4 py-3" method="get">
         <input type="hidden" name="tab" value="stock" />
         <input type="search" name="q" defaultValue={q} placeholder="搜尋商品" className="min-w-[12rem] flex-1 rounded-lg border border-line px-3 py-2" />
@@ -88,7 +91,8 @@ async function StockTab({ q, only }: { q?: string; only?: string }) {
                     </div>
                   ))}
                 </dl>
-                <div className="mt-2 flex gap-2">
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <SellButton primary product={{ id: p.id, name: p.name, salePriceTwd: p.salePriceTwd, available: s.available }} />
                   <KeepButton productId={p.id} name={p.name} available={s.available} kept={s.kept} />
                   <Link href={`/inventory?tab=receive&productId=${p.id}`} className="rounded-lg border border-line px-3 py-1.5 text-sm text-ai">登記到貨</Link>
                 </div>
@@ -125,6 +129,7 @@ async function StockTab({ q, only }: { q?: string; only?: string }) {
                     <td className="num text-right">{s.shortage > 0 ? <Badge tone="bad">缺 {s.shortage}</Badge> : 0}</td>
                     <td className="whitespace-nowrap">
                       <span className="flex gap-2">
+                        <SellButton small primary product={{ id: p.id, name: p.name, salePriceTwd: p.salePriceTwd, available: s.available }} />
                         <KeepButton productId={p.id} name={p.name} available={s.available} kept={s.kept} small />
                         <Link href={`/inventory?tab=receive&productId=${p.id}`} className="text-sm text-ai hover:underline">登記到貨</Link>
                       </span>

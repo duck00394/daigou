@@ -10,6 +10,7 @@ export const NAV: { href: string; label: string; group: string }[] = [
   { href: "/orders", label: "訂單", group: "日常" },
   { href: "/payments", label: "收款與退款", group: "日常" },
   { href: "/shipping", label: "出貨", group: "日常" },
+  { href: "/sales", label: "出售紀錄", group: "日常" },
   { href: "/buyers", label: "買家", group: "資料" },
   { href: "/products", label: "商品", group: "資料" },
   { href: "/series", label: "系列與角色", group: "資料" },
