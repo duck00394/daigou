@@ -1,26 +1,71 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* 色彩：藍（主要操作）＋淡粉（選取、數量）＋中性墨色。低飽和、資料優先。 */
+@theme {
+  --color-paper: #f6f7f9;
+  --color-card: #ffffff;
+  --color-ink: #1d2433;
+  --color-ink-2: #4a5263;
+  --color-mute: #7a8294;
+  --color-line: #e2e5eb;
+  --color-line-2: #eef0f4;
+  --color-ai: #2f4b7c;
+  --color-ai-2: #253d66;
+  --color-ai-soft: #e9eef7;
+  --color-peach: #f6d5db;
+  --color-peach-ink: #8a3a4a;
+  --color-good: #1f7a4d;
+  --color-good-soft: #e5f4ec;
+  --color-warn: #8a5a00;
+  --color-warn-soft: #fff4d6;
+  --color-bad: #b42318;
+  --color-bad-soft: #fde8e6;
+  --color-info: #2f4b7c;
+  --color-info-soft: #e9eef7;
+  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Noto Sans CJK TC", "Microsoft JhengHei", "Segoe UI", sans-serif;
+  --font-round: ui-rounded, "SF Pro Rounded", -apple-system, "PingFang TC", "Noto Sans TC", "Noto Sans CJK TC", "Microsoft JhengHei", sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html {
+  -webkit-text-size-adjust: 100%;
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+}
+.num {
+  font-family: var(--font-round);
+  font-variant-numeric: tabular-nums;
+}
+.round {
+  font-family: var(--font-round);
+}
+:focus-visible {
+  outline: 2px solid var(--color-ai);
+  outline-offset: 2px;
+}
+input,
+select,
+textarea {
+  font-size: 16px; /* iPhone 不會自動放大 */
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
   }
 }
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
 }

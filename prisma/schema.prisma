@@ -1,0 +1,813 @@
+// 吉伊卡哇代購管理 APP 資料模型
+// 金額：台幣（TWD）與日幣（JPY）一律以整數「元／円」儲存；匯率以 Decimal(12,6) 儲存。
+// 已收、已退、待收等金額與庫存數量的唯一來源是流水紀錄（Payment / Refund / InventoryMovement / ShipmentItem / OrderCancellation）。
+// Order 與 OrderItem 上的 *Cache 欄位只是為了列表篩選與排序，每次異動都會在同一個交易內依流水重新計算。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────── 使用者與登入 ─────────────────────────
+
+enum UserRole {
+  OWNER
+  ADMIN
+  STAFF
+}
+
+model User {
+  id          String     @id @default(cuid())
+  username    String     @unique
+  displayName String
+  role        UserRole   @default(OWNER)
+  active      Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  sessions    Session[]
+  auditLogs   AuditLog[]
+}
+
+model Session {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
+  ip         String?
+  userAgent  String?
+
+  @@index([userId])
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  key       String
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+}
+
+// ───────────────────────── 系統設定與流水號 ─────────────────────────
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model Counter {
+  key   String @id
+  value Int    @default(0)
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  data      Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+// ───────────────────────── 商品 ─────────────────────────
+
+model Character {
+  id        String             @id @default(cuid())
+  name      String             @unique
+  sortOrder Int                @default(0)
+  active    Boolean            @default(true)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  products  ProductCharacter[]
+}
+
+model ProductType {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  sortOrder Int       @default(0)
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
+}
+
+enum ProductStatus {
+  IN_STOCK // 現貨
+  PREORDER // 預購中
+  SOLD_OUT // 已售完
+  PAUSED // 暫停販售
+  OUT_OF_PRINT // 絕版
+  DISCONTINUED // 停售
+}
+
+model Product {
+  id                  String              @id @default(cuid())
+  code                String              @unique
+  name                String
+  imageUrl            String?
+  series              String?
+  spec                String? // 規格、款式、尺寸
+  productTypeId       String?
+  productType         ProductType?        @relation(fields: [productTypeId], references: [id])
+  status              ProductStatus       @default(PREORDER)
+  officialPriceJpy    Int?
+  salePriceTwd        Int?
+  estCostTwd          Int? // 預估單件成本（台幣）
+  weightGrams         Int?
+  sourceName          String?
+  sourceUrl           String?
+  releaseDate         DateTime?           @db.Date
+  expectedArrivalDate DateTime?           @db.Date
+  actualArrivalDate   DateTime?           @db.Date
+  notes               String?
+  archivedAt          DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  characters          ProductCharacter[]
+  categories          ProductCategory[]
+  aliases             ProductAlias[]
+  orderItems          OrderItem[]
+  purchaseItems       PurchaseBatchItem[]
+  movements           InventoryMovement[]
+
+  @@index([name])
+  @@index([status])
+}
+
+model ProductCharacter {
+  productId   String
+  characterId String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  character   Character @relation(fields: [characterId], references: [id])
+
+  @@id([productId, characterId])
+}
+
+model ProductAlias {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  alias      String
+  normalized String   @unique // 一個別名只能指向一個商品，必須人工確認
+  createdAt  DateTime @default(now())
+}
+
+// ───────────────────────── 商品分類（多重分類，與代購團、採購批次分開） ─────────────────────────
+
+enum CategoryType {
+  FESTIVAL // 節慶
+  REGION // 地區
+  SERIES // 系列
+  ICHIBAN // 一番賞
+  STORE_LIMITED // 店舖限定
+  GENERAL // 一般分類
+  CUSTOM // 自訂
+}
+
+model Category {
+  id         String            @id @default(cuid())
+  name       String            @unique
+  type       CategoryType      @default(GENERAL)
+  customType String?
+  startDate  DateTime?         @db.Date
+  endDate    DateTime?         @db.Date
+  notes      String?
+  active     Boolean           @default(true)
+  sortOrder  Int               @default(0)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  products   ProductCategory[]
+  orderItems OrderItem[]
+  groupBuys  GroupBuy[]
+}
+
+model ProductCategory {
+  productId  String
+  categoryId String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@id([productId, categoryId])
+  @@index([categoryId])
+}
+
+// ───────────────────────── 代購團（實際開團與收單） ─────────────────────────
+
+enum GroupBuyStatus {
+  DRAFT // 籌備中
+  OPEN // 收單中
+  CLOSED // 已截止
+  COMPLETED // 已結束
+  CANCELLED // 已取消
+}
+
+model GroupBuy {
+  id         String         @id @default(cuid())
+  code       String         @unique
+  name       String
+  categoryId String? // 主要活動分類（建單時預設的銷售歸屬）
+  category   Category?      @relation(fields: [categoryId], references: [id])
+  status     GroupBuyStatus @default(OPEN)
+  openAt     DateTime?
+  closeAt    DateTime? // 收單截止
+  notes      String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  orders     Order[]
+
+  @@index([status, closeAt])
+}
+
+// ───────────────────────── 買家與標籤 ─────────────────────────
+
+model Buyer {
+  id             String          @id @default(cuid())
+  code           String          @unique
+  name           String
+  lineName       String?
+  contact        String?
+  recipientName  String? // 私人收件資料：不放入一般匯出
+  recipientPhone String?
+  address        String?
+  shippingMethod String?
+  notes          String? // 內部備註，不得出現在未來公開頁面
+  mergedIntoId   String?
+  mergedInto     Buyer?          @relation("BuyerMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom     Buyer[]         @relation("BuyerMerge")
+  archivedAt     DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  aliases        BuyerAlias[]
+  tags           BuyerTag[]
+  orders         Order[]
+  incidents      BuyerIncident[]
+  shipments      Shipment[]
+
+  @@index([name])
+}
+
+model BuyerAlias {
+  id         String   @id @default(cuid())
+  buyerId    String
+  buyer      Buyer    @relation(fields: [buyerId], references: [id])
+  alias      String
+  normalized String
+  createdAt  DateTime @default(now())
+
+  @@unique([buyerId, normalized])
+  @@index([normalized])
+}
+
+enum TagKind {
+  RISK // 風險
+  POSITIVE // 正面
+  OPERATION // 作業
+  CUSTOM // 自訂
+}
+
+model Tag {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  color       String     @default("#64748b")
+  description String?
+  kind        TagKind    @default(CUSTOM)
+  warnOnOrder Boolean    @default(false)
+  active      Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  buyers      BuyerTag[]
+}
+
+model BuyerTag {
+  id          String    @id @default(cuid())
+  buyerId     String
+  tagId       String
+  buyer       Buyer     @relation(fields: [buyerId], references: [id])
+  tag         Tag       @relation(fields: [tagId], references: [id])
+  reason      String?
+  createdAt   DateTime  @default(now())
+  createdById String?
+  removedAt   DateTime?
+  removedById String?
+
+  @@index([buyerId])
+  @@index([tagId])
+}
+
+enum IncidentKind {
+  LATE_PAYMENT // 逾期付款
+  CANCELLATION // 取消
+  REFUND_DISPUTE // 退款爭議
+  CHANGE_REQUEST // 改單
+  OTHER
+}
+
+// 客觀交易紀錄，與主觀標籤分開保存
+model BuyerIncident {
+  id          String       @id @default(cuid())
+  buyerId     String
+  buyer       Buyer        @relation(fields: [buyerId], references: [id])
+  kind        IncidentKind
+  occurredAt  DateTime     @default(now())
+  orderId     String?
+  description String?
+  createdAt   DateTime     @default(now())
+
+  @@index([buyerId])
+}
+
+model BuyerMerge {
+  id            String   @id @default(cuid())
+  sourceBuyerId String
+  targetBuyerId String
+  snapshot      Json // 合併前來源買家的完整資料
+  summary       Json // 移轉的訂單、別名、標籤等數量
+  createdAt     DateTime @default(now())
+  createdById   String?
+}
+
+// ───────────────────────── 訂單 ─────────────────────────
+
+enum OrderSource {
+  MANUAL
+  LINE
+  EXCEL
+  WEB
+}
+
+// 只儲存「人為決定」的部分；其餘顯示狀態由明細、付款、出貨推算
+enum OrderConfirmation {
+  PENDING // 待確認
+  CONFIRMED // 已確認
+  CANCELLED // 已取消
+}
+
+enum OrderStatus {
+  PENDING_CONFIRM // 待確認
+  AWAITING_PAYMENT // 待付款
+  CONFIRMED // 已確認
+  ORDERED // 已下單
+  PROCESSING // 處理中
+  PARTIAL // 部分完成
+  COMPLETED // 已完成
+  CANCELLED // 已取消
+}
+
+enum PaymentStatus {
+  UNPAID // 未付款
+  PARTIAL // 部分付款
+  PAID // 已付款
+  REFUND_PENDING // 退款處理中
+  PARTIALLY_REFUNDED // 部分退款
+  REFUNDED // 已退款
+}
+
+enum ShipStatus {
+  PENDING // 待備貨
+  PREPARING // 備貨中
+  READY // 待出貨
+  PARTIAL // 部分出貨
+  SHIPPED // 已出貨
+  DELIVERED // 已送達
+  CANCELLED // 已取消
+}
+
+model Order {
+  id                 String            @id @default(cuid())
+  orderNo            String            @unique
+  buyerId            String
+  buyer              Buyer             @relation(fields: [buyerId], references: [id])
+  groupBuyId         String?
+  groupBuy           GroupBuy?         @relation(fields: [groupBuyId], references: [id])
+  parentOrderId      String? // 獨立追加訂單指向原訂單
+  parentOrder        Order?            @relation("OrderAppend", fields: [parentOrderId], references: [id])
+  appendOrders       Order[]           @relation("OrderAppend")
+  source             OrderSource       @default(MANUAL)
+  externalRef        String? // 來源訂單編號（Excel 等）
+  rawInput           String? // 原始輸入資料
+  orderedAt          DateTime          @default(now())
+  confirmation       OrderConfirmation @default(CONFIRMED)
+  shippingFee        Int               @default(0)
+  orderDiscount      Int               @default(0) // 整單折扣（正數＝折扣，負數＝加價）
+  notes              String?
+  cancelledAt        DateTime?
+  cancelReason       String?
+  importBatchId      String?
+  idempotencyKey     String?           @unique // 手動建單的防重複送出識別碼
+  // ── 以下為快取，依流水重新計算 ──
+  statusCache        OrderStatus       @default(CONFIRMED)
+  paymentStatusCache PaymentStatus     @default(UNPAID)
+  shipStatusCache    ShipStatus        @default(PENDING)
+  receivableCache    Int               @default(0)
+  paidCache          Int               @default(0)
+  refundedCache      Int               @default(0)
+  refundPendingCache Int               @default(0)
+  balanceCache       Int               @default(0)
+  refundDueCache     Int               @default(0)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  items              OrderItem[]
+  payments           Payment[]
+  refunds            Refund[]
+
+  @@unique([source, externalRef])
+  @@index([buyerId])
+  @@index([groupBuyId])
+  @@index([orderedAt])
+  @@index([statusCache])
+  @@index([paymentStatusCache])
+}
+
+// 採購／到貨狀態中需人為設定的部分；已到貨、部分到貨、已取消由數量推算
+enum PurchaseFlag {
+  PENDING_PURCHASE // 待採購
+  ORDERED // 已下單給供應商
+  OUT_OF_STOCK // 缺貨
+  DELAYED // 延期
+}
+
+enum ProcurementStatus {
+  PENDING_PURCHASE
+  ORDERED
+  PARTIAL_ARRIVED
+  ARRIVED
+  OUT_OF_STOCK
+  DELAYED
+  CANCELLED
+}
+
+enum PackFlag {
+  NONE // 待備貨
+  PREPARING // 備貨中
+  READY // 待出貨（已備妥）
+}
+
+model OrderItem {
+  id                     String              @id @default(cuid())
+  orderId                String
+  order                  Order               @relation(fields: [orderId], references: [id])
+  productId              String
+  product                Product             @relation(fields: [productId], references: [id])
+  productNameSnapshot    String
+  specNote               String?
+  categoryId             String? // 銷售歸屬分類（統計時每件只歸屬一個分類，避免重複計算）
+  category               Category?           @relation(fields: [categoryId], references: [id])
+  qty                    Int // 原始訂購數量（不因取消而改變）
+  unitPrice              Int // 成交單價（台幣）
+  lineDiscount           Int                 @default(0) // 明細折扣（以原始數量計）
+  estUnitCostTwd         Int? // 建單時預估成本快照
+  estRateMicro           Int? // 建單時匯率快照（1 JPY = x TWD，×1,000,000）
+  estUnitCostJpy         Int?
+  purchaseFlag           PurchaseFlag        @default(PENDING_PURCHASE)
+  packFlag               PackFlag            @default(NONE)
+  addedLater             Boolean             @default(false) // 追加到原訂單的明細
+  notes                  String?
+  // ── 快取 ──
+  cancelledQtyCache      Int                 @default(0)
+  reservedQtyCache       Int                 @default(0)
+  shippedQtyCache        Int                 @default(0)
+  procurementStatusCache ProcurementStatus   @default(PENDING_PURCHASE)
+  shipStatusCache        ShipStatus          @default(PENDING)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  events                 OrderItemEvent[]
+  cancellations          OrderCancellation[]
+  movements              InventoryMovement[]
+  shipmentItems          ShipmentItem[]
+  refunds                Refund[]
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([categoryId])
+}
+
+model OrderItemEvent {
+  id          String    @id @default(cuid())
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id])
+  type        String // CREATED, APPENDED, QTY_CHANGED, PRICE_CHANGED, PURCHASE_FLAG, PACK_FLAG, CANCELLED, RESERVED, UNRESERVED, SHIPPED, CATEGORY_CHANGED
+  fromValue   String?
+  toValue     String?
+  qtyDelta    Int?
+  note        String?
+  actorId     String?
+  createdAt   DateTime  @default(now())
+
+  @@index([orderItemId])
+}
+
+model OrderCancellation {
+  id          String    @id @default(cuid())
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id])
+  qty         Int
+  reason      String?
+  cancelledAt DateTime  @default(now())
+  actorId     String?
+  refunds     Refund[]
+
+  @@index([orderItemId])
+}
+
+// ───────────────────────── 收款與退款 ─────────────────────────
+
+model Payment {
+  id          String    @id @default(cuid())
+  orderId     String
+  order       Order     @relation(fields: [orderId], references: [id])
+  amount      Int
+  paidAt      DateTime
+  method      String?
+  reference   String? // 付款識別資訊（帳號末五碼等）
+  note        String?
+  dedupeKey   String?   @unique
+  voidedAt    DateTime?
+  voidReason  String?
+  createdAt   DateTime  @default(now())
+  createdById String?
+
+  @@index([orderId])
+  @@index([paidAt])
+}
+
+enum RefundStatus {
+  PENDING // 待退款（尚未實際退出，不計入已退款）
+  COMPLETED // 已退款
+  VOIDED // 作廢
+}
+
+model Refund {
+  id             String             @id @default(cuid())
+  orderId        String
+  order          Order              @relation(fields: [orderId], references: [id])
+  orderItemId    String?
+  orderItem      OrderItem?         @relation(fields: [orderItemId], references: [id])
+  cancellationId String?
+  cancellation   OrderCancellation? @relation(fields: [cancellationId], references: [id])
+  amount         Int
+  status         RefundStatus       @default(PENDING)
+  reason         String?
+  method         String?
+  note           String?
+  requestedAt    DateTime           @default(now())
+  completedAt    DateTime?
+  dedupeKey      String?            @unique
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+}
+
+// ───────────────────────── 採購批次與成本 ─────────────────────────
+
+enum PurchaseBatchStatus {
+  DRAFT // 草稿
+  ORDERED // 已向供應商下單
+  PARTIAL_RECEIVED // 部分到貨
+  RECEIVED // 已全部到貨
+  CANCELLED
+}
+
+enum AllocationMethod {
+  BY_QTY // 依件數
+  BY_WEIGHT // 依重量
+  BY_VALUE // 依商品金額
+  MANUAL // 手動分配
+}
+
+model PurchaseBatch {
+  id        String              @id @default(cuid())
+  code      String              @unique
+  name      String
+  supplier  String?
+  status    PurchaseBatchStatus @default(ORDERED)
+  orderedAt DateTime?
+  rateMicro Int // 本批次適用匯率快照（1 JPY = x TWD，×1,000,000）
+  notes     String?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  items     PurchaseBatchItem[]
+  costs     BatchCost[]
+}
+
+model PurchaseBatchItem {
+  id           String              @id @default(cuid())
+  batchId      String
+  batch        PurchaseBatch       @relation(fields: [batchId], references: [id])
+  productId    String
+  product      Product             @relation(fields: [productId], references: [id])
+  qty          Int
+  unitCostJpy  Int
+  weightGrams  Int? // 本筆總重（依重量分攤時使用）
+  cancelledQty Int                 @default(0)
+  notes        String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  allocations  CostAllocation[]
+  movements    InventoryMovement[]
+
+  @@index([batchId])
+  @@index([productId])
+}
+
+enum BatchCostKind {
+  JP_DOMESTIC_SHIPPING // 日本國內運費
+  INTL_SHIPPING // 國際運費
+  DUTY // 關稅及進口費用
+  PACKAGING // 包裝材料
+  PLATFORM_FEE // 平台或金流手續費
+  OTHER // 其他
+}
+
+model BatchCost {
+  id          String           @id @default(cuid())
+  batchId     String
+  batch       PurchaseBatch    @relation(fields: [batchId], references: [id])
+  kind        BatchCostKind
+  currency    String           @default("TWD") // TWD 或 JPY（JPY 以批次匯率換算）
+  amount      Int
+  method      AllocationMethod @default(BY_QTY)
+  manualSplit Json? // MANUAL 時：{ batchItemId: 台幣金額 }
+  note        String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  allocations CostAllocation[]
+}
+
+// 每筆共同費用的分攤結果；同一筆費用的分攤總和必須等於費用金額
+model CostAllocation {
+  id          String            @id @default(cuid())
+  batchCostId String
+  batchCost   BatchCost         @relation(fields: [batchCostId], references: [id], onDelete: Cascade)
+  batchItemId String
+  batchItem   PurchaseBatchItem @relation(fields: [batchItemId], references: [id])
+  amountTwd   Int
+  createdAt   DateTime          @default(now())
+
+  @@unique([batchCostId, batchItemId])
+}
+
+// 不屬於任何採購批次的費用（例：本月包材、平台月費）
+model Expense {
+  id        String        @id @default(cuid())
+  date      DateTime      @db.Date
+  kind      BatchCostKind
+  amountTwd Int
+  note      String?
+  createdAt DateTime      @default(now())
+
+  @@index([date])
+}
+
+// ───────────────────────── 庫存流水 ─────────────────────────
+
+enum MovementKind {
+  RECEIVE // 到貨入庫：在庫 +n
+  ADJUST // 盤點調整：在庫 ±n
+  RESERVE // 保留給訂單明細：保留 +n
+  UNRESERVE // 取消保留（含取消訂單釋放）：保留 −n
+  SHIP // 出貨：在庫 −n、保留 −n
+}
+
+model InventoryMovement {
+  id                  String             @id @default(cuid())
+  productId           String
+  product             Product            @relation(fields: [productId], references: [id])
+  kind                MovementKind
+  onHandDelta         Int                @default(0)
+  reservedDelta       Int                @default(0)
+  orderItemId         String?
+  orderItem           OrderItem?         @relation(fields: [orderItemId], references: [id])
+  purchaseBatchItemId String? // 成本來源（到貨批次）
+  purchaseBatchItem   PurchaseBatchItem? @relation(fields: [purchaseBatchItemId], references: [id])
+  unitCostTwd         Int? // 非批次入庫時的成本快照
+  shipmentItemId      String?
+  reason              String?
+  dedupeKey           String?            @unique
+  actorId             String?
+  createdAt           DateTime           @default(now())
+
+  @@index([productId])
+  @@index([orderItemId])
+  @@index([purchaseBatchItemId])
+}
+
+// ───────────────────────── 出貨 ─────────────────────────
+
+enum ShipmentStatus {
+  SHIPPED
+  DELIVERED
+}
+
+model Shipment {
+  id          String         @id @default(cuid())
+  shipmentNo  String         @unique
+  buyerId     String
+  buyer       Buyer          @relation(fields: [buyerId], references: [id])
+  method      String?
+  trackingNo  String?
+  shippedAt   DateTime
+  status      ShipmentStatus @default(SHIPPED)
+  deliveredAt DateTime?
+  note        String?
+  dedupeKey   String?        @unique
+  createdAt   DateTime       @default(now())
+  items       ShipmentItem[]
+
+  @@index([buyerId])
+  @@index([shippedAt])
+}
+
+model ShipmentItem {
+  id          String    @id @default(cuid())
+  shipmentId  String
+  shipment    Shipment  @relation(fields: [shipmentId], references: [id])
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id])
+  qty         Int
+
+  @@index([orderItemId])
+}
+
+// ───────────────────────── 匯入（LINE 貼上與 Excel） ─────────────────────────
+
+enum ImportKind {
+  LINE
+  EXCEL
+}
+
+enum ImportBatchStatus {
+  DRAFT // 預覽中，尚未寫入正式訂單
+  COMMITTING // 寫入中（鎖定，防止重複提交）
+  COMMITTED // 全部完成
+  PARTIAL // 部分成功，可重試未完成的列
+  DISCARDED // 已放棄
+}
+
+enum ImportRowStatus {
+  PENDING_REVIEW // 待確認（不得建立訂單）
+  READY // 已確認，可建立
+  DUPLICATE_SUSPECT // 可能重複，需人工決定
+  ERROR // 資料錯誤
+  EXCLUDED // 使用者排除
+  COMMITTED // 已建立正式訂單
+  FAILED // 建立失敗，可重試
+}
+
+model ImportBatch {
+  id             String            @id @default(cuid())
+  kind           ImportKind
+  status         ImportBatchStatus @default(DRAFT)
+  fileName       String?
+  fileHash       String?
+  sheetName      String?
+  mapping        Json?
+  rawText        String?
+  groupBuyId     String?
+  idempotencyKey String            @unique
+  summary        Json?
+  createdById    String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  committedAt    DateTime?
+  rows           ImportRow[]
+
+  @@index([fileHash])
+}
+
+model ImportRow {
+  id          String          @id @default(cuid())
+  batchId     String
+  batch       ImportBatch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  rowNo       Int // 原始行號／Excel 列號
+  seq         Int             @default(0) // 同一行拆出多筆時的順序
+  raw         Json // 原始資料
+  parsed      Json? // 解析結果
+  resolution  Json? // 人工確認後的最終值
+  status      ImportRowStatus @default(PENDING_REVIEW)
+  messages    Json? // 錯誤與警告
+  rowHash     String?
+  orderId     String?
+  orderItemId String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([batchId, rowNo])
+  @@index([rowHash])
+}

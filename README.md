@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 代購帳房：日本角色周邊代購管理
 
-## Getting Started
+個人使用的代購管理後台：商品、活動分類、代購團、LINE 貼上加單、Excel 匯入、買家與標籤、收款退款、採購與到貨、庫存、出貨、成本與利潤、匯出與備份。
 
-First, run the development server:
+- 技術：Next.js 15（App Router）、TypeScript、Tailwind CSS 4、Prisma 6、PostgreSQL
+- 全部使用免費開源套件，不依賴任何付費服務；可完全在本機執行
+- 文件：[計算口徑](docs/計算口徑.md)、[狀態規則](docs/狀態規則.md)、[備份與還原](docs/備份與還原.md)
+
+## 本機啟動（Windows / macOS）
+
+需要：Node.js 20 以上、PostgreSQL 14 以上（本機安裝即可）。
+
+1. 建立資料庫（以 PostgreSQL 內建的 psql 或 pgAdmin 執行）：
+   ```sql
+   CREATE USER daigou WITH PASSWORD '自訂密碼' CREATEDB;
+   CREATE DATABASE daigou OWNER daigou;
+   ```
+2. 安裝套件：`npm install`
+3. 複製 `.env.example` 為 `.env`，填入 `DATABASE_URL`。
+4. 產生管理者密碼雜湊：`npm run hash-password -- "你的密碼"`，把印出的那一行貼到 `.env`（雜湊值裡的 `$` 前面要有反斜線，指令已經處理好）。
+5. 建立資料表：`npm run db:migrate`
+6. 建立預設分類、標籤、商品類型、角色（可重複執行，不會建立假訂單）：`npm run db:seed`
+7. 開發模式：`npm run dev`，或正式模式：`npm run build` 後 `npm start`，打開 http://localhost:3000
+
+以 `npm start` 在本機用 http（非 https）測試時，登入 Cookie 預設要求 https，請在 `.env` 加上 `INSECURE_COOKIE=1`；部署到 https 網站時不要設定。
+
+## 環境變數
+
+| 名稱 | 必填 | 說明 |
+|---|---|---|
+| `DATABASE_URL` | 是 | 任何標準 PostgreSQL 連線字串 |
+| `ADMIN_PASSWORD_HASH` | 是 | 管理者密碼的 bcrypt 雜湊值（不是密碼本身） |
+| `INSECURE_COOKIE` | 否 | 只在本機 http 測試正式模式時設為 `1` |
+| `TEST_DATABASE_URL` | 否 | 測試用資料庫，名稱必須含 `test`；預設 `daigou_test` |
+
+更換密碼：重新產生雜湊並更新環境變數後重新啟動；可在設定頁「登出所有裝置」。
+
+## 測試
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run db:test:prepare   # 對測試資料庫套用 migration
+npm test                  # 單元測試＋整合測試（使用測試資料庫，會清空它）
+npx playwright install chromium   # 第一次執行端對端測試前
+npm run test:e2e          # 端對端測試：會建置正式版並以測試資料庫啟動
+npm run typecheck
+npm run lint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 安全設計
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- 登入：單一管理者密碼（bcrypt），登入後發 HttpOnly、SameSite=Lax、https 下為 Secure 的工作階段 Cookie；工作階段存在資料庫，可撤銷。14 天到期、3 天未使用到期，可登出所有裝置。
+- 暴力破解防護：同一來源 15 分鐘內失敗 5 次、或全站失敗 30 次即暫停登入 15 分鐘。
+- Middleware 只做第一層檢查；每個頁面、Server Action 與匯出 API 都在伺服器端重新驗證工作階段（`src/server/auth.ts`、`src/server/action.ts`）。
+- 擴充邊界：已有 `User`（含角色 OWNER／ADMIN／STAFF）與 `Session` 資料表，權限檢查集中在 `can()`；之後增加員工帳號只需加入使用者管理與登入方式，不必改業務模組。
+- 上傳檔案只解析、不執行；檢查副檔名與檔案標頭、10 MB 上限。CSV 匯出防範公式注入。一般匯出不含收件人、電話、地址。
+- 網站設定 noindex 與基本安全標頭。
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 部署（尚未執行）
 
-## Learn More
+依你的決定，部署要等本機驗收後再處理，預計使用 GitHub（Private 儲存庫）＋ Vercel ＋ Neon。部署前會再次確認當時各服務的免費額度、休眠機制、儲存上限與超額收費規則，並列出清單請你確認，不會自行啟用付費功能。
 
-To learn more about Next.js, take a look at the following resources:
+目前依賴的外部服務：無（本機即可完整運作）。部署後預計使用：
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| 服務 | 用途 | 替代方案 |
+|---|---|---|
+| GitHub | 存放程式碼 | GitLab、本機 Git |
+| Vercel | 執行網站 | Render、Fly.io、自有 VPS（`npm run build && npm start`） |
+| Neon | PostgreSQL | Supabase、本機或 VPS 的 PostgreSQL（標準 PostgreSQL，可用 pg_dump 搬移） |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+部署到 Vercel 的已知限制：單次上傳約 4.5 MB（Excel 匯入大檔或還原大型備份時需注意，可改在本機操作或用 pg_restore）。
 
-## Deploy on Vercel
+## 專案結構
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+prisma/schema.prisma        資料模型；prisma/migrations 為正式 migration
+prisma/seed.ts              預設分類、標籤、類型、角色
+src/lib/parser/line.ts      LINE 訊息解析器（純函式）
+src/lib/parser/excel.ts     Excel/CSV 讀取與欄位配對
+src/lib/money.ts            整數金額、匯率、最大餘數分攤
+src/server/calc/order.ts    訂單金額與狀態計算（純函式）
+src/server/services/        業務邏輯（訂單、付款、庫存、採購、出貨、買家、報表、備份）
+src/server/imports/         匯入預覽、驗證、重複偵測與建單
+src/actions/                Server Actions（驗證登入後呼叫 services）
+src/app/(app)/              各頁面
+tests/unit, integration, e2e
+```
