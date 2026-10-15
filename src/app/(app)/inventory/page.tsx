@@ -9,6 +9,7 @@ import { PageHeader, Section, TableWrap, Empty, StatusBadge, LinkButton, Badge }
 import { ReceiveForm, AdjustForm, CreateBatchFromDemand, KeepButton } from "./parts";
 import { SellButton } from "@/components/quick-sale";
 import { stockValuation } from "@/server/services/reports";
+import { productSearchWhere } from "@/server/services/catalog";
 import { formatTwd } from "@/lib/money";
 import { batchStatus, fmtDate, fmtDay, formatRateLabel } from "./util";
 
@@ -51,7 +52,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
 
 async function StockTab({ q, only }: { q?: string; only?: string }) {
   const products = await prisma.product.findMany({
-    where: { archivedAt: null, ...(q ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { code: { contains: q, mode: "insensitive" } }] } : {}) },
+    where: { archivedAt: null, ...productSearchWhere(q) },
     orderBy: { name: "asc" },
     select: { id: true, code: true, name: true, status: true, salePriceTwd: true },
   });

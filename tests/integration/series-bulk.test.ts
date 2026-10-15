@@ -239,3 +239,16 @@ describe("系列名單與範本", () => {
     expect(await prisma.purchaseBatchItem.count()).toBe(0);
   });
 });
+
+describe("商品搜尋", () => {
+  it("多個關鍵字順序不拘，可用角色、系列、類型、別名搜尋", async () => {
+    const { productSearchWhere } = await import("@/server/services/catalog");
+    await add([row("a", { characterId: ctx.hachi, unitCost: 300, qty: 1 }), row("b", { characterId: ctx.usagi, unitCost: 300, qty: 1 })]);
+    const find = async (q: string) => (await prisma.product.findMany({ where: productSearchWhere(q), select: { name: true }, orderBy: { name: "asc" } })).map((p) => p.name);
+    expect(await find("吊娃 小八")).toEqual(["吉伊卡哇 小八 吊娃"]);
+    expect(await find("兔兔  吉伊卡哇")).toEqual(["吉伊卡哇 兔兔 吊娃"]);
+    expect(await find("吉伊娃娃")).toEqual(["吉伊吊娃"]); // 別名
+    expect(await find("小八 扭蛋")).toEqual([]);
+    expect((await find("")).length).toBeGreaterThan(3);
+  });
+});

@@ -9,6 +9,7 @@ import { createReceivingRecord } from "@/server/services/receiving";
 import { setDefaultRate } from "@/server/services/settings";
 import { audit, claimRequest } from "@/server/services/common";
 import { parseDateTimeInput, parseDay } from "@/lib/labels";
+import { productSearchWhere } from "@/server/services/catalog";
 
 export async function receiveAction(input: { productId: string; qty: number; batchItemId: string | null; unitCostTwd: number | null; reason: string | null; dedupeKey: string; receivedById?: string | null; defectQty?: number }) {
   return run(async (a) => {
@@ -171,7 +172,7 @@ export async function productSearchAction(q: string) {
     const rows = await prisma.product.findMany({
       where: {
         archivedAt: null,
-        ...(term ? { OR: [{ name: { contains: term, mode: "insensitive" } }, { code: { contains: term, mode: "insensitive" } }, { aliases: { some: { alias: { contains: term, mode: "insensitive" } } } }] } : {}),
+        ...productSearchWhere(term),
       },
       select: { id: true, code: true, name: true, salePriceTwd: true, spec: true, categories: { select: { category: { select: { id: true, name: true } } } } },
       orderBy: { updatedAt: "desc" },

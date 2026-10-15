@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { productSearchWhere } from "@/server/services/catalog";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { inventorySummary } from "@/server/services/inventory";
@@ -19,7 +20,7 @@ export default async function Products({ searchParams }: { searchParams: Promise
   const page = Math.max(1, Number(sp.page) || 1);
   const where: Prisma.ProductWhereInput = {
     archivedAt: sp.archived ? { not: null } : null,
-    ...(sp.q ? { OR: [{ name: { contains: sp.q, mode: "insensitive" } }, { code: { contains: sp.q, mode: "insensitive" } }, { series: { contains: sp.q, mode: "insensitive" } }, { aliases: { some: { alias: { contains: sp.q, mode: "insensitive" } } } }] } : {}),
+    ...productSearchWhere(sp.q),
     ...(sp.categoryId ? { categories: { some: { categoryId: sp.categoryId } } } : {}),
     ...(sp.characterId ? { characters: { some: { characterId: sp.characterId } } } : {}),
     ...(sp.seriesId ? { seriesId: sp.seriesId } : {}),

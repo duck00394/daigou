@@ -2,7 +2,7 @@
 import { BizError, isUniqueViolation, type Tx } from "@/server/db";
 import { normalizeKey } from "@/lib/normalize";
 import { audit, emptyToNull, nextCode, type Actor } from "./common";
-import type { CategoryType, GroupBuyStatus, ProductStatus } from "@prisma/client";
+import type { CategoryType, GroupBuyStatus, Prisma, ProductStatus } from "@prisma/client";
 
 export interface ProductInput {
   name: string;
@@ -251,4 +251,27 @@ export async function saveGroupBuy(t: Tx, actor: Actor, id: string | null, input
   const row = id ? await t.groupBuy.update({ where: { id }, data }) : await t.groupBuy.create({ data: { ...data, code: await nextCode(t, "groupbuy") } });
   await audit(t, actor, id ? "groupbuy.update" : "groupbuy.create", "GroupBuy", row.id, data);
   return row;
+}
+
+/**
+ * 商品搜尋條件：以空白分開的每個關鍵字都要符合（順序不拘），
+ * 每個關鍵字可以出現在名稱、編號、別名、系列、角色、類型或規格。例：「吊娃 小八」。
+ */
+export function productSearchWhere(q: string | null | undefined): Prisma.ProductWhereInput {
+  const tokens = (q ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 6);
+  if (!tokens.length) return {};
+  return {
+    AND: tokens.map((w) => ({
+      OR: [
+        { name: { contains: w, mode: "insensitive" as const } },
+        { code: { contains: w, mode: "insensitive" as const } },
+        { spec: { contains: w, mode: "insensitive" as const } },
+        { series: { contains: w, mode: "insensitive" as const } },
+        { seriesRef: { name: { contains: w, mode: "insensitive" as const } } },
+        { productType: { name: { contains: w, mode: "insensitive" as const } } },
+        { characters: { some: { character: { name: { contains: w, mode: "insensitive" as const } } } } },
+        { aliases: { some: { alias: { contains: w, mode: "insensitive" as const } } } },
+      ],
+    })),
+  };
 }
