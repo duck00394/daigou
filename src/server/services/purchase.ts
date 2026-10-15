@@ -43,9 +43,12 @@ export async function createBatch(
     supplierOrderNo?: string | null;
     orderUrl?: string | null;
     expectedAt?: Date | null;
+    ownership?: "PERSONAL" | "JOINT"; // 個人（歸 orderedById）或合資
+    progress?: "ASKED" | "AGENT_HAS" | "SHIPPED";
   },
 ) {
   if (!input.name?.trim()) throw new BizError("請填寫採購團名稱");
+  const ownership = input.ownership === "JOINT" ? "JOINT" : "PERSONAL";
   if (input.categoryId && !(await t.category.findUnique({ where: { id: input.categoryId } }))) throw new BizError("找不到活動／系列");
   const rateMicro = input.rate ? safeRate(input.rate) : await getDefaultRateMicro(t);
   let supplierId = input.supplierId ?? null;
@@ -56,7 +59,7 @@ export async function createBatch(
   }
   const sp = supplierId ? await t.supplier.findUnique({ where: { id: supplierId } }) : null;
   if (supplierId && !sp) throw new BizError("找不到供應商");
-  const orderedById = await checkOperator(t, input.orderedById, "訂購負責人");
+  const orderedById = ownership === "JOINT" ? null : await checkOperator(t, input.orderedById, "這團是誰的");
   const paymentResponsibleById = await checkOperator(t, input.paymentResponsibleById, "主要付款負責人");
   const receivingResponsibleById = await checkOperator(t, input.receivingResponsibleById, "收貨負責人");
   const batch = await t.purchaseBatch.create({
@@ -74,6 +77,8 @@ export async function createBatch(
       receivingResponsibleById,
       responsibilityNote: emptyToNull(input.responsibilityNote ?? null),
       categoryId: input.categoryId || null,
+      ownership,
+      progress: input.progress ?? "ASKED",
       supplierOrderNo: emptyToNull(input.supplierOrderNo ?? null),
       orderUrl: (() => {
         const u = emptyToNull(input.orderUrl ?? null);

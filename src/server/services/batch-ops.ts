@@ -5,6 +5,8 @@ import { audit, emptyToNull, type Actor } from "./common";
 import { addBatchItem, effectiveUnitCost, itemGoodsTwd, minCommittedQty, reallocateBatch, type Currency } from "./purchase";
 import { recomputeOrder } from "./recompute";
 import { refreshBatchStatus } from "./inventory";
+import { batchOwnerKey, JOINT, jointWeights, sharePercents, splitByWeights, stockByOwner } from "./ownership";
+import { batchStage } from "@/lib/labels";
 
 // ── 基本資料 ──
 export function checkUrl(u: string | null | undefined) {
@@ -292,6 +294,9 @@ export async function categoryOverview(t: Tx, categoryId: string) {
       status: b.status,
       supplier: b.supplierRef?.name ?? b.supplier,
       orderedBy: b.orderedBy?.name ?? null,
+      ownership: b.ownership,
+      ownerKey: batchOwnerKey(b),
+      stage: batchStage(b),
       paymentResponsibleBy: b.paymentResponsibleBy?.name ?? null,
       receivingResponsibleBy: b.receivingResponsibleBy?.name ?? null,
       expectedAt: b.expectedAt,
@@ -326,9 +331,59 @@ export async function categoryOverview(t: Tx, categoryId: string) {
       };
     })
     .sort((a, b) => a.product.name.localeCompare(b.product.name, "zh-Hant"));
+  // 依人分：個人團歸主人；合資團依實際付款比例分，還沒付款的列在「合資（未分）」
+  const weights = await jointWeights(t, active.filter((b) => b.ownership === "JOINT").map((b) => b.id));
+  const byOwner = new Map<string, { amount: number; batches: number; qty: number }>();
+  const addOwner = (k: string, amount: number, batches: number, qty: number) => {
+    const v = byOwner.get(k) ?? { amount: 0, batches: 0, qty: 0 };
+    v.amount += amount;
+    v.batches += batches;
+    v.qty += qty;
+    byOwner.set(k, v);
+  };
+  const jointShares: Record<string, { key: string; amount: number; percent: number }[]> = {};
+  for (const b of active) {
+    if (b.ownership !== "JOINT") {
+      addOwner(b.ownerKey, b.totalTwd, 1, b.qty);
+      continue;
+    }
+    jointShares[b.id] = sharePercents(weights.get(b.id));
+    const split = splitByWeights(b.totalTwd, weights.get(b.id));
+    if (!split) addOwner(JOINT, b.totalTwd, 1, b.qty);
+    else {
+      addOwner(JOINT, 0, 1, b.qty);
+      for (const [k, v] of split) addOwner(k, v, 0, 0);
+    }
+  }
+  // 依進度分（金額＝該團總額；待到貨件數）
+  const byStage = new Map<string, { amount: number; batches: number; outstanding: number }>();
+  for (const b of active) {
+    const v = byStage.get(b.stage) ?? { amount: 0, batches: 0, outstanding: 0 };
+    v.amount += b.totalTwd;
+    v.batches += 1;
+    v.outstanding += b.outstanding;
+    byStage.set(b.stage, v);
+  }
+  // 這個活動進來的庫存，依歸屬分
+  const itemIds = batches.flatMap((b) => b.items.map((i) => i.id));
+  const stockPer = await stockByOwner(t, { batchItemIds: itemIds });
+  const stock = new Map<string, { onHand: number; free: number; reserved: number; kept: number }>();
+  for (const per of stockPer.values())
+    for (const [k, v] of per) {
+      const x = stock.get(k) ?? { onHand: 0, free: 0, reserved: 0, kept: 0 };
+      x.onHand += v.onHand;
+      x.free += v.free;
+      x.reserved += v.reserved;
+      x.kept += v.kept;
+      stock.set(k, x);
+    }
   return {
     batches: summaries,
     matrix,
+    byOwner: Object.fromEntries(byOwner),
+    byStage: Object.fromEntries(byStage),
+    stock: Object.fromEntries(stock),
+    jointShares,
     total: {
       batches: active.length,
       qty: active.reduce((s, b) => s + b.qty, 0),
@@ -338,4 +393,37 @@ export async function categoryOverview(t: Tx, categoryId: string) {
       estimated: active.some((b) => b.estimated || !b.feesRecorded),
     },
   };
+}
+
+/** 活動總表：每個活動的採購團數、總額、依人分的金額、待到貨件數（不含已取消的團） */
+export async function categoriesSummary(t: Tx) {
+  const batches = await t.purchaseBatch.findMany({
+    where: { categoryId: { not: null }, status: { not: "CANCELLED" } },
+    select: {
+      id: true,
+      categoryId: true,
+      ownership: true,
+      orderedById: true,
+      rateMicro: true,
+      items: { select: { qty: true, cancelledQty: true, currency: true, estUnitCost: true, actualUnitCost: true, allocations: { select: { amountTwd: true } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } },
+    },
+  });
+  const weights = await jointWeights(t, batches.filter((b) => b.ownership === "JOINT").map((b) => b.id));
+  const out = new Map<string, { batches: number; totalTwd: number; outstanding: number; byOwner: Record<string, number> }>();
+  for (const b of batches) {
+    const v = out.get(b.categoryId!) ?? { batches: 0, totalTwd: 0, outstanding: 0, byOwner: {} };
+    let total = 0;
+    for (const i of b.items) {
+      total += itemGoodsTwd(i, b.rateMicro) + i.allocations.reduce((s, a) => s + a.amountTwd, 0);
+      v.outstanding += Math.max(0, i.qty - i.cancelledQty - i.movements.reduce((s, m) => s + m.onHandDelta, 0));
+    }
+    v.batches += 1;
+    v.totalTwd += total;
+    const key = batchOwnerKey(b);
+    const split = key === JOINT ? splitByWeights(total, weights.get(b.id)) : null;
+    if (split) for (const [k, x] of split) v.byOwner[k] = (v.byOwner[k] ?? 0) + x;
+    else v.byOwner[key] = (v.byOwner[key] ?? 0) + total;
+    out.set(b.categoryId!, v);
+  }
+  return out;
 }

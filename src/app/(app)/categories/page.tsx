@@ -2,7 +2,12 @@ import Link from "next/link";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { categoryOverview } from "@/server/services/reports";
-import { PageHeader, Section, TableWrap, Badge, Empty } from "@/components/ui";
+import { tx } from "@/server/db";
+import { categoriesSummary } from "@/server/services/batch-ops";
+import { listOperators } from "@/server/services/operators";
+import { JOINT, NONE } from "@/server/services/ownership";
+import { formatTwd } from "@/lib/money";
+import { PageHeader, Section, TableWrap, Badge, Empty, LinkButton } from "@/components/ui";
 import { CategoryEditButton } from "./forms";
 import { categoryType, fmtDay } from "@/lib/labels";
 
@@ -10,11 +15,36 @@ export const metadata = { title: "活動與分類" };
 
 export default async function Categories() {
   await requireUser();
-  const ov = await categoryOverview(prisma);
+  const [ov, buys, operators] = await Promise.all([categoryOverview(prisma), tx((t) => categoriesSummary(t)), tx((t) => listOperators(t, { includeInactive: true }))]);
+  const who = (k: string) => (k === JOINT ? "合資（未分）" : k === NONE ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
+  const withBuys = ov.categories.filter((c) => buys.has(c.id));
   return (
-    <div>
-      <PageHeader title="活動與分類" sub="購買人數是不同買家的人數，訂購件數是商品數量；取消不計入有效統計，另外列出取消件數。" actions={<CategoryEditButton label="新增分類" />} />
-      <Section pad={false}>
+    <div className="space-y-4">
+      <PageHeader title="活動與分類" sub="點一個活動，看總額、每一團的總額、誰買的和庫存。" actions={<><LinkButton href="/purchase">新增採購</LinkButton><CategoryEditButton label="新增活動" /></>} />
+      {withBuys.length > 0 && (
+        <Section title="活動總表（我們買了多少）" pad={false}>
+          <ul className="grid gap-2 p-3 md:grid-cols-2 xl:grid-cols-3">
+            {withBuys.map((c) => {
+              const b = buys.get(c.id)!;
+              return (
+                <li key={c.id}>
+                  <Link href={`/categories/${c.id}`} className="block h-full rounded-xl border border-line bg-white p-3 hover:border-ai" data-testid={`cat-card-${c.name}`}>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="font-semibold">{c.name}</span>
+                      <span className="num text-[17px] font-semibold">{formatTwd(b.totalTwd)}</span>
+                    </div>
+                    <div className="text-[12px] text-mute">{b.batches} 團{b.outstanding ? `・還沒到 ${b.outstanding} 件` : "・都到了"}</div>
+                    <div className="mt-1 text-[13px] text-ink-2">
+                      {Object.entries(b.byOwner).map(([k, v]) => `${who(k)} ${formatTwd(v)}`).join("｜")}
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </Section>
+      )}
+      <Section title="買家預購統計" pad={false}>
         {ov.categories.length === 0 ? (
           <Empty action={<CategoryEditButton label="新增分類" />}>還沒有分類。</Empty>
         ) : (

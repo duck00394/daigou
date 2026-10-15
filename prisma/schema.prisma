@@ -676,12 +676,27 @@ model PurchaseBatch {
   receivingResponsibleById String? // 收貨負責人：主要負責收貨清點的人（實際確認人記在每次收貨）
   receivingResponsibleBy   Operator?           @relation("BatchReceivingResponsible", fields: [receivingResponsibleById], references: [id])
   responsibilityNote       String?
+  // 歸屬：個人（歸 orderedById＝「這團是誰的」）或合資（賣掉的錢依各自實際付給代購的金額比例分）
+  ownership                BatchOwnership      @default(PERSONAL)
+  // 進度（口語）：已請代購 → 代購收到了，等寄出 → 寄出了，在路上；到手與否由收貨決定
+  progress                 BatchProgress       @default(ASKED)
   createdAt                DateTime            @default(now())
   updatedAt                DateTime            @updatedAt
   items                    PurchaseBatchItem[]
   costs                    BatchCost[]
   supplierPayments         SupplierPayment[]
   receivings               ReceivingRecord[]
+}
+
+enum BatchOwnership {
+  PERSONAL
+  JOINT
+}
+
+enum BatchProgress {
+  ASKED // 已請代購
+  AGENT_HAS // 代購收到了，等寄出
+  SHIPPED // 寄出了，在路上
 }
 
 // 經營者（目前兩位，日後可擴充）。紀錄一律存 id，修改顯示名稱不影響歷史歸屬

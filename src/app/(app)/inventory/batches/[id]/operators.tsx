@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button, Modal, TextField, useIdemKey, useRun, inputCls, notify } from "@/components/client";
 import { OperatorPicker, operatorName, type OperatorOption } from "@/components/operator-picker";
-import { addSupplierPaymentAction, createReceivingAction, updateResponsibilityAction, updateSupplierPaymentAction, voidSupplierPaymentAction } from "@/actions/operators";
+import { addSupplierPaymentAction, createReceivingAction, updateBatchProgressAction, updateResponsibilityAction, updateSupplierPaymentAction, voidSupplierPaymentAction } from "@/actions/operators";
 import { currencyName, fmtDate, paymentPurpose, supplierPaymentStatus, toDateTimeInput } from "@/lib/labels";
 import { formatJpy, formatTwd } from "@/lib/money";
 
@@ -12,55 +12,100 @@ const money = (v: number, c: string) => (c === "JPY" ? formatJpy(v) : formatTwd(
 const intOrNaN = (s: string) => (/^\d+$/.test(s.trim().replace(/,/g, "")) ? Number(s.trim().replace(/,/g, "")) : NaN);
 
 // ── 負責人 ──
-export type Resp = { orderedById: string | null; paymentResponsibleById: string | null; receivingResponsibleById: string | null; responsibilityNote: string | null };
+export type Resp = { ownership: "PERSONAL" | "JOINT"; orderedById: string | null; paymentResponsibleById: string | null; receivingResponsibleById: string | null; responsibilityNote: string | null };
 
-export function ResponsibilityCard({ batchId, operators, value, editable }: { batchId: string; operators: Op[]; value: Resp; editable: boolean }) {
+const JOINT_KEY = "__joint__";
+
+export function ResponsibilityCard({ batchId, operators, value, editable, jointShares }: { batchId: string; operators: Op[]; value: Resp; editable: boolean; jointShares?: { name: string; percent: number }[] }) {
   const [edit, setEdit] = useState(false);
   const [d, setD] = useState(value);
   const { run, pending } = useRun();
   const active = operators.filter((o) => o.active || [value.orderedById, value.paymentResponsibleById, value.receivingResponsibleById].includes(o.id));
+  const ownerLabel = value.ownership === "JOINT" ? "合資" : operatorName(operators, value.orderedById);
   const rows: [string, keyof Resp, string][] = [
-    ["訂購負責人", "orderedById", "向官方或代購下單"],
-    ["主要付款負責人", "paymentResponsibleById", "負責安排付款；實際付款人見下方付款紀錄"],
-    ["收貨負責人", "receivingResponsibleById", "主要清點；每次收貨另記確認人"],
+    ["付款負責", "paymentResponsibleById", "負責安排付款；實際付款人見付款紀錄"],
+    ["收貨負責", "receivingResponsibleById", "主要清點；每次收貨另記確認人"],
   ];
   if (!edit)
     return (
       <div>
         <dl className="grid grid-cols-3 gap-2">
+          <div className="min-w-0 rounded-lg border border-ai/40 bg-ai-soft px-2 py-2 sm:px-3">
+            <dt className="text-[12px] text-mute">這團是誰的</dt>
+            <dd data-testid="resp-orderedById" className={`truncate text-[15px] font-semibold sm:text-[16px] ${value.ownership === "JOINT" || value.orderedById ? "" : "text-mute"}`}>{ownerLabel}</dd>
+            {value.ownership === "JOINT" && (
+              <dd className="text-[11px] text-mute">{jointShares && jointShares.length ? jointShares.map((x) => `${x.name} ${x.percent}%`).join("・") : "還沒登記付款，暫時不分"}</dd>
+            )}
+          </div>
           {rows.map(([label, k, note]) => (
             <div key={k} className="min-w-0 rounded-lg border border-line-2 px-2 py-2 sm:px-3">
-              <dt className="text-[12px] text-mute">{label.replace("主要", "")}</dt>
+              <dt className="text-[12px] text-mute">{label}</dt>
               <dd data-testid={`resp-${k}`} className={`truncate text-[15px] font-semibold sm:text-[16px] ${value[k] ? "" : "text-mute"}`}>{operatorName(operators, value[k] as string | null)}</dd>
               <dd className="hidden text-[11px] text-mute sm:block">{note}</dd>
             </div>
           ))}
         </dl>
+        {value.ownership === "JOINT" && <p className="mt-2 text-[12px] text-mute">合資：賣掉的錢依各自實際付給代購的金額比例分（誰付錢誰拿錢）。</p>}
         {value.responsibilityNote && <p className="mt-2 text-[13px] text-ink-2">備註：{value.responsibilityNote}</p>}
         {editable && (
           <div className="mt-2 text-right">
-            <Button small onClick={() => { setD(value); setEdit(true); }}>修改負責人</Button>
+            <Button small onClick={() => { setD(value); setEdit(true); }}>修改</Button>
           </div>
         )}
       </div>
     );
+  const ownerValue = d.ownership === "JOINT" ? JOINT_KEY : d.orderedById;
   return (
     <form
       className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => updateResponsibilityAction(batchId, d), { success: "已更新負責人", onOk: () => setEdit(false) });
+        run(() => updateResponsibilityAction(batchId, d), { success: "已更新", onOk: () => setEdit(false) });
       }}
     >
+      <OperatorPicker
+        label="這團是誰的"
+        operators={[...active, { id: JOINT_KEY, name: "合資", code: "J", active: true }]}
+        value={ownerValue}
+        onChange={(v) => setD(v === JOINT_KEY ? { ...d, ownership: "JOINT", orderedById: null } : { ...d, ownership: "PERSONAL", orderedById: v })}
+        hint="合資：賣掉的錢依各自實際付給代購的金額比例分"
+      />
       {rows.map(([label, k, note]) => (
         <OperatorPicker key={k} label={label} hint={note} operators={active} value={d[k] as string | null} onChange={(v) => setD({ ...d, [k]: v })} />
       ))}
-      <TextField label="負責人備註" value={d.responsibilityNote ?? ""} onChange={(e) => setD({ ...d, responsibilityNote: e.target.value })} />
+      <TextField label="備註" value={d.responsibilityNote ?? ""} onChange={(e) => setD({ ...d, responsibilityNote: e.target.value })} />
       <div className="flex justify-end gap-2">
         <Button onClick={() => setEdit(false)}>取消</Button>
-        <Button type="submit" variant="primary" loading={pending}>儲存負責人</Button>
+        <Button type="submit" variant="primary" loading={pending}>儲存</Button>
       </div>
     </form>
+  );
+}
+
+/** 進度（口語）：前三個可以點；到手與否由收貨自動判斷 */
+export function ProgressBar({ batchId, progress, stage, editable }: { batchId: string; progress: string; stage: string; editable: boolean }) {
+  const { run, pending } = useRun();
+  const steps: [string, string][] = [["ASKED", "已請代購"], ["AGENT_HAS", "代購收到了，等寄出"], ["SHIPPED", "寄出了，在路上"]];
+  const doneLabel = stage === "DONE" ? "全部到手" : stage === "PARTIAL" ? "部分到手" : "到手（收貨後自動）";
+  const order = ["ASKED", "AGENT_HAS", "SHIPPED"];
+  const reached = stage === "DONE" || stage === "PARTIAL" ? 3 : order.indexOf(progress);
+  return (
+    <div role="radiogroup" aria-label="現在到哪了" className="flex flex-wrap items-center gap-1.5">
+      {steps.map(([v, l], i) => (
+        <button
+          key={v}
+          type="button"
+          role="radio"
+          aria-checked={progress === v && reached < 3}
+          disabled={!editable || pending || stage === "DONE"}
+          onClick={() => run(() => updateBatchProgressAction(batchId, v as "ASKED"), { success: `進度：${l}` })}
+          className={`min-h-10 rounded-full border px-3 text-[14px] disabled:cursor-default ${i <= reached ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"} ${progress === v && reached < 3 ? "ring-2 ring-ai/30" : ""}`}
+        >
+          {l}
+        </button>
+      ))}
+      <a href="#receiving" className={`flex min-h-10 items-center rounded-full border px-3 text-[14px] ${stage === "DONE" ? "border-good bg-good text-white" : stage === "PARTIAL" ? "border-warn bg-warn-soft text-warn" : "border-dashed border-line text-mute"}`}>{doneLabel}</a>
+    </div>
   );
 }
 

@@ -36,8 +36,8 @@ export async function copyBatchItemsAction(input: { fromBatchId: string; toBatch
   return run((a) => tx((t) => bo.copyBatchItems(t, a, v), { timeout: 120_000 }));
 }
 
-export async function keepAction(input: { productId: string; delta: number; note?: string | null; dedupeKey: string }) {
-  const v = z.object({ productId: z.string(), delta: z.number().int(), note: str(100), dedupeKey: z.string().min(8).max(100) }).parse(input);
+export async function keepAction(input: { productId: string; delta: number; note?: string | null; dedupeKey: string; owner?: string | null }) {
+  const v = z.object({ productId: z.string(), delta: z.number().int(), note: str(100), dedupeKey: z.string().min(8).max(100), owner: str(64) }).parse(input);
   return run((a) => tx((t) => keepStock(t, a, v)));
 }
 

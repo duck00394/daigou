@@ -11,7 +11,7 @@ export const metadata = { title: "首頁" };
 
 const QUICK = [
   { href: "/paste", label: "貼上加單", main: true },
-  { href: "/inventory/batches/new", label: "新增採購團", main: true },
+  { href: "/purchase", label: "新增採購", main: true },
   { href: "/inventory?tab=batches", label: "登記收貨／採購團" },
   { href: "/orders/new", label: "新增訂單" },
   { href: "/payments", label: "待收款" },

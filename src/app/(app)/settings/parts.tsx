@@ -5,7 +5,7 @@ import { setRateAction, addExpenseAction, deleteExpenseAction } from "@/actions/
 import { saveCharacterAction, saveProductTypeAction } from "@/actions/catalog";
 import { verifyBackupAction, restoreBackupAction, logoutAllAction, checkIntegrityAction, recomputeDerivedAction } from "@/actions/system";
 import { costKind } from "@/lib/labels";
-import { saveOperatorAction } from "@/actions/operators";
+import { saveOperatorAction, setMeAction } from "@/actions/operators";
 
 export function RateForm({ current }: { current: string }) {
   const [v, setV] = useState(current);
@@ -225,6 +225,24 @@ export function HealthCheck() {
           <li className="text-[12px] text-ink-2">「重算」只會依原始紀錄重新計算採購團狀態與訂單金額，不會改動庫存流水、付款或訂單內容；若重算後仍有問題，請把畫面截圖回報。</li>
         </ul>
       ))}
+    </div>
+  );
+}
+
+export function MeSelect({ operators, me }: { operators: { id: string; name: string }[]; me: string | null }) {
+  const [v, setV] = useState(me);
+  const { run } = useRun();
+  return (
+    <div className="mt-3 rounded-lg border border-line-2 p-3">
+      <div className="mb-1.5 text-[13px] font-medium text-ink-2">這支手機是誰在用？</div>
+      <div role="radiogroup" aria-label="這支手機是誰在用" className="flex flex-wrap gap-1.5">
+        {operators.map((o) => (
+          <button key={o.id} type="button" role="radio" aria-checked={v === o.id} className={`min-h-10 rounded-lg border px-3 text-[15px] ${v === o.id ? "border-ai bg-ai text-white" : "border-line bg-white"}`} onClick={() => run(() => setMeAction(o.id), { success: `這支手機設為 ${o.name}`, onOk: () => setV(o.id) })}>
+            {o.name}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1 text-[12px] text-mute">新增採購、出售、自留時會預設是這個人的，只記在這支手機上。</p>
     </div>
   );
 }

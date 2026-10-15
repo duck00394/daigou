@@ -2,24 +2,31 @@
 import { test, expect, type Page } from "@playwright/test";
 import { login, toast } from "./helpers";
 
+/** 改經營者名稱；名稱沒變（例如重複執行時）就不需要儲存 */
+async function rename(page: Page, code: string, name: string) {
+  await page.getByLabel(`經營者 ${code} 名稱`).fill(name);
+  const save = page.getByRole("button", { name: `儲存經營者 ${code}` });
+  if (await save.isVisible()) {
+    await save.click();
+    await toast(page, "已更新名稱");
+    await expect(save).toBeHidden(); // 存好並重新整理後按鈕才會消失
+  }
+}
+
 const cell = (page: Page, row: number, col: number) => page.locator(`[data-row="${row}"][data-col="${col}"]`).first();
 
 test("桌面：A 下單、A 付訂金 B 付尾款、A B 分批收貨，對帳依人依幣別分開", async ({ page }) => {
   await login(page);
   // 1. 經營者改名
   await page.goto("/settings");
-  await page.getByLabel("經營者 A 名稱").fill("阿珍");
-  await page.getByRole("button", { name: "儲存經營者 A" }).click();
-  await toast(page, "已更新名稱");
-  await page.getByLabel("經營者 B 名稱").fill("阿強");
-  await page.getByRole("button", { name: "儲存經營者 B" }).click();
-  await toast(page, "已更新名稱");
+  await rename(page, "A", "阿珍");
+  await rename(page, "B", "阿強");
 
   // 2. 建立採購團並選負責人
   await page.goto("/inventory/batches/new");
   await page.getByLabel("採購團名稱").fill("E2E 雙人團");
   await page.getByLabel("供應商").selectOption({ label: "日本官網" });
-  await page.getByRole("radiogroup", { name: /訂購負責人/ }).getByRole("radio", { name: "阿珍" }).click();
+  await page.getByRole("radiogroup", { name: /這團是誰的/ }).getByRole("radio", { name: "阿珍" }).click();
   await page.getByRole("radiogroup", { name: /主要付款負責人/ }).getByRole("radio", { name: "阿珍" }).click();
   await page.getByRole("radiogroup", { name: /收貨負責人/ }).getByRole("radio", { name: "阿強" }).click();
   await page.getByRole("button", { name: "建立採購團" }).click();
@@ -108,17 +115,13 @@ test("桌面：A 下單、A 付訂金 B 付尾款、A B 分批收貨，對帳依
 
   // 7. 改名後歷史仍屬同一人
   await page.goto("/settings");
-  await page.getByLabel("經營者 A 名稱").fill("珍珍");
-  await page.getByRole("button", { name: "儲存經營者 A" }).click();
-  await toast(page, "已更新名稱");
+  await rename(page, "A", "珍珍");
   await page.goto(`/operators?batch=${batchId}`);
   await expect(page.getByTestId("op-card-A")).toContainText("珍珍");
   await expect(page.getByTestId("paid-A-JPY")).toHaveText("¥3,000");
 
   // 8. 沿用負責人建立新團：必須確認，且不複製付款
-  await page.goto("/inventory?tab=batches&open=0"); // 已全部到貨的團預設收起
-  await page.getByRole("link", { name: /E2E 雙人團/ }).click();
-  await page.getByRole("link", { name: "沿用負責人建立新團" }).click();
+  await page.goto(`/inventory/batches/new?from=${batchId}`); // 進階表單仍可沿用某一團的負責人
   await expect(page.getByRole("button", { name: "建立採購團" })).toBeDisabled();
   await page.getByLabel("採購團名稱").fill("E2E 雙人第二團");
   await page.getByLabel(/已確認負責人/).check();

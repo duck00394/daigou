@@ -41,21 +41,26 @@ export default async function CategoryPage({ params, searchParams }: { params: P
           </>
         }
       />
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-7">
-        <Stat label="商品款數" value={d.products.length} />
-        <Stat label="有效購買人數" value={d.total.buyers.size} />
-        <Stat label="有效訂購件數" value={d.total.activeQty} />
-        <Stat label="已取消件數" value={d.total.cancelledQty} />
-        <Stat label="待下單" value={d.total.toPurchase} />
-        <Stat label="待到貨" value={d.total.incoming} />
-        <Stat label="待出貨／已出貨" value={`${d.total.toShip} / ${d.total.shipped}`} />
-      </div>
       {(c.startDate || c.notes) && (
         <Section>
           <KV items={[["活動期間", `${fmtDay(c.startDate)} – ${fmtDay(c.endDate)}`], ["備註", c.notes]]} />
         </Section>
       )}
       <CategoryBatches categoryId={c.id} view={sp.view} />
+      {(d.total.activeQty > 0 || d.total.cancelledQty > 0) && (
+        <div>
+          <h2 className="mb-2 text-[15px] font-semibold">買家預購統計</h2>
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-7">
+          <Stat label="商品款數" value={d.products.length} />
+          <Stat label="有效購買人數" value={d.total.buyers.size} />
+          <Stat label="有效訂購件數" value={d.total.activeQty} />
+          <Stat label="已取消件數" value={d.total.cancelledQty} />
+          <Stat label="待下單" value={d.total.toPurchase} />
+          <Stat label="待到貨" value={d.total.incoming} />
+          <Stat label="待出貨／已出貨" value={`${d.total.toShip} / ${d.total.shipped}`} />
+        </div>
+          </div>
+      )}
       <Section title="分類內商品" pad={false}>
         <form className="flex flex-wrap gap-2 border-b border-line-2 px-4 py-3" method="get">
           <input type="search" name="q" defaultValue={sp.q} placeholder="搜尋商品" className="min-w-[12rem] flex-1 rounded-lg border border-line px-3 py-2" />

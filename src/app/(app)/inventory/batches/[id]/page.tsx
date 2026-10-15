@@ -7,10 +7,11 @@ import { AddCost, DeleteCost, CancelBatch, Collapsible } from "./parts";
 import { BulkAddGrid } from "./bulk-add";
 import { BulkEditTable, type EditItem } from "./bulk-edit";
 import { BatchInfoCard, CopyItemsButton } from "./manage";
-import { ResponsibilityCard, SupplierPayments, Receiving, type PaymentRow } from "./operators";
+import { ProgressBar, ResponsibilityCard, SupplierPayments, Receiving, type PaymentRow } from "./operators";
 import { listOperators } from "@/server/services/operators";
+import { jointWeights, sharePercents } from "@/server/services/ownership";
 import { supplierPaymentHistory } from "@/server/services/supplier-payments";
-import { allocMethod, batchStatus, costKind, currencyName, dayInput, fmtDate, paymentPurpose, supplierPaymentStatus, toDateTimeInput } from "@/lib/labels";
+import { allocMethod, batchStage, batchStageLabel, costKind, currencyName, dayInput, fmtDate, paymentPurpose, supplierPaymentStatus, toDateTimeInput } from "@/lib/labels";
 import { formatRate, jpyToTwd } from "@/lib/money";
 
 export default async function BatchPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ bulk?: string }> }) {
@@ -103,8 +104,8 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       <PageHeader
         title={`${b.code} ${b.name}`}
         back={{ href: "/inventory?tab=batches", label: "採購團" }}
-        sub={<span className="flex flex-wrap items-center gap-2"><StatusBadge map={batchStatus} value={b.status} />{supplierName && <span>供應商：{supplierName}</span>}{b.category && <a href={`/categories/${b.category.id}`} className="text-ai hover:underline">{b.category.name}</a>}</span>}
-        actions={<><LinkButton href={`/inventory/batches/new?from=${b.id}`}>沿用負責人建立新團</LinkButton>{open && <CancelBatch id={b.id} />}</>}
+        sub={<span className="flex flex-wrap items-center gap-2"><StatusBadge map={batchStageLabel} value={batchStage(b)} />{supplierName && <span>供應商：{supplierName}</span>}{b.category && <a href={`/categories/${b.category.id}`} className="text-ai hover:underline">{b.category.name}</a>}</span>}
+        actions={<><LinkButton href={`/purchase${b.categoryId ? `?categoryId=${b.categoryId}` : ""}`}>同活動再開一團</LinkButton>{open && <CancelBatch id={b.id} />}</>}
       />
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <Stat label="採購品項" value={editItems.length} />
@@ -112,6 +113,8 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         <Stat label="總成本（台幣）" value={<Twd v={totalLanded} />} note={estimated ? "部分品項依預估單價" : "依實際單價"} />
         <Stat label="本團匯率（已鎖定）" value={formatRate(b.rateMicro)} note="1 日圓 = ? 台幣" />
       </div>
+
+      <ProgressBar batchId={b.id} progress={b.progress} stage={batchStage(b)} editable={b.status !== "CANCELLED"} />
 
       <nav aria-label="跳到段落" className="no-print sticky top-[49px] z-30 -mx-3 flex gap-1.5 overflow-x-auto bg-paper/95 px-3 py-2 backdrop-blur sm:-mx-5 sm:px-5 md:top-0">
         {([["items", `品項 ${editItems.length}`], ["receiving", `收貨 ${b.receivings.length}`], ["payments", `付款 ${payments.filter((p) => p.status !== "VOIDED").length}`], ["people", "負責人"], ["costs", `費用 ${b.costs.length}`], ["info", "基本資料"]] as const).map(([id, label]) => (
@@ -126,7 +129,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
           <BulkAddGrid
             batchId={b.id}
             supplierId={b.supplierId}
-            supplierCurrency={(b.supplierRef?.defaultCurrency as "JPY" | "TWD") ?? "JPY"}
+            supplierCurrency={(b.supplierRef?.defaultCurrency as "JPY" | "TWD") ?? "TWD"}
             rateMicro={b.rateMicro}
             series={series}
             types={types}
@@ -151,7 +154,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
             payments={payments}
             editable={b.status !== "CANCELLED"}
             defaultPayer={b.paymentResponsibleById}
-            defaultCurrency={(b.supplierRef?.defaultCurrency as "JPY" | "TWD") ?? "JPY"}
+            defaultCurrency={(b.supplierRef?.defaultCurrency as "JPY" | "TWD") ?? "TWD"}
           />
         </Section>
         <Section id="receiving" title={`收貨清點（${b.receivings.length}）`} pad={false}>
@@ -177,7 +180,8 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
           batchId={b.id}
           operators={ops}
           editable={open}
-          value={{ orderedById: b.orderedById, paymentResponsibleById: b.paymentResponsibleById, receivingResponsibleById: b.receivingResponsibleById, responsibilityNote: b.responsibilityNote }}
+          jointShares={b.ownership === "JOINT" ? sharePercents((await tx((t) => jointWeights(t, [b.id]))).get(b.id)).map((x) => ({ name: ops.find((o) => o.id === x.key)?.name ?? "未指定", percent: x.percent })) : undefined}
+          value={{ ownership: b.ownership, orderedById: b.orderedById, paymentResponsibleById: b.paymentResponsibleById, receivingResponsibleById: b.receivingResponsibleById, responsibilityNote: b.responsibilityNote }}
         />
       </Section>
 

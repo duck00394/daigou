@@ -6,6 +6,7 @@ import { ProductPicker, type ProductOpt } from "@/components/pickers";
 import { receiveAction, allocateAction, adjustAction, createBatchAction } from "@/actions/ops";
 import { OperatorPicker, type OperatorOption } from "@/components/operator-picker";
 import { keepAction } from "@/actions/batches";
+import { OwnerChips, defaultOwner, type OwnerStockOpt } from "@/components/owner-chips";
 
 type Plan = { orderItemId: string; orderNo: string; buyerName: string; need: number; allocate: number };
 
@@ -238,26 +239,45 @@ export function CreateBatchFromDemand({ demand, defaultRate }: { demand: { produ
 }
 
 /** 自留／改回出售：自留的不算可售庫存，成本來源保留 */
-export function KeepButton({ productId, name, available, kept, small }: { productId: string; name: string; available: number; kept: number; small?: boolean }) {
+export function KeepButton({ productId, name, available, kept, small, owners, me }: { productId: string; name: string; available: number; kept: number; small?: boolean; owners?: OwnerStockOpt[]; me?: string | null }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"keep" | "sell">("keep");
   const [n, setN] = useState(1);
+  const [owner, setOwner] = useState<string | null>(null);
   const idem = useIdemKey();
   const { run, pending } = useRun();
   if (available <= 0 && kept <= 0) return null;
-  const max = mode === "keep" ? Math.max(0, available) : kept;
+  const cur = owners?.find((o) => o.key === owner);
+  const avail = cur ? cur.free : available;
+  const keptN = cur ? cur.kept : kept;
+  const max = mode === "keep" ? Math.max(0, avail) : keptN;
+  const countOf = (m: "keep" | "sell") => (o: OwnerStockOpt) => (m === "keep" ? o.free : o.kept);
   return (
     <>
-      <Button small={small} onClick={() => { setMode(available > 0 ? "keep" : "sell"); setN(1); setOpen(true); }}>自留{kept ? ` ${kept}` : ""}</Button>
+      <Button
+        small={small}
+        onClick={() => {
+          const m = available > 0 ? "keep" : "sell";
+          setMode(m);
+          setOwner(defaultOwner(owners, me, countOf(m)));
+          setN(1);
+          setOpen(true);
+        }}
+      >
+        自留{kept ? ` ${kept}` : ""}
+      </Button>
       <Modal open={open} onClose={() => setOpen(false)} title={`自留：${name}`} footer={
-        <Button variant="primary" loading={pending} disabled={n < 1 || n > max} onClick={() => run(() => keepAction({ productId, delta: mode === "keep" ? n : -n, dedupeKey: idem.key }), { success: mode === "keep" ? `已自留 ${n} 件` : `已改回出售 ${n} 件`, onOk: () => { idem.renew(); setOpen(false); } })}>
+        <Button variant="primary" loading={pending} disabled={n < 1 || n > max} onClick={() => run(() => keepAction({ productId, delta: mode === "keep" ? n : -n, dedupeKey: idem.key, owner }), { success: mode === "keep" ? `已自留 ${n} 件` : `已改回出售 ${n} 件`, onOk: () => { idem.renew(); setOpen(false); } })}>
           {mode === "keep" ? `自留 ${n} 件` : `改回出售 ${n} 件`}
         </Button>
       }>
         <div role="radiogroup" aria-label="操作" className="mb-4 grid grid-cols-2 gap-2">
-          {([["keep", `留給自己（可售 ${Math.max(0, available)}）`], ["sell", `改回出售（自留 ${kept}）`]] as const).map(([k, l]) => (
-            <button key={k} type="button" role="radio" aria-checked={mode === k} disabled={k === "keep" ? available <= 0 : kept <= 0} onClick={() => { setMode(k); setN(1); }} className={`min-h-11 rounded-lg border px-2 text-sm disabled:opacity-40 ${mode === k ? "border-ai bg-ai text-white" : "border-line bg-white"}`}>{l}</button>
+          {([["keep", `留給自己（可售 ${Math.max(0, avail)}）`], ["sell", `改回出售（自留 ${keptN}）`]] as const).map(([k, l]) => (
+            <button key={k} type="button" role="radio" aria-checked={mode === k} disabled={k === "keep" ? available <= 0 : kept <= 0} onClick={() => { setMode(k); setOwner(defaultOwner(owners, me, countOf(k))); setN(1); }} className={`min-h-11 rounded-lg border px-2 text-sm disabled:opacity-40 ${mode === k ? "border-ai bg-ai text-white" : "border-line bg-white"}`}>{l}</button>
           ))}
+        </div>
+        <div className="mb-4">
+          <OwnerChips label="留誰的" owners={owners ?? []} value={owner} onChange={(k) => { setOwner(k); setN(1); }} count={countOf(mode)} />
         </div>
         <div className="flex items-center justify-center gap-3">
           <Button onClick={() => setN((x) => Math.max(1, x - 1))} aria-label="減少">－</Button>

@@ -4,7 +4,7 @@ import { sheetResponse } from "@/server/exporter";
 import { inventorySummary } from "@/server/services/inventory";
 import { categoryDetail } from "@/server/services/reports";
 import { formatRate, jpyToTwd } from "@/lib/money";
-import { paymentPurpose, supplierPaymentStatus } from "@/lib/labels";
+import { batchStage, batchStageLabel, paymentPurpose, supplierPaymentStatus } from "@/lib/labels";
 import { fmtDate, fmtDay, orderStatus, paymentStatus, procurementStatus, shipStatus, productStatus, orderSource, refundStatus, importRowStatus, categoryType } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
@@ -82,8 +82,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
         orderBy: [{ batch: { createdAt: "asc" } }, { createdAt: "asc" }],
       });
       return sheetResponse("採購品項", [
-        ["採購團", "採購團名稱", "供應商", "狀態", "匯率", "商品編號", "商品", "系列", "類型", "規格", "幣別", "預估單價", "實際單價", "對客售價", "數量", "已取消", "已到貨", "分攤費用（台幣）", "訂購負責人", "主要付款負責人", "收貨負責人", "活動／系列", "供應商訂單編號", "砍單原因"],
-        ...items.map((i) => [i.batch.code, i.batch.name, i.batch.supplierRef?.name ?? i.batch.supplier ?? "", i.batch.status, i.batch.rateMicro / 1_000_000, i.product.code, i.product.name, i.product.seriesRef?.name ?? "", i.product.productType?.name ?? "", i.specNote ?? "", i.currency, i.estUnitCost, i.actualUnitCost, i.salePriceTwd, i.qty - i.cancelledQty, i.cancelledQty, i.movements.reduce((s, m) => s + m.onHandDelta, 0), i.allocations.reduce((s, a) => s + a.amountTwd, 0), i.batch.orderedBy?.name ?? "未指定", i.batch.paymentResponsibleBy?.name ?? "未指定", i.batch.receivingResponsibleBy?.name ?? "未指定", i.batch.category?.name ?? "", i.batch.supplierOrderNo ?? "", i.cancelReason ?? ""]),
+        ["採購團", "採購團名稱", "供應商", "狀態", "匯率", "商品編號", "商品", "系列", "類型", "規格", "幣別", "預估單價", "實際單價", "對客售價", "數量", "已取消", "已到貨", "分攤費用（台幣）", "這團是誰的", "進度", "主要付款負責人", "收貨負責人", "活動／系列", "供應商訂單編號", "砍單原因"],
+        ...items.map((i) => [i.batch.code, i.batch.name, i.batch.supplierRef?.name ?? i.batch.supplier ?? "", i.batch.status, i.batch.rateMicro / 1_000_000, i.product.code, i.product.name, i.product.seriesRef?.name ?? "", i.product.productType?.name ?? "", i.specNote ?? "", i.currency, i.estUnitCost, i.actualUnitCost, i.salePriceTwd, i.qty - i.cancelledQty, i.cancelledQty, i.movements.reduce((s, m) => s + m.onHandDelta, 0), i.allocations.reduce((s, a) => s + a.amountTwd, 0), i.batch.ownership === "JOINT" ? "合資" : (i.batch.orderedBy?.name ?? "未指定"), batchStageLabel[batchStage(i.batch)][0], i.batch.paymentResponsibleBy?.name ?? "未指定", i.batch.receivingResponsibleBy?.name ?? "未指定", i.batch.category?.name ?? "", i.batch.supplierOrderNo ?? "", i.cancelReason ?? ""]),
       ], format);
     }
     case "supplier-payments": {

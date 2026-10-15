@@ -8,10 +8,14 @@ import { getDefaultRateMicro } from "@/server/services/settings";
 import { PageHeader, Section, TableWrap, Empty, StatusBadge, LinkButton, Badge } from "@/components/ui";
 import { ReceiveForm, AdjustForm, CreateBatchFromDemand, KeepButton } from "./parts";
 import { SellButton } from "@/components/quick-sale";
+import { getMe } from "@/server/me";
+import { JOINT, NONE, stockByOwner } from "@/server/services/ownership";
+import type { OwnerStockOpt } from "@/components/owner-chips";
 import { stockValuation } from "@/server/services/reports";
 import { productSearchWhere } from "@/server/services/catalog";
 import { formatTwd } from "@/lib/money";
-import { batchStatus, fmtDate, fmtDay, formatRateLabel } from "./util";
+import { fmtDate, fmtDay, formatRateLabel } from "./util";
+import { batchStage, batchStageLabel } from "@/lib/labels";
 
 export const metadata = { title: "庫存與採購" };
 
@@ -58,6 +62,13 @@ async function StockTab({ q, only }: { q?: string; only?: string }) {
   });
   const inv = await tx((t) => inventorySummary(t, products.map((p) => p.id)));
   const val = (await stockValuation(prisma, products.map((p) => p.id))).byProduct;
+  const [byOwner, me, operators] = await Promise.all([tx((t) => stockByOwner(t, { productIds: products.map((p) => p.id) })), getMe(), tx((t) => listOperators(t, { includeInactive: true }))]);
+  const ownerName = (k: string) => (k === JOINT ? "合資" : k === NONE ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
+  const ownersOf = (pid: string): OwnerStockOpt[] =>
+    [...(byOwner.get(pid)?.entries() ?? [])]
+      .filter(([, v]) => v.free > 0 || v.kept > 0)
+      .map(([k, v]) => ({ key: k, label: k === me ? `${ownerName(k)}（我）` : ownerName(k), free: v.free, kept: v.kept }))
+      .sort((a, b) => (a.key === me ? -1 : b.key === me ? 1 : 0));
   const buyerNames = await prisma.buyer.findMany({ where: { mergedIntoId: null }, orderBy: { updatedAt: "desc" }, take: 200, select: { name: true } });
   let rows = products.map((p) => ({ p, s: inv.get(p.id) ?? { onHand: 0, reserved: 0, available: 0, incoming: 0, shipped: 0, kept: 0, activeOrdered: 0, openDemand: 0, unallocated: 0, shortage: 0 } }));
   if (only === "active") rows = rows.filter((r) => r.s.onHand || r.s.incoming || r.s.openDemand || r.s.kept);
@@ -101,9 +112,12 @@ async function StockTab({ q, only }: { q?: string; only?: string }) {
                     {p.salePriceTwd != null ? `・參考售價 ${formatTwd(p.salePriceTwd)}` : ""}
                   </p>
                 )}
+                {ownersOf(p.id).length > 0 && (
+                  <p className="mt-1 text-[12px] text-ink-2" data-testid="owner-line">誰的：{ownersOf(p.id).map((o) => `${o.label} 可賣 ${o.free}${o.kept ? `・自留 ${o.kept}` : ""}`).join("｜")}</p>
+                )}
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <SellButton primary product={{ id: p.id, name: p.name, salePriceTwd: p.salePriceTwd, available: s.available, avgCost: val.get(p.id)?.avgUnitCost ?? null }} />
-                  <KeepButton productId={p.id} name={p.name} available={s.available} kept={s.kept} />
+                  <SellButton primary me={me} product={{ id: p.id, name: p.name, salePriceTwd: p.salePriceTwd, available: s.available, avgCost: val.get(p.id)?.avgUnitCost ?? null, owners: ownersOf(p.id) }} />
+                  <KeepButton productId={p.id} name={p.name} available={s.available} kept={s.kept} owners={ownersOf(p.id)} me={me} />
                   <Link href={`/inventory?tab=receive&productId=${p.id}`} className="rounded-lg border border-line px-3 py-1.5 text-sm text-ai">登記到貨</Link>
                 </div>
               </li>
@@ -141,8 +155,8 @@ async function StockTab({ q, only }: { q?: string; only?: string }) {
                     <td className="num text-right">{s.shortage > 0 ? <Badge tone="bad">缺 {s.shortage}</Badge> : 0}</td>
                     <td className="whitespace-nowrap">
                       <span className="flex gap-2">
-                        <SellButton small primary product={{ id: p.id, name: p.name, salePriceTwd: p.salePriceTwd, available: s.available, avgCost: val.get(p.id)?.avgUnitCost ?? null }} />
-                        <KeepButton productId={p.id} name={p.name} available={s.available} kept={s.kept} small />
+                        <SellButton small primary me={me} product={{ id: p.id, name: p.name, salePriceTwd: p.salePriceTwd, available: s.available, avgCost: val.get(p.id)?.avgUnitCost ?? null, owners: ownersOf(p.id) }} />
+                        <KeepButton productId={p.id} name={p.name} available={s.available} kept={s.kept} small owners={ownersOf(p.id)} me={me} />
                         <Link href={`/inventory?tab=receive&productId=${p.id}`} className="text-sm text-ai hover:underline">登記到貨</Link>
                       </span>
                     </td>
@@ -211,14 +225,14 @@ async function BatchesTab({ cat, open }: { cat?: string; open?: string }) {
   const batches = await prisma.purchaseBatch.findMany({
     where: { ...(cat ? { categoryId: cat === "none" ? null : cat } : {}), ...(onlyOpen ? { status: { in: ["DRAFT", "ORDERED", "PARTIAL_RECEIVED"] } } : {}) },
     orderBy: { createdAt: "desc" },
-    include: { supplierRef: true, category: { select: { id: true, name: true } }, items: { include: { movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } } },
+    include: { supplierRef: true, orderedBy: { select: { name: true } }, category: { select: { id: true, name: true } }, items: { include: { movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } } },
   });
   const cats = await prisma.category.findMany({ where: { batches: { some: {} } }, orderBy: [{ active: "desc" }, { sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } });
   const chip = (on: boolean) => `shrink-0 rounded-full border px-3 py-1.5 text-sm ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
   const href = (c?: string, o?: string) => `/inventory?tab=batches${c ? `&cat=${c}` : ""}${o === "0" ? "&open=0" : ""}`;
   const today = new Date();
   return (
-    <Section title="採購團" pad={false} actions={<LinkButton href={`/inventory/batches/new${cat && cat !== "none" ? `?categoryId=${cat}` : ""}`} primary small>新增採購團</LinkButton>}>
+    <Section title="採購團" pad={false} actions={<LinkButton href={`/purchase${cat && cat !== "none" ? `?categoryId=${cat}` : ""}`} primary small>新增採購</LinkButton>}>
       <div className="flex gap-1.5 overflow-x-auto border-b border-line-2 px-4 py-2.5">
         <Link href={href(cat, onlyOpen ? "0" : undefined)} className={chip(!onlyOpen)}>{onlyOpen ? "顯示已完成" : "含已完成"}</Link>
         <Link href={href(undefined, open)} className={chip(!cat)}>全部活動</Link>
@@ -226,7 +240,7 @@ async function BatchesTab({ cat, open }: { cat?: string; open?: string }) {
         <Link href={href("none", open)} className={chip(cat === "none")}>未指定活動</Link>
       </div>
       {batches.length === 0 ? (
-        <Empty action={<LinkButton href="/inventory/batches/new" primary>新增採購團</LinkButton>}>{onlyOpen ? "沒有進行中的採購團。" : "還沒有採購團。"}</Empty>
+        <Empty action={<LinkButton href="/purchase" primary>新增採購</LinkButton>}>{onlyOpen ? "沒有進行中的採購團。" : "還沒有採購團。"}</Empty>
       ) : (
         <ul className="grid gap-2 p-3 md:grid-cols-2 xl:grid-cols-3">
           {batches.map((b) => {
@@ -238,10 +252,10 @@ async function BatchesTab({ cat, open }: { cat?: string; open?: string }) {
                 <Link href={`/inventory/batches/${b.id}`} className="block h-full rounded-xl border border-line bg-white p-3 hover:border-ai">
                   <div className="flex items-start justify-between gap-2">
                     <span className="font-semibold">{b.code} {b.name}</span>
-                    <StatusBadge map={batchStatus} value={b.status} />
+                    <StatusBadge map={batchStageLabel} value={batchStage(b)} />
                   </div>
                   <div className="mt-0.5 text-[13px] text-mute">
-                    {[b.supplierRef?.name ?? b.supplier, b.category?.name, `下單 ${fmtDate(b.orderedAt)}`].filter(Boolean).join("｜")}
+                    {[b.ownership === "JOINT" ? "合資" : `${b.orderedBy?.name ?? "未指定"}的`, b.supplierRef?.name ?? b.supplier, b.category?.name, `下單 ${fmtDate(b.orderedAt)}`].filter(Boolean).join("｜")}
                   </div>
                   <div className="mt-2 flex items-center gap-2">
                     <div className="h-2 flex-1 overflow-hidden rounded-full bg-line-2" aria-hidden>

@@ -14,6 +14,7 @@ const sale = z.object({
   note: z.string().max(300).nullable().optional(),
   paid: z.boolean().optional(),
   method: z.string().max(40).nullable().optional(),
+  owner: z.string().max(64).nullable().optional(),
   idemKey: z.string().min(8).max(100),
 });
 type SaleIn = z.infer<typeof sale>;

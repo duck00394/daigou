@@ -13,8 +13,8 @@ export async function saveOperatorAction(id: string | null, input: { name: strin
   return run((a) => tx((t) => op.saveOperator(t, a, id, z.object({ name: z.string().max(60), active: z.boolean().optional(), code: z.string().max(8).optional() }).parse(input))).then((o) => ({ id: o.id })));
 }
 
-export async function updateResponsibilityAction(batchId: string, input: { orderedById?: string | null; paymentResponsibleById?: string | null; receivingResponsibleById?: string | null; responsibilityNote?: string | null }) {
-  const v = z.object({ orderedById: opId.optional(), paymentResponsibleById: opId.optional(), receivingResponsibleById: opId.optional(), responsibilityNote: z.string().max(500).nullable().optional() }).parse(input);
+export async function updateResponsibilityAction(batchId: string, input: { ownership?: "PERSONAL" | "JOINT"; orderedById?: string | null; paymentResponsibleById?: string | null; receivingResponsibleById?: string | null; responsibilityNote?: string | null }) {
+  const v = z.object({ ownership: z.enum(["PERSONAL", "JOINT"]).optional(), orderedById: opId.optional(), paymentResponsibleById: opId.optional(), receivingResponsibleById: opId.optional(), responsibilityNote: z.string().max(500).nullable().optional() }).parse(input);
   return run((a) => tx((t) => op.updateBatchResponsibility(t, a, batchId, v)).then(() => null));
 }
 
@@ -76,4 +76,25 @@ export async function createReceivingAction(input: { batchId: string; receivedBy
     );
     return { id: r.record.id, duplicated: r.duplicated, goodQty: r.record.lines.reduce((s, l) => s + l.receivedQty - l.defectQty, 0) };
   });
+}
+
+export async function updateBatchProgressAction(batchId: string, progress: "ASKED" | "AGENT_HAS" | "SHIPPED") {
+  return run((a) => tx((t) => op.updateBatchProgress(t, a, batchId, z.enum(["ASKED", "AGENT_HAS", "SHIPPED"]).parse(progress))).then(() => null));
+}
+
+/** 設定「這支手機是誰在用」（只是預設值，存在這台裝置的 Cookie） */
+export async function setMeAction(operatorId: string | null) {
+  return run(async () => {
+    const { cookies } = await import("next/headers");
+    const { ME_COOKIE } = await import("@/server/me");
+    const jar = await cookies();
+    if (!operatorId) {
+      jar.delete(ME_COOKIE);
+      return null;
+    }
+    const found = await tx((t) => t.operator.findUnique({ where: { id: z.string().max(64).parse(operatorId) } }));
+    if (!found || !found.active) throw new Error("bad operator");
+    jar.set(ME_COOKIE, found.id, { httpOnly: true, sameSite: "lax", secure: process.env.INSECURE_COOKIE !== "1" && process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 24 * 365 });
+    return null;
+  }, "read");
 }

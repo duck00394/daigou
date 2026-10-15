@@ -7,7 +7,7 @@ test("手機：建團選負責人、登記付款與收貨，對帳頁不橫向�
   await login(page);
   await page.goto("/inventory/batches/new");
   await page.getByLabel("採購團名稱").fill("手機雙人團");
-  await page.getByRole("radiogroup", { name: /訂購負責人/ }).getByRole("radio").first().click();
+  await page.getByRole("radiogroup", { name: /這團是誰的/ }).getByRole("radio").first().click();
   await page.getByRole("radiogroup", { name: /收貨負責人/ }).getByRole("radio").nth(1).click();
   await page.getByRole("button", { name: "建立採購團" }).click();
   await expect(page.getByRole("heading", { name: /手機雙人團/ })).toBeVisible();

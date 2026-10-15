@@ -95,11 +95,11 @@ export async function operatorReport(t: Tx, f: OperatorFilter) {
   const r = range(f);
   const batches = await t.purchaseBatch.findMany({
     where: { ...batchWhere(f), status: { not: "CANCELLED" }, ...(r ? { orderedAt: r } : {}) },
-    select: { id: true, orderedById: true, paymentResponsibleById: true, receivingResponsibleById: true },
+    select: { id: true, ownership: true, orderedById: true, paymentResponsibleById: true, receivingResponsibleById: true },
   });
   const want = (id: string | null) => !f.operatorId || (id ?? UNASSIGNED) === f.operatorId;
   for (const b of batches) {
-    if (want(b.orderedById)) row(b.orderedById ?? UNASSIGNED).batches.ordered++;
+    if (b.ownership !== "JOINT" && want(b.orderedById)) row(b.orderedById ?? UNASSIGNED).batches.ordered++; // 合資團沒有單一主人，不計入個人
     if (want(b.paymentResponsibleById)) row(b.paymentResponsibleById ?? UNASSIGNED).batches.paymentResponsible++;
     if (want(b.receivingResponsibleById)) row(b.receivingResponsibleById ?? UNASSIGNED).batches.receivingResponsible++;
   }

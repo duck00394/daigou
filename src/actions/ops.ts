@@ -92,12 +92,16 @@ export async function createBatchAction(input: {
   supplierOrderNo?: string | null;
   orderUrl?: string | null;
   expectedAt?: string | null;
+  ownership?: "PERSONAL" | "JOINT";
+  progress?: "ASKED" | "AGENT_HAS" | "SHIPPED";
 }) {
   return run(async (a) => {
     const items = z.array(batchItem).max(300).parse(input.items);
     const opId = z.string().max(64).nullish();
     const resp = z.object({ orderedById: opId, paymentResponsibleById: opId, receivingResponsibleById: opId, responsibilityNote: z.string().max(500).nullish() }).parse(input);
-    const extra = z.object({ categoryId: z.string().max(64).nullish(), supplierOrderNo: z.string().max(100).nullish(), orderUrl: z.string().max(500).nullish(), expectedAt: z.string().max(10).nullish() }).parse(input);
+    const extra = z
+      .object({ categoryId: z.string().max(64).nullish(), supplierOrderNo: z.string().max(100).nullish(), orderUrl: z.string().max(500).nullish(), expectedAt: z.string().max(10).nullish(), ownership: z.enum(["PERSONAL", "JOINT"]).optional(), progress: z.enum(["ASKED", "AGENT_HAS", "SHIPPED"]).optional() })
+      .parse(input);
     const b = await tx((t) => pur.createBatch(t, a, { ...input, ...resp, ...extra, expectedAt: parseDay(extra.expectedAt), orderedAt: parseDateTimeInput(input.orderedAt), items }), { timeout: 120_000 });
     return { id: b.id };
   });

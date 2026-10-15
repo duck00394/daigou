@@ -8,7 +8,8 @@ import { audit, emptyToNull, nextCode, type Actor } from "./common";
 import { createOrder } from "./orders";
 import { createShipment } from "./shipping";
 import { addPayment, voidPayment } from "./payments";
-import { productLots } from "./inventory";
+import { productLots, reserveForItem } from "./inventory";
+import { filterLotsByOwner, ownerAttributor, type OwnerMoney } from "./ownership";
 import { recomputeOrder } from "./recompute";
 import { landedCosts } from "./purchase";
 import { costOfMove } from "./reports";
@@ -26,6 +27,7 @@ export interface QuickSaleInput {
   note?: string | null;
   paid?: boolean; // 是否同時登記為已收款（預設是）
   method?: string | null;
+  owner?: string | null; // 賣誰的：經營者 id、"joint"（合資）、"none"；空白＝不限（先進先出）
   idemKey: string;
 }
 
@@ -65,8 +67,9 @@ export async function quickSale(t: Tx, actor: Actor, input: QuickSaleInput) {
   // 鎖定後再確認一次：同一請求同時送出兩次時，第二個會等第一個完成後在這裡判定為重複
   const again = await t.order.findUnique({ where: { idempotencyKey: key } });
   if (again) return { orderId: again.id, duplicated: true, ...(await saleSummary(t, again.id)) };
-  const free = (await productLots(t, product.id)).reduce((s, l) => s + Math.max(0, l.free), 0);
-  if (free < input.qty) throw new BizError(`「${product.name}」可售庫存只有 ${free} 件（已保留給買家與自留的不能出售）`);
+  const lots = await filterLotsByOwner(t, await productLots(t, product.id), input.owner);
+  const free = lots.reduce((s, l) => s + Math.max(0, l.free), 0);
+  if (free < input.qty) throw new BizError(`「${product.name}」${input.owner ? "這個人的" : ""}可售庫存只有 ${free} 件（已保留給買家與自留的不能出售）`);
   const buyer = await resolveBuyer(t, actor, input.buyerName);
   const soldAt = input.soldAt ?? new Date();
   const order = await createOrder(t, actor, {
@@ -77,7 +80,18 @@ export async function quickSale(t: Tx, actor: Actor, input: QuickSaleInput) {
     idempotencyKey: key,
     items: [{ productId: product.id, qty: input.qty, unitPrice: input.unitPrice }],
   });
-  await createShipment(t, actor, { buyerId: buyer.id, items: [{ orderItemId: order.items[0].id, qty: input.qty }], autoReserve: true, shippedAt: soldAt, method: "現貨出售", dedupeKey: key });
+  // 指定賣誰的：只從那個人的成本批次依先進先出保留；不指定則由出貨自動保留
+  if (input.owner) {
+    let left = input.qty;
+    for (const lot of lots) {
+      if (left <= 0) break;
+      const take = Math.min(left, Math.max(0, lot.free));
+      if (take <= 0) continue;
+      await reserveForItem(t, actor, { orderItemId: order.items[0].id, qty: take, batchItemId: lot.batchItemId });
+      left -= take;
+    }
+  }
+  await createShipment(t, actor, { buyerId: buyer.id, items: [{ orderItemId: order.items[0].id, qty: input.qty }], autoReserve: !input.owner, shippedAt: soldAt, method: "現貨出售", dedupeKey: key });
   const amount = input.qty * input.unitPrice;
   if (input.paid !== false && amount > 0) await addPayment(t, actor, { orderId: order.id, amount, paidAt: soldAt, method: input.method ?? null, note: "現貨出售", dedupeKey: key });
   await audit(t, actor, "quickSale.create", "Order", order.id, { productId: product.id, qty: input.qty, unitPrice: input.unitPrice, buyerId: buyer.id, paid: input.paid !== false });
@@ -201,17 +215,29 @@ export async function listQuickSales(t: Tx, opts: { q?: string | null; from?: Da
     arr.push(m);
     movesByItem.set(m.orderItemId!, arr);
   }
+  const attribute = await ownerAttributor(t, lotIds);
+  const totalByOwner = new Map<string, OwnerMoney>();
   const rows = orders.map((o) => {
     let cost = 0;
     let tentative = false;
+    const parts: { purchaseBatchItemId: string | null; qty: number; revenue: number; cost: number }[] = [];
     for (const it of o.items) {
       for (const m of movesByItem.get(it.id) ?? []) {
         const r = costOfMove(landed, { qty: -m.onHandDelta, purchaseBatchItemId: m.purchaseBatchItemId, unitCostTwd: m.unitCostTwd, estUnitCostTwd: it.estUnitCostTwd });
+        parts.push({ purchaseBatchItemId: m.purchaseBatchItemId, qty: -m.onHandDelta, revenue: -m.onHandDelta * it.unitPrice, cost: r.cost });
         cost += r.cost;
         if (r.estimatedUnits > 0 || (m.purchaseBatchItemId && tentativeLot.has(m.purchaseBatchItemId))) tentative = true;
       }
     }
     const qty = o.items.reduce((a, i) => a + i.qty - i.cancellations.reduce((x, c) => x + c.qty, 0), 0);
+    const owners = attribute(parts);
+    if (qty > 0) for (const [k, v] of owners) {
+      const x = totalByOwner.get(k) ?? { qty: 0, revenue: 0, cost: 0 };
+      x.qty += v.qty;
+      x.revenue += v.revenue;
+      x.cost += v.cost;
+      totalByOwner.set(k, x);
+    }
     const revenue = o.items.reduce((a, i) => a + (i.qty - i.cancellations.reduce((x, c) => x + c.qty, 0)) * i.unitPrice, 0);
     return {
       id: o.id,
@@ -231,11 +257,13 @@ export async function listQuickSales(t: Tx, opts: { q?: string | null; from?: Da
       profit: revenue - cost,
       tentative: qty > 0 && tentative,
       voided: qty === 0,
+      owners: [...owners.entries()].filter(([, v]) => v.qty !== 0 || v.revenue !== 0).map(([k, v]) => ({ key: k, ...v })),
     };
   });
   const live = rows.filter((r) => !r.voided);
   return {
     rows,
+    byOwner: Object.fromEntries(totalByOwner),
     total: { count: live.length, qty: live.reduce((a, r) => a + r.qty, 0), revenue: live.reduce((a, r) => a + r.revenue, 0), cost: live.reduce((a, r) => a + r.cost, 0), profit: live.reduce((a, r) => a + r.profit, 0), tentative: live.some((r) => r.tentative) },
   };
 }

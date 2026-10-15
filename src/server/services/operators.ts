@@ -10,9 +10,9 @@ export const DEFAULT_OPERATORS = [
 
 /** 確保預設兩位經營者存在（migration 已建立；資料庫被清空或還原舊備份後也能補回，不會覆寫已改過的名稱） */
 export async function ensureDefaultOperators(t: Tx) {
-  for (const o of DEFAULT_OPERATORS) {
-    await t.operator.upsert({ where: { id: o.id }, update: {}, create: { ...o } });
-  }
+  // 以 INSERT ... ON CONFLICT DO NOTHING 補建，兩個請求同時執行也不會撞號，也不會覆寫已改過的名稱
+  if ((await t.operator.count({ where: { id: { in: DEFAULT_OPERATORS.map((o) => o.id) } } })) === DEFAULT_OPERATORS.length) return;
+  await t.operator.createMany({ data: DEFAULT_OPERATORS.map((o) => ({ ...o })), skipDuplicates: true });
 }
 
 export async function listOperators(t: Tx, opts: { includeInactive?: boolean } = {}) {
@@ -59,7 +59,8 @@ export async function checkOperator(t: Tx, id: string | null | undefined, label:
 }
 
 export interface Responsibility {
-  orderedById?: string | null;
+  ownership?: "PERSONAL" | "JOINT";
+  orderedById?: string | null; // 個人團：這團是誰的
   paymentResponsibleById?: string | null;
   receivingResponsibleById?: string | null;
   responsibilityNote?: string | null;
@@ -70,7 +71,15 @@ export async function updateBatchResponsibility(t: Tx, actor: Actor, batchId: st
   const before = await t.purchaseBatch.findUnique({ where: { id: batchId } });
   if (!before) throw new BizError("找不到採購團");
   const data: Responsibility = {};
-  if (input.orderedById !== undefined) data.orderedById = await checkOperator(t, input.orderedById, "訂購負責人", before.orderedById);
+  if (input.ownership !== undefined) {
+    if (input.ownership !== "PERSONAL" && input.ownership !== "JOINT") throw new BizError("歸屬只能是個人或合資");
+    data.ownership = input.ownership;
+    if (input.ownership === "JOINT") data.orderedById = null; // 合資沒有單一主人
+  }
+  if (input.orderedById !== undefined && data.ownership !== "JOINT") {
+    data.orderedById = await checkOperator(t, input.orderedById, "這團是誰的", before.orderedById);
+    if (data.orderedById && data.ownership === undefined && before.ownership === "JOINT") data.ownership = "PERSONAL";
+  }
   if (input.paymentResponsibleById !== undefined) data.paymentResponsibleById = await checkOperator(t, input.paymentResponsibleById, "主要付款負責人", before.paymentResponsibleById);
   if (input.receivingResponsibleById !== undefined) data.receivingResponsibleById = await checkOperator(t, input.receivingResponsibleById, "收貨負責人", before.receivingResponsibleById);
   if (input.responsibilityNote !== undefined) data.responsibilityNote = emptyToNull(input.responsibilityNote);
@@ -100,4 +109,16 @@ export async function responsibilityDefaults(t: Tx, fromBatchId: string) {
     paymentResponsibleById: keep(b.paymentResponsibleById),
     receivingResponsibleById: keep(b.receivingResponsibleById),
   };
+}
+
+/** 修改採購團進度（已請代購／代購收到了，等寄出／寄出了，在路上）；到手與否由收貨決定 */
+export async function updateBatchProgress(t: Tx, actor: Actor, batchId: string, progress: string) {
+  if (!["ASKED", "AGENT_HAS", "SHIPPED"].includes(progress)) throw new BizError("進度不正確");
+  const before = await t.purchaseBatch.findUnique({ where: { id: batchId } });
+  if (!before) throw new BizError("找不到採購團");
+  if (before.status === "CANCELLED") throw new BizError("已取消的採購團不能修改進度");
+  if (before.progress === progress) return before;
+  const row = await t.purchaseBatch.update({ where: { id: batchId }, data: { progress: progress as "ASKED" } });
+  await audit(t, actor, "batch.progress", "PurchaseBatch", batchId, { before: before.progress, after: progress });
+  return row;
 }

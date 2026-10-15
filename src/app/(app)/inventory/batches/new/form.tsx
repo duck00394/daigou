@@ -54,7 +54,7 @@ export function NewBatchForm({
         e.preventDefault();
         if (!f.name.trim()) return notify("請填寫採購團名稱");
         if (needConfirm) return notify("請先確認從其他採購團帶入的負責人");
-        run(() => createBatchAction({ name: f.name, supplierId: f.supplierId || null, rate: f.rate, orderedAt: f.orderedAt, notes: f.notes || null, items: [], ...resp, responsibilityNote: f.responsibilityNote || null, categoryId: f.categoryId || null, expectedAt: f.expectedAt || null, supplierOrderNo: f.supplierOrderNo || null, orderUrl: f.orderUrl || null }), {
+        run(() => createBatchAction({ name: f.name, supplierId: f.supplierId || null, rate: f.rate, orderedAt: f.orderedAt, notes: f.notes || null, items: [], ...resp, orderedById: resp.orderedById === "__joint__" ? null : resp.orderedById, ownership: resp.orderedById === "__joint__" ? "JOINT" : "PERSONAL", responsibilityNote: f.responsibilityNote || null, categoryId: f.categoryId || null, expectedAt: f.expectedAt || null, supplierOrderNo: f.supplierOrderNo || null, orderUrl: f.orderUrl || null }), {
           success: "已建立採購團，接著批次新增系列商品",
           onOk: (d) => router.push(`/inventory/batches/${d.id}?bulk=1`),
         });
@@ -97,7 +97,7 @@ export function NewBatchForm({
               <input autoFocus className={`${inputCls} mt-1`} value={newSupplier} onChange={(e) => setNewSupplier(e.target.value)} />
             </label>
             <Button variant="primary" onClick={async () => {
-              const r = await saveSupplierAction(null, { name: newSupplier, defaultCurrency: "JPY" });
+              const r = await saveSupplierAction(null, { name: newSupplier, defaultCurrency: "TWD" });
               if (!r.ok) return notify(r.error);
               setSuppliers((l) => [...l, r.data]);
               setF((x) => ({ ...x, supplierId: r.data.id }));
@@ -136,7 +136,7 @@ export function NewBatchForm({
             hint="只帶入三位負責人，不會複製付款或收貨紀錄。"
           />
         )}
-        <OperatorPicker label="訂購負責人（負責下單）" operators={operators} value={resp.orderedById} onChange={setR("orderedById")} highlight={needConfirm} />
+        <OperatorPicker label="這團是誰的" operators={[...operators, { id: "__joint__", name: "合資", code: "J" }]} value={resp.orderedById} onChange={setR("orderedById")} highlight={needConfirm} hint="合資：賣掉的錢依各自實際付給代購的金額比例分" />
         <OperatorPicker label="主要付款負責人（安排付款）" operators={operators} value={resp.paymentResponsibleById} onChange={setR("paymentResponsibleById")} highlight={needConfirm} hint="實際是誰付的錢，請在採購團頁面逐筆登記付款。" />
         <OperatorPicker label="收貨負責人（主要清點）" operators={operators} value={resp.receivingResponsibleById} onChange={setR("receivingResponsibleById")} highlight={needConfirm} hint="每次到貨仍要記錄實際收貨確認人。" />
         <TextField label="負責人備註（選填）" value={f.responsibilityNote} onChange={(e) => setF({ ...f, responsibilityNote: e.target.value })} />

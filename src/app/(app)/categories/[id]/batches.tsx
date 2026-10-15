@@ -2,16 +2,21 @@
 import Link from "next/link";
 import { tx } from "@/server/db";
 import { categoryOverview } from "@/server/services/batch-ops";
-import { Section, Stat, StatusBadge, Empty, LinkButton, Twd } from "@/components/ui";
-import { batchStatus, fmtDay } from "@/lib/labels";
+import { Section, StatusBadge, Empty, LinkButton } from "@/components/ui";
+import { batchStageLabel, fmtDay, type BatchStage } from "@/lib/labels";
+import { listOperators } from "@/server/services/operators";
+import { JOINT, NONE } from "@/server/services/ownership";
 import { formatJpy, formatTwd } from "@/lib/money";
 
 const money = (v: number, c: string) => (c === "JPY" ? formatJpy(v) : formatTwd(v));
 const sums = (m: Record<string, number>) => Object.entries(m).map(([c, v]) => money(v, c)).join("、");
 
 export async function CategoryBatches({ categoryId, view }: { categoryId: string; view?: string }) {
-  const o = await tx((t) => categoryOverview(t, categoryId));
-  const add = <LinkButton small primary href={`/inventory/batches/new?categoryId=${categoryId}`}>新增採購團</LinkButton>;
+  const [o, operators] = await Promise.all([tx((t) => categoryOverview(t, categoryId)), tx((t) => listOperators(t, { includeInactive: true }))]);
+  const who = (k: string) => (k === JOINT ? "合資（還沒登記付款）" : k === NONE ? "未指定" : (operators.find((x) => x.id === k)?.name ?? "未指定"));
+  const ownerKeys = [...operators.map((x) => x.id), NONE, JOINT].filter((k) => o.byOwner[k] || o.stock[k]);
+  const stageOrder: BatchStage[] = ["ASKED", "AGENT_HAS", "SHIPPED", "PARTIAL", "DONE"];
+  const add = <LinkButton small primary href={`/purchase?categoryId=${categoryId}`}>新增採購</LinkButton>;
   if (!o.batches.length)
     return (
       <Section title="採購團" actions={add}>
@@ -22,12 +27,43 @@ export async function CategoryBatches({ categoryId, view }: { categoryId: string
   const fullView = view === "full";
   return (
     <>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Stat label="採購團" value={o.total.batches} />
-        <Stat label="總採購件數" value={o.total.qty} note={`已到貨 ${o.total.received}`} />
-        <Stat label="待到貨" value={o.total.outstanding} tone={o.total.outstanding ? "warn" : undefined} />
-        <Stat label="總成本（台幣）" value={<Twd v={o.total.totalTwd} />} note={o.total.estimated ? "含暫估（未確認單價或未登記費用）" : "已確認"} />
-      </div>
+      <Section title="總覽">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <div className="text-[13px] text-mute">這個活動總額</div>
+            <div className="num text-[26px] font-semibold" data-testid="cat-total">{formatTwd(o.total.totalTwd)}</div>
+            <div className="text-[12px] text-mute">{o.total.batches} 團・{o.total.qty} 件・已到 {o.total.received}・還沒到 {o.total.outstanding}{o.total.estimated ? "・含暫估" : ""}</div>
+          </div>
+        </div>
+        <h3 className="mt-3 mb-1.5 text-[13px] font-semibold text-ink-2">誰買的</h3>
+        <ul className="grid gap-2 sm:grid-cols-3">
+          {ownerKeys.map((k) => {
+            const m = o.byOwner[k];
+            const st = o.stock[k];
+            return (
+              <li key={k} className="rounded-xl border border-line-2 bg-[#fafbfc] p-3" data-testid={`owner-${k}`}>
+                <div className="font-semibold">{k === JOINT ? "合資" : who(k)}</div>
+                {k === JOINT ? (
+                  <div className="text-[13px] text-ink-2">{m?.batches ?? 0} 團・{m?.qty ?? 0} 件{m?.amount ? `・還沒登記付款 ${formatTwd(m.amount)}` : "・金額已依付款分給各人"}</div>
+                ) : (
+                  <div className="num text-[18px] font-semibold">{formatTwd(m?.amount ?? 0)}<span className="ml-1 text-[12px] font-normal text-mute">{m?.batches ?? 0} 團・{m?.qty ?? 0} 件</span></div>
+                )}
+                <div className="mt-1 text-[12px] text-mute">庫存：可賣 {st?.free ?? 0}・已保留 {st?.reserved ?? 0}・自留 {st?.kept ?? 0}</div>
+              </li>
+            );
+          })}
+        </ul>
+        <h3 className="mt-3 mb-1.5 text-[13px] font-semibold text-ink-2">現在到哪了</h3>
+        <ul className="flex flex-wrap gap-2">
+          {stageOrder.filter((k) => o.byStage[k]).map((k) => (
+            <li key={k} className="rounded-lg border border-line-2 px-3 py-1.5 text-[13px]">
+              <StatusBadge map={batchStageLabel} value={k} /> <span className="num ml-1 font-medium">{formatTwd(o.byStage[k].amount)}</span>
+              <span className="text-mute">（{o.byStage[k].batches} 團{o.byStage[k].outstanding ? `・還沒到 ${o.byStage[k].outstanding} 件` : ""}）</span>
+            </li>
+          ))}
+        </ul>
+      </Section>
+
 
       <Section title={`採購團（${o.batches.length}）`} pad={false} actions={add}>
         <ul className="grid gap-2 p-3 md:grid-cols-2">
@@ -36,12 +72,14 @@ export async function CategoryBatches({ categoryId, view }: { categoryId: string
               <Link href={`/inventory/batches/${b.id}`} className={`block h-full rounded-xl border p-3 hover:border-ai ${b.issues.length ? "border-[#f0dfa8]" : "border-line"} ${b.status === "CANCELLED" ? "opacity-60" : ""}`}>
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-semibold">{b.code} {b.name}</span>
-                  <StatusBadge map={batchStatus} value={b.status} />
+                  <StatusBadge map={batchStageLabel} value={b.stage} />
                 </div>
-                <div className="text-[13px] text-mute">{b.supplier ?? "未指定供應商"}｜下單 {b.orderedBy ?? "未指定"}・付款 {b.paymentResponsibleBy ?? "未指定"}・收貨 {b.receivingResponsibleBy ?? "未指定"}</div>
+                <div className="text-[13px] text-mute">
+                  <span className="font-medium text-ink-2">{b.ownership === "JOINT" ? `合資${o.jointShares[b.id]?.length ? `（${o.jointShares[b.id].map((x) => `${who(x.key)} ${x.percent}%`).join("・")}）` : ""}` : `${b.orderedBy ?? "未指定"}的`}</span>｜{b.supplier ?? "未指定代購"}
+                </div>
                 <div className="mt-1.5 grid grid-cols-3 gap-1 text-center text-[13px]">
                   <div className="rounded-lg bg-[#fafbfc] py-1"><div className="text-[11px] text-mute">到貨</div><span className="num">{b.received}／{b.qty}</span></div>
-                  <div className="rounded-lg bg-[#fafbfc] py-1"><div className="text-[11px] text-mute">成本{b.estimated || !b.feesRecorded ? "（暫估）" : ""}</div><span className="num">{formatTwd(b.totalTwd)}</span></div>
+                  <div className="rounded-lg bg-[#fafbfc] py-1"><div className="text-[11px] text-mute">這團總額{b.estimated || !b.feesRecorded ? "（暫估）" : ""}</div><span className="num">{formatTwd(b.totalTwd)}</span></div>
                   <div className="rounded-lg bg-[#fafbfc] py-1"><div className="text-[11px] text-mute">已付</div><span className="num">{sums(b.paid) || "—"}</span></div>
                 </div>
                 {Object.keys(b.pending).length > 0 && <div className="mt-1 text-[12px] text-warn">待付款 {sums(b.pending)}</div>}

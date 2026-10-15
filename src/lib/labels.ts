@@ -210,3 +210,27 @@ export const supplierKind: Record<string, string> = {
   INDIVIDUAL: "個人賣家",
   OTHER: "其他",
 };
+
+/** 採購團進度（口語）：前三個自己點選，到手與否由收貨自動判斷 */
+export const batchProgress: Record<string, string> = {
+  ASKED: "已請代購",
+  AGENT_HAS: "代購收到了，等寄出",
+  SHIPPED: "寄出了，在路上",
+};
+
+export type BatchStage = "ASKED" | "AGENT_HAS" | "SHIPPED" | "PARTIAL" | "DONE" | "CANCELLED";
+export const batchStageLabel: Record<BatchStage, [string, Tone]> = {
+  ASKED: ["已請代購", "neutral"],
+  AGENT_HAS: ["代購收到了，等寄出", "info"],
+  SHIPPED: ["寄出了，在路上", "info"],
+  PARTIAL: ["部分到手", "warn"],
+  DONE: ["全部到手", "good"],
+  CANCELLED: ["已取消", "muted"],
+};
+
+export function batchStage(b: { status: string; progress: string }): BatchStage {
+  if (b.status === "CANCELLED") return "CANCELLED";
+  if (b.status === "RECEIVED") return "DONE";
+  if (b.status === "PARTIAL_RECEIVED") return "PARTIAL";
+  return (b.progress as BatchStage) ?? "ASKED";
+}

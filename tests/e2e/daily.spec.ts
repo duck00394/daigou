@@ -4,6 +4,14 @@ import { login, toast } from "./helpers";
 
 const cell = (page: Page, row: number, col: number) => page.locator(`[data-row="${row}"][data-col="${col}"]`).first();
 
+async function stockOf(page: Page, name: string) {
+  await page.goto(`/inventory?tab=stock&only=all&q=${encodeURIComponent(name)}`);
+  const row = page.getByRole("row").filter({ hasText: name });
+  if ((await row.count()) === 0) return { avail: 0, kept: 0 };
+  const cell = async (i: number) => Number((await row.first().getByRole("cell").nth(i).textContent())?.trim() ?? 0);
+  return { avail: await cell(3), kept: await cell(4) };
+}
+
 async function newBatch(page: Page, name: string) {
   await page.goto("/inventory/batches/new");
   await page.getByLabel("採購團名稱").fill(name);
@@ -14,8 +22,9 @@ async function newBatch(page: Page, name: string) {
 }
 
 test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page }) => {
+  const tag = Date.now().toString(36).slice(-4); // 每次不同，重複執行也不會撞名
   await login(page);
-  await newBatch(page, "E2E 萬聖 A 團");
+  await newBatch(page, `E2E 萬聖 A 團 ${tag}`);
   await page.getByLabel("IP／系列").selectOption({ label: "吉伊卡哇" });
   await page.getByLabel("商品類型").selectOption({ label: "吊娃" });
   await page.getByRole("button", { name: "＋ 吉伊" }).click();
@@ -42,10 +51,10 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
   await expect(rowOf("吉伊卡哇 吉伊 吊娃").getByLabel("數量")).toHaveValue("3"); // 其他品項不受影響
 
   // B 團：從 A 團複製，改吉伊單價
-  await newBatch(page, "E2E 萬聖 B 團");
+  await newBatch(page, `E2E 萬聖 B 團 ${tag}`);
   await page.getByRole("button", { name: "從其他團複製品項" }).click();
   const src = dlg.getByLabel("來源採購團");
-  await src.selectOption((await src.locator("option", { hasText: "E2E 萬聖 A 團" }).getAttribute("value"))!);
+  await src.selectOption((await src.locator("option", { hasText: `E2E 萬聖 A 團 ${tag}` }).getAttribute("value"))!);
   await expect(dlg.getByLabel("吉伊卡哇 吉伊 吊娃 單價")).toHaveValue("350");
   await expect(dlg.getByLabel("吉伊卡哇 小八 吊娃 數量")).toHaveValue("1");
   await dlg.getByLabel("吉伊卡哇 吉伊 吊娃 單價").fill("380");
@@ -69,8 +78,9 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
   await expect(page).toHaveURL(/view=full/);
 
   // A 團到貨，自留 2 件
+  const before = await stockOf(page, "吉伊卡哇 吉伊 吊娃"); // 只比較本測試造成的變化
   await page.goto("/inventory?tab=batches");
-  await page.getByRole("link", { name: /E2E 萬聖 A 團/ }).click();
+  await page.getByRole("link", { name: new RegExp(`E2E 萬聖 A 團 ${tag}`) }).click();
   await page.getByRole("button", { name: "＋ 登記這次收貨" }).click();
   const rcv = page.getByRole("form", { name: "登記收貨" });
   await rcv.getByRole("radio").first().click();
@@ -84,21 +94,22 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
   await dlg.getByLabel("數量").fill("2");
   await dlg.getByRole("button", { name: "自留 2 件" }).click();
   await toast(page, "已自留 2 件");
-  await expect(stockRow.getByRole("cell").nth(4)).toHaveText("2"); // 自留
-  await expect(stockRow.getByRole("cell").nth(3)).toHaveText("1"); // 可售
+  await expect(stockRow.getByRole("cell").nth(4)).toHaveText(String(before.kept + 2)); // 自留
+  await expect(stockRow.getByRole("cell").nth(3)).toHaveText(String(before.avail + 1)); // 可售：到貨 3 − 自留 2
 
   // 直接出售剩下的 1 件 → 出售紀錄 → 更正售價 → 作廢後庫存回來
   await stockRow.getByRole("button", { name: "出售" }).click();
   await dlg.getByLabel("每件售價（台幣）").fill("520");
   await dlg.getByText("選填：買家、日期、備註").click();
   await dlg.getByLabel("成交日期").fill("2025-02-10"); // 過去月份：不影響其他測試的本月報表
+  await dlg.getByLabel("備註").fill(`E2E-${tag}`); // 讓出售紀錄可以只搜到本次測試的資料
   await dlg.getByRole("button", { name: "確認出售 NT$520" }).click();
   await expect(dlg.getByText("收入")).toBeVisible();
   await expect(dlg).toContainText("NT$520");
   await dlg.getByRole("button", { name: "完成" }).click();
-  await expect(stockRow.getByRole("cell").nth(3)).toHaveText("0");
+  await expect(stockRow.getByRole("cell").nth(3)).toHaveText(String(before.avail));
 
-  await page.goto("/sales?ym=2025-02");
+  await page.goto(`/sales?ym=2025-02&q=E2E-${tag}`);
   const sale = page.getByTestId("sale-row").filter({ hasText: "吉伊卡哇 吉伊 吊娃" }).first();
   await expect(sale).toContainText("散客");
   await expect(sale).toContainText("已收款");
@@ -115,7 +126,7 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
   await page.getByRole("link", { name: "顯示已作廢" }).click();
   await expect(page.getByTestId("sale-row").filter({ hasText: "已作廢" })).toHaveCount(2);
   await page.goto("/inventory?tab=stock&q=吉伊卡哇 吉伊 吊娃");
-  await expect(stockRow.getByRole("cell").nth(3)).toHaveText("1");
+  await expect(stockRow.getByRole("cell").nth(3)).toHaveText(String(before.avail + 1));
 
   // 出售紀錄匯出：包含作廢與有效紀錄、成本與毛利欄位
   const csv = await (await page.request.get("/api/export/sales?format=csv")).text();

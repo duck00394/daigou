@@ -8,7 +8,7 @@ type S = { id: string; name: string; defaultCurrency: string; kind: string | nul
 
 export function SupplierEditButton({ supplier }: { supplier?: S }) {
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState({ name: supplier?.name ?? "", defaultCurrency: supplier?.defaultCurrency ?? "JPY", kind: supplier?.kind ?? "", contact: supplier?.contact ?? "", paymentMethod: supplier?.paymentMethod ?? "", orderUrl: supplier?.orderUrl ?? "", notes: supplier?.notes ?? "", active: supplier?.active ?? true });
+  const [f, setF] = useState({ name: supplier?.name ?? "", defaultCurrency: supplier?.defaultCurrency ?? "TWD", kind: supplier?.kind ?? "", contact: supplier?.contact ?? "", paymentMethod: supplier?.paymentMethod ?? "", orderUrl: supplier?.orderUrl ?? "", notes: supplier?.notes ?? "", active: supplier?.active ?? true });
   const { run, pending } = useRun();
   return (
     <>

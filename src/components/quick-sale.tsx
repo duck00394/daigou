@@ -6,11 +6,12 @@ import { ProductPicker, type ProductOpt } from "./pickers";
 import { correctQuickSaleAction, quickSaleAction } from "@/actions/sales";
 import { formatTwd } from "@/lib/money";
 import { toDateInput } from "@/lib/labels";
+import { OwnerChips, defaultOwner, type OwnerStockOpt } from "./owner-chips";
 
-type Fixed = { id: string; name: string; salePriceTwd: number | null; available?: number; avgCost?: number | null };
+type Fixed = { id: string; name: string; salePriceTwd: number | null; available?: number; avgCost?: number | null; owners?: OwnerStockOpt[] };
 export type CorrectFrom = { orderId: string; productId: string; productName: string; qty: number; unitPrice: number; buyerName: string | null; soldAt: string; note: string | null };
 
-export function SellButton({ product, small, label = "出售", primary, autoOpen, correct }: { product?: Fixed; small?: boolean; label?: string; primary?: boolean; autoOpen?: boolean; correct?: CorrectFrom }) {
+export function SellButton({ product, small, label = "出售", primary, autoOpen, correct, me }: { product?: Fixed; small?: boolean; label?: string; primary?: boolean; autoOpen?: boolean; correct?: CorrectFrom; me?: string | null }) {
   const [open, setOpen] = useState(!!autoOpen);
   const [picked, setPicked] = useState<ProductOpt | null>(null);
   const init = () => ({
@@ -23,6 +24,8 @@ export function SellButton({ product, small, label = "出售", primary, autoOpen
     reason: "",
   });
   const [f, setF] = useState(init);
+  const freeOf = (o: OwnerStockOpt) => o.free;
+  const [owner, setOwner] = useState<string | null>(null);
   const [done, setDone] = useState<{ revenue: number; cost: number; profit: number; tentative: boolean; duplicated: boolean } | null>(null);
   const idem = useIdemKey();
   const { run, pending } = useRun();
@@ -31,14 +34,15 @@ export function SellButton({ product, small, label = "出售", primary, autoOpen
   const qty = Number(f.qty);
   const price = Number(f.price);
   const valid = !!productId && Number.isInteger(qty) && qty > 0 && /^\d+$/.test(f.price.trim()) && (!correct || f.reason.trim());
-  const max = product?.available;
+  const ownerOpt = product?.owners?.find((o) => o.key === owner);
+  const max = ownerOpt ? ownerOpt.free : product?.available;
   const close = () => { setOpen(false); setDone(null); };
 
   const submit = () => {
     if (!productId) return notify("請選擇商品");
     if (!valid) return notify(correct && !f.reason.trim() ? "請填寫更正原因" : "請確認數量與售價");
     if (max !== undefined && qty > max) return notify(`可售庫存只有 ${max} 件`);
-    const payload = { productId, qty, unitPrice: price, buyerName: f.buyer || null, soldAt: f.date || null, note: f.note || null, paid: f.paid, idemKey: idem.key };
+    const payload = { productId, qty, unitPrice: price, buyerName: f.buyer || null, soldAt: f.date || null, note: f.note || null, paid: f.paid, owner: correct ? null : owner, idemKey: idem.key };
     run(() => (correct ? correctQuickSaleAction(correct.orderId, { ...payload, reason: f.reason }) : quickSaleAction(payload)), {
       success: (d) => (d.duplicated ? "這筆出售已經登記過，沒有重複扣庫存" : correct ? `已更正：收入 ${formatTwd(d.revenue)}、毛利 ${formatTwd(d.profit)}${d.tentative ? "（成本暫估）" : ""}` : `已出售 ${qty} 件`),
       // 更正後舊紀錄會變成已作廢、這一列重新整理，所以直接關閉並以提示訊息顯示結果
@@ -48,7 +52,7 @@ export function SellButton({ product, small, label = "出售", primary, autoOpen
 
   return (
     <>
-      <Button small={small} variant={primary ? "primary" : "default"} disabled={!correct && max !== undefined && max <= 0} title={!correct && max !== undefined && max <= 0 ? "沒有可售庫存" : undefined} onClick={() => { setF(init()); setDone(null); setOpen(true); }}>{label}</Button>
+      <Button small={small} variant={primary ? "primary" : "default"} disabled={!correct && max !== undefined && max <= 0} title={!correct && max !== undefined && max <= 0 ? "沒有可售庫存" : undefined} onClick={() => { setF(init()); setDone(null); setOwner(defaultOwner(product?.owners, me, freeOf)); setOpen(true); }}>{label}</Button>
       <Modal
         open={open}
         onClose={close}
@@ -68,6 +72,7 @@ export function SellButton({ product, small, label = "出售", primary, autoOpen
         ) : (
           <div className="space-y-3">
             {!product && !correct && <ProductPicker value={picked} onPick={(p) => { setPicked(p); if (p?.salePriceTwd != null && !f.price) setF((x) => ({ ...x, price: String(p.salePriceTwd) })); }} />}
+            {!correct && <OwnerChips label="賣誰的" owners={product?.owners ?? []} value={owner} onChange={setOwner} count={freeOf} />}
             {max !== undefined && <p className="text-[13px] text-mute">可售庫存 {max} 件（已保留給買家、自留的不會被賣掉）</p>}
             {product?.avgCost != null && (
               <p className="text-[13px] text-mute">

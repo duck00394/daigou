@@ -2,6 +2,8 @@ import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { listQuickSales } from "@/server/services/quick-sale";
+import { listOperators } from "@/server/services/operators";
+import { JOINT, NONE } from "@/server/services/ownership";
 import { PageHeader, Section, Stat, Twd, Empty, LinkButton } from "@/components/ui";
 import { SellButton } from "@/components/quick-sale";
 import { VoidSaleButton } from "./parts";
@@ -22,10 +24,13 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
   const thisMonth = toDateInput(new Date()).slice(0, 7);
   const ym = sp.ym === "all" ? undefined : (sp.ym ?? thisMonth);
   const { from, to } = monthRange(ym);
-  const [data, buyers] = await Promise.all([
+  const [data, buyers, operators] = await Promise.all([
     tx((t) => listQuickSales(t, { q: sp.q, from, toExclusive: to, includeVoided: sp.voided === "1" })),
     prisma.buyer.findMany({ where: { mergedIntoId: null }, orderBy: { updatedAt: "desc" }, take: 200, select: { name: true } }),
+    tx((t) => listOperators(t, { includeInactive: true })),
   ]);
+  const who = (k: string) => (k === JOINT ? "合資（還沒登記付款）" : k === NONE ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
+  const ownerEntries = Object.entries(data.byOwner).filter(([k, v]) => v.revenue !== 0 || (k !== JOINT && v.qty !== 0));
   const chip = (on: boolean) => `shrink-0 rounded-full border px-3 py-1.5 text-sm ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
   const href = (o: Record<string, string | undefined>) => {
     const u = new URLSearchParams();
@@ -43,6 +48,20 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
         <Stat label="商品成本" value={<Twd v={data.total.cost} />} note={data.total.tentative ? "含暫估成本" : undefined} />
         <Stat label="毛利" value={<Twd v={data.total.profit} />} tone={data.total.profit < 0 ? "bad" : undefined} />
       </div>
+      {ownerEntries.length > 0 && (
+        <Section title="誰賺多少">
+          <ul className="grid gap-2 sm:grid-cols-3">
+            {ownerEntries.map(([k, v]) => (
+              <li key={k} className="rounded-xl border border-line-2 bg-[#fafbfc] p-3 text-sm" data-testid={`sale-owner-${k}`}>
+                <div className="font-semibold">{who(k)}</div>
+                <div>收入 <span className="num font-medium">{formatTwd(v.revenue)}</span>・成本 <span className="num">{formatTwd(v.cost)}</span></div>
+                <div className={v.revenue - v.cost < 0 ? "text-bad" : "text-good"}>毛利 <span className="num font-semibold">{formatTwd(v.revenue - v.cost)}</span></div>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-[12px] text-mute">依賣掉的那件是誰的計算；合資團的錢依各自實際付給代購的金額比例分。</p>
+        </Section>
+      )}
       <Section pad={false}>
         <form method="get" className="flex flex-wrap gap-2 border-b border-line-2 px-4 py-3">
           <input type="search" name="q" defaultValue={sp.q} placeholder="搜尋商品、買家、備註" className="min-w-[12rem] flex-1 rounded-lg border border-line px-3 py-2" />
@@ -70,6 +89,7 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
                     </div>
                     <div className="text-[13px] text-mute">
                       {fmtDate(r.soldAt)}｜{r.buyer.name}｜每件 {formatTwd(r.unitPrice)}
+                      {!r.voided && r.owners.length > 0 ? `｜${r.owners.filter((x) => x.qty > 0).map((x) => (x.key === JOINT ? "合資" : who(x.key))).join("、")}的` : ""}
                       {!r.voided && (r.paid >= r.revenue ? "｜已收款" : `｜未收 ${formatTwd(r.revenue - r.paid)}`)}
                       {r.note ? `｜${r.note}` : ""}
                     </div>

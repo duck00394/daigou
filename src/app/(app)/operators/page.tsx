@@ -14,7 +14,7 @@ type SP = { from?: string; to?: string; supplier?: string; batch?: string; op?: 
 
 const money = (v: number, c: string) => (c === "JPY" ? formatJpy(v) : formatTwd(v));
 const ROLES: Record<string, [string, "orderedById" | "paymentResponsibleById" | "receivingResponsibleById"]> = {
-  ordered: ["訂購負責", "orderedById"],
+  ordered: ["這團是他的", "orderedById"],
   payment: ["付款負責", "paymentResponsibleById"],
   receiving: ["收貨負責", "receivingResponsibleById"],
 };
@@ -243,7 +243,7 @@ async function BatchesList({ f, role, opName }: { f: OperatorFilter; role: strin
     <Section title={`${label}的採購團：${f.operatorId ? opName(f.operatorId === UNASSIGNED ? null : f.operatorId) : "全部"}`} pad={false}>
       {rows.length === 0 ? <Empty>沒有符合的採購團。</Empty> : (
         <TableWrap>
-          <thead><tr><th>採購團</th><th>供應商</th><th>下單日</th><th>訂購</th><th>付款負責</th><th>收貨負責</th></tr></thead>
+          <thead><tr><th>採購團</th><th>供應商</th><th>下單日</th><th>誰的</th><th>付款負責</th><th>收貨負責</th></tr></thead>
           <tbody>
             {rows.map((b) => (
               <tr key={b.id}>

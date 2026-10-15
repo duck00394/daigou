@@ -9,6 +9,7 @@ import { BizError, lockRows, type Tx } from "@/server/db";
 import { divRound } from "@/lib/money";
 import { audit, type Actor } from "./common";
 import { recomputeOrder } from "./recompute";
+import { filterLotsByOwner, lotOwners, ownerOfLot } from "./ownership";
 
 export interface Lot {
   batchItemId: string | null;
@@ -383,7 +384,7 @@ export async function inventorySummary(t: Tx, productIds?: string[]) {
  * 自留：把到貨的良品從可售庫存移到自己收藏（delta > 0），或改回出售（delta < 0）。
  * 自留不刪除任何紀錄，以 KEEP 異動記錄並保留成本來源（採購批次）；自留的數量不算可用庫存。
  */
-export async function keepStock(t: Tx, actor: Actor, input: { productId: string; delta: number; note?: string | null; dedupeKey?: string }) {
+export async function keepStock(t: Tx, actor: Actor, input: { productId: string; delta: number; note?: string | null; dedupeKey?: string; owner?: string | null }) {
   if (!Number.isInteger(input.delta) || input.delta === 0) throw new BizError("數量必須是非 0 整數");
   if (input.dedupeKey) {
     const dup = await t.inventoryMovement.findFirst({ where: { dedupeKey: { startsWith: `${input.dedupeKey}#` } } });
@@ -399,9 +400,9 @@ export async function keepStock(t: Tx, actor: Actor, input: { productId: string;
     });
   if (input.delta > 0) {
     let left = input.delta;
-    const lots = await productLots(t, input.productId);
+    const lots = await filterLotsByOwner(t, await productLots(t, input.productId), input.owner);
     const free = lots.reduce((s, l) => s + Math.max(0, l.free), 0);
-    if (free < left) throw new BizError(`可用庫存只有 ${free} 件（已保留給買家的不能自留，請先取消保留）`);
+    if (free < left) throw new BizError(`${input.owner ? "這個人的" : ""}可用庫存只有 ${free} 件（已保留給買家的不能自留，請先取消保留）`);
     for (const lot of lots) {
       if (left <= 0) break;
       const take = Math.min(left, Math.max(0, lot.free));
@@ -415,7 +416,11 @@ export async function keepStock(t: Tx, actor: Actor, input: { productId: string;
     }
   } else {
     let left = -input.delta;
-    const keeps = await t.inventoryMovement.findMany({ where: { productId: input.productId, kind: "KEEP" }, orderBy: { createdAt: "desc" } });
+    let keeps = await t.inventoryMovement.findMany({ where: { productId: input.productId, kind: "KEEP" }, orderBy: { createdAt: "desc" } });
+    if (input.owner) {
+      const owners = await lotOwners(t, keeps.map((k) => k.purchaseBatchItemId));
+      keeps = keeps.filter((k) => ownerOfLot(owners, k.purchaseBatchItemId) === input.owner);
+    }
     const perLot = new Map<string, { lot: string | null; qty: number; cost: number | null }>();
     for (const k of [...keeps].reverse()) {
       const key = k.purchaseBatchItemId ?? "__manual__";

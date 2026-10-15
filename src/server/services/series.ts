@@ -120,7 +120,7 @@ export async function saveSupplier(
   if (input.orderUrl && !/^https?:\/\//i.test(input.orderUrl.trim())) throw new BizError("訂購連結請以 http:// 或 https:// 開頭");
   const data = {
     name,
-    defaultCurrency: input.defaultCurrency ?? "JPY",
+    defaultCurrency: input.defaultCurrency ?? "TWD",
     contact: emptyToNull(input.contact),
     notes: emptyToNull(input.notes),
     active: input.active ?? true,

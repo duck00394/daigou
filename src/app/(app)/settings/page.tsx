@@ -3,8 +3,9 @@ import { requireUser } from "@/server/auth";
 import { getDefaultRateMicro } from "@/server/services/settings";
 import { businessDataCount } from "@/server/services/backup";
 import { listOperators } from "@/server/services/operators";
+import { getMe } from "@/server/me";
 import { PageHeader, Section, LinkButton, Twd, Empty } from "@/components/ui";
-import { RateForm, NameList, OperatorList, HealthCheck, ExpenseForm, DeleteExpense, RestoreForm, LogoutAll } from "./parts";
+import { RateForm, NameList, OperatorList, HealthCheck, MeSelect, ExpenseForm, DeleteExpense, RestoreForm, LogoutAll } from "./parts";
 import { costKind, fmtDate } from "@/lib/labels";
 import { formatRate } from "@/lib/money";
 
@@ -36,6 +37,7 @@ export default async function Settings() {
     prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 30 }),
     tx((t) => listOperators(t, { includeInactive: true })),
   ]);
+  const me = await getMe();
   return (
     <div className="space-y-4">
       <PageHeader title="匯出、備份與設定" />
@@ -45,6 +47,7 @@ export default async function Settings() {
         </Section>
         <Section title="經營者管理" actions={<LinkButton small href="/operators">經營者對帳</LinkButton>}>
           <OperatorList items={operators} />
+          <MeSelect operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} me={me} />
         </Section>
         <Section title="帳號安全">
           <p className="mb-3 text-sm text-ink-2">管理者密碼設定在伺服器的環境變數 ADMIN_PASSWORD_HASH，修改方式見 README。登入 3 天未使用或 14 天後需要重新登入；同一來源連續輸錯 5 次會暫停 15 分鐘。</p>

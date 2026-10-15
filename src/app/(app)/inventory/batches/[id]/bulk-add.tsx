@@ -1,4 +1,5 @@
 "use client";
+import type { RowDefault } from "@/server/services/series";
 // 批次新增系列商品：同一張表格填寫多個角色的單價與數量，一次建立。
 // 桌面：可鍵盤移動、貼上多格（從 Excel 複製）；手機：每列顯示為一張卡片。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -29,6 +30,8 @@ type RowState = {
   salePrice: string;
   hint: string; // 參考價來源
   serverError?: string;
+  touched?: boolean; // 使用者已經點進價格欄位：背景帶入的參考價不再覆蓋或接在後面
+  loading?: boolean; // 正在讀取參考價：價格欄暫停輸入，避免讀到的數字和正在打的字混在一起
 };
 type Result = { rowKey: string; ok: boolean; already?: boolean; error?: string; productName?: string };
 
@@ -70,8 +73,12 @@ export function BulkAddGrid({
   rateMicro,
   series: seriesInit,
   types: typesInit,
+  ensureBatch,
+  onSaved,
 }: {
-  batchId: string;
+  batchId: string | null; // 還沒建立採購團時為 null，送出時由 ensureBatch 建立
+  ensureBatch?: () => Promise<string | null>;
+  onSaved?: (batchId: string, created: number) => void;
   supplierId: string | null;
   supplierCurrency: Currency;
   rateMicro: number;
@@ -126,7 +133,7 @@ export function BulkAddGrid({
     const tid = opts.productTypeId !== undefined ? opts.productTypeId : typeId || null;
     const specs: Record<string, string | null> = {};
     items.forEach((i) => (specs[i.characterId] = i.spec ?? null));
-    const pending = items.map((i) => ({ ...blankRow(supplierCurrency), characterId: i.characterId, spec: i.spec ?? "", hint: "讀取參考價…" }));
+    const pending = items.map((i) => ({ ...blankRow(supplierCurrency), characterId: i.characterId, spec: i.spec ?? "", hint: "讀取參考價…", loading: true }));
     const placed = new Map<string, string>(); // characterId|spec → row key
     setRows((rs) => {
       const kept = replace ? [] : rs.filter((r) => !isBlank(r));
@@ -138,7 +145,7 @@ export function BulkAddGrid({
         existing.add(k);
         const orphan = out.findIndex((r) => !r.characterId && !r.newName.trim());
         if (orphan >= 0) {
-          out[orphan] = { ...out[orphan], characterId: n.characterId, spec: out[orphan].spec || n.spec, hint: n.hint };
+          out[orphan] = { ...out[orphan], characterId: n.characterId, spec: out[orphan].spec || n.spec, hint: n.hint, loading: !out[orphan].unitCost };
           placed.set(k, out[orphan].key);
         } else {
           out.push(n);
@@ -147,14 +154,19 @@ export function BulkAddGrid({
       }
       return out.length ? out : [blankRow(supplierCurrency)];
     });
-    const d = await rowDefaultsAction({ seriesId, productTypeId: tid, supplierId, characterIds: items.map((i) => i.characterId), specs });
-    const defaults = d.ok ? d.data : [];
+    let defaults: RowDefault[] = [];
+    try {
+      const d = await rowDefaultsAction({ seriesId, productTypeId: tid, supplierId, characterIds: items.map((i) => i.characterId), specs });
+      if (d.ok) defaults = d.data;
+    } catch {
+      /* 讀不到參考價也要讓使用者可以輸入 */
+    }
     setRows((rs) =>
       rs.map((r) => {
         const isOurs = [...placed.values()].includes(r.key);
         if (!isOurs) return r;
         const df = defaults.find((x) => x.characterId === r.characterId);
-        if (!df) return { ...r, hint: r.hint === "讀取參考價…" ? "" : r.hint };
+        if (!df || r.touched) return { ...r, loading: false, hint: r.hint === "讀取參考價…" ? "" : r.hint };
         return {
           ...r,
           // 使用者已經自己輸入的不覆蓋
@@ -162,6 +174,7 @@ export function BulkAddGrid({
           currency: r.unitCost ? r.currency : ((df.currency as Currency | undefined) ?? r.currency),
           salePrice: r.salePrice || (df.salePriceTwd != null ? String(df.salePriceTwd) : ""),
           hint: df.unitCost != null ? `參考：${df.source}` : "",
+          loading: false,
         };
       }),
     );
@@ -291,7 +304,9 @@ export function BulkAddGrid({
           qty: toInt(r.qty),
           salePriceTwd: toInt(r.salePrice),
         }));
-      const res = await bulkAddAction({ batchId, seriesId, productTypeId: typeId || null, submissionKey: idem.key, rows: payload });
+      const targetId = batchId ?? (ensureBatch ? await ensureBatch() : null);
+      if (!targetId) return;
+      const res = await bulkAddAction({ batchId: targetId, seriesId, productTypeId: typeId || null, submissionKey: idem.key, rows: payload });
       if (!res.ok) {
         notify(res.error);
         return;
@@ -305,6 +320,7 @@ export function BulkAddGrid({
         const left = rs.filter((r) => !okKeys.has(r.key) && !isBlank(r)).map((r) => ({ ...r, serverError: errs.get(r.key) }));
         return left.length ? left : [blankRow(supplierCurrency)];
       });
+      onSaved?.(targetId, d.created + d.already);
       if (d.failed === 0) {
         idem.renew();
         toast(`已新增 ${d.created} 個採購品項${d.already ? `（${d.already} 列先前已建立）` : ""}`);
@@ -471,9 +487,19 @@ export function BulkAddGrid({
                     const v = e.target.value;
                     update(r.key, { characterId: v, newName: v === "__new__" ? r.newName : "" });
                     if (v && v !== "__new__" && !r.unitCost && seriesId) {
+                      update(r.key, { characterId: v, newName: "", loading: true });
                       const d = await rowDefaultsAction({ seriesId, productTypeId: typeId || null, supplierId, characterIds: [v], specs: { [v]: r.spec || null } });
                       const df = d.ok ? d.data[0] : null;
-                      if (df?.unitCost != null) update(r.key, { characterId: v, unitCost: String(df.unitCost), currency: df.currency, salePrice: r.salePrice || (df.salePriceTwd != null ? String(df.salePriceTwd) : ""), hint: `參考：${df.source}` });
+                      setRows((rs) => rs.map((x) => (x.key === r.key ? { ...x, loading: false } : x)));
+                      // 參考價回來時，只補在使用者還沒動過、也還沒填的欄位
+                      if (df?.unitCost != null)
+                        setRows((rs) =>
+                          rs.map((x) =>
+                            x.key !== r.key || x.touched || x.unitCost || x.characterId !== v
+                              ? x
+                              : { ...x, unitCost: String(df.unitCost), currency: df.currency as Currency, salePrice: x.salePrice || (df.salePriceTwd != null ? String(df.salePriceTwd) : ""), hint: `參考：${df.source}` },
+                          ),
+                        );
                     }
                   }}
                 >
@@ -491,7 +517,7 @@ export function BulkAddGrid({
               </div>
               <div role="cell">
                 <label className={lbl} htmlFor={`u-${r.key}`}>單價</label>
-                <input id={`u-${r.key}`} {...cell(2)} className={`${inputCls} num text-right`} inputMode="numeric" value={r.unitCost} onChange={(e) => update(r.key, { unitCost: e.target.value, hint: "" })} />
+                <input id={`u-${r.key}`} {...cell(2)} className={`${inputCls} num text-right`} inputMode="numeric" disabled={r.loading} placeholder={r.loading ? "讀取中…" : undefined} value={r.unitCost} onFocus={() => !r.touched && update(r.key, { touched: true })} onChange={(e) => update(r.key, { unitCost: e.target.value, hint: "", touched: true })} />
                 {r.hint && <span className="mt-0.5 block text-[11px] leading-tight text-mute">{r.hint}</span>}
               </div>
               <div role="cell">
@@ -507,7 +533,7 @@ export function BulkAddGrid({
               </div>
               <div role="cell">
                 <label className={lbl} htmlFor={`p-${r.key}`}>對客售價（台幣）</label>
-                <input id={`p-${r.key}`} {...cell(5)} className={`${inputCls} num text-right`} inputMode="numeric" value={r.salePrice} onChange={(e) => update(r.key, { salePrice: e.target.value })} placeholder="選填" />
+                <input id={`p-${r.key}`} {...cell(5)} className={`${inputCls} num text-right`} inputMode="numeric" disabled={r.loading} value={r.salePrice} onFocus={() => !r.touched && update(r.key, { touched: true })} onChange={(e) => update(r.key, { salePrice: e.target.value, touched: true })} placeholder="選填" />
               </div>
               <div role="cell" className="flex items-center justify-between md:block md:pt-2.5 md:text-right">
                 <span className="text-[12px] text-mute md:sr-only">小計</span>
@@ -601,7 +627,10 @@ export function BulkAddGrid({
                 <tr key={r.key} className="border-t border-line-2">
                   <td className="py-1">{r.characterId === "__new__" ? <>{r.newName}<span className="ml-1 text-[12px] text-info">（新角色）</span></> : nameOf(r.characterId)}</td>
                   <td>{r.spec || "—"}</td>
-                  <td className="num text-right">{r.currency === "JPY" ? formatJpy(c) : formatTwd(c)}</td>
+                  <td className="num text-right">
+                    {r.currency === "JPY" ? formatJpy(c) : formatTwd(c)}
+                    {(r.currency === "JPY" ? c >= 100000 : c >= 20000) && <span className="block text-[12px] font-medium text-bad">⚠ 單價很高，請確認</span>}
+                  </td>
                   <td className="num text-right">{q}</td>
                   <td className="num text-right">{r.currency === "JPY" ? formatJpy(q * c) : formatTwd(q * c)}</td>
                 </tr>
