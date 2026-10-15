@@ -2,7 +2,9 @@
 // 可重複執行，已存在的名稱會略過。
 import { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient();
+const raw = process.env.DATABASE_URL ?? "";
+const url = /-pooler\./.test(raw) && !/pgbouncer=/.test(raw) ? raw + (raw.includes("?") ? "&" : "?") + "pgbouncer=true" : raw;
+const prisma = new PrismaClient({ datasourceUrl: url });
 
 async function main() {
   const categories: [string, "FESTIVAL" | "REGION" | "STORE_LIMITED" | "ICHIBAN" | "SERIES" | "GENERAL"][] = [

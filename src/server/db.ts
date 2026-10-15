@@ -2,9 +2,16 @@ import { PrismaClient, Prisma } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
+/** 連到 PgBouncer 連線池（例如 Neon 的 -pooler 網址）時，需關閉 prepared statements */
+export function runtimeDbUrl(url = process.env.DATABASE_URL ?? ""): string {
+  if (!url || !/-pooler\./.test(url) || /[?&]pgbouncer=/.test(url)) return url;
+  return url + (url.includes("?") ? "&" : "?") + "pgbouncer=true";
+}
+
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
+    datasourceUrl: runtimeDbUrl(),
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   });
 

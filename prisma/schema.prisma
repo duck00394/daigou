@@ -9,7 +9,9 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url       = env("DATABASE_URL")
+  // migration 用的直連網址（Neon 等使用連線池的服務需要）；本機與 DATABASE_URL 相同即可
+  directUrl = env("DIRECT_URL")
 }
 
 // ───────────────────────── 使用者與登入 ─────────────────────────

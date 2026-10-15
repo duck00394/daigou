@@ -27,6 +27,6 @@ export default defineConfig({
     port: PORT,
     reuseExistingServer: false,
     timeout: 600_000,
-    env: { DATABASE_URL: TEST_DB, ADMIN_PASSWORD_HASH: HASH.replace(/\$/g, "\\$"), NEXT_TELEMETRY_DISABLED: "1", INSECURE_COOKIE: "1" },
+    env: { DATABASE_URL: TEST_DB, DIRECT_URL: TEST_DB, ADMIN_PASSWORD_HASH: HASH.replace(/\$/g, "\\$"), NEXT_TELEMETRY_DISABLED: "1", INSECURE_COOKIE: "1" },
   },
 });

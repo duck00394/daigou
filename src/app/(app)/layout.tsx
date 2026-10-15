@@ -3,6 +3,8 @@ import { ToastProvider } from "@/components/client";
 import { MobileBar, Sidebar } from "@/components/nav";
 
 export const dynamic = "force-dynamic";
+// 大量匯入、還原等操作可能較久（Vercel 免費方案上限 60 秒）
+export const maxDuration = 60;
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   await requireUser();
