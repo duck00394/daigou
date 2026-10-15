@@ -146,7 +146,7 @@ describe("庫存、到貨、出貨", () => {
   it("部分到貨、部分出貨、剩餘數量正確；重複出貨不重複扣庫存", async () => {
     const o = await order({ items: [{ productId: s.p1.id, qty: 3 }] });
     const item = o.items[0];
-    const batch = await tx((t) => createBatch(t, actor, { name: "10 月採購", rate: "0.2", items: [{ productId: s.p1.id, qty: 3, unitCostJpy: 1650, markOrderItemIds: [item.id] }] }));
+    const batch = await tx((t) => createBatch(t, actor, { name: "10 月採購", rate: "0.2", items: [{ productId: s.p1.id, qty: 3, unitCost: 1650, markOrderItemIds: [item.id] }] }));
     const bi = await prisma.purchaseBatchItem.findFirstOrThrow({ where: { batchId: batch.id } });
     let it = await prisma.orderItem.findUniqueOrThrow({ where: { id: item.id } });
     expect(it.procurementStatusCache).toBe("ORDERED");
@@ -214,8 +214,8 @@ describe("採購成本與利潤", () => {
         name: "批次 A",
         rate: "0.2",
         items: [
-          { productId: s.p1.id, qty: 2, unitCostJpy: 1650, weightGrams: 400 },
-          { productId: s.p2.id, qty: 1, unitCostJpy: 990, weightGrams: 100 },
+          { productId: s.p1.id, qty: 2, unitCost: 1650, weightGrams: 400 },
+          { productId: s.p2.id, qty: 1, unitCost: 990, weightGrams: 100 },
         ],
       }),
     );
@@ -237,7 +237,7 @@ describe("採購成本與利潤", () => {
 
   it("本月報表：已實現營收、銷貨成本、利潤與現金分開", async () => {
     const o = await order({ items: [{ productId: s.p1.id, qty: 2 }], shippingFee: 60 }); // 應收 1060
-    const batch = await tx((t) => createBatch(t, actor, { name: "B", rate: "0.2", items: [{ productId: s.p1.id, qty: 2, unitCostJpy: 1500 }] }));
+    const batch = await tx((t) => createBatch(t, actor, { name: "B", rate: "0.2", items: [{ productId: s.p1.id, qty: 2, unitCost: 1500 }] }));
     const bi = await prisma.purchaseBatchItem.findFirstOrThrow({ where: { batchId: batch.id } });
     await tx((t) => addBatchCost(t, actor, { batchId: batch.id, kind: "INTL_SHIPPING", currency: "TWD", amount: 100, method: "BY_QTY" }));
     await tx((t) => receiveStock(t, actor, { productId: s.p1.id, qty: 2, batchItemId: bi.id }));

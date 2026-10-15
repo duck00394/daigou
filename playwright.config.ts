@@ -18,8 +18,8 @@ export default defineConfig({
   globalSetup: "./tests/e2e/global-setup.ts",
   use: { baseURL: `http://localhost:${PORT}`, locale: "zh-TW", timezoneId: "Asia/Taipei", trace: "retain-on-failure", screenshot: "only-on-failure", launchOptions },
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 } }, testIgnore: /mobile\.spec\.ts/ },
-    { name: "iphone", use: { ...devices["iPhone 15 Pro"], browserName: "chromium", defaultBrowserType: "chromium" }, testMatch: /mobile\.spec\.ts/ },
+    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 900 } }, testIgnore: /mobile.*\.spec\.ts/ },
+    { name: "iphone", use: { ...devices["iPhone 15 Pro"], browserName: "chromium", defaultBrowserType: "chromium" }, testMatch: /mobile.*\.spec\.ts/ },
   ],
   webServer: {
     // 以正式建置執行，與實際部署行為一致；設定 E2E_DEV=1 可改用開發模式

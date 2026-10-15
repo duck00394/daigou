@@ -11,6 +11,10 @@ export const TABLES = [
   "appSetting",
   "counter",
   "character",
+  "series",
+  "seriesCharacter",
+  "seriesTemplate",
+  "supplier",
   "productType",
   "category",
   "product",
@@ -107,6 +111,7 @@ function orderOf(table: Table): unknown {
   if (table === "counter") return { key: "asc" };
   if (table === "productCharacter") return [{ productId: "asc" }, { characterId: "asc" }];
   if (table === "productCategory") return [{ productId: "asc" }, { categoryId: "asc" }];
+  if (table === "seriesCharacter") return [{ seriesId: "asc" }, { characterId: "asc" }];
   return { id: "asc" };
 }
 
@@ -189,7 +194,7 @@ export async function restoreBackup(actor: Actor, raw: unknown, opts: { wipe: bo
 
 // Prisma 的 Json 欄位不能直接寫入 null，需轉為資料庫 NULL
 import { Prisma } from "@prisma/client";
-const JSON_FIELDS = new Set(["data", "snapshot", "summary", "manualSplit", "mapping", "raw", "parsed", "resolution", "messages"]);
+const JSON_FIELDS = new Set(["data", "snapshot", "summary", "manualSplit", "mapping", "raw", "parsed", "resolution", "messages", "items"]);
 function fixJsonNulls(row: Record<string, unknown>) {
   const out: Record<string, unknown> = { ...row };
   for (const k of Object.keys(out)) if (JSON_FIELDS.has(k) && out[k] === null) out[k] = Prisma.DbNull;

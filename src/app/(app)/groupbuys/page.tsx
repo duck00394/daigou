@@ -23,7 +23,7 @@ export default async function GroupBuys({ searchParams }: { searchParams: Promis
   const sm = new Map(stats.map((s) => [s.groupBuyId, s]));
   return (
     <div>
-      <PageHeader title={sp.closing ? "7 天內截止的代購團" : "代購團"} sub="代購團記錄實際開團與收單；商品分類與採購批次分開管理。" actions={<GroupBuyEditButton categories={cats} />} />
+      <PageHeader title={sp.closing ? "7 天內截止的代購團" : "代購團"} sub="代購團記錄實際開團與收單；商品分類與採購團分開管理。" actions={<GroupBuyEditButton categories={cats} />} />
       <Section pad={false}>
         {gbs.length === 0 ? (
           <Empty>{sp.closing ? "7 天內沒有截止的代購團。" : "還沒有代購團。"}</Empty>

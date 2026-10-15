@@ -1,8 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Button, ConfirmButton, Modal, TextField, SelectField, useRun, inputCls, notify } from "@/components/client";
-import { ProductPicker, type ProductOpt } from "@/components/pickers";
-import { addBatchCostAction, deleteBatchCostAction, updateBatchItemAction, addBatchItemAction, cancelBatchAction } from "@/actions/ops";
+import { addBatchCostAction, deleteBatchCostAction, cancelBatchAction } from "@/actions/ops";
 import { allocMethod, costKind } from "@/lib/labels";
 
 export function AddCost({ batchId, items }: { batchId: string; items: { id: string; name: string }[] }) {
@@ -34,7 +33,7 @@ export function AddCost({ batchId, items }: { batchId: string; items: { id: stri
       >
         <div className="grid gap-3 sm:grid-cols-2">
           <SelectField label="費用類型" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })} options={Object.entries(costKind)} />
-          <SelectField label="幣別" value={f.currency} onChange={(e) => setF({ ...f, currency: e.target.value })} options={[["TWD", "台幣"], ["JPY", "日幣（以本批匯率換算）"]]} />
+          <SelectField label="幣別" value={f.currency} onChange={(e) => setF({ ...f, currency: e.target.value })} options={[["TWD", "台幣"], ["JPY", "日幣（以本團匯率換算）"]]} />
           <TextField label="金額" inputMode="numeric" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} />
           <SelectField label="分攤方式" value={f.method} onChange={(e) => setF({ ...f, method: e.target.value })} options={Object.entries(allocMethod)} />
           <TextField label="備註" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} className="sm:col-span-2" />
@@ -50,7 +49,7 @@ export function AddCost({ batchId, items }: { batchId: string; items: { id: stri
             ))}
           </div>
         )}
-        {f.method === "BY_WEIGHT" && <p className="mt-2 text-[13px] text-mute">依重量分攤時，每一項採購明細都要填寫重量。</p>}
+        {f.method === "BY_WEIGHT" && <p className="mt-2 text-[13px] text-mute">依重量分攤時，每一項採購品項都要填寫重量。</p>}
       </Modal>
     </>
   );
@@ -58,63 +57,23 @@ export function AddCost({ batchId, items }: { batchId: string; items: { id: stri
 
 export function DeleteCost({ id }: { id: string }) {
   const { run } = useRun();
-  return <ConfirmButton small variant="danger" label="刪除" title="刪除費用" message="刪除後會重新分攤本批其他費用，已出貨商品的成本也會跟著更新。" confirmLabel="刪除費用" onConfirm={() => run(() => deleteBatchCostAction(id), { success: "已刪除費用" })} />;
-}
-
-export function EditBatchItem({ item }: { item: { id: string; name: string; unitCostJpy: number; weightGrams: number | null; cancellable: number } }) {
-  const [open, setOpen] = useState(false);
-  const [f, setF] = useState({ jpy: String(item.unitCostJpy), w: item.weightGrams == null ? "" : String(item.weightGrams), cancel: "" });
-  const { run, pending } = useRun();
-  return (
-    <>
-      <Button small onClick={() => setOpen(true)}>修改</Button>
-      <Modal open={open} onClose={() => setOpen(false)} title={`修改「${item.name}」`} footer={
-        <Button variant="primary" loading={pending} onClick={() => {
-          const jpy = Number(f.jpy);
-          const w = f.w === "" ? null : Number(f.w);
-          const c = f.cancel === "" ? 0 : Number(f.cancel);
-          if (!Number.isInteger(jpy) || jpy < 0 || (w !== null && (!Number.isInteger(w) || w < 0)) || !Number.isInteger(c) || c < 0) return notify("請輸入正確的整數");
-          run(() => updateBatchItemAction(item.id, { unitCostJpy: jpy, weightGrams: w, cancelQty: c || undefined }), { success: "已儲存", onOk: () => setOpen(false) });
-        }}>儲存</Button>
-      }>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <TextField label="日幣單價" inputMode="numeric" value={f.jpy} onChange={(e) => setF({ ...f, jpy: e.target.value })} />
-          <TextField label="本筆總重（公克）" inputMode="numeric" value={f.w} onChange={(e) => setF({ ...f, w: e.target.value })} />
-          <TextField label={`取消未到貨數量（最多 ${item.cancellable}）`} inputMode="numeric" value={f.cancel} onChange={(e) => setF({ ...f, cancel: e.target.value })} />
-        </div>
-      </Modal>
-    </>
-  );
-}
-
-export function AddBatchItem({ batchId }: { batchId: string }) {
-  const [open, setOpen] = useState(false);
-  const [p, setP] = useState<ProductOpt | null>(null);
-  const [qty, setQty] = useState("");
-  const [jpy, setJpy] = useState("");
-  const { run, pending } = useRun();
-  return (
-    <>
-      <Button small onClick={() => setOpen(true)}>新增採購商品</Button>
-      <Modal open={open} onClose={() => setOpen(false)} title="新增採購商品" footer={
-        <Button variant="primary" loading={pending} onClick={() => {
-          if (!p) return notify("請選擇商品");
-          run(() => addBatchItemAction(batchId, { productId: p.id, qty: Number(qty), unitCostJpy: Number(jpy) }), { success: "已新增", onOk: () => setOpen(false) });
-        }}>新增</Button>
-      }>
-        <div className="grid gap-3">
-          <ProductPicker value={p} onPick={setP} />
-          <div className="grid grid-cols-2 gap-3">
-            <TextField label="數量" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} />
-            <TextField label="日幣單價" inputMode="numeric" value={jpy} onChange={(e) => setJpy(e.target.value)} />
-          </div>
-        </div>
-      </Modal>
-    </>
-  );
+  return <ConfirmButton small variant="danger" label="刪除" title="刪除費用" message="刪除後會重新分攤本團其他費用，已出貨商品的成本也會跟著更新。" confirmLabel="刪除費用" onConfirm={() => run(() => deleteBatchCostAction(id), { success: "已刪除費用" })} />;
 }
 
 export function CancelBatch({ id }: { id: string }) {
   const { run } = useRun();
-  return <ConfirmButton variant="danger" label="取消批次" title="取消採購批次" message="只有完全沒有到貨紀錄的批次可以取消。相關訂單明細的採購狀態不會自動改回，請視需要調整。" confirmLabel="取消批次" onConfirm={() => run(() => cancelBatchAction(id), { success: "已取消批次" })} />;
+  return <ConfirmButton variant="danger" label="取消採購團" title="取消採購團" message="只有完全沒有到貨紀錄的採購團可以取消。相關訂單明細的採購狀態不會自動改回，請視需要調整。" confirmLabel="取消採購團" onConfirm={() => run(() => cancelBatchAction(id), { success: "已取消採購團" })} />;
+}
+
+export function Collapsible({ title, defaultOpen, children }: { title: React.ReactNode; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  return (
+    <section className="rounded-xl border border-line bg-card">
+      <button type="button" aria-expanded={open} onClick={() => setOpen((x) => !x)} className="flex w-full items-center justify-between px-4 py-3 text-left">
+        <span className="text-[15px] font-semibold">{title}</span>
+        <span className="text-sm text-ai">{open ? "收合" : "展開"}</span>
+      </button>
+      {open && <div className="border-t border-line-2 p-4">{children}</div>}
+    </section>
+  );
 }

@@ -10,6 +10,7 @@ const productSchema = z.object({
   name: z.string().max(200),
   imageUrl: z.string().max(1000).nullish(),
   series: z.string().max(100).nullish(),
+  seriesId: z.string().nullish(),
   spec: z.string().max(200).nullish(),
   productTypeId: z.string().nullish(),
   status: z.enum(["IN_STOCK", "PREORDER", "SOLD_OUT", "PAUSED", "OUT_OF_PRINT", "DISCONTINUED"]),

@@ -21,7 +21,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
     case "products": {
       const ps = await prisma.product.findMany({
         where: { archivedAt: sp.get("archived") ? { not: null } : null },
-        include: { productType: true, characters: { include: { character: true } }, categories: { include: { category: true } }, aliases: true },
+        include: { productType: true, seriesRef: true, characters: { include: { character: true } }, categories: { include: { category: true } }, aliases: true },
         orderBy: { code: "asc" },
       });
       const inv = await tx((t) => inventorySummary(t, ps.map((p) => p.id)));
@@ -29,7 +29,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
         ["商品編號", "商品名稱", "狀態", "類型", "角色", "系列", "規格", "分類", "別名", "日幣官方價", "代購售價", "預估成本", "實際在庫", "已保留", "可用庫存", "待到貨", "有效訂購", "已出貨", "缺貨", "發售日", "預計到貨", "實際到貨", "來源", "網址", "備註"],
         ...ps.map((p) => {
           const s = inv.get(p.id);
-          return [p.code, p.name, L(productStatus, p.status), p.productType?.name ?? "", p.characters.map((c) => c.character.name).join("、"), p.series ?? "", p.spec ?? "", p.categories.map((c) => c.category.name).join("、"), p.aliases.map((a) => a.alias).join("、"), p.officialPriceJpy, p.salePriceTwd, p.estCostTwd, s?.onHand ?? 0, s?.reserved ?? 0, s?.available ?? 0, s?.incoming ?? 0, s?.activeOrdered ?? 0, s?.shipped ?? 0, s?.shortage ?? 0, fmtDay(p.releaseDate), fmtDay(p.expectedArrivalDate), fmtDay(p.actualArrivalDate), p.sourceName ?? "", p.sourceUrl ?? "", p.notes ?? ""];
+          return [p.code, p.name, L(productStatus, p.status), p.productType?.name ?? "", p.characters.map((c) => c.character.name).join("、"), p.seriesRef?.name ?? p.series ?? "", p.spec ?? "", p.categories.map((c) => c.category.name).join("、"), p.aliases.map((a) => a.alias).join("、"), p.officialPriceJpy, p.salePriceTwd, p.estCostTwd, s?.onHand ?? 0, s?.reserved ?? 0, s?.available ?? 0, s?.incoming ?? 0, s?.activeOrdered ?? 0, s?.shipped ?? 0, s?.shortage ?? 0, fmtDay(p.releaseDate), fmtDay(p.expectedArrivalDate), fmtDay(p.actualArrivalDate), p.sourceName ?? "", p.sourceUrl ?? "", p.notes ?? ""];
         }),
       ], format);
     }
@@ -72,6 +72,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
         ["類型", "日期", "訂單編號", "買家", "金額", "方式", "識別資訊", "狀態", "原因／備註"],
         ...ps.map((p) => ["收款", fmtDate(p.paidAt, true), p.order.orderNo, p.order.buyer.name, p.amount, p.method ?? "", p.reference ?? "", p.voidedAt ? "已作廢" : "有效", [p.note, p.voidReason].filter(Boolean).join("；")]),
         ...rs.map((r) => ["退款", fmtDate(r.completedAt ?? r.requestedAt, true), r.order.orderNo, r.order.buyer.name, r.amount, r.method ?? "", "", L(refundStatus, r.status), [r.reason, r.note].filter(Boolean).join("；")]),
+      ], format);
+    }
+    case "purchases": {
+      const items = await prisma.purchaseBatchItem.findMany({
+        include: { batch: { include: { supplierRef: true } }, product: { include: { seriesRef: true, productType: true } }, allocations: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
+        orderBy: [{ batch: { createdAt: "asc" } }, { createdAt: "asc" }],
+      });
+      return sheetResponse("採購品項", [
+        ["採購團", "採購團名稱", "供應商", "狀態", "匯率", "商品編號", "商品", "系列", "類型", "規格", "幣別", "預估單價", "實際單價", "對客售價", "數量", "已取消", "已到貨", "分攤費用（台幣）"],
+        ...items.map((i) => [i.batch.code, i.batch.name, i.batch.supplierRef?.name ?? i.batch.supplier ?? "", i.batch.status, i.batch.rateMicro / 1_000_000, i.product.code, i.product.name, i.product.seriesRef?.name ?? "", i.product.productType?.name ?? "", i.specNote ?? "", i.currency, i.estUnitCost, i.actualUnitCost, i.salePriceTwd, i.qty - i.cancelledQty, i.cancelledQty, i.movements.reduce((s, m) => s + m.onHandDelta, 0), i.allocations.reduce((s, a) => s + a.amountTwd, 0)]),
       ], format);
     }
     case "inventory": {

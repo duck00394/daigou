@@ -47,8 +47,8 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
       />
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <Stat label="已實現營收" value={<Twd v={r.revenue} />} note={`其中運費收入 ${r.shippingIncome.toLocaleString()} 元`} />
-        <Stat label="銷貨成本" value={<Twd v={r.cogs} />} note={r.estimatedCostUnits > 0 ? `${r.estimatedCostUnits} 件以預估成本計` : "依採購批次實際成本"} tone={r.estimatedCostUnits > 0 ? "warn" : undefined} />
-        <Stat label="其他費用" value={<Twd v={r.expenses} />} note="不屬於採購批次的費用" />
+        <Stat label="銷貨成本" value={<Twd v={r.cogs} />} note={r.estimatedCostUnits > 0 ? `${r.estimatedCostUnits} 件以預估成本計` : "依採購團實際成本"} tone={r.estimatedCostUnits > 0 ? "warn" : undefined} />
+        <Stat label="其他費用" value={<Twd v={r.expenses} />} note="不屬於採購團的費用" />
         <Stat label="已實現利潤" value={<Twd v={r.realizedProfit} />} note={`毛利率 ${margin(r.revenue, r.cogs)}`} />
         <Stat label="本月新訂單金額" value={<Twd v={r.bookedSales} />} note="以訂單日期計的有效應收" />
         <Stat label="本月收款" value={<Twd v={r.cashIn} />} note={`本月退款 ${r.cashOut.toLocaleString()} 元`} />

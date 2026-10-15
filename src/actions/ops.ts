@@ -47,8 +47,17 @@ export async function adjustAction(input: { productId: string; delta: number; re
   return run((a) => tx((t) => inv.adjustStock(t, a, input)));
 }
 
-const batchItem = z.object({ productId: z.string(), qty: z.number().int().min(1), unitCostJpy: z.number().int().min(0), weightGrams: z.number().int().min(0).nullish(), markOrderItemIds: z.array(z.string()).optional() });
-export async function createBatchAction(input: { name: string; supplier: string | null; rate: string | null; orderedAt: string | null; notes: string | null; items: z.infer<typeof batchItem>[] }) {
+const currency = z.enum(["JPY", "TWD"]);
+const batchItem = z.object({
+  productId: z.string(),
+  qty: z.number().int().min(1),
+  unitCost: z.number().int().min(0),
+  currency: currency.optional(),
+  salePriceTwd: z.number().int().min(0).nullish(),
+  weightGrams: z.number().int().min(0).nullish(),
+  markOrderItemIds: z.array(z.string()).optional(),
+});
+export async function createBatchAction(input: { name: string; supplierId?: string | null; supplier?: string | null; rate: string | null; orderedAt: string | null; notes: string | null; items: z.infer<typeof batchItem>[] }) {
   return run(async (a) => {
     const items = z.array(batchItem).max(300).parse(input.items);
     const b = await tx((t) => pur.createBatch(t, a, { ...input, orderedAt: parseDateTimeInput(input.orderedAt), items }), { timeout: 120_000 });
@@ -58,10 +67,16 @@ export async function createBatchAction(input: { name: string; supplier: string 
 export async function addBatchItemAction(batchId: string, item: z.infer<typeof batchItem>) {
   return run((a) => tx((t) => pur.addBatchItem(t, a, batchId, batchItem.parse(item))).then(() => null));
 }
-export async function updateBatchItemAction(itemId: string, input: { unitCostJpy?: number; weightGrams?: number | null; cancelQty?: number }) {
+export async function updateBatchItemAction(
+  itemId: string,
+  input: { qty?: number; unitCost?: number; actualUnitCost?: number | null; currency?: "JPY" | "TWD"; salePriceTwd?: number | null; specNote?: string | null; weightGrams?: number | null; cancelQty?: number },
+) {
   return run((a) => tx((t) => pur.updateBatchItem(t, a, itemId, input)));
 }
-export async function addBatchCostAction(input: { batchId: string; kind: "JP_DOMESTIC_SHIPPING" | "INTL_SHIPPING" | "DUTY" | "PACKAGING" | "PLATFORM_FEE" | "OTHER"; currency: "TWD" | "JPY"; amount: number; method: "BY_QTY" | "BY_WEIGHT" | "BY_VALUE" | "MANUAL"; manualSplit: Record<string, number> | null; note: string | null }) {
+export async function deleteBatchItemAction(itemId: string) {
+  return run((a) => tx((t) => pur.deleteBatchItem(t, a, itemId)));
+}
+export async function addBatchCostAction(input: { batchId: string; kind: "AGENT_FEE" | "JP_DOMESTIC_SHIPPING" | "INTL_SHIPPING" | "TW_DOMESTIC_SHIPPING" | "DUTY" | "PACKAGING" | "PLATFORM_FEE" | "OTHER"; currency: "TWD" | "JPY"; amount: number; method: "BY_QTY" | "BY_WEIGHT" | "BY_VALUE" | "MANUAL"; manualSplit: Record<string, number> | null; note: string | null }) {
   return run((a) => tx((t) => pur.addBatchCost(t, a, input)).then(() => null));
 }
 export async function deleteBatchCostAction(costId: string) {

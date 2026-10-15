@@ -101,10 +101,10 @@ test("訂單：部分付款、取消一件、建立與完成退款", async ({ pa
 test("採購、到貨、分配、部分出貨與報表", async ({ page }) => {
   await login(page);
   await page.goto("/inventory?tab=demand");
-  await page.getByRole("button", { name: "建立採購批次" }).click();
-  await page.getByLabel("批次名稱").fill("10 月官網");
+  await page.getByRole("button", { name: "建立採購團" }).click();
+  await page.getByLabel("採購團名稱").fill("10 月官網");
   await page.getByLabel("匯率（1 日圓 = ? 台幣）").fill("0.2");
-  await page.getByRole("button", { name: "建立批次並標記訂單為已下單" }).click();
+  await page.getByRole("button", { name: "建立採購團並標記訂單為已下單" }).click();
   await expect(page.getByRole("heading", { name: /10 月官網/ })).toBeVisible();
   // 國際運費依件數分攤
   await page.getByRole("button", { name: "新增共同費用" }).click();

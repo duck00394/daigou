@@ -8,7 +8,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   url       = env("DATABASE_URL")
   // migration 用的直連網址（Neon 等使用連線池的服務需要）；本機與 DATABASE_URL 相同即可
   directUrl = env("DIRECT_URL")
@@ -95,6 +95,57 @@ model Character {
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
   products  ProductCharacter[]
+  series    SeriesCharacter[]
+}
+
+// IP／系列（例如：吉伊卡哇、排球少年）。角色名單、範本都掛在系列底下
+model Series {
+  id         String            @id @default(cuid())
+  name       String            @unique
+  notes      String?
+  active     Boolean           @default(true)
+  sortOrder  Int               @default(0)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  characters SeriesCharacter[]
+  templates  SeriesTemplate[]
+  products   Product[]
+}
+
+model SeriesCharacter {
+  seriesId    String
+  characterId String
+  sortOrder   Int       @default(0)
+  series      Series    @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  character   Character @relation(fields: [characterId], references: [id])
+
+  @@id([seriesId, characterId])
+}
+
+// 常用角色／款式組合（只記角色、類型、規格，不含價格與數量）
+model SeriesTemplate {
+  id            String   @id @default(cuid())
+  seriesId      String
+  series        Series   @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  name          String
+  productTypeId String?
+  items         Json // [{ characterId, spec }]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([seriesId, name])
+}
+
+model Supplier {
+  id              String          @id @default(cuid())
+  name            String          @unique
+  defaultCurrency String          @default("JPY")
+  contact         String?
+  notes           String?
+  active          Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  batches         PurchaseBatch[]
 }
 
 model ProductType {
@@ -121,13 +172,16 @@ model Product {
   code                String              @unique
   name                String
   imageUrl            String?
-  series              String?
+  series              String? // 舊版文字欄位，保留相容；新資料使用 seriesId
+  seriesId            String?
+  seriesRef           Series?             @relation(fields: [seriesId], references: [id])
+  variantKey          String?             @unique // 系列|類型|角色|規格，批次新增時用來找回同一商品
   spec                String? // 規格、款式、尺寸
   productTypeId       String?
   productType         ProductType?        @relation(fields: [productTypeId], references: [id])
   status              ProductStatus       @default(PREORDER)
   officialPriceJpy    Int?
-  salePriceTwd        Int?
+  salePriceTwd        Int? // 商品參考售價（台幣），建單時的預設值
   estCostTwd          Int? // 預估單件成本（台幣）
   weightGrams         Int?
   sourceName          String?
@@ -594,43 +648,52 @@ enum AllocationMethod {
 }
 
 model PurchaseBatch {
-  id        String              @id @default(cuid())
-  code      String              @unique
-  name      String
-  supplier  String?
-  status    PurchaseBatchStatus @default(ORDERED)
-  orderedAt DateTime?
-  rateMicro Int // 本批次適用匯率快照（1 JPY = x TWD，×1,000,000）
-  notes     String?
-  createdAt DateTime            @default(now())
-  updatedAt DateTime            @updatedAt
-  items     PurchaseBatchItem[]
-  costs     BatchCost[]
+  id          String              @id @default(cuid())
+  code        String              @unique
+  name        String
+  supplier    String? // 舊版文字欄位；新資料使用 supplierId
+  supplierId  String?
+  supplierRef Supplier?           @relation(fields: [supplierId], references: [id])
+  status      PurchaseBatchStatus @default(ORDERED)
+  orderedAt   DateTime?
+  rateMicro   Int // 本批次適用匯率快照（1 JPY = x TWD，×1,000,000）
+  notes       String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  items       PurchaseBatchItem[]
+  costs       BatchCost[]
 }
 
 model PurchaseBatchItem {
-  id           String              @id @default(cuid())
-  batchId      String
-  batch        PurchaseBatch       @relation(fields: [batchId], references: [id])
-  productId    String
-  product      Product             @relation(fields: [productId], references: [id])
-  qty          Int
-  unitCostJpy  Int
-  weightGrams  Int? // 本筆總重（依重量分攤時使用）
-  cancelledQty Int                 @default(0)
-  notes        String?
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-  allocations  CostAllocation[]
-  movements    InventoryMovement[]
+  id             String              @id @default(cuid())
+  batchId        String
+  batch          PurchaseBatch       @relation(fields: [batchId], references: [id])
+  productId      String
+  product        Product             @relation(fields: [productId], references: [id])
+  qty            Int
+  currency       String              @default("JPY") // JPY 或 TWD；JPY 以本批匯率換算
+  estUnitCost    Int // 採購預估單價（依幣別）
+  actualUnitCost Int? // 採購實際單價（供應商實際收取；填寫後成本以此計算）
+  salePriceTwd   Int? // 本團對客售價（台幣）
+  specNote       String?
+  weightGrams    Int? // 本筆總重（依重量分攤時使用）
+  cancelledQty   Int                 @default(0)
+  dedupeKey      String?             @unique // 批次新增的列識別碼，重試時不重複建立
+  notes          String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  allocations    CostAllocation[]
+  movements      InventoryMovement[]
 
   @@index([batchId])
   @@index([productId])
 }
 
 enum BatchCostKind {
+  AGENT_FEE // 代購費
   JP_DOMESTIC_SHIPPING // 日本國內運費
   INTL_SHIPPING // 國際運費
+  TW_DOMESTIC_SHIPPING // 台灣國內運費
   DUTY // 關稅及進口費用
   PACKAGING // 包裝材料
   PLATFORM_FEE // 平台或金流手續費

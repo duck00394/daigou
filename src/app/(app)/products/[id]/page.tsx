@@ -8,6 +8,7 @@ import { PageHeader, Section, TableWrap, StatusBadge, Stat, Badge, Empty, Twd, L
 import { ProductImage } from "@/components/client";
 import { ProductFormView } from "../form";
 import { AliasEditor, ArchiveButton } from "./parts";
+import { formatJpy, formatRate, formatTwd } from "@/lib/money";
 import { dayInput, fmtDate, movementKind, orderStatus, paymentStatus, procurementStatus, shipStatus, productStatus } from "@/lib/labels";
 
 export default async function ProductPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ categoryId?: string }> }) {
@@ -19,15 +20,16 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
     include: { aliases: { orderBy: { createdAt: "asc" } }, characters: true, categories: { include: { category: true } }, productType: true },
   });
   if (!p) notFound();
-  const [categories, characters, types, inv, lots, moves, buyers, batches] = await Promise.all([
+  const [categories, characters, types, seriesList, inv, lots, moves, buyers, batches] = await Promise.all([
     prisma.category.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.character.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.productType.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.series.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     tx((t) => inventorySummary(t, [id])),
     tx((t) => productLots(t, id)),
     prisma.inventoryMovement.findMany({ where: { productId: id }, orderBy: { createdAt: "desc" }, take: 30, include: { orderItem: { select: { order: { select: { id: true, orderNo: true } } } } } }),
     productBuyers(prisma, id, sp.categoryId),
-    prisma.purchaseBatchItem.findMany({ where: { productId: id }, include: { batch: true }, orderBy: { createdAt: "desc" }, take: 10 }),
+    prisma.purchaseBatchItem.findMany({ where: { productId: id }, include: { batch: { include: { supplierRef: true } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } }, orderBy: { createdAt: "desc" }, take: 30 }),
   ]);
   const s = inv.get(id) ?? { onHand: 0, reserved: 0, available: 0, incoming: 0, shipped: 0, activeOrdered: 0, openDemand: 0, unallocated: 0, shortage: 0 };
   const batchName = new Map(batches.map((b) => [b.id, `${b.batch.code} ${b.batch.name}`]));
@@ -114,6 +116,50 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
         )}
       </Section>
 
+      <Section title="採購紀錄（各採購團分開計價）" pad={false}>
+        {batches.length === 0 ? (
+          <Empty>還沒有採購紀錄。</Empty>
+        ) : (
+          <TableWrap>
+            <thead>
+              <tr>
+                <th>採購團</th>
+                <th>供應商</th>
+                <th className="text-right">數量</th>
+                <th className="text-right">已到貨</th>
+                <th className="text-right">預估單價</th>
+                <th className="text-right">實際單價</th>
+                <th className="text-right">匯率</th>
+                <th className="text-right">對客售價</th>
+              </tr>
+            </thead>
+            <tbody>
+              {batches.map((b) => {
+                const money = (v: number | null) => (v == null ? "—" : b.currency === "JPY" ? formatJpy(v) : formatTwd(v));
+                return (
+                  <tr key={b.id} className={b.batch.status === "CANCELLED" ? "opacity-60" : ""}>
+                    <td><Link href={`/inventory/batches/${b.batchId}`} className="text-ai hover:underline">{b.batch.code} {b.batch.name}</Link><div className="text-[12px] text-mute">{fmtDate(b.batch.orderedAt)}</div></td>
+                    <td>{b.batch.supplierRef?.name ?? b.batch.supplier ?? "—"}</td>
+                    <td className="num text-right">{b.qty - b.cancelledQty}</td>
+                    <td className="num text-right">{b.movements.reduce((x, m) => x + m.onHandDelta, 0)}</td>
+                    <td className="num text-right">{money(b.estUnitCost)}</td>
+                    <td className="num text-right">{money(b.actualUnitCost)}</td>
+                    <td className="num text-right">{b.currency === "JPY" ? formatRate(b.batch.rateMicro) : "—"}</td>
+                    <td className="text-right"><Twd v={b.salePriceTwd} /></td>
+                  </tr>
+                );
+              })}
+              <tr>
+                <td colSpan={2} className="text-mute">合計（未取消的採購團）</td>
+                <td className="num text-right font-medium">{batches.filter((b) => b.batch.status !== "CANCELLED").reduce((x, b) => x + b.qty - b.cancelledQty, 0)}</td>
+                <td className="num text-right font-medium">{batches.reduce((x, b) => x + b.movements.reduce((y, m) => y + m.onHandDelta, 0), 0)}</td>
+                <td colSpan={4} className="text-[12px] text-mute">成本、付款與到貨仍依各採購團分開追蹤</td>
+              </tr>
+            </tbody>
+          </TableWrap>
+        )}
+      </Section>
+
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
         <Section title="商品資料">
           <div className="mb-4 flex items-center gap-3">
@@ -129,11 +175,13 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
             categories={categories}
             characters={characters}
             types={types}
+          series={seriesList}
             initial={{
               name: p.name,
               status: p.status,
               imageUrl: p.imageUrl,
               series: p.series,
+              seriesId: p.seriesId,
               spec: p.spec,
               productTypeId: p.productTypeId,
               officialPriceJpy: p.officialPriceJpy,
@@ -162,7 +210,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
               <ul className="divide-y divide-line-2 text-sm">
                 {lots.map((l, i) => (
                   <li key={i} className="flex justify-between px-4 py-2">
-                    <span>{l.batchItemId ? (batchName.get(l.batchItemId) ?? "採購批次") : "手動入庫"}</span>
+                    <span>{l.batchItemId ? (batchName.get(l.batchItemId) ?? "採購團") : "手動入庫"}</span>
                     <span className="num text-mute">在庫 {l.onHand}・保留 {l.reserved}</span>
                   </li>
                 ))}

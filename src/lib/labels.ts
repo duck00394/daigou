@@ -105,8 +105,10 @@ export const batchStatus: Record<string, [string, Tone]> = {
 };
 
 export const costKind: Record<string, string> = {
+  AGENT_FEE: "代購費",
   JP_DOMESTIC_SHIPPING: "日本國內運費",
   INTL_SHIPPING: "國際運費",
+  TW_DOMESTIC_SHIPPING: "台灣國內運費",
   DUTY: "關稅及進口費用",
   PACKAGING: "包裝材料",
   PLATFORM_FEE: "平台或金流手續費",

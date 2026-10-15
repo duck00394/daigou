@@ -7,7 +7,7 @@ import { productStatus } from "@/lib/labels";
 
 type Opt = { id: string; name: string; active?: boolean };
 
-export function ProductFormView({ id, initial, categories, characters, types, isNew }: { id: string | null; initial: ProductForm; categories: Opt[]; characters: Opt[]; types: Opt[]; isNew?: boolean }) {
+export function ProductFormView({ id, initial, categories, characters, types, series, isNew }: { id: string | null; initial: ProductForm; categories: Opt[]; characters: Opt[]; types: Opt[]; series: Opt[]; isNew?: boolean }) {
   const [f, setF] = useState<ProductForm>(initial);
   const [aliasText, setAliasText] = useState("");
   const { run, pending } = useRun();
@@ -39,7 +39,13 @@ export function ProductFormView({ id, initial, categories, characters, types, is
         <TextField label="商品名稱（必填）" value={f.name} onChange={(e) => set("name", e.target.value)} required maxLength={200} />
         <SelectField label="商品狀態" value={f.status} onChange={(e) => set("status", e.target.value as ProductForm["status"])} options={Object.entries(productStatus).map(([k, v]) => [k, v[0]])} />
         <SelectField label="商品類型" value={f.productTypeId ?? ""} onChange={(e) => set("productTypeId", e.target.value || null)} options={[["", "未指定"], ...types.filter((t) => t.active !== false || t.id === f.productTypeId).map((t) => [t.id, t.name] as [string, string])]} />
-        <TextField label="系列" value={f.series ?? ""} onChange={(e) => set("series", e.target.value)} placeholder="例：吉伊卡哇 2026 萬聖節" />
+        <SelectField
+          label="IP／系列"
+          value={f.seriesId ?? ""}
+          onChange={(e) => set("seriesId", e.target.value || null)}
+          options={[["", f.series && !f.seriesId ? `未指定（舊資料：${f.series}）` : "未指定"], ...series.filter((x) => x.active !== false || x.id === f.seriesId).map((x) => [x.id, x.name] as [string, string])]}
+          hint="系列與角色名單在「系列與角色」管理"
+        />
         <TextField label="規格／款式／尺寸" value={f.spec ?? ""} onChange={(e) => set("spec", e.target.value)} />
         <TextField label="圖片網址" value={f.imageUrl ?? ""} onChange={(e) => set("imageUrl", e.target.value)} placeholder="https://" inputMode="url" />
       </div>

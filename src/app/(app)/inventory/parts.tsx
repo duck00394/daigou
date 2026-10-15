@@ -27,8 +27,8 @@ export function ReceiveForm({ initialProduct, batchItems }: { initialProduct: Pr
           label="到貨來源"
           value={source}
           onChange={(e) => setSource(e.target.value)}
-          options={[["", "手動入庫（不屬於採購批次）"], ...options.map((o) => [o.id, `${o.label}（未到 ${o.remaining} 件）`] as [string, string])]}
-          hint={product && options.length === 0 ? "這個商品沒有未到貨的採購明細" : "選採購批次時，成本會依批次匯率與分攤費用計算"}
+          options={[["", "手動入庫（不屬於採購團）"], ...options.map((o) => [o.id, `${o.label}（未到 ${o.remaining} 件）`] as [string, string])]}
+          hint={product && options.length === 0 ? "這個商品沒有未到貨的採購明細" : "選採購團時，成本會依採購團匯率與分攤費用計算"}
         />
         <TextField label="到貨數量" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} />
         {source === "" ? <TextField label="單件成本（台幣，選填）" inputMode="numeric" value={cost} onChange={(e) => setCost(e.target.value)} hint="空白時銷貨成本改用訂單的預估成本" /> : <div />}
@@ -145,7 +145,7 @@ export function AdjustForm() {
   );
 }
 
-/** 從待下單清單建立採購批次 */
+/** 從待下單清單建立採購團 */
 export function CreateBatchFromDemand({ demand, defaultRate }: { demand: { productId: string; name: string; code: string; qty: number; jpy: number | null; itemIds: string[] }[]; defaultRate: string }) {
   const [sel, setSel] = useState<Record<string, { on: boolean; qty: string; jpy: string }>>(() => Object.fromEntries(demand.map((d) => [d.productId, { on: true, qty: String(d.qty), jpy: d.jpy == null ? "" : String(d.jpy) }])));
   const [name, setName] = useState("");
@@ -158,39 +158,39 @@ export function CreateBatchFromDemand({ demand, defaultRate }: { demand: { produ
   return (
     <>
       <Button variant="primary" disabled={demand.length === 0} onClick={() => setOpen(true)}>
-        建立採購批次
+        建立採購團
       </Button>
       <Modal
         open={open}
         onClose={() => setOpen(false)}
         wide
-        title="建立採購批次"
+        title="建立採購團"
         footer={
           <Button
             variant="primary"
             loading={pending}
             onClick={() => {
-              if (!name.trim()) return notify("請填寫批次名稱");
-              const items: { productId: string; qty: number; unitCostJpy: number; markOrderItemIds: string[] }[] = [];
+              if (!name.trim()) return notify("請填寫採購團名稱");
+              const items: { productId: string; qty: number; unitCost: number; currency: "JPY"; markOrderItemIds: string[] }[] = [];
               for (const d of chosen) {
                 const s = sel[d.productId];
                 const q = Number(s.qty);
                 const j = Number(s.jpy);
                 if (!Number.isInteger(q) || q <= 0) return notify(`「${d.name}」的數量必須是正整數`);
                 if (s.jpy === "" || !Number.isInteger(j) || j < 0) return notify(`請填寫「${d.name}」的日幣單價`);
-                items.push({ productId: d.productId, qty: q, unitCostJpy: j, markOrderItemIds: d.itemIds });
+                items.push({ productId: d.productId, qty: q, unitCost: j, currency: "JPY", markOrderItemIds: d.itemIds });
               }
               if (!items.length) return notify("請至少選一項商品");
-              run(() => createBatchAction({ name, supplier: supplier || null, rate, orderedAt: null, notes: null, items }), { success: "已建立採購批次", onOk: (d) => router.push(`/inventory/batches/${d.id}`) });
+              run(() => createBatchAction({ name, supplier: supplier || null, rate, orderedAt: null, notes: null, items }), { success: "已建立採購團", onOk: (d) => router.push(`/inventory/batches/${d.id}`) });
             }}
           >
-            建立批次並標記訂單為已下單
+            建立採購團並標記訂單為已下單
           </Button>
         }
       >
         <div className="mb-3 grid gap-3 sm:grid-cols-3">
-          <TextField label="批次名稱" value={name} onChange={(e) => setName(e.target.value)} placeholder="例：10/15 官網下單" />
-          <TextField label="供應商" value={supplier} onChange={(e) => setSupplier(e.target.value)} />
+          <TextField label="採購團名稱" value={name} onChange={(e) => setName(e.target.value)} placeholder="例：10/15 官網下單" />
+          <TextField label="供應商" value={supplier} onChange={(e) => setSupplier(e.target.value)} hint="輸入名稱；不存在時會自動建立" />
           <TextField label="匯率（1 日圓 = ? 台幣）" value={rate} onChange={(e) => setRate(e.target.value)} hint="建立後鎖定，之後修改預設匯率不影響這批" />
         </div>
         <table className="w-full text-sm">

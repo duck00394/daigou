@@ -8,6 +8,7 @@ export interface ProductInput {
   name: string;
   imageUrl?: string | null;
   series?: string | null;
+  seriesId?: string | null;
   spec?: string | null;
   productTypeId?: string | null;
   status?: ProductStatus;
@@ -44,6 +45,7 @@ function productData(input: ProductInput) {
     name: input.name.trim(),
     imageUrl: checkUrl(input.imageUrl, "圖片網址"),
     series: emptyToNull(input.series),
+    seriesId: input.seriesId || null,
     spec: emptyToNull(input.spec),
     productTypeId: input.productTypeId || null,
     status: input.status ?? "PREORDER",
@@ -60,7 +62,18 @@ function productData(input: ProductInput) {
   };
 }
 
-export async function createProduct(t: Tx, actor: Actor, input: ProductInput) {
+async function withSeriesName(t: Tx, input: ProductInput) {
+  // 選了系列時，舊版文字欄位同步為系列名稱，方便匯出與相容
+  if (input.seriesId) {
+    const sr = await t.series.findUnique({ where: { id: input.seriesId } });
+    if (!sr) throw new BizError("找不到系列");
+    return { ...input, series: sr.name };
+  }
+  return input;
+}
+
+export async function createProduct(t: Tx, actor: Actor, input0: ProductInput) {
+  const input = await withSeriesName(t, input0);
   const data = productData(input);
   const p = await t.product.create({
     data: {
@@ -75,7 +88,8 @@ export async function createProduct(t: Tx, actor: Actor, input: ProductInput) {
   return p;
 }
 
-export async function updateProduct(t: Tx, actor: Actor, id: string, input: ProductInput) {
+export async function updateProduct(t: Tx, actor: Actor, id: string, input0: ProductInput) {
+  const input = await withSeriesName(t, input0);
   const data = productData(input);
   const before = await t.product.findUniqueOrThrow({ where: { id } });
   await t.product.update({ where: { id }, data });

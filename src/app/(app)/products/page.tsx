@@ -22,19 +22,21 @@ export default async function Products({ searchParams }: { searchParams: Promise
     ...(sp.q ? { OR: [{ name: { contains: sp.q, mode: "insensitive" } }, { code: { contains: sp.q, mode: "insensitive" } }, { series: { contains: sp.q, mode: "insensitive" } }, { aliases: { some: { alias: { contains: sp.q, mode: "insensitive" } } } }] } : {}),
     ...(sp.categoryId ? { categories: { some: { categoryId: sp.categoryId } } } : {}),
     ...(sp.characterId ? { characters: { some: { characterId: sp.characterId } } } : {}),
+    ...(sp.seriesId ? { seriesId: sp.seriesId } : {}),
     ...(sp.status ? { status: sp.status as never } : {}),
     ...(sp.typeId ? { productTypeId: sp.typeId } : {}),
   };
   const sortStock = sp.sort === "stock" || sp.sort === "shortage";
-  const [cats, chars, types, total] = await Promise.all([
+  const [cats, chars, types, total, seriesList] = await Promise.all([
     prisma.category.findMany({ orderBy: { name: "asc" } }),
     prisma.character.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.productType.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.product.count({ where }),
+    prisma.series.findMany({ orderBy: { name: "asc" } }),
   ]);
   let products = await prisma.product.findMany({
     where,
-    include: { productType: true, characters: { include: { character: true } }, categories: { include: { category: true } } },
+    include: { productType: true, seriesRef: true, characters: { include: { character: true } }, categories: { include: { category: true } } },
     orderBy: sp.sort === "name" ? { name: "asc" } : { updatedAt: "desc" },
     ...(sortStock ? {} : { skip: (page - 1) * SIZE, take: SIZE }),
   });
@@ -63,6 +65,7 @@ export default async function Products({ searchParams }: { searchParams: Promise
         <FilterBar action="/products">
           <FSearch data-search value={sp.q} placeholder="搜尋名稱、編號、系列、別名" />
           <FSelect name="categoryId" label="分類" value={sp.categoryId} options={cats.map((c) => [c.id, c.name])} />
+          <FSelect name="seriesId" label="系列" value={sp.seriesId} options={seriesList.map((c) => [c.id, c.name])} />
           <FSelect name="characterId" label="角色" value={sp.characterId} options={chars.map((c) => [c.id, c.name])} />
           <FSelect name="typeId" label="類型" value={sp.typeId} options={types.map((c) => [c.id, c.name])} />
           <FSelect name="status" label="狀態" value={sp.status} options={Object.entries(productStatus).map(([k, v]) => [k, v[0]])} />
@@ -100,6 +103,7 @@ export default async function Products({ searchParams }: { searchParams: Promise
                           <span className="block font-medium">{p.name}</span>
                           <span className="block text-[12px] text-mute">
                             {p.code}
+                            {p.seriesRef ? `｜${p.seriesRef.name}` : p.series ? `｜${p.series}` : ""}
                             {p.productType ? `｜${p.productType.name}` : ""}
                             {p.characters.length ? `｜${p.characters.map((c) => c.character.name).join("、")}` : ""}
                             {p.spec ? `｜${p.spec}` : ""}

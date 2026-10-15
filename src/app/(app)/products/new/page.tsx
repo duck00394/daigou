@@ -5,13 +5,14 @@ import { ProductFormView } from "../form";
 
 export const metadata = { title: "新增商品" };
 
-export default async function NewProduct({ searchParams }: { searchParams: Promise<{ name?: string; categoryId?: string }> }) {
+export default async function NewProduct({ searchParams }: { searchParams: Promise<{ name?: string; categoryId?: string; seriesId?: string }> }) {
   await requireUser();
   const sp = await searchParams;
-  const [categories, characters, types] = await Promise.all([
+  const [categories, characters, types, seriesList] = await Promise.all([
     prisma.category.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.character.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.productType.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.series.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
   ]);
   return (
     <div>
@@ -23,11 +24,13 @@ export default async function NewProduct({ searchParams }: { searchParams: Promi
           categories={categories}
           characters={characters}
           types={types}
+          series={seriesList}
           initial={{
             name: sp.name ?? "",
             status: "PREORDER",
             imageUrl: null,
             series: null,
+            seriesId: sp.seriesId ?? null,
             spec: null,
             productTypeId: null,
             officialPriceJpy: null,

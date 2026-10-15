@@ -15,6 +15,7 @@ const EXPORTS: [string, string, string][] = [
   ["buyers?private=1", "買家（含收件資料）", "包含私人資料，請小心保管"],
   ["orders", "訂單明細", "每列一項商品，含付款與出貨狀態"],
   ["payments", "收款與退款", "所有付款與退款紀錄"],
+  ["purchases", "採購品項", "各採購團的單價、幣別、匯率、數量與分攤費用"],
   ["inventory", "庫存流水", "每一次到貨、保留、出貨與調整"],
   ["shipments", "出貨紀錄", "不含收件資料"],
   ["to-ship", "待出貨清單", "依買家排序"],
@@ -49,7 +50,7 @@ export default async function Settings() {
         </Section>
       </div>
 
-      <Section title="其他費用（不屬於任何採購批次）">
+      <Section title="其他費用（不屬於任何採購團）">
         <ExpenseForm />
         {expenses.length === 0 ? <Empty>沒有其他費用。</Empty> : (
           <ul className="mt-3 divide-y divide-line-2 text-sm">

@@ -13,7 +13,7 @@ export function RateForm({ current }: { current: string }) {
     <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); run(() => setRateAction(v), { success: "已更新預設匯率" }); }}>
       <TextField label="1 日圓 = ? 台幣" value={v} onChange={(e) => setV(e.target.value)} inputMode="decimal" />
       <Button type="submit" variant="primary" loading={pending}>儲存匯率</Button>
-      <p className="w-full text-[12px] text-mute">只影響之後新建的訂單預估成本與採購批次；既有訂單與批次的匯率快照不會改變。</p>
+      <p className="w-full text-[12px] text-mute">只影響之後新建的訂單預估成本與採購團；既有訂單與批次的匯率快照不會改變。</p>
     </form>
   );
 }

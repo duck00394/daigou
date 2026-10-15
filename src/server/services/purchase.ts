@@ -1,4 +1,4 @@
-// 採購批次：實際向供應商採購的數量、日幣成本、匯率快照與共同費用分攤。
+// 採購團（採購批次）：向供應商採購的品項、預估與實際單價、匯率快照與共同費用分攤。
 import { BizError, lockRows, type Tx } from "@/server/db";
 import { allocate, jpyToTwd, mulDiv, parseRate } from "@/lib/money";
 import { audit, emptyToNull, nextCode, type Actor } from "./common";
@@ -6,33 +6,59 @@ import { getDefaultRateMicro } from "./settings";
 import { recomputeOrder } from "./recompute";
 import type { AllocationMethod, BatchCostKind } from "@prisma/client";
 
+export type Currency = "JPY" | "TWD";
+export const CURRENCIES: Currency[] = ["JPY", "TWD"];
+
+export interface BatchItemInput {
+  productId: string;
+  qty: number;
+  unitCost: number; // 採購預估單價（依幣別）
+  currency?: Currency;
+  actualUnitCost?: number | null;
+  salePriceTwd?: number | null;
+  specNote?: string | null;
+  weightGrams?: number | null;
+  markOrderItemIds?: string[];
+  dedupeKey?: string | null;
+}
+
 export async function createBatch(
   t: Tx,
   actor: Actor,
   input: {
     name: string;
-    supplier?: string | null;
+    supplierId?: string | null;
+    supplier?: string | null; // 相容舊介面：供應商名稱，不存在時自動建立
     rate?: string | null; // 未填時使用目前預設匯率，建立後即鎖定
     orderedAt?: Date | null;
     notes?: string | null;
-    items: { productId: string; qty: number; unitCostJpy: number; weightGrams?: number | null; markOrderItemIds?: string[] }[];
+    items?: BatchItemInput[];
   },
 ) {
-  if (!input.name?.trim()) throw new BizError("請填寫批次名稱");
+  if (!input.name?.trim()) throw new BizError("請填寫採購團名稱");
   const rateMicro = input.rate ? safeRate(input.rate) : await getDefaultRateMicro(t);
+  let supplierId = input.supplierId ?? null;
+  const supplierName = emptyToNull(input.supplier ?? null);
+  if (!supplierId && supplierName) {
+    const sp = await t.supplier.upsert({ where: { name: supplierName }, update: {}, create: { name: supplierName } });
+    supplierId = sp.id;
+  }
+  const sp = supplierId ? await t.supplier.findUnique({ where: { id: supplierId } }) : null;
+  if (supplierId && !sp) throw new BizError("找不到供應商");
   const batch = await t.purchaseBatch.create({
     data: {
       code: await nextCode(t, "batch"),
       name: input.name.trim(),
-      supplier: emptyToNull(input.supplier ?? null),
+      supplierId,
+      supplier: sp?.name ?? null,
       rateMicro,
       orderedAt: input.orderedAt ?? new Date(),
       notes: emptyToNull(input.notes ?? null),
       status: "ORDERED",
     },
   });
-  for (const it of input.items) await addBatchItem(t, actor, batch.id, it);
-  await audit(t, actor, "batch.create", "PurchaseBatch", batch.id, { rateMicro, items: input.items.length });
+  for (const it of input.items ?? []) await addBatchItem(t, actor, batch.id, it);
+  await audit(t, actor, "batch.create", "PurchaseBatch", batch.id, { rateMicro, items: input.items?.length ?? 0, supplierId });
   return batch;
 }
 
@@ -44,16 +70,43 @@ function safeRate(s: string) {
   }
 }
 
-export async function addBatchItem(
-  t: Tx,
-  actor: Actor,
-  batchId: string,
-  it: { productId: string; qty: number; unitCostJpy: number; weightGrams?: number | null; markOrderItemIds?: string[] },
-) {
+function checkMoney(n: unknown, label: string, allowNull = false): number | null {
+  if (n === null || n === undefined) {
+    if (allowNull) return null;
+    throw new BizError(`請填寫${label}`);
+  }
+  if (typeof n !== "number" || !Number.isInteger(n) || n < 0) throw new BizError(`${label}必須是不小於 0 的整數`);
+  return n;
+}
+
+function checkCurrency(c: unknown): Currency {
+  if (c === undefined || c === null) return "JPY";
+  if (c !== "JPY" && c !== "TWD") throw new BizError("幣別只支援日幣（JPY）或台幣（TWD）");
+  return c;
+}
+
+export async function addBatchItem(t: Tx, actor: Actor, batchId: string, it: BatchItemInput) {
   if (!Number.isInteger(it.qty) || it.qty <= 0) throw new BizError("採購數量必須是正整數");
-  if (!Number.isInteger(it.unitCostJpy) || it.unitCostJpy < 0) throw new BizError("日幣成本必須是不小於 0 的整數");
+  checkMoney(it.unitCost, "採購單價");
+  const batch = await t.purchaseBatch.findUniqueOrThrow({ where: { id: batchId } });
+  if (batch.status === "CANCELLED") throw new BizError("已取消的採購團不能新增品項");
+  if (it.dedupeKey) {
+    const dup = await t.purchaseBatchItem.findUnique({ where: { dedupeKey: it.dedupeKey } });
+    if (dup) return dup;
+  }
   const row = await t.purchaseBatchItem.create({
-    data: { batchId, productId: it.productId, qty: it.qty, unitCostJpy: it.unitCostJpy, weightGrams: it.weightGrams ?? null },
+    data: {
+      batchId,
+      productId: it.productId,
+      qty: it.qty,
+      currency: checkCurrency(it.currency),
+      estUnitCost: it.unitCost,
+      actualUnitCost: checkMoney(it.actualUnitCost, "實際單價", true),
+      salePriceTwd: checkMoney(it.salePriceTwd, "對客售價", true),
+      specNote: emptyToNull(it.specNote ?? null),
+      weightGrams: it.weightGrams ?? null,
+      dedupeKey: it.dedupeKey ?? null,
+    },
   });
   // 將相關訂單明細標記為「已下單給供應商」
   const touched = new Set<string>();
@@ -62,7 +115,7 @@ export async function addBatchItem(
     if (!oi || oi.productId !== it.productId) continue;
     if (oi.purchaseFlag === "PENDING_PURCHASE" || oi.purchaseFlag === "DELAYED" || oi.purchaseFlag === "OUT_OF_STOCK") {
       await t.orderItem.update({ where: { id: oid }, data: { purchaseFlag: "ORDERED" } });
-      await t.orderItemEvent.create({ data: { orderItemId: oid, type: "PURCHASE_FLAG", fromValue: oi.purchaseFlag, toValue: "ORDERED", note: `採購批次`, actorId: actor.userId } });
+      await t.orderItemEvent.create({ data: { orderItemId: oid, type: "PURCHASE_FLAG", fromValue: oi.purchaseFlag, toValue: "ORDERED", note: `採購團 ${batch.code}`, actorId: actor.userId } });
       touched.add(oi.orderId);
     }
   }
@@ -71,24 +124,103 @@ export async function addBatchItem(
   return row;
 }
 
-export async function updateBatchItem(t: Tx, actor: Actor, itemId: string, input: { unitCostJpy?: number; weightGrams?: number | null; cancelQty?: number }) {
-  const bi = await t.purchaseBatchItem.findUniqueOrThrow({ where: { id: itemId }, include: { movements: { where: { kind: "RECEIVE" } } } });
-  await lockRows(t, "PurchaseBatch", [bi.batchId]);
+/**
+ * 採購品項目前不能低於的數量（有效數量 = qty − cancelledQty）：
+ *   已到貨數量 ＋ 依賴這批到貨的買家需求
+ * 依賴量 = 已向供應商下單、尚未保留也未出貨的訂單需求 − 其他採購團的在途數量 − 目前可用庫存（不小於 0）
+ */
+export async function minCommittedQty(t: Tx, batchItemId: string) {
+  const bi = await t.purchaseBatchItem.findUniqueOrThrow({
+    where: { id: batchItemId },
+    include: { movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
+  });
+  const received = bi.movements.reduce((s, m) => s + m.onHandDelta, 0);
+  const demandItems = await t.orderItem.findMany({
+    where: { productId: bi.productId, purchaseFlag: "ORDERED", order: { confirmation: "CONFIRMED" } },
+    select: { qty: true, cancelledQtyCache: true, shippedQtyCache: true, reservedQtyCache: true },
+  });
+  const promised = demandItems.reduce((s, i) => s + Math.max(0, i.qty - i.cancelledQtyCache - i.shippedQtyCache - i.reservedQtyCache), 0);
+  const others = await t.purchaseBatchItem.findMany({
+    where: { productId: bi.productId, id: { not: bi.id }, batch: { status: { notIn: ["CANCELLED", "DRAFT"] } } },
+    include: { movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
+  });
+  const otherIncoming = others.reduce((s, o) => s + Math.max(0, o.qty - o.cancelledQty - o.movements.reduce((a, m) => a + m.onHandDelta, 0)), 0);
+  const stock = await t.inventoryMovement.aggregate({ where: { productId: bi.productId }, _sum: { onHandDelta: true, reservedDelta: true } });
+  const free = Math.max(0, (stock._sum.onHandDelta ?? 0) - (stock._sum.reservedDelta ?? 0));
+  const dependent = Math.max(0, promised - otherIncoming - free);
+  return { min: received + dependent, received, promised, dependent };
+}
+
+export async function updateBatchItem(
+  t: Tx,
+  actor: Actor,
+  itemId: string,
+  input: {
+    qty?: number; // 新的有效數量
+    unitCost?: number;
+    actualUnitCost?: number | null;
+    currency?: Currency;
+    salePriceTwd?: number | null;
+    specNote?: string | null;
+    weightGrams?: number | null;
+    cancelQty?: number;
+  },
+) {
+  const bi0 = await t.purchaseBatchItem.findUniqueOrThrow({ where: { id: itemId }, select: { batchId: true, productId: true } });
+  await lockRows(t, "PurchaseBatch", [bi0.batchId]);
+  await lockRows(t, "Product", [bi0.productId]);
+  const bi = await t.purchaseBatchItem.findUniqueOrThrow({ where: { id: itemId }, include: { batch: true, product: { select: { name: true } } } });
+  if (bi.batch.status === "CANCELLED") throw new BizError("已取消的採購團不能修改");
   const data: Record<string, unknown> = {};
-  if (input.unitCostJpy !== undefined) {
-    if (!Number.isInteger(input.unitCostJpy) || input.unitCostJpy < 0) throw new BizError("日幣成本必須是不小於 0 的整數");
-    data.unitCostJpy = input.unitCostJpy;
-  }
+  const before = { qty: bi.qty - bi.cancelledQty, estUnitCost: bi.estUnitCost, actualUnitCost: bi.actualUnitCost, currency: bi.currency, salePriceTwd: bi.salePriceTwd };
+  if (input.unitCost !== undefined) data.estUnitCost = checkMoney(input.unitCost, "採購預估單價");
+  if (input.actualUnitCost !== undefined) data.actualUnitCost = checkMoney(input.actualUnitCost, "實際單價", true);
+  if (input.currency !== undefined) data.currency = checkCurrency(input.currency);
+  if (input.salePriceTwd !== undefined) data.salePriceTwd = checkMoney(input.salePriceTwd, "對客售價", true);
+  if (input.specNote !== undefined) data.specNote = emptyToNull(input.specNote);
   if (input.weightGrams !== undefined) data.weightGrams = input.weightGrams;
+  const { min, received, dependent } = await minCommittedQty(t, itemId);
+  if (input.qty !== undefined && input.qty !== before.qty) {
+    if (!Number.isInteger(input.qty) || input.qty < 0) throw new BizError("數量必須是不小於 0 的整數");
+    if (input.qty < min) {
+      throw new BizError(
+        `「${bi.product.name}」數量不能少於 ${min}（已到貨 ${received} 件${dependent ? `、買家已訂購且只能靠這批到貨 ${dependent} 件` : ""}）`,
+      );
+    }
+    data.qty = input.qty + bi.cancelledQty;
+  }
   if (input.cancelQty) {
-    const received = bi.movements.reduce((s, m) => s + m.onHandDelta, 0);
-    const maxCancel = bi.qty - bi.cancelledQty - received;
-    if (input.cancelQty > maxCancel) throw new BizError(`最多只能取消 ${maxCancel} 件尚未到貨的數量`);
+    const active = bi.qty - bi.cancelledQty;
+    if (active - input.cancelQty < min) throw new BizError(`最多只能取消 ${Math.max(0, active - min)} 件`);
     data.cancelledQty = bi.cancelledQty + input.cancelQty;
   }
   await t.purchaseBatchItem.update({ where: { id: itemId }, data });
   await reallocateBatch(t, bi.batchId);
-  await audit(t, actor, "batch.updateItem", "PurchaseBatch", bi.batchId, { itemId, ...input });
+  await audit(t, actor, "batch.updateItem", "PurchaseBatch", bi.batchId, { itemId, before, after: input });
+}
+
+/** 刪除採購品項：只有沒有到貨紀錄、也沒有買家依賴時才可以 */
+export async function deleteBatchItem(t: Tx, actor: Actor, itemId: string) {
+  const bi = await t.purchaseBatchItem.findUniqueOrThrow({ where: { id: itemId }, include: { product: { select: { name: true } }, movements: { take: 1 } } });
+  await lockRows(t, "PurchaseBatch", [bi.batchId]);
+  if (bi.movements.length > 0) throw new BizError(`「${bi.product.name}」已有到貨或庫存紀錄，不能刪除，請改為修改數量`);
+  const { min } = await minCommittedQty(t, itemId);
+  if (min > 0) throw new BizError(`「${bi.product.name}」有 ${min} 件買家訂購需要靠這批到貨，不能刪除`);
+  await t.costAllocation.deleteMany({ where: { batchItemId: itemId } });
+  await t.purchaseBatchItem.delete({ where: { id: itemId } });
+  await reallocateBatch(t, bi.batchId);
+  await audit(t, actor, "batch.deleteItem", "PurchaseBatch", bi.batchId, { itemId, productId: bi.productId, qty: bi.qty, estUnitCost: bi.estUnitCost, currency: bi.currency });
+}
+
+/** 採購品項用於成本計算的單價：有實際單價用實際，否則用預估 */
+export function effectiveUnitCost(i: { estUnitCost: number; actualUnitCost: number | null }) {
+  return i.actualUnitCost ?? i.estUnitCost;
+}
+
+/** 採購品項商品金額（台幣） */
+export function itemGoodsTwd(i: { estUnitCost: number; actualUnitCost: number | null; currency: string; qty: number; cancelledQty: number }, rateMicro: number) {
+  const amount = effectiveUnitCost(i) * (i.qty - i.cancelledQty);
+  return i.currency === "TWD" ? amount : jpyToTwd(amount, rateMicro);
 }
 
 export async function addBatchCost(
@@ -140,7 +272,7 @@ export async function reallocateBatch(t: Tx, batchId: string) {
       const weights = items.map((i) => {
         const q = i.qty - i.cancelledQty;
         if (cost.method === "BY_QTY") return q;
-        if (cost.method === "BY_VALUE") return q * i.unitCostJpy;
+        if (cost.method === "BY_VALUE") return itemGoodsTwd(i, batch.rateMicro);
         if (i.weightGrams === null) throw new BizError("依重量分攤時，每一項採購明細都要填寫重量");
         return mulDiv(i.weightGrams, q, i.qty); // 取消部分數量時，重量按比例
       });
@@ -159,12 +291,12 @@ export async function landedCosts(t: Tx, batchItemIds?: string[]) {
     where: batchItemIds ? { id: { in: batchItemIds } } : {},
     include: { batch: { select: { rateMicro: true } }, allocations: { select: { amountTwd: true } } },
   });
-  const map = new Map<string, { qty: number; goodsTwd: number; feesTwd: number; totalTwd: number }>();
+  const map = new Map<string, { qty: number; goodsTwd: number; feesTwd: number; totalTwd: number; estimated: boolean }>();
   for (const i of items) {
     const qty = i.qty - i.cancelledQty;
-    const goodsTwd = jpyToTwd(i.unitCostJpy * qty, i.batch.rateMicro);
+    const goodsTwd = itemGoodsTwd(i, i.batch.rateMicro);
     const feesTwd = i.allocations.reduce((s, a) => s + a.amountTwd, 0);
-    map.set(i.id, { qty, goodsTwd, feesTwd, totalTwd: goodsTwd + feesTwd });
+    map.set(i.id, { qty, goodsTwd, feesTwd, totalTwd: goodsTwd + feesTwd, estimated: i.actualUnitCost === null });
   }
   return map;
 }

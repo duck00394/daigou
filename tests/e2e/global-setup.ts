@@ -17,5 +17,13 @@ export default async function globalSetup() {
   await prisma.buyer.create({ data: { code: "B0001", name: "小美", lineName: "Mei" } });
   await prisma.tag.create({ data: { name: "建議不接", color: "#7f1d1d", kind: "RISK", warnOnOrder: true } });
   await prisma.appSetting.create({ data: { key: "defaultRateMicro", value: "210000" } });
+  // 批次新增用：系列、角色名單、商品類型、供應商
+  const series = await prisma.series.create({ data: { name: "吉伊卡哇" } });
+  for (const [i, name] of ["吉伊", "小八", "兔兔"].entries()) {
+    const c = await prisma.character.create({ data: { name } });
+    await prisma.seriesCharacter.create({ data: { seriesId: series.id, characterId: c.id, sortOrder: i + 1 } });
+  }
+  await prisma.productType.create({ data: { name: "吊娃" } });
+  await prisma.supplier.create({ data: { name: "日本官網", defaultCurrency: "TWD" } });
   await prisma.$disconnect();
 }

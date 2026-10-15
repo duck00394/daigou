@@ -12,10 +12,12 @@ export const NAV: { href: string; label: string; group: string }[] = [
   { href: "/shipping", label: "出貨", group: "日常" },
   { href: "/buyers", label: "買家", group: "資料" },
   { href: "/products", label: "商品", group: "資料" },
+  { href: "/series", label: "系列與角色", group: "資料" },
   { href: "/categories", label: "活動與分類", group: "資料" },
   { href: "/groupbuys", label: "代購團", group: "資料" },
   { href: "/tags", label: "標籤", group: "資料" },
   { href: "/inventory", label: "庫存與採購", group: "營運" },
+  { href: "/suppliers", label: "供應商", group: "營運" },
   { href: "/reports", label: "成本與利潤", group: "營運" },
   { href: "/settings", label: "匯出、備份與設定", group: "營運" },
 ];

@@ -13,7 +13,7 @@ export const metadata = { title: "庫存與採購" };
 const TABS = [
   ["stock", "庫存總覽"],
   ["demand", "待下單"],
-  ["batches", "採購批次"],
+  ["batches", "採購團"],
   ["receive", "到貨登記"],
   ["adjust", "盤點調整"],
 ] as const;
@@ -157,16 +157,16 @@ async function DemandTab() {
 }
 
 async function BatchesTab() {
-  const batches = await prisma.purchaseBatch.findMany({ orderBy: { createdAt: "desc" }, include: { items: { include: { movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } }, costs: true } });
+  const batches = await prisma.purchaseBatch.findMany({ orderBy: { createdAt: "desc" }, include: { supplierRef: true, items: { include: { movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } }, costs: true } });
   return (
-    <Section title="採購批次" pad={false}>
+    <Section title="採購團" pad={false} actions={<LinkButton href="/inventory/batches/new" primary small>新增採購團</LinkButton>}>
       {batches.length === 0 ? (
-        <Empty>還沒有採購批次。可以從「待下單」建立。</Empty>
+        <Empty action={<LinkButton href="/inventory/batches/new" primary>新增採購團</LinkButton>}>還沒有採購團。可以直接新增，或從「待下單」建立。</Empty>
       ) : (
         <TableWrap>
           <thead>
             <tr>
-              <th>批次</th>
+              <th>採購團</th>
               <th>狀態</th>
               <th>供應商</th>
               <th>下單日</th>
@@ -184,7 +184,7 @@ async function BatchesTab() {
                 <tr key={b.id}>
                   <td><Link href={`/inventory/batches/${b.id}`} className="font-medium text-ai hover:underline">{b.code} {b.name}</Link></td>
                   <td><StatusBadge map={batchStatus} value={b.status} /></td>
-                  <td>{b.supplier ?? "—"}</td>
+                  <td>{b.supplierRef?.name ?? b.supplier ?? "—"}</td>
                   <td className="num">{fmtDate(b.orderedAt)}</td>
                   <td className="num text-right">{formatRateLabel(b.rateMicro)}</td>
                   <td className="num text-right">{ordered}</td>

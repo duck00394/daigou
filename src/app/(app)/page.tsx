@@ -96,7 +96,7 @@ export default async function Home() {
             </ul>
           )}
         </Section>
-        <Section title="待到貨的採購批次" pad={false} actions={<Link href="/inventory?tab=batches" className="text-sm text-ai">全部</Link>}>
+        <Section title="待到貨的採購團" pad={false} actions={<Link href="/inventory?tab=batches" className="text-sm text-ai">全部</Link>}>
           {d.incomingBatches.length === 0 ? (
             <Empty>沒有待到貨的批次。</Empty>
           ) : (

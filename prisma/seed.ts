@@ -39,6 +39,16 @@ async function main() {
   ];
   for (const [name, color, kind, warnOnOrder] of tags) await prisma.tag.upsert({ where: { name }, update: {}, create: { name, color, kind, warnOnOrder } });
 
+  // 預設系列與角色名單（可在「系列與角色」修改）
+  const chiikawa = await prisma.series.upsert({ where: { name: "吉伊卡哇" }, update: {}, create: { name: "吉伊卡哇" } });
+  if ((await prisma.seriesCharacter.count({ where: { seriesId: chiikawa.id } })) === 0) {
+    const cs = await prisma.character.findMany({ where: { name: { in: chars } } });
+    for (const [i, name] of chars.entries()) {
+      const c = cs.find((x) => x.name === name);
+      if (c) await prisma.seriesCharacter.create({ data: { seriesId: chiikawa.id, characterId: c.id, sortOrder: i + 1 } });
+    }
+  }
+
   await prisma.appSetting.upsert({ where: { key: "defaultRateMicro" }, update: {}, create: { key: "defaultRateMicro", value: "210000" } });
   console.log("預設資料已建立");
 }
