@@ -36,6 +36,11 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
   await page.getByRole("button", { name: "批次新增 2 列" }).click();
   await page.getByRole("button", { name: "確認新增 2 列" }).click();
   await page.getByRole("button", { name: "知道了" }).click();
+  // 新增完回到品項清單（只看不改），要改才按「編輯」
+  await expect(page.getByRole("list", { name: "品項清單" })).toContainText("吉伊卡哇 小八 吊娃");
+  await expect(page.getByTestId("items-total")).toHaveText("NT$1,750");
+  await expect(page.getByTestId("batch-due")).toHaveText("NT$1,750");
+  await page.getByRole("button", { name: "編輯", exact: true }).click();
   const table = page.getByRole("table", { name: "採購品項", exact: true });
   const rowOf = (name: string) => table.getByRole("row").filter({ hasText: name });
 
@@ -62,6 +67,8 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
   await dlg.getByLabel(/已確認本團的實際單價/).check();
   await dlg.getByRole("button", { name: "新增到本團" }).click();
   await toast(page, "已新增 2 個品項");
+  await page.getByRole("button", { name: "收起" }).click();
+  await page.getByRole("button", { name: "編輯", exact: true }).click();
   await expect(rowOf("吉伊卡哇 吉伊 吊娃").getByLabel("預估單價")).toHaveValue("380");
   await expect(page.getByText("還沒有付給供應商的款項")).toBeVisible();
 

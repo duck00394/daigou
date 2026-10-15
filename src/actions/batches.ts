@@ -57,3 +57,8 @@ export async function batchItemsForCopyAction(batchId: string) {
     "read",
   );
 }
+
+export async function payRemainingAction(batchId: string, paidById: string | null, dedupeKey: string) {
+  const v = z.object({ batchId: z.string().max(64), paidById: z.string().max(64).nullable(), dedupeKey: z.string().min(8).max(100) }).parse({ batchId, paidById, dedupeKey });
+  return run((a) => tx((t) => bo.payRemaining(t, a, v.batchId, { paidById: v.paidById, dedupeKey: `payoff:${v.dedupeKey}` })).then((r) => ({ duplicated: r.duplicated })));
+}

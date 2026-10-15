@@ -75,10 +75,13 @@ export function BulkAddGrid({
   types: typesInit,
   ensureBatch,
   onSaved,
+  onClosed,
 }: {
   batchId: string | null; // 還沒建立採購團時為 null，送出時由 ensureBatch 建立
   ensureBatch?: () => Promise<string | null>;
   onSaved?: (batchId: string, created: number) => void;
+  /** 看完「批次新增結果」按知道了；allOk = 這次全部成功 */
+  onClosed?: (allOk: boolean) => void;
   supplierId: string | null;
   supplierCurrency: Currency;
   rateMicro: number;
@@ -95,6 +98,11 @@ export function BulkAddGrid({
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<Result[] | null>(null);
+  const closeResults = () => {
+    const allOk = !!results && results.every((x) => x.ok);
+    setResults(null);
+    onClosed?.(allOk);
+  };
   const [showErrors, setShowErrors] = useState(false);
   const [tplName, setTplName] = useState("");
   const [newSeries, setNewSeries] = useState<string | null>(null);
@@ -640,7 +648,7 @@ export function BulkAddGrid({
         </table>
       </Modal>
 
-      <Modal open={!!results} onClose={() => setResults(null)} title="批次新增結果" footer={<Button variant="primary" onClick={() => setResults(null)}>知道了</Button>}>
+      <Modal open={!!results} onClose={closeResults} title="批次新增結果" footer={<Button variant="primary" onClick={closeResults}>知道了</Button>}>
         {results && (
           <ul className="space-y-1 text-sm">
             {results.map((x) => (

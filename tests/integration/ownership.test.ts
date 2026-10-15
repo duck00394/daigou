@@ -6,7 +6,7 @@ import { ensureDefaultOperators, updateBatchProgress, updateBatchResponsibility 
 import { addBatchItem, createBatch } from "@/server/services/purchase";
 import { createReceivingRecord } from "@/server/services/receiving";
 import { addSupplierPayment } from "@/server/services/supplier-payments";
-import { categoriesSummary, categoryOverview } from "@/server/services/batch-ops";
+import { batchPaySummary, categoriesSummary, categoryOverview, payRemaining } from "@/server/services/batch-ops";
 import { keepStock } from "@/server/services/inventory";
 import { listQuickSales, quickSale } from "@/server/services/quick-sale";
 import { JOINT, stockByOwner } from "@/server/services/ownership";
@@ -107,6 +107,31 @@ describe("各自採買與合資", () => {
     expect([b.ownership, b.orderedById]).toEqual(["PERSONAL", B]);
     expect(await prisma.auditLog.count({ where: { action: { in: ["batch.progress", "batch.responsibility"] }, entityId: nb.id } })).toBe(4);
     await expect(tx((t) => updateBatchProgress(t, actor, nb.id, "DONE"))).rejects.toThrow("進度不正確");
+  });
+});
+
+describe("這團金額：總額、已付、待付款、一鍵付清", () => {
+  it("待付款 = 總額 − 已付；活動總覽依人分待付／已付", async () => {
+    await tx((t) => addSupplierPayment(t, actor, { batchId: ids.a, paidById: A, paidAt: new Date(), amount: 300, currency: "TWD" }));
+    const m = await tx((t) => batchPaySummary(t, [ids.a, ids.b]));
+    expect(m.get(ids.a)).toEqual({ totalTwd: 800, paidTwd: 300, dueTwd: 500 });
+    expect(m.get(ids.b)).toEqual({ totalTwd: 1350, paidTwd: 0, dueTwd: 1350 });
+    const o = await tx((t) => categoryOverview(t, s.halloween.id));
+    expect(o.total).toMatchObject({ paidTwd: 300, dueTwd: 500 + 1350 + 1500 });
+    expect(o.batches.find((b) => b.id === ids.a)).toMatchObject({ paidTwd: 300, dueTwd: 500, ownerKey: A });
+  });
+
+  it("付清只登記剩下的金額，重送不重複，付清後再按會擋下", async () => {
+    await tx((t) => addSupplierPayment(t, actor, { batchId: ids.a, paidById: A, paidAt: new Date(), amount: 300, currency: "TWD" }));
+    const r1 = await tx((t) => payRemaining(t, actor, ids.a, { paidById: A, dedupeKey: "payoff-test-1" }));
+    expect([r1.duplicated, r1.payment.amount, r1.payment.purpose]).toEqual([false, 500, "BALANCE"]);
+    const r2 = await tx((t) => payRemaining(t, actor, ids.a, { paidById: A, dedupeKey: "payoff-test-1" }));
+    expect(r2.duplicated).toBe(true);
+    expect(await prisma.supplierPayment.count({ where: { batchId: ids.a } })).toBe(2);
+    expect((await tx((t) => batchPaySummary(t, [ids.a]))).get(ids.a)!.dueTwd).toBe(0);
+    await expect(tx((t) => payRemaining(t, actor, ids.a, { paidById: A, dedupeKey: "payoff-test-2" }))).rejects.toThrow("這團已經付清了");
+    const full = await tx((t) => payRemaining(t, actor, ids.b, { paidById: B, dedupeKey: "payoff-test-3" }));
+    expect([full.payment.amount, full.payment.purpose]).toEqual([1350, "FULL"]);
   });
 });
 

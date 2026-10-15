@@ -314,7 +314,9 @@ export async function categoryOverview(t: Tx, categoryId: string) {
       issues,
     };
   });
-  const active = summaries.filter((s) => s.status !== "CANCELLED");
+  const pay = await batchPaySummary(t, batches.map((b) => b.id));
+  const summariesWithPay = summaries.map((x) => ({ ...x, paidTwd: pay.get(x.id)?.paidTwd ?? 0, dueTwd: pay.get(x.id)?.dueTwd ?? 0 }));
+  const active = summariesWithPay.filter((s) => s.status !== "CANCELLED");
   const matrix = [...rows.values()]
     .map((r) => {
       const all = [...r.cells.values()].flat();
@@ -378,13 +380,15 @@ export async function categoryOverview(t: Tx, categoryId: string) {
       stock.set(k, x);
     }
   return {
-    batches: summaries,
+    batches: summariesWithPay,
     matrix,
     byOwner: Object.fromEntries(byOwner),
     byStage: Object.fromEntries(byStage),
     stock: Object.fromEntries(stock),
     jointShares,
     total: {
+      paidTwd: active.reduce((s, b) => s + b.paidTwd, 0),
+      dueTwd: active.reduce((s, b) => s + b.dueTwd, 0),
       batches: active.length,
       qty: active.reduce((s, b) => s + b.qty, 0),
       received: active.reduce((s, b) => s + b.received, 0),
@@ -426,4 +430,43 @@ export async function categoriesSummary(t: Tx) {
     out.set(b.categoryId!, v);
   }
   return out;
+}
+
+/**
+ * 採購團付款狀態（台幣）：總額＝商品（依該團鎖定匯率換算）＋分攤費用；已付＝已付款的供應商付款
+ * （日幣用該筆實際匯率，沒填用該團匯率）；還要付＝總額 − 已付（不小於 0）。待付款的登記不算已付。
+ */
+export async function batchPaySummary(t: Tx, batchIds: string[]) {
+  const ids = [...new Set(batchIds)];
+  const out = new Map<string, { totalTwd: number; paidTwd: number; dueTwd: number }>();
+  if (!ids.length) return out;
+  const batches = await t.purchaseBatch.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      rateMicro: true,
+      items: { select: { qty: true, cancelledQty: true, currency: true, estUnitCost: true, actualUnitCost: true, allocations: { select: { amountTwd: true } } } },
+      supplierPayments: { where: { status: "PAID" }, select: { amount: true, currency: true, rateMicro: true } },
+    },
+  });
+  for (const b of batches) {
+    const total = b.items.reduce((s, i) => s + itemGoodsTwd(i, b.rateMicro) + i.allocations.reduce((a, x) => a + x.amountTwd, 0), 0);
+    const paid = b.supplierPayments.reduce((s, p) => s + (p.currency === "TWD" ? p.amount : jpyToTwd(p.amount, p.rateMicro ?? b.rateMicro)), 0);
+    out.set(b.id, { totalTwd: total, paidTwd: paid, dueTwd: Math.max(0, total - paid) });
+  }
+  return out;
+}
+
+/** 一鍵付清：把「還要付」的金額登記成一筆台幣付款（重送不重複） */
+export async function payRemaining(t: Tx, actor: Actor, batchId: string, input: { paidById: string | null; dedupeKey: string }) {
+  await lockRows(t, "PurchaseBatch", [batchId]);
+  const dup = await t.supplierPayment.findUnique({ where: { dedupeKey: input.dedupeKey } });
+  if (dup) return { payment: dup, duplicated: true };
+  const b = await t.purchaseBatch.findUnique({ where: { id: batchId } });
+  if (!b) throw new BizError("找不到採購團");
+  if (b.status === "CANCELLED") throw new BizError("已取消的採購團不能登記付款");
+  const s = (await batchPaySummary(t, [batchId])).get(batchId)!;
+  if (s.dueTwd <= 0) throw new BizError("這團已經付清了");
+  const { addSupplierPayment } = await import("./supplier-payments");
+  return addSupplierPayment(t, actor, { batchId, paidById: input.paidById, paidAt: new Date(), amount: s.dueTwd, currency: "TWD", purpose: s.paidTwd > 0 ? "BALANCE" : "FULL", note: "一鍵付清", dedupeKey: input.dedupeKey });
 }

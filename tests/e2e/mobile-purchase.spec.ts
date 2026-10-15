@@ -76,7 +76,9 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   await expect(card).toContainText("3 團");
   await card.click();
   await expect(page.getByTestId("cat-total")).toHaveText("NT$5,701");
-  await expect(page.getByTestId("owner-joint")).toContainText("還沒登記付款 NT$2,440");
+  await expect(page.getByTestId("cat-due")).toHaveText("NT$5,701");
+  await expect(page.getByTestId("cat-paid")).toHaveText("NT$0");
+  await expect(page.getByTestId("due-joint")).toContainText("NT$2,440");
   await expect(page.locator("main")).toContainText("NT$1,941");
   await expect(page.locator("main")).toContainText("NT$1,320");
   await expect(page.locator("main")).toContainText("代購收到了，等寄出");
@@ -88,4 +90,18 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   await page.getByRole("link", { name: new RegExp(`YUANS ${tag}`) }).first().click();
   await page.getByRole("radiogroup", { name: "現在到哪了" }).getByRole("radio", { name: "寄出了，在路上" }).click();
   await toast(page, "進度：寄出了，在路上");
+
+  // 一打開就看到品項與這團金額；按「付清」一鍵登記
+  await expect(page.getByRole("list", { name: "品項清單" })).toContainText("吉伊");
+  await expect(page.getByTestId("batch-due")).toHaveText("NT$1,941");
+  await page.getByRole("button", { name: "付清" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "登記已付 NT$1,941" }).click();
+  await toast(page, "已登記付款 NT$1,941");
+  await expect(page.getByTestId("batch-due")).toHaveText("NT$0");
+  await page.screenshot({ path: "test-results/mobile_batch_paid.png", fullPage: true });
+  await page.goto("/categories");
+  await page.getByTestId(`cat-card-${cat}`).click();
+  await expect(page.getByTestId("cat-due")).toHaveText("NT$3,760");
+  await expect(page.getByTestId("cat-paid")).toHaveText("NT$1,941");
+  await page.screenshot({ path: "test-results/mobile_category_pay.png", fullPage: true });
 });

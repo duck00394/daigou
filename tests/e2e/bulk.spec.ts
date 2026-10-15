@@ -75,7 +75,8 @@ test("桌面：批次新增 4 個角色（含新角色與貼上），再批次�
   await expect(page.getByText(/已新增：吉伊卡哇 兔兔 吊娃/)).toBeVisible();
   await page.getByRole("button", { name: "知道了" }).click();
 
-  // 採購品項表格
+  // 採購品項表格（按「編輯」才會出現可修改的表格）
+  await page.getByRole("button", { name: "編輯", exact: true }).click();
   const table = page.getByRole("table", { name: "採購品項", exact: true });
   await expect(table.getByRole("row")).toHaveCount(5); // 表頭 + 4
   await expect(table).toContainText("吉伊卡哇 栗子饅頭 吊娃");
@@ -87,6 +88,7 @@ test("桌面：批次新增 4 個角色（含新角色與貼上），再批次�
   await page.getByRole("button", { name: "儲存修改" }).click();
   await toast(page, "已儲存 2 列");
   await page.reload();
+  await page.getByRole("button", { name: "編輯", exact: true }).click();
   await expect(rowOf("吉伊卡哇 吉伊 吊娃").getByLabel("數量")).toHaveValue("5");
   await expect(rowOf("吉伊卡哇 小八 吊娃").getByLabel("預估單價")).toHaveValue("360");
 
@@ -118,6 +120,5 @@ test("桌面：第二團套用上次使用的角色，價格帶入上次設定�
   // 回到第一團確認價格沒變
   await page.goto("/inventory?tab=batches");
   await page.getByRole("link", { name: /E2E 批次團/ }).first().click(); // 清單依建立時間由新到舊
-  const table = page.getByRole("table", { name: "採購品項", exact: true });
-  await expect(table.getByRole("row").filter({ hasText: "吉伊卡哇 吉伊 吊娃" }).getByLabel("預估單價")).toHaveValue("350");
+  await expect(page.getByRole("list", { name: "品項清單" }).getByRole("listitem").filter({ hasText: "吉伊卡哇 吉伊 吊娃" })).toContainText("NT$350 ×");
 });

@@ -35,6 +35,11 @@ test("手機：卡片式表格可新增、修改、刪除列並確認儲存", as
   await page.getByRole("button", { name: "批次新增 2 列" }).click();
   await page.getByRole("button", { name: "確認新增 2 列" }).click();
   await page.getByRole("button", { name: "知道了" }).click();
+  // 一打開先看品項清單與合計；要改才按「編輯」
+  await expect(page.getByRole("list", { name: "品項清單" })).toContainText("吉伊卡哇 吉伊 吊娃");
+  await expect(page.getByTestId("batch-total")).toBeVisible();
+  await page.screenshot({ path: "test-results/mobile_batch_view.png", fullPage: true });
+  await page.getByRole("button", { name: "編輯", exact: true }).click();
   const items = page.getByRole("table", { name: "採購品項", exact: true }).getByRole("row");
   const chiikawa = items.filter({ hasText: "吉伊卡哇 吉伊 吊娃" });
   await chiikawa.getByLabel("數量").fill("4");

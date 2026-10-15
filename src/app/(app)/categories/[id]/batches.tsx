@@ -14,7 +14,22 @@ const sums = (m: Record<string, number>) => Object.entries(m).map(([c, v]) => mo
 export async function CategoryBatches({ categoryId, view }: { categoryId: string; view?: string }) {
   const [o, operators] = await Promise.all([tx((t) => categoryOverview(t, categoryId)), tx((t) => listOperators(t, { includeInactive: true }))]);
   const who = (k: string) => (k === JOINT ? "合資（還沒登記付款）" : k === NONE ? "未指定" : (operators.find((x) => x.id === k)?.name ?? "未指定"));
-  const ownerKeys = [...operators.map((x) => x.id), NONE, JOINT].filter((k) => o.byOwner[k] || o.stock[k]);
+  // 依「這團是誰的」分組：個人、合資、未指定；每組分待付款、已付款
+  const live = o.batches.filter((b) => b.status !== "CANCELLED");
+  const groups = [...operators.map((x) => x.id), JOINT, NONE]
+    .map((key) => {
+      const bs = live.filter((b) => b.ownerKey === key);
+      return {
+        key,
+        label: key === JOINT ? "合資" : who(key),
+        total: bs.reduce((a, b) => a + b.totalTwd, 0),
+        due: bs.reduce((a, b) => a + b.dueTwd, 0),
+        paid: bs.reduce((a, b) => a + b.paidTwd, 0),
+        dueList: bs.filter((b) => b.dueTwd > 0),
+        paidList: bs.filter((b) => b.paidTwd > 0),
+      };
+    })
+    .filter((g) => g.dueList.length || g.paidList.length || g.total);
   const stageOrder: BatchStage[] = ["ASKED", "AGENT_HAS", "SHIPPED", "PARTIAL", "DONE"];
   const add = <LinkButton small primary href={`/purchase?categoryId=${categoryId}`}>新增採購</LinkButton>;
   if (!o.batches.length)
@@ -28,31 +43,57 @@ export async function CategoryBatches({ categoryId, view }: { categoryId: string
   return (
     <>
       <Section title="總覽">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <div>
-            <div className="text-[13px] text-mute">這個活動總額</div>
-            <div className="num text-[26px] font-semibold" data-testid="cat-total">{formatTwd(o.total.totalTwd)}</div>
-            <div className="text-[12px] text-mute">{o.total.batches} 團・{o.total.qty} 件・已到 {o.total.received}・還沒到 {o.total.outstanding}{o.total.estimated ? "・含暫估" : ""}</div>
+            <div className="text-[12px] text-mute">總額</div>
+            <div className="num text-[20px] font-semibold" data-testid="cat-total">{formatTwd(o.total.totalTwd)}</div>
+          </div>
+          <div>
+            <div className="text-[12px] text-mute">待付款</div>
+            <div className={`num text-[20px] font-semibold ${o.total.dueTwd ? "text-bad" : ""}`} data-testid="cat-due">{formatTwd(o.total.dueTwd)}</div>
+          </div>
+          <div>
+            <div className="text-[12px] text-mute">已付款</div>
+            <div className="num text-[20px] font-semibold text-good" data-testid="cat-paid">{formatTwd(o.total.paidTwd)}</div>
           </div>
         </div>
-        <h3 className="mt-3 mb-1.5 text-[13px] font-semibold text-ink-2">誰買的</h3>
-        <ul className="grid gap-2 sm:grid-cols-3">
-          {ownerKeys.map((k) => {
-            const m = o.byOwner[k];
-            const st = o.stock[k];
-            return (
-              <li key={k} className="rounded-xl border border-line-2 bg-[#fafbfc] p-3" data-testid={`owner-${k}`}>
-                <div className="font-semibold">{k === JOINT ? "合資" : who(k)}</div>
-                {k === JOINT ? (
-                  <div className="text-[13px] text-ink-2">{m?.batches ?? 0} 團・{m?.qty ?? 0} 件{m?.amount ? `・還沒登記付款 ${formatTwd(m.amount)}` : "・金額已依付款分給各人"}</div>
-                ) : (
-                  <div className="num text-[18px] font-semibold">{formatTwd(m?.amount ?? 0)}<span className="ml-1 text-[12px] font-normal text-mute">{m?.batches ?? 0} 團・{m?.qty ?? 0} 件</span></div>
-                )}
-                <div className="mt-1 text-[12px] text-mute">庫存：可賣 {st?.free ?? 0}・已保留 {st?.reserved ?? 0}・自留 {st?.kept ?? 0}</div>
-              </li>
-            );
-          })}
-        </ul>
+        <p className="mt-1 text-[12px] text-mute">{o.total.batches} 團・{o.total.qty} 件・已到 {o.total.received}・還沒到 {o.total.outstanding}{o.total.estimated ? "・金額含暫估" : ""}</p>
+
+        <div className="mt-3 space-y-3">
+          {groups.map((g) => (
+            <div key={g.key} className="rounded-xl border border-line-2 bg-[#fafbfc] p-3" data-testid={`owner-${g.key}`}>
+              <div className="flex items-baseline justify-between gap-2">
+                <h3 className="text-[16px] font-semibold">{g.label}</h3>
+                <span className="text-[13px] text-mute">總額 <span className="num font-medium text-ink">{formatTwd(g.total)}</span></span>
+              </div>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <div className="rounded-lg bg-white p-2.5">
+                  <div className="flex items-baseline justify-between"><span className="text-[13px] font-medium text-bad">待付款</span><span className="num font-semibold" data-testid={`due-${g.key}`}>{formatTwd(g.due)}</span></div>
+                  {g.dueList.length === 0 ? <p className="text-[12px] text-mute">都付清了</p> : (
+                    <ul className="mt-1 space-y-0.5 text-[14px]">
+                      {g.dueList.map((b) => (
+                        <li key={b.id}><Link href={`/inventory/batches/${b.id}`} className="flex justify-between gap-2 hover:underline"><span className="truncate">{b.name}</span><span className="num shrink-0">{formatTwd(b.dueTwd)}{b.paidTwd > 0 && <span className="ml-1 text-[11px] text-mute">（總額 {formatTwd(b.totalTwd)}）</span>}</span></Link></li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="rounded-lg bg-white p-2.5">
+                  <div className="flex items-baseline justify-between"><span className="text-[13px] font-medium text-good">已付款</span><span className="num font-semibold" data-testid={`paid-${g.key}`}>{formatTwd(g.paid)}</span></div>
+                  {g.paidList.length === 0 ? <p className="text-[12px] text-mute">還沒有付款</p> : (
+                    <ul className="mt-1 space-y-0.5 text-[14px]">
+                      {g.paidList.map((b) => (
+                        <li key={b.id}><Link href={`/inventory/batches/${b.id}`} className="flex justify-between gap-2 hover:underline"><span className="truncate">{b.name}</span><span className="num shrink-0">{formatTwd(b.paidTwd)}{b.dueTwd > 0 && <span className="ml-1 text-[11px] text-mute">（部分）</span>}</span></Link></li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+              {o.stock[g.key] && <p className="mt-1.5 text-[12px] text-mute">庫存：可賣 {o.stock[g.key].free}・已保留 {o.stock[g.key].reserved}・自留 {o.stock[g.key].kept}</p>}
+              {g.key === JOINT && <p className="mt-1 text-[12px] text-mute">合資團賣掉的錢依各自實際付款比例分。</p>}
+            </div>
+          ))}
+        </div>
+
         <h3 className="mt-3 mb-1.5 text-[13px] font-semibold text-ink-2">現在到哪了</h3>
         <ul className="flex flex-wrap gap-2">
           {stageOrder.filter((k) => o.byStage[k]).map((k) => (

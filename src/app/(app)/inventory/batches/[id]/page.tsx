@@ -2,17 +2,19 @@ import { notFound } from "next/navigation";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { landedCosts, minCommittedQty } from "@/server/services/purchase";
-import { PageHeader, Section, TableWrap, Twd, Jpy, StatusBadge, Empty, LinkButton, Stat } from "@/components/ui";
-import { AddCost, DeleteCost, CancelBatch, Collapsible } from "./parts";
-import { BulkAddGrid } from "./bulk-add";
-import { BulkEditTable, type EditItem } from "./bulk-edit";
+import { PageHeader, Section, TableWrap, Twd, Jpy, StatusBadge, Empty, LinkButton } from "@/components/ui";
+import { AddCost, DeleteCost, CancelBatch } from "./parts";
+import { type EditItem } from "./bulk-edit";
 import { BatchInfoCard, CopyItemsButton } from "./manage";
+import { ItemsPanel, PayOffButton } from "./items";
+import { batchPaySummary } from "@/server/services/batch-ops";
+import { getMe } from "@/server/me";
 import { ProgressBar, ResponsibilityCard, SupplierPayments, Receiving, type PaymentRow } from "./operators";
 import { listOperators } from "@/server/services/operators";
 import { jointWeights, sharePercents } from "@/server/services/ownership";
 import { supplierPaymentHistory } from "@/server/services/supplier-payments";
 import { allocMethod, batchStage, batchStageLabel, costKind, currencyName, dayInput, fmtDate, paymentPurpose, supplierPaymentStatus, toDateTimeInput } from "@/lib/labels";
-import { formatRate, jpyToTwd } from "@/lib/money";
+import { formatRate, formatTwd, jpyToTwd } from "@/lib/money";
 
 export default async function BatchPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ bulk?: string }> }) {
   await requireUser();
@@ -99,6 +101,8 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
   const received = editItems.reduce((s, i) => s + i.received, 0);
   const estimated = [...landed.values()].some((l) => l.estimated);
   const supplierName = b.supplierRef?.name ?? b.supplier;
+  const pay = (await tx((t) => batchPaySummary(t, [b.id]))).get(b.id) ?? { totalTwd: totalLanded, paidTwd: 0, dueTwd: totalLanded };
+  const me = await getMe();
   return (
     <div className="space-y-4">
       <PageHeader
@@ -107,12 +111,17 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         sub={<span className="flex flex-wrap items-center gap-2"><StatusBadge map={batchStageLabel} value={batchStage(b)} />{supplierName && <span>供應商：{supplierName}</span>}{b.category && <a href={`/categories/${b.category.id}`} className="text-ai hover:underline">{b.category.name}</a>}</span>}
         actions={<><LinkButton href={`/purchase${b.categoryId ? `?categoryId=${b.categoryId}` : ""}`}>同活動再開一團</LinkButton>{open && <CancelBatch id={b.id} />}</>}
       />
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <Stat label="採購品項" value={editItems.length} />
-        <Stat label="總件數／已到貨" value={`${totalQty} / ${received}`} />
-        <Stat label="總成本（台幣）" value={<Twd v={totalLanded} />} note={estimated ? "部分品項依預估單價" : "依實際單價"} />
-        <Stat label="本團匯率（已鎖定）" value={formatRate(b.rateMicro)} note="1 日圓 = ? 台幣" />
-      </div>
+      <section className="rounded-xl border border-line bg-card p-4" aria-label="這團金額">
+        <div className="grid grid-cols-3 gap-2">
+          <div><div className="text-[12px] text-mute">總額{estimated ? "（含預估）" : ""}</div><div className="num text-[20px] font-semibold" data-testid="batch-total">{formatTwd(pay.totalTwd)}</div></div>
+          <div><div className="text-[12px] text-mute">已付</div><div className="num text-[20px] font-semibold text-good">{formatTwd(pay.paidTwd)}</div></div>
+          <div><div className="text-[12px] text-mute">還要付</div><div className={`num text-[20px] font-semibold ${pay.dueTwd ? "text-bad" : ""}`} data-testid="batch-due">{formatTwd(pay.dueTwd)}</div></div>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[13px] text-mute">
+          <span>{totalQty} 件・已到 {received}</span>
+          {open && <PayOffButton batchId={b.id} due={pay.dueTwd} operators={ops.filter((o) => o.active)} defaultPayer={b.ownership === "JOINT" ? me : (b.orderedById ?? me)} />}
+        </div>
+      </section>
 
       <ProgressBar batchId={b.id} progress={b.progress} stage={batchStage(b)} editable={b.status !== "CANCELLED"} />
 
@@ -124,27 +133,20 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
 
 
 
-      {open && (
-        <Collapsible title="批次新增系列商品" defaultOpen={sp.bulk === "1" || b.items.length === 0}>
-          <BulkAddGrid
-            batchId={b.id}
-            supplierId={b.supplierId}
-            supplierCurrency={(b.supplierRef?.defaultCurrency as "JPY" | "TWD") ?? "TWD"}
-            rateMicro={b.rateMicro}
-            series={series}
-            types={types}
-          />
-        </Collapsible>
-      )}
-
-      <Section id="items" title={`採購品項（${editItems.length}）`} pad={false} actions={open && <CopyItemsButton toBatchId={b.id} batches={otherBatches.map((x) => ({ id: x.id, label: `${x.code} ${x.name}${x.supplierRef ? `（${x.supplierRef.name}）` : ""}` }))} />}>
-        {editItems.length === 0 ? (
-          <Empty>還沒有採購品項，請用上方「批次新增系列商品」加入。</Empty>
-        ) : (
-          <BulkEditTable batchId={b.id} items={editItems} editable={open} />
-        )}
-        <p className="px-4 py-2 text-[12px] text-mute">新增採購品項不代表已付款或到貨，也不會增加庫存；到貨請用「登記到貨」。數量不能低於已到貨與買家已訂購、只能靠這批到貨的數量。</p>
-      </Section>
+      <section id="items" className="scroll-mt-28 rounded-xl border border-line bg-card">
+        <ItemsPanel
+          batchId={b.id}
+          items={editItems}
+          editable={open}
+          initialMode={open && (sp.bulk === "1" || b.items.length === 0) ? "add" : "view"}
+          supplierId={b.supplierId}
+          supplierCurrency={(b.supplierRef?.defaultCurrency as "JPY" | "TWD") ?? "TWD"}
+          rateMicro={b.rateMicro}
+          series={series}
+          types={types}
+          copyButton={<CopyItemsButton toBatchId={b.id} batches={otherBatches.map((x) => ({ id: x.id, label: `${x.code} ${x.name}${x.supplierRef ? `（${x.supplierRef.name}）` : ""}` }))} />}
+        />
+      </section>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Section id="payments" title={`供應商付款（${payments.filter((p) => p.status !== "VOIDED").length}）`} pad={false}>
