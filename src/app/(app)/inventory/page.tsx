@@ -3,6 +3,7 @@ import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { inventorySummary } from "@/server/services/inventory";
 import { purchaseDemand } from "@/server/services/purchase";
+import { listOperators } from "@/server/services/operators";
 import { getDefaultRateMicro } from "@/server/services/settings";
 import { PageHeader, Section, TableWrap, Empty, StatusBadge, LinkButton, Badge } from "@/components/ui";
 import { ReceiveForm, AdjustForm, CreateBatchFromDemand } from "./parts";
@@ -201,15 +202,17 @@ async function BatchesTab() {
 }
 
 async function ReceiveTab({ productId }: { productId?: string }) {
-  const [p, items] = await Promise.all([
+  const [p, items, operators] = await Promise.all([
     productId ? prisma.product.findUnique({ where: { id: productId }, select: { id: true, code: true, name: true, salePriceTwd: true, spec: true, categories: { select: { category: { select: { id: true, name: true } } } } } }) : null,
     prisma.purchaseBatchItem.findMany({ where: { batch: { status: { in: ["ORDERED", "PARTIAL_RECEIVED"] } } }, include: { batch: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } }),
+    tx((t) => listOperators(t)),
   ]);
   return (
     <Section title="到貨登記">
       <ReceiveForm
         initialProduct={p ? { ...p, categories: p.categories.map((c) => c.category) } : null}
-        batchItems={items.map((i) => ({ id: i.id, productId: i.productId, label: `${i.batch.code} ${i.batch.name}`, remaining: i.qty - i.cancelledQty - i.movements.reduce((s, m) => s + m.onHandDelta, 0) }))}
+        batchItems={items.map((i) => ({ id: i.id, productId: i.productId, label: `${i.batch.code} ${i.batch.name}`, remaining: i.qty - i.cancelledQty - i.movements.reduce((s, m) => s + m.onHandDelta, 0), defaultReceiver: i.batch.receivingResponsibleById }))}
+        operators={operators.map((o) => ({ id: o.id, name: o.name, code: o.code }))}
       />
     </Section>
   );

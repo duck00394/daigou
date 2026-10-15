@@ -4,6 +4,7 @@ import { allocate, jpyToTwd, mulDiv, parseRate } from "@/lib/money";
 import { audit, emptyToNull, nextCode, type Actor } from "./common";
 import { getDefaultRateMicro } from "./settings";
 import { recomputeOrder } from "./recompute";
+import { checkOperator } from "./operators";
 import type { AllocationMethod, BatchCostKind } from "@prisma/client";
 
 export type Currency = "JPY" | "TWD";
@@ -33,6 +34,10 @@ export async function createBatch(
     orderedAt?: Date | null;
     notes?: string | null;
     items?: BatchItemInput[];
+    orderedById?: string | null; // 訂購負責人（經營者）
+    paymentResponsibleById?: string | null; // 主要付款負責人
+    receivingResponsibleById?: string | null; // 收貨負責人
+    responsibilityNote?: string | null;
   },
 ) {
   if (!input.name?.trim()) throw new BizError("請填寫採購團名稱");
@@ -45,6 +50,9 @@ export async function createBatch(
   }
   const sp = supplierId ? await t.supplier.findUnique({ where: { id: supplierId } }) : null;
   if (supplierId && !sp) throw new BizError("找不到供應商");
+  const orderedById = await checkOperator(t, input.orderedById, "訂購負責人");
+  const paymentResponsibleById = await checkOperator(t, input.paymentResponsibleById, "主要付款負責人");
+  const receivingResponsibleById = await checkOperator(t, input.receivingResponsibleById, "收貨負責人");
   const batch = await t.purchaseBatch.create({
     data: {
       code: await nextCode(t, "batch"),
@@ -55,10 +63,14 @@ export async function createBatch(
       orderedAt: input.orderedAt ?? new Date(),
       notes: emptyToNull(input.notes ?? null),
       status: "ORDERED",
+      orderedById,
+      paymentResponsibleById,
+      receivingResponsibleById,
+      responsibilityNote: emptyToNull(input.responsibilityNote ?? null),
     },
   });
   for (const it of input.items ?? []) await addBatchItem(t, actor, batch.id, it);
-  await audit(t, actor, "batch.create", "PurchaseBatch", batch.id, { rateMicro, items: input.items?.length ?? 0, supplierId });
+  await audit(t, actor, "batch.create", "PurchaseBatch", batch.id, { rateMicro, items: input.items?.length ?? 0, supplierId, orderedById, paymentResponsibleById, receivingResponsibleById });
   return batch;
 }
 

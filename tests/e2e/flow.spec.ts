@@ -119,6 +119,10 @@ test("採購、到貨、分配、部分出貨與報表", async ({ page }) => {
   await page.getByRole("button", { name: /吉伊吊娃/ }).first().click();
   await page.getByLabel("到貨來源").selectOption({ index: 1 });
   await page.getByLabel("到貨數量").fill("2");
+  // 採購團到貨必須選收貨確認人
+  await page.getByRole("button", { name: "登記到貨" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "請選擇收貨確認人" })).toBeVisible();
+  await page.getByRole("radiogroup", { name: /收貨確認人/ }).getByRole("radio", { name: "經營者 A" }).click();
   await page.getByRole("button", { name: "登記到貨" }).click();
   await expect(page.getByRole("heading", { name: "分配給待出貨的訂單" })).toBeVisible();
   await page.getByRole("button", { name: "確認保留" }).click();

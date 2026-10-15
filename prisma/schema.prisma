@@ -648,20 +648,112 @@ enum AllocationMethod {
 }
 
 model PurchaseBatch {
+  id                       String              @id @default(cuid())
+  code                     String              @unique
+  name                     String
+  supplier                 String? // 舊版文字欄位；新資料使用 supplierId
+  supplierId               String?
+  supplierRef              Supplier?           @relation(fields: [supplierId], references: [id])
+  status                   PurchaseBatchStatus @default(ORDERED)
+  orderedAt                DateTime?
+  rateMicro                Int // 本批次適用匯率快照（1 JPY = x TWD，×1,000,000）
+  notes                    String?
+  // ── 經營者責任（記錄的是經營者 ID，改名不影響歷史） ──
+  orderedById              String? // 訂購負責人：向官方或代購下單的人
+  orderedBy                Operator?           @relation("BatchOrderedBy", fields: [orderedById], references: [id])
+  paymentResponsibleById   String? // 主要付款負責人：安排付款的人（實際付款人記在每筆供應商付款）
+  paymentResponsibleBy     Operator?           @relation("BatchPaymentResponsible", fields: [paymentResponsibleById], references: [id])
+  receivingResponsibleById String? // 收貨負責人：主要負責收貨清點的人（實際確認人記在每次收貨）
+  receivingResponsibleBy   Operator?           @relation("BatchReceivingResponsible", fields: [receivingResponsibleById], references: [id])
+  responsibilityNote       String?
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+  items                    PurchaseBatchItem[]
+  costs                    BatchCost[]
+  supplierPayments         SupplierPayment[]
+  receivings               ReceivingRecord[]
+}
+
+// 經營者（目前兩位，日後可擴充）。紀錄一律存 id，修改顯示名稱不影響歷史歸屬
+model Operator {
+  id               String            @id @default(cuid())
+  code             String            @unique // 穩定代號，例如 A、B
+  name             String
+  active           Boolean           @default(true)
+  sortOrder        Int               @default(0)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  batchesOrdered   PurchaseBatch[]   @relation("BatchOrderedBy")
+  batchesPayment   PurchaseBatch[]   @relation("BatchPaymentResponsible")
+  batchesReceiving PurchaseBatch[]   @relation("BatchReceivingResponsible")
+  supplierPayments SupplierPayment[]
+  receivings       ReceivingRecord[]
+}
+
+enum SupplierPaymentStatus {
+  PENDING // 已安排、尚未付出
+  PAID // 已付款
+  VOIDED // 已作廢（保留紀錄）
+}
+
+// 付給供應商的款項（與買家付給我們的 Payment 完全分開）
+model SupplierPayment {
+  id         String                @id @default(cuid())
+  batchId    String
+  batch      PurchaseBatch         @relation(fields: [batchId], references: [id])
+  paidById   String? // 實際付款人；null = 未指定
+  paidBy     Operator?             @relation(fields: [paidById], references: [id])
+  paidAt     DateTime
+  amount     Int // 原始幣別金額（整數）
+  currency   String                @default("JPY") // JPY 或 TWD
+  rateMicro  Int? // 實際換匯匯率（選填，只有填寫時才換算台幣）
+  method     String?
+  status     SupplierPaymentStatus @default(PAID)
+  reference  String? // 交易參考編號
+  purpose    String? // 訂金、尾款、運費等
+  note       String?
+  dedupeKey  String?               @unique
+  voidedAt   DateTime?
+  voidReason String?
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  @@index([batchId])
+  @@index([paidById])
+  @@index([paidAt])
+}
+
+// 一次收貨清點事件（同一團可分多次，每次可由不同經營者確認）
+model ReceivingRecord {
+  id           String          @id @default(cuid())
+  batchId      String
+  batch        PurchaseBatch   @relation(fields: [batchId], references: [id])
+  receivedById String // 收貨確認人（必填）
+  receivedBy   Operator        @relation(fields: [receivedById], references: [id])
+  receivedAt   DateTime
+  note         String?
+  dedupeKey    String?         @unique
+  createdAt    DateTime        @default(now())
+  lines        ReceivingLine[]
+
+  @@index([batchId])
+  @@index([receivedById])
+}
+
+model ReceivingLine {
   id          String              @id @default(cuid())
-  code        String              @unique
-  name        String
-  supplier    String? // 舊版文字欄位；新資料使用 supplierId
-  supplierId  String?
-  supplierRef Supplier?           @relation(fields: [supplierId], references: [id])
-  status      PurchaseBatchStatus @default(ORDERED)
-  orderedAt   DateTime?
-  rateMicro   Int // 本批次適用匯率快照（1 JPY = x TWD，×1,000,000）
-  notes       String?
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  items       PurchaseBatchItem[]
-  costs       BatchCost[]
+  recordId    String
+  record      ReceivingRecord     @relation(fields: [recordId], references: [id])
+  batchItemId String
+  batchItem   PurchaseBatchItem   @relation(fields: [batchItemId], references: [id])
+  receivedQty Int // 實收數量（含瑕疵）
+  defectQty   Int                 @default(0) // 其中瑕疵數量（不入可售庫存）
+  missingQty  Int                 @default(0) // 本次清點發現缺少的數量（僅紀錄）
+  note        String?
+  movements   InventoryMovement[]
+
+  @@index([recordId])
+  @@index([batchItemId])
 }
 
 model PurchaseBatchItem {
@@ -683,6 +775,7 @@ model PurchaseBatchItem {
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   allocations    CostAllocation[]
+  receivingLines ReceivingLine[]
   movements      InventoryMovement[]
 
   @@index([batchId])
@@ -763,6 +856,8 @@ model InventoryMovement {
   purchaseBatchItem   PurchaseBatchItem? @relation(fields: [purchaseBatchItemId], references: [id])
   unitCostTwd         Int? // 非批次入庫時的成本快照
   shipmentItemId      String?
+  receivingLineId     String? // 來自哪一次收貨清點
+  receivingLine       ReceivingLine?     @relation(fields: [receivingLineId], references: [id])
   reason              String?
   dedupeKey           String?            @unique
   actorId             String?

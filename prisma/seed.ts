@@ -49,6 +49,14 @@ async function main() {
     }
   }
 
+  // 預設兩位經營者（名稱可在設定頁修改，不會覆寫已改過的名稱）
+  for (const o of [
+    { id: "op_a", code: "A", name: "經營者 A", sortOrder: 1 },
+    { id: "op_b", code: "B", name: "經營者 B", sortOrder: 2 },
+  ]) {
+    await prisma.operator.upsert({ where: { id: o.id }, update: {}, create: o });
+  }
+
   await prisma.appSetting.upsert({ where: { key: "defaultRateMicro" }, update: {}, create: { key: "defaultRateMicro", value: "210000" } });
   console.log("預設資料已建立");
 }

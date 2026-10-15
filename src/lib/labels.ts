@@ -191,3 +191,13 @@ export function parseDay(s: string | null | undefined): Date | null {
   if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
   return new Date(`${s}T00:00:00.000Z`);
 }
+
+export const supplierPaymentStatus: Record<string, [string, Tone]> = {
+  PENDING: ["待付款", "warn"],
+  PAID: ["已付款", "good"],
+  VOIDED: ["已作廢", "muted"],
+};
+
+export const paymentPurpose: Record<string, string> = { DEPOSIT: "訂金", BALANCE: "尾款", FULL: "全額", FEE: "費用", OTHER: "其他" };
+
+export const currencyName: Record<string, string> = { JPY: "日幣", TWD: "台幣" };

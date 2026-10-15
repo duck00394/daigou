@@ -18,6 +18,7 @@ export const NAV: { href: string; label: string; group: string }[] = [
   { href: "/tags", label: "標籤", group: "資料" },
   { href: "/inventory", label: "庫存與採購", group: "營運" },
   { href: "/suppliers", label: "供應商", group: "營運" },
+  { href: "/operators", label: "經營者對帳", group: "營運" },
   { href: "/reports", label: "成本與利潤", group: "營運" },
   { href: "/settings", label: "匯出、備份與設定", group: "營運" },
 ];

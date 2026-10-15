@@ -5,12 +5,30 @@ import { tx, prisma, BizError } from "@/server/db";
 import * as inv from "@/server/services/inventory";
 import * as pur from "@/server/services/purchase";
 import * as ship from "@/server/services/shipping";
+import { createReceivingRecord } from "@/server/services/receiving";
 import { setDefaultRate } from "@/server/services/settings";
 import { audit } from "@/server/services/common";
 import { parseDateTimeInput, parseDay } from "@/lib/labels";
 
-export async function receiveAction(input: { productId: string; qty: number; batchItemId: string | null; unitCostTwd: number | null; reason: string | null; dedupeKey: string }) {
+export async function receiveAction(input: { productId: string; qty: number; batchItemId: string | null; unitCostTwd: number | null; reason: string | null; dedupeKey: string; receivedById?: string | null; defectQty?: number }) {
   return run(async (a) => {
+    // 採購團到貨：一律建立收貨紀錄（收貨確認人必填），良品才入庫
+    if (input.batchItemId) {
+      const batchItemId = input.batchItemId;
+      const good = await tx(async (t) => {
+        const bi = await t.purchaseBatchItem.findUnique({ where: { id: batchItemId } });
+        if (!bi || bi.productId !== input.productId) throw new BizError("採購明細與商品不符");
+        const r = await createReceivingRecord(t, a, {
+          batchId: bi.batchId,
+          receivedById: typeof input.receivedById === "string" ? input.receivedById : "",
+          dedupeKey: `recv:${input.dedupeKey}`,
+          lines: [{ batchItemId, receivedQty: input.qty, defectQty: input.defectQty ?? 0 }],
+        });
+        return r.record.lines.reduce((s, l) => s + l.receivedQty - l.defectQty, 0);
+      });
+      if (good <= 0) return { plan: [], unallocated: 0 };
+      return tx((t) => inv.previewAllocation(t, input.productId, good));
+    }
     await tx((t) => inv.receiveStock(t, a, input));
     return tx((t) => inv.previewAllocation(t, input.productId, input.qty));
   });
@@ -57,10 +75,24 @@ const batchItem = z.object({
   weightGrams: z.number().int().min(0).nullish(),
   markOrderItemIds: z.array(z.string()).optional(),
 });
-export async function createBatchAction(input: { name: string; supplierId?: string | null; supplier?: string | null; rate: string | null; orderedAt: string | null; notes: string | null; items: z.infer<typeof batchItem>[] }) {
+export async function createBatchAction(input: {
+  name: string;
+  supplierId?: string | null;
+  supplier?: string | null;
+  rate: string | null;
+  orderedAt: string | null;
+  notes: string | null;
+  items: z.infer<typeof batchItem>[];
+  orderedById?: string | null;
+  paymentResponsibleById?: string | null;
+  receivingResponsibleById?: string | null;
+  responsibilityNote?: string | null;
+}) {
   return run(async (a) => {
     const items = z.array(batchItem).max(300).parse(input.items);
-    const b = await tx((t) => pur.createBatch(t, a, { ...input, orderedAt: parseDateTimeInput(input.orderedAt), items }), { timeout: 120_000 });
+    const opId = z.string().max(64).nullish();
+    const resp = z.object({ orderedById: opId, paymentResponsibleById: opId, receivingResponsibleById: opId, responsibilityNote: z.string().max(500).nullish() }).parse(input);
+    const b = await tx((t) => pur.createBatch(t, a, { ...input, ...resp, orderedAt: parseDateTimeInput(input.orderedAt), items }), { timeout: 120_000 });
     return { id: b.id };
   });
 }

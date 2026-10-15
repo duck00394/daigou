@@ -3,6 +3,8 @@ import { currentUser } from "@/server/auth";
 import { sheetResponse } from "@/server/exporter";
 import { inventorySummary } from "@/server/services/inventory";
 import { categoryDetail } from "@/server/services/reports";
+import { formatRate, jpyToTwd } from "@/lib/money";
+import { paymentPurpose, supplierPaymentStatus } from "@/lib/labels";
 import { fmtDate, fmtDay, orderStatus, paymentStatus, procurementStatus, shipStatus, productStatus, orderSource, refundStatus, importRowStatus, categoryType } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
@@ -76,12 +78,30 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
     }
     case "purchases": {
       const items = await prisma.purchaseBatchItem.findMany({
-        include: { batch: { include: { supplierRef: true } }, product: { include: { seriesRef: true, productType: true } }, allocations: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
+        include: { batch: { include: { supplierRef: true, orderedBy: true, paymentResponsibleBy: true, receivingResponsibleBy: true } }, product: { include: { seriesRef: true, productType: true } }, allocations: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
         orderBy: [{ batch: { createdAt: "asc" } }, { createdAt: "asc" }],
       });
       return sheetResponse("採購品項", [
-        ["採購團", "採購團名稱", "供應商", "狀態", "匯率", "商品編號", "商品", "系列", "類型", "規格", "幣別", "預估單價", "實際單價", "對客售價", "數量", "已取消", "已到貨", "分攤費用（台幣）"],
-        ...items.map((i) => [i.batch.code, i.batch.name, i.batch.supplierRef?.name ?? i.batch.supplier ?? "", i.batch.status, i.batch.rateMicro / 1_000_000, i.product.code, i.product.name, i.product.seriesRef?.name ?? "", i.product.productType?.name ?? "", i.specNote ?? "", i.currency, i.estUnitCost, i.actualUnitCost, i.salePriceTwd, i.qty - i.cancelledQty, i.cancelledQty, i.movements.reduce((s, m) => s + m.onHandDelta, 0), i.allocations.reduce((s, a) => s + a.amountTwd, 0)]),
+        ["採購團", "採購團名稱", "供應商", "狀態", "匯率", "商品編號", "商品", "系列", "類型", "規格", "幣別", "預估單價", "實際單價", "對客售價", "數量", "已取消", "已到貨", "分攤費用（台幣）", "訂購負責人", "主要付款負責人", "收貨負責人"],
+        ...items.map((i) => [i.batch.code, i.batch.name, i.batch.supplierRef?.name ?? i.batch.supplier ?? "", i.batch.status, i.batch.rateMicro / 1_000_000, i.product.code, i.product.name, i.product.seriesRef?.name ?? "", i.product.productType?.name ?? "", i.specNote ?? "", i.currency, i.estUnitCost, i.actualUnitCost, i.salePriceTwd, i.qty - i.cancelledQty, i.cancelledQty, i.movements.reduce((s, m) => s + m.onHandDelta, 0), i.allocations.reduce((s, a) => s + a.amountTwd, 0), i.batch.orderedBy?.name ?? "未指定", i.batch.paymentResponsibleBy?.name ?? "未指定", i.batch.receivingResponsibleBy?.name ?? "未指定"]),
+      ], format);
+    }
+    case "supplier-payments": {
+      const rows = await prisma.supplierPayment.findMany({ include: { paidBy: true, batch: { include: { supplierRef: true } } }, orderBy: [{ paidAt: "asc" }, { createdAt: "asc" }] });
+      return sheetResponse("供應商付款", [
+        ["付款日", "採購團", "採購團名稱", "供應商", "實際付款人代號", "實際付款人", "金額", "幣別", "實際匯率", "依實際匯率換算台幣", "用途", "付款方式", "狀態", "交易參考編號", "備註", "作廢原因"],
+        ...rows.map((p) => [
+          fmtDate(p.paidAt, true), p.batch.code, p.batch.name, p.batch.supplierRef?.name ?? p.batch.supplier ?? "", p.paidBy?.code ?? "", p.paidBy?.name ?? "未指定", p.amount, p.currency,
+          p.rateMicro ? formatRate(p.rateMicro) : "", p.currency === "TWD" ? p.amount : p.rateMicro ? jpyToTwd(p.amount, p.rateMicro) : "",
+          p.purpose ? (paymentPurpose[p.purpose] ?? p.purpose) : "", p.method ?? "", L(supplierPaymentStatus, p.status), p.reference ?? "", p.note ?? "", p.voidReason ?? "",
+        ]),
+      ], format);
+    }
+    case "receivings": {
+      const rows = await prisma.receivingLine.findMany({ include: { record: { include: { receivedBy: true, batch: true } }, batchItem: { include: { product: true } } }, orderBy: [{ record: { receivedAt: "asc" } }, { id: "asc" }] });
+      return sheetResponse("收貨清點", [
+        ["收貨日", "採購團", "採購團名稱", "收貨確認人代號", "收貨確認人", "商品編號", "商品", "實收", "瑕疵", "良品入庫", "缺少", "品項備註", "收貨備註"],
+        ...rows.map((l) => [fmtDate(l.record.receivedAt, true), l.record.batch.code, l.record.batch.name, l.record.receivedBy.code, l.record.receivedBy.name, l.batchItem.product.code, l.batchItem.product.name, l.receivedQty, l.defectQty, l.receivedQty - l.defectQty, l.missingQty, l.note ?? "", l.record.note ?? ""]),
       ], format);
     }
     case "inventory": {

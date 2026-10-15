@@ -1,0 +1,48 @@
+// 手機：負責人、付款人與收貨確認人都是一排大按鈕，不必進多層選單
+import { test, expect } from "@playwright/test";
+import { login, toast } from "./helpers";
+
+test("手機：建團選負責人、登記付款與收貨，對帳頁不橫向捲動", async ({ page }) => {
+  await login(page);
+  await page.goto("/inventory/batches/new");
+  await page.getByLabel("採購團名稱").fill("手機雙人團");
+  await page.getByRole("radiogroup", { name: /訂購負責人/ }).getByRole("radio").first().click();
+  await page.getByRole("radiogroup", { name: /收貨負責人/ }).getByRole("radio").nth(1).click();
+  await page.getByRole("button", { name: "建立採購團" }).click();
+  await expect(page.getByRole("heading", { name: /手機雙人團/ })).toBeVisible();
+  const batchId = page.url().split("/inventory/batches/")[1].split("?")[0];
+
+  await page.getByLabel("IP／系列").selectOption({ label: "吉伊卡哇" });
+  await page.getByLabel("商品類型").selectOption({ label: "吊娃" });
+  await page.getByRole("button", { name: "＋ 兔兔" }).click();
+  const r1 = page.getByRole("table", { name: "批次新增採購品項" }).getByRole("row").filter({ hasText: "第 1 列" });
+  await r1.getByLabel("單價").fill("420");
+  await r1.getByLabel("數量").fill("2");
+  await page.getByRole("button", { name: "批次新增 1 列" }).click();
+  await page.getByRole("button", { name: "確認新增 1 列" }).click();
+  await page.getByRole("button", { name: "知道了" }).click();
+
+  await page.getByRole("button", { name: "＋ 登記付款" }).click();
+  const pay = page.getByRole("form", { name: "登記付款" });
+  await pay.getByRole("radiogroup", { name: "實際付款人" }).getByRole("radio").nth(1).click();
+  await pay.getByLabel("付款金額").fill("840");
+  await pay.getByRole("button", { name: "儲存付款" }).click();
+  await toast(page, "已登記付款");
+
+  await page.getByRole("button", { name: "＋ 登記這次收貨" }).click();
+  const rcv = page.getByRole("form", { name: "登記收貨" });
+  const box = await rcv.getByRole("radio").first().boundingBox();
+  expect(box!.height).toBeGreaterThanOrEqual(40); // 手指好點
+  await rcv.getByRole("button", { name: "全部到齊" }).click();
+  await rcv.getByRole("button", { name: "儲存收貨" }).click();
+  await toast(page, "良品 2 件已入庫");
+  let overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: "test-results/mobile_batch_operators.png", fullPage: true });
+
+  await page.goto(`/operators?batch=${batchId}`);
+  await expect(page.getByTestId("op-card-B")).toContainText("實收 2 件");
+  overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: "test-results/mobile_operators.png", fullPage: true });
+});

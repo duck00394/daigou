@@ -1,9 +1,10 @@
-import { prisma } from "@/server/db";
+import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { getDefaultRateMicro } from "@/server/services/settings";
 import { businessDataCount } from "@/server/services/backup";
+import { listOperators } from "@/server/services/operators";
 import { PageHeader, Section, LinkButton, Twd, Empty } from "@/components/ui";
-import { RateForm, NameList, ExpenseForm, DeleteExpense, RestoreForm, LogoutAll } from "./parts";
+import { RateForm, NameList, OperatorList, ExpenseForm, DeleteExpense, RestoreForm, LogoutAll } from "./parts";
 import { costKind, fmtDate } from "@/lib/labels";
 import { formatRate } from "@/lib/money";
 
@@ -19,17 +20,20 @@ const EXPORTS: [string, string, string][] = [
   ["inventory", "庫存流水", "每一次到貨、保留、出貨與調整"],
   ["shipments", "出貨紀錄", "不含收件資料"],
   ["to-ship", "待出貨清單", "依買家排序"],
+  ["supplier-payments", "供應商付款", "每筆付給供應商的款項、實際付款人、幣別與狀態（含已作廢）"],
+  ["receivings", "收貨清點", "每次收貨的確認人、實收、瑕疵與缺少數量"],
 ];
 
 export default async function Settings() {
   await requireUser();
-  const [rate, chars, types, expenses, dataCount, audits] = await Promise.all([
+  const [rate, chars, types, expenses, dataCount, audits, operators] = await Promise.all([
     getDefaultRateMicro(prisma),
     prisma.character.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.productType.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.expense.findMany({ orderBy: { date: "desc" }, take: 20 }),
     businessDataCount(),
     prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 30 }),
+    tx((t) => listOperators(t, { includeInactive: true })),
   ]);
   return (
     <div className="space-y-4">
@@ -37,6 +41,9 @@ export default async function Settings() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Section title="預設匯率">
           <RateForm current={formatRate(rate)} />
+        </Section>
+        <Section title="經營者管理" actions={<LinkButton small href="/operators">經營者對帳</LinkButton>}>
+          <OperatorList items={operators} />
         </Section>
         <Section title="帳號安全">
           <p className="mb-3 text-sm text-ink-2">管理者密碼設定在伺服器的環境變數 ADMIN_PASSWORD_HASH，修改方式見 README。登入 3 天未使用或 14 天後需要重新登入；同一來源連續輸錯 5 次會暫停 15 分鐘。</p>

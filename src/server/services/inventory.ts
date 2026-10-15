@@ -100,7 +100,7 @@ async function itemNeed(t: Tx, orderItemId: string) {
 export async function receiveStock(
   t: Tx,
   actor: Actor,
-  input: { productId: string; qty: number; batchItemId?: string | null; unitCostTwd?: number | null; reason?: string | null; dedupeKey?: string },
+  input: { productId: string; qty: number; batchItemId?: string | null; unitCostTwd?: number | null; reason?: string | null; dedupeKey?: string; receivingLineId?: string | null },
 ) {
   if (!Number.isInteger(input.qty) || input.qty <= 0) throw new BizError("到貨數量必須是正整數");
   if (input.dedupeKey) {
@@ -128,6 +128,7 @@ export async function receiveStock(
       unitCostTwd: input.batchItemId ? null : (input.unitCostTwd ?? null),
       reason: input.reason ?? (input.batchItemId ? "採購到貨" : "手動入庫"),
       dedupeKey: input.dedupeKey,
+      receivingLineId: input.receivingLineId ?? null,
       actorId: actor.userId,
     },
   });

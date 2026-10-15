@@ -5,6 +5,7 @@ import { setRateAction, addExpenseAction, deleteExpenseAction } from "@/actions/
 import { saveCharacterAction, saveProductTypeAction } from "@/actions/catalog";
 import { verifyBackupAction, restoreBackupAction, logoutAllAction } from "@/actions/system";
 import { costKind } from "@/lib/labels";
+import { saveOperatorAction } from "@/actions/operators";
 
 export function RateForm({ current }: { current: string }) {
   const [v, setV] = useState(current);
@@ -147,4 +148,47 @@ export function RestoreForm({ hasData }: { hasData: boolean }) {
 export function LogoutAll() {
   const { run } = useRun();
   return <ConfirmButton label="登出所有裝置" title="登出所有裝置" message="所有已登入的裝置（包含這一台）都需要重新輸入密碼。" confirmLabel="登出所有裝置" onConfirm={() => run(() => logoutAllAction(), { success: "已登出所有裝置", onOk: () => (location.href = "/login") })} />;
+}
+
+export function OperatorList({ items }: { items: { id: string; code: string; name: string; active: boolean }[] }) {
+  const [names, setNames] = useState<Record<string, string>>(() => Object.fromEntries(items.map((i) => [i.id, i.name])));
+  const [adding, setAdding] = useState<{ code: string; name: string } | null>(null);
+  const { run, pending } = useRun();
+  // 伺服器資料更新時只同步名稱有變的那一位，其他人正在編輯的內容不會被蓋掉
+  const [server, setServer] = useState<Record<string, string>>(() => Object.fromEntries(items.map((i) => [i.id, i.name])));
+  if (items.some((i) => server[i.id] !== i.name)) {
+    const changed = items.filter((i) => server[i.id] !== i.name);
+    setServer(Object.fromEntries(items.map((i) => [i.id, i.name])));
+    setNames((n) => ({ ...n, ...Object.fromEntries(changed.map((i) => [i.id, i.name])) }));
+  }
+  return (
+    <div className="space-y-2">
+      <p className="text-[13px] text-mute">記錄「誰向供應商下單、誰實際付款、誰收貨清點」用，不是買家，也不是登入帳號。改名只改顯示，舊紀錄仍歸同一人。</p>
+      <ul className="space-y-2">
+        {items.map((i) => {
+          const dirty = (names[i.id] ?? "") !== i.name;
+          return (
+            <li key={i.id} className="flex flex-wrap items-center gap-2">
+              <span className="num w-8 shrink-0 rounded bg-line-2 px-1.5 py-1 text-center text-[13px] text-ink-2" title="固定代號">{i.code}</span>
+              <input aria-label={`經營者 ${i.code} 名稱`} className={`${inputCls} min-w-0 flex-1`} value={names[i.id] ?? ""} onChange={(e) => setNames({ ...names, [i.id]: e.target.value })} disabled={!i.active} />
+              {dirty && <Button small variant="primary" aria-label={`儲存經營者 ${i.code}`} loading={pending} onClick={() => run(() => saveOperatorAction(i.id, { name: names[i.id] }), { success: "已更新名稱" })}>儲存</Button>}
+              {(items.length > 2 || !i.active) && (
+                <Button small variant="ghost" onClick={() => run(() => saveOperatorAction(i.id, { name: i.name, active: !i.active }), { success: i.active ? "已停用" : "已啟用" })}>{i.active ? "停用" : "啟用"}</Button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {adding ? (
+        <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); run(() => saveOperatorAction(null, adding), { success: "已新增經營者", onOk: () => setAdding(null) }); }}>
+          <TextField label="代號" className="w-20" value={adding.code} onChange={(e) => setAdding({ ...adding, code: e.target.value })} placeholder="C" maxLength={8} />
+          <TextField label="名稱" className="flex-1" value={adding.name} onChange={(e) => setAdding({ ...adding, name: e.target.value })} />
+          <Button type="submit" variant="primary" loading={pending}>新增</Button>
+          <Button onClick={() => setAdding(null)}>取消</Button>
+        </form>
+      ) : (
+        <Button small variant="ghost" onClick={() => setAdding({ code: "", name: "" })}>＋ 新增經營者</Button>
+      )}
+    </div>
+  );
 }

@@ -4,13 +4,20 @@ import { useRouter } from "next/navigation";
 import { Button, Modal, TextField, SelectField, useRun, useIdemKey, inputCls, notify } from "@/components/client";
 import { ProductPicker, type ProductOpt } from "@/components/pickers";
 import { receiveAction, allocateAction, adjustAction, createBatchAction } from "@/actions/ops";
+import { OperatorPicker, type OperatorOption } from "@/components/operator-picker";
 
 type Plan = { orderItemId: string; orderNo: string; buyerName: string; need: number; allocate: number };
 
 /** 到貨登記：入庫後列出待出貨的訂單，確認後保留給訂單 */
-export function ReceiveForm({ initialProduct, batchItems }: { initialProduct: ProductOpt | null; batchItems: { id: string; productId: string; label: string; remaining: number }[] }) {
+export function ReceiveForm({ initialProduct, batchItems, operators }: { initialProduct: ProductOpt | null; batchItems: { id: string; productId: string; label: string; remaining: number; defaultReceiver: string | null }[]; operators: OperatorOption[] }) {
   const [product, setProduct] = useState<ProductOpt | null>(initialProduct);
-  const [source, setSource] = useState("");
+  const [source, setSourceRaw] = useState("");
+  const [receiver, setReceiver] = useState<string | null>(null);
+  const [defect, setDefect] = useState("");
+  const setSource = (v: string) => {
+    setSourceRaw(v);
+    setReceiver(batchItems.find((b) => b.id === v)?.defaultReceiver ?? null);
+  };
   const [qty, setQty] = useState("");
   const [cost, setCost] = useState("");
   const [reason, setReason] = useState("");
@@ -33,6 +40,12 @@ export function ReceiveForm({ initialProduct, batchItems }: { initialProduct: Pr
         <TextField label="到貨數量" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} />
         {source === "" ? <TextField label="單件成本（台幣，選填）" inputMode="numeric" value={cost} onChange={(e) => setCost(e.target.value)} hint="空白時銷貨成本改用訂單的預估成本" /> : <div />}
         {source === "" && <TextField label="原因" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例：期初庫存、現貨購入" className="sm:col-span-2" />}
+        {source !== "" && <TextField label="其中瑕疵（選填，不入庫）" inputMode="numeric" value={defect} onChange={(e) => setDefect(e.target.value)} placeholder="0" />}
+        {source !== "" && (
+          <div className="sm:col-span-2">
+            <OperatorPicker label="收貨確認人" required allowNone={false} operators={operators} value={receiver} onChange={setReceiver} hint="多個品項一起到貨時，建議到採購團頁面一次登記整批收貨" />
+          </div>
+        )}
       </div>
       <Button
         variant="primary"
@@ -43,10 +56,14 @@ export function ReceiveForm({ initialProduct, batchItems }: { initialProduct: Pr
           if (!Number.isInteger(n) || n <= 0) return notify("到貨數量必須是正整數");
           const c = cost.trim() === "" ? null : Number(cost);
           if (c !== null && (!Number.isInteger(c) || c < 0)) return notify("成本必須是整數");
-          run(() => receiveAction({ productId: product.id, qty: n, batchItemId: source || null, unitCostTwd: c, reason: reason || null, dedupeKey: idem.key }), {
-            success: `已登記到貨 ${n} 件`,
+          const dq = defect.trim() === "" ? 0 : Number(defect);
+          if (source && (!Number.isInteger(dq) || dq < 0 || dq > n)) return notify("瑕疵數量必須是 0 到到貨數量之間的整數");
+          if (source && !receiver) return notify("請選擇收貨確認人");
+          run(() => receiveAction({ productId: product.id, qty: n, batchItemId: source || null, unitCostTwd: c, reason: reason || null, dedupeKey: idem.key, receivedById: source ? receiver : null, defectQty: source ? dq : 0 }), {
+            success: source && dq ? `已登記到貨 ${n} 件（良品 ${n - dq} 件入庫）` : `已登記到貨 ${n} 件`,
             onOk: (d) => {
               idem.renew();
+              setDefect("");
               setPlan({ ...d, batchItemId: source || null });
               setAlloc(Object.fromEntries(d.plan.map((p) => [p.orderItemId, String(p.allocate)])));
             },

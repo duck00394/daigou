@@ -28,8 +28,12 @@ export const TABLES = [
   "buyerTag",
   "buyerIncident",
   "buyerMerge",
+  "operator",
   "purchaseBatch",
   "purchaseBatchItem",
+  "supplierPayment",
+  "receivingRecord",
+  "receivingLine",
   "batchCost",
   "costAllocation",
   "expense",
@@ -47,6 +51,8 @@ export const TABLES = [
   "auditLog",
 ] as const;
 type Table = (typeof TABLES)[number];
+/** 較新版本才加入的資料表：舊備份沒有時視為空白，仍可還原 */
+const ADDED_LATER: Table[] = ["operator", "supplierPayment", "receivingRecord", "receivingLine"];
 
 type AnyDelegate = {
   findMany: (args?: unknown) => Promise<Record<string, unknown>[]>;
@@ -121,11 +127,17 @@ export function verifyBackup(raw: unknown): BackupFile {
   if (!b || b.format !== BACKUP_FORMAT) throw new BizError("不是本系統的備份檔");
   if (b.version !== BACKUP_VERSION) throw new BizError(`備份檔版本 ${b.version} 不受支援`);
   if (!b.data || typeof b.data !== "object") throw new BizError("備份檔缺少資料");
+  if (checksumOf(b.data) !== b.checksum) throw new BizError("備份檔內容檢查碼不符，檔案可能已損毀或被修改");
+  for (const t of ADDED_LATER) {
+    if (b.data[t] === undefined) {
+      b.data[t] = [];
+      b.counts = { ...b.counts, [t]: 0 };
+    }
+  }
   for (const t of TABLES) {
     if (!Array.isArray(b.data[t])) throw new BizError(`備份檔缺少資料表 ${t}`);
     if (b.counts?.[t] !== b.data[t].length) throw new BizError(`資料表 ${t} 的筆數與備份紀錄不符`);
   }
-  if (checksumOf(b.data) !== b.checksum) throw new BizError("備份檔內容檢查碼不符，檔案可能已損毀或被修改");
   return b;
 }
 
