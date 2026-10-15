@@ -9,13 +9,13 @@ export const metadata = { title: "首頁" };
 
 const QUICK = [
   { href: "/paste", label: "貼上加單", main: true },
-  { href: "/import", label: "Excel 匯入" },
-  { href: "/products/new", label: "新增商品" },
+  { href: "/inventory/batches/new", label: "新增採購團", main: true },
+  { href: "/inventory?tab=batches", label: "登記收貨／採購團" },
   { href: "/orders/new", label: "新增訂單" },
   { href: "/payments", label: "待收款" },
   { href: "/shipping", label: "待出貨" },
-  { href: "/inventory", label: "待到貨" },
-  { href: "/groupbuys?closing=1", label: "即將截止的代購團" },
+  { href: "/inventory?tab=stock", label: "庫存與自留" },
+  { href: "/import", label: "Excel 匯入" },
 ];
 
 export default async function Home() {

@@ -16,10 +16,26 @@ type Template = {
 };
 type Resp = { orderedById: string | null; paymentResponsibleById: string | null; receivingResponsibleById: string | null };
 
-export function NewBatchForm({ suppliers: init, defaultRate, operators, templates, initialFrom }: { suppliers: { id: string; name: string }[]; defaultRate: string; operators: OperatorOption[]; templates: Template[]; initialFrom: string | null }) {
+export function NewBatchForm({
+  suppliers: init,
+  defaultRate,
+  operators,
+  templates,
+  initialFrom,
+  categories,
+  initialCategory,
+}: {
+  suppliers: { id: string; name: string }[];
+  defaultRate: string;
+  operators: OperatorOption[];
+  templates: Template[];
+  initialFrom: string | null;
+  categories: { id: string; name: string }[];
+  initialCategory: string | null;
+}) {
   const [suppliers, setSuppliers] = useState(init);
   const first = templates.find((x) => x.fromBatch.id === initialFrom) ?? null;
-  const [f, setF] = useState({ name: "", supplierId: first?.supplierId ?? init[0]?.id ?? "", rate: defaultRate, orderedAt: toDateTimeInput(new Date()), notes: "", responsibilityNote: "" });
+  const [f, setF] = useState({ name: "", supplierId: first?.supplierId ?? init[0]?.id ?? "", rate: defaultRate, orderedAt: toDateTimeInput(new Date()), notes: "", responsibilityNote: "", categoryId: initialCategory ?? "", expectedAt: "", supplierOrderNo: "", orderUrl: "" });
   const [resp, setResp] = useState<Resp>(first ? pick(first) : { orderedById: null, paymentResponsibleById: null, receivingResponsibleById: null });
   const [copiedFrom, setCopiedFrom] = useState<Template | null>(first);
   const [confirmed, setConfirmed] = useState(false);
@@ -35,13 +51,16 @@ export function NewBatchForm({ suppliers: init, defaultRate, operators, template
         e.preventDefault();
         if (!f.name.trim()) return notify("請填寫採購團名稱");
         if (needConfirm) return notify("請先確認從其他採購團帶入的負責人");
-        run(() => createBatchAction({ name: f.name, supplierId: f.supplierId || null, rate: f.rate, orderedAt: f.orderedAt, notes: f.notes || null, items: [], ...resp, responsibilityNote: f.responsibilityNote || null }), {
+        run(() => createBatchAction({ name: f.name, supplierId: f.supplierId || null, rate: f.rate, orderedAt: f.orderedAt, notes: f.notes || null, items: [], ...resp, responsibilityNote: f.responsibilityNote || null, categoryId: f.categoryId || null, expectedAt: f.expectedAt || null, supplierOrderNo: f.supplierOrderNo || null, orderUrl: f.orderUrl || null }), {
           success: "已建立採購團，接著批次新增系列商品",
           onOk: (d) => router.push(`/inventory/batches/${d.id}?bulk=1`),
         });
       }}
     >
-      <TextField label="採購團名稱" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="例：10/20 吉伊卡哇官網團" />
+      <TextField label="採購團名稱（必填）" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="例：聖誕 A 團（代購小美）" />
+      {categories.length > 0 && (
+        <SelectField label="所屬活動／系列" value={f.categoryId} onChange={(e) => setF({ ...f, categoryId: e.target.value })} options={[["", "不指定"], ...categories.map((c) => [c.id, c.name] as [string, string])]} hint="同一活動的各團可以在活動頁一起比較價格與進度" />
+      )}
       <div>
         {newSupplier === null ? (
           <div className="flex items-end gap-2">
@@ -68,7 +87,15 @@ export function NewBatchForm({ suppliers: init, defaultRate, operators, template
       <div className="grid gap-3 sm:grid-cols-2">
         <TextField label="匯率（1 日圓 = ? 台幣）" value={f.rate} onChange={(e) => setF({ ...f, rate: e.target.value })} hint="建立後鎖定，之後修改預設匯率不影響這一團" inputMode="decimal" />
         <TextField label="下單時間" type="datetime-local" value={f.orderedAt} onChange={(e) => setF({ ...f, orderedAt: e.target.value })} />
+        <TextField label="預計到貨日（選填）" type="date" value={f.expectedAt} onChange={(e) => setF({ ...f, expectedAt: e.target.value })} />
       </div>
+      <details className="rounded-lg border border-line-2 px-3 py-2">
+        <summary className="cursor-pointer text-sm text-ai">更多選填資料（訂單編號、訂購連結）</summary>
+        <div className="mt-2 grid gap-3 sm:grid-cols-2">
+          <TextField label="訂單編號" value={f.supplierOrderNo} onChange={(e) => setF({ ...f, supplierOrderNo: e.target.value })} />
+          <TextField label="訂購連結" value={f.orderUrl} onChange={(e) => setF({ ...f, orderUrl: e.target.value })} placeholder="https://" />
+        </div>
+      </details>
 
       <fieldset className="space-y-3 rounded-xl border border-line p-3">
         <legend className="px-1 text-[14px] font-semibold">負責人</legend>

@@ -116,7 +116,7 @@ test("桌面：A 下單、A 付訂金 B 付尾款、A B 分批收貨，對帳依
   await expect(page.getByTestId("paid-A-JPY")).toHaveText("¥3,000");
 
   // 8. 沿用負責人建立新團：必須確認，且不複製付款
-  await page.goto("/inventory?tab=batches");
+  await page.goto("/inventory?tab=batches&open=0"); // 已全部到貨的團預設收起
   await page.getByRole("link", { name: /E2E 雙人團/ }).click();
   await page.getByRole("link", { name: "沿用負責人建立新團" }).click();
   await expect(page.getByRole("button", { name: "建立採購團" })).toBeDisabled();

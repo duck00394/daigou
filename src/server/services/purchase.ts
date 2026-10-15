@@ -38,9 +38,14 @@ export async function createBatch(
     paymentResponsibleById?: string | null; // 主要付款負責人
     receivingResponsibleById?: string | null; // 收貨負責人
     responsibilityNote?: string | null;
+    categoryId?: string | null; // 所屬代購活動／系列
+    supplierOrderNo?: string | null;
+    orderUrl?: string | null;
+    expectedAt?: Date | null;
   },
 ) {
   if (!input.name?.trim()) throw new BizError("請填寫採購團名稱");
+  if (input.categoryId && !(await t.category.findUnique({ where: { id: input.categoryId } }))) throw new BizError("找不到活動／系列");
   const rateMicro = input.rate ? safeRate(input.rate) : await getDefaultRateMicro(t);
   let supplierId = input.supplierId ?? null;
   const supplierName = emptyToNull(input.supplier ?? null);
@@ -67,6 +72,14 @@ export async function createBatch(
       paymentResponsibleById,
       receivingResponsibleById,
       responsibilityNote: emptyToNull(input.responsibilityNote ?? null),
+      categoryId: input.categoryId || null,
+      supplierOrderNo: emptyToNull(input.supplierOrderNo ?? null),
+      orderUrl: (() => {
+        const u = emptyToNull(input.orderUrl ?? null);
+        if (u && !/^https?:\/\//i.test(u)) throw new BizError("訂購連結請以 http:// 或 https:// 開頭");
+        return u;
+      })(),
+      expectedAt: input.expectedAt ?? null,
     },
   });
   for (const it of input.items ?? []) await addBatchItem(t, actor, batch.id, it);

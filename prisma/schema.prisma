@@ -140,7 +140,10 @@ model Supplier {
   id              String          @id @default(cuid())
   name            String          @unique
   defaultCurrency String          @default("JPY")
+  kind            String? // OFFICIAL_ONLINE 官網、OFFICIAL_STORE 實體店、AGENT 代購、AGENT_GROUP 代購群、INDIVIDUAL 個人賣家、OTHER
   contact         String?
+  paymentMethod   String? // 常用付款方式
+  orderUrl        String? // 訂購連結
   notes           String?
   active          Boolean         @default(true)
   createdAt       DateTime        @default(now())
@@ -249,6 +252,7 @@ model Category {
   products   ProductCategory[]
   orderItems OrderItem[]
   groupBuys  GroupBuy[]
+  batches    PurchaseBatch[]
 }
 
 model ProductCategory {
@@ -658,6 +662,11 @@ model PurchaseBatch {
   orderedAt                DateTime?
   rateMicro                Int // 本批次適用匯率快照（1 JPY = x TWD，×1,000,000）
   notes                    String?
+  categoryId               String? // 所屬代購活動／系列（例：吉伊卡哇聖誕系列）
+  category                 Category?           @relation(fields: [categoryId], references: [id])
+  supplierOrderNo          String? // 供應商訂單編號
+  orderUrl                 String? // 訂購連結
+  expectedAt               DateTime?           @db.Date // 預計到貨日
   // ── 經營者責任（記錄的是經營者 ID，改名不影響歷史） ──
   orderedById              String? // 訂購負責人：向官方或代購下單的人
   orderedBy                Operator?           @relation("BatchOrderedBy", fields: [orderedById], references: [id])
@@ -770,6 +779,7 @@ model PurchaseBatchItem {
   specNote       String?
   weightGrams    Int? // 本筆總重（依重量分攤時使用）
   cancelledQty   Int                 @default(0)
+  cancelReason   String? // 最近一次砍單原因（每次砍單的完整紀錄在稽核紀錄）
   dedupeKey      String?             @unique // 批次新增的列識別碼，重試時不重複建立
   notes          String?
   createdAt      DateTime            @default(now())
@@ -841,6 +851,7 @@ enum MovementKind {
   RESERVE // 保留給訂單明細：保留 +n
   UNRESERVE // 取消保留（含取消訂單釋放）：保留 −n
   SHIP // 出貨：在庫 −n、保留 −n
+  KEEP // 自留：從可售庫存移到自己收藏（在庫 −n；取消自留為 +n），保留成本來源
 }
 
 model InventoryMovement {

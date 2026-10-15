@@ -46,3 +46,21 @@ test("手機：建團選負責人、登記付款與收貨，對帳頁不橫向�
   expect(overflow).toBeLessThanOrEqual(1);
   await page.screenshot({ path: "test-results/mobile_operators.png", fullPage: true });
 });
+
+test("手機：庫存以卡片顯示，可直接自留與改回出售", async ({ page }) => {
+  await login(page);
+  await page.goto("/inventory?tab=stock&q=吉伊卡哇 兔兔 吊娃");
+  const card = page.getByRole("listitem").filter({ hasText: "吉伊卡哇 兔兔 吊娃" });
+  await expect(card.getByText("可售")).toBeVisible();
+  await card.getByRole("button", { name: /^自留/ }).click();
+  const dlg = page.getByRole("dialog");
+  await dlg.getByRole("button", { name: "自留 1 件" }).click();
+  await toast(page, "已自留 1 件");
+  await card.getByRole("button", { name: "自留 1" }).click();
+  await dlg.getByRole("radio", { name: /改回出售/ }).click();
+  await dlg.getByRole("button", { name: "改回出售 1 件" }).click();
+  await toast(page, "已改回出售 1 件");
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: "test-results/mobile_stock.png", fullPage: true });
+});

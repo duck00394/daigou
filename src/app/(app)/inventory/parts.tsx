@@ -5,6 +5,7 @@ import { Button, Modal, TextField, SelectField, useRun, useIdemKey, inputCls, no
 import { ProductPicker, type ProductOpt } from "@/components/pickers";
 import { receiveAction, allocateAction, adjustAction, createBatchAction } from "@/actions/ops";
 import { OperatorPicker, type OperatorOption } from "@/components/operator-picker";
+import { keepAction } from "@/actions/batches";
 
 type Plan = { orderItemId: string; orderNo: string; buyerName: string; need: number; allocate: number };
 
@@ -231,6 +232,39 @@ export function CreateBatchFromDemand({ demand, defaultRate }: { demand: { produ
           </tbody>
         </table>
         <p className="mt-2 text-[12px] text-mute">相關訂單明細會標記為「已向供應商下單」。</p>
+      </Modal>
+    </>
+  );
+}
+
+/** 自留／改回出售：自留的不算可售庫存，成本來源保留 */
+export function KeepButton({ productId, name, available, kept, small }: { productId: string; name: string; available: number; kept: number; small?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"keep" | "sell">("keep");
+  const [n, setN] = useState(1);
+  const idem = useIdemKey();
+  const { run, pending } = useRun();
+  if (available <= 0 && kept <= 0) return null;
+  const max = mode === "keep" ? Math.max(0, available) : kept;
+  return (
+    <>
+      <Button small={small} onClick={() => { setMode(available > 0 ? "keep" : "sell"); setN(1); setOpen(true); }}>自留{kept ? ` ${kept}` : ""}</Button>
+      <Modal open={open} onClose={() => setOpen(false)} title={`自留：${name}`} footer={
+        <Button variant="primary" loading={pending} disabled={n < 1 || n > max} onClick={() => run(() => keepAction({ productId, delta: mode === "keep" ? n : -n, dedupeKey: idem.key }), { success: mode === "keep" ? `已自留 ${n} 件` : `已改回出售 ${n} 件`, onOk: () => { idem.renew(); setOpen(false); } })}>
+          {mode === "keep" ? `自留 ${n} 件` : `改回出售 ${n} 件`}
+        </Button>
+      }>
+        <div role="radiogroup" aria-label="操作" className="mb-4 grid grid-cols-2 gap-2">
+          {([["keep", `留給自己（可售 ${Math.max(0, available)}）`], ["sell", `改回出售（自留 ${kept}）`]] as const).map(([k, l]) => (
+            <button key={k} type="button" role="radio" aria-checked={mode === k} disabled={k === "keep" ? available <= 0 : kept <= 0} onClick={() => { setMode(k); setN(1); }} className={`min-h-11 rounded-lg border px-2 text-sm disabled:opacity-40 ${mode === k ? "border-ai bg-ai text-white" : "border-line bg-white"}`}>{l}</button>
+          ))}
+        </div>
+        <div className="flex items-center justify-center gap-3">
+          <Button onClick={() => setN((x) => Math.max(1, x - 1))} aria-label="減少">－</Button>
+          <input aria-label="數量" inputMode="numeric" className={`${inputCls} num w-20 text-center text-lg`} value={n} onChange={(e) => setN(Number(e.target.value.replace(/\D/g, "")) || 0)} />
+          <Button onClick={() => setN((x) => Math.min(max, x + 1))} aria-label="增加">＋</Button>
+        </div>
+        <p className="mt-3 text-[13px] text-mute">自留的商品不會算進可售庫存，也不會被分配給買家；原本的採購成本來源會保留。已保留給買家的數量不能自留。</p>
       </Modal>
     </>
   );

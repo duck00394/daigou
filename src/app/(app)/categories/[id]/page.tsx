@@ -6,9 +6,10 @@ import { categoryDetail } from "@/server/services/reports";
 import { PageHeader, Section, TableWrap, Stat, Twd, Empty, LinkButton, StatusBadge, KV, Badge } from "@/components/ui";
 import { ProductImage } from "@/components/client";
 import { CategoryEditButton, CategoryActiveButton } from "../forms";
+import { CategoryBatches } from "./batches";
 import { categoryType, dayInput, fmtDay, productStatus } from "@/lib/labels";
 
-export default async function CategoryPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ q?: string; sort?: string }> }) {
+export default async function CategoryPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ q?: string; sort?: string; view?: string }> }) {
   await requireUser();
   const { id } = await params;
   const sp = await searchParams;
@@ -54,6 +55,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
           <KV items={[["活動期間", `${fmtDay(c.startDate)} – ${fmtDay(c.endDate)}`], ["備註", c.notes]]} />
         </Section>
       )}
+      <CategoryBatches categoryId={c.id} view={sp.view} />
       <Section title="分類內商品" pad={false}>
         <form className="flex flex-wrap gap-2 border-b border-line-2 px-4 py-3" method="get">
           <input type="search" name="q" defaultValue={sp.q} placeholder="搜尋商品" className="min-w-[12rem] flex-1 rounded-lg border border-line px-3 py-2" />

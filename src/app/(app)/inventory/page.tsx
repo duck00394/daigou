@@ -6,8 +6,8 @@ import { purchaseDemand } from "@/server/services/purchase";
 import { listOperators } from "@/server/services/operators";
 import { getDefaultRateMicro } from "@/server/services/settings";
 import { PageHeader, Section, TableWrap, Empty, StatusBadge, LinkButton, Badge } from "@/components/ui";
-import { ReceiveForm, AdjustForm, CreateBatchFromDemand } from "./parts";
-import { batchStatus, fmtDate, formatRateLabel } from "./util";
+import { ReceiveForm, AdjustForm, CreateBatchFromDemand, KeepButton } from "./parts";
+import { batchStatus, fmtDate, fmtDay, formatRateLabel } from "./util";
 
 export const metadata = { title: "庫存與採購" };
 
@@ -35,7 +35,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
       </nav>
       {tab === "stock" && <StockTab q={sp.q} only={sp.only} />}
       {tab === "demand" && <DemandTab />}
-      {tab === "batches" && <BatchesTab />}
+      {tab === "batches" && <BatchesTab cat={sp.cat} open={sp.open} />}
       {tab === "receive" && <ReceiveTab productId={sp.productId} />}
       {tab === "adjust" && (
         <Section title="盤點調整">
@@ -53,8 +53,8 @@ async function StockTab({ q, only }: { q?: string; only?: string }) {
     select: { id: true, code: true, name: true, status: true },
   });
   const inv = await tx((t) => inventorySummary(t, products.map((p) => p.id)));
-  let rows = products.map((p) => ({ p, s: inv.get(p.id) ?? { onHand: 0, reserved: 0, available: 0, incoming: 0, shipped: 0, activeOrdered: 0, openDemand: 0, unallocated: 0, shortage: 0 } }));
-  if (only === "active") rows = rows.filter((r) => r.s.onHand || r.s.incoming || r.s.openDemand);
+  let rows = products.map((p) => ({ p, s: inv.get(p.id) ?? { onHand: 0, reserved: 0, available: 0, incoming: 0, shipped: 0, kept: 0, activeOrdered: 0, openDemand: 0, unallocated: 0, shortage: 0 } }));
+  if (only === "active") rows = rows.filter((r) => r.s.onHand || r.s.incoming || r.s.openDemand || r.s.kept);
   if (only === "short") rows = rows.filter((r) => r.s.shortage > 0);
   return (
     <Section pad={false}>
@@ -71,40 +71,72 @@ async function StockTab({ q, only }: { q?: string; only?: string }) {
       {rows.length === 0 ? (
         <Empty>沒有符合條件的商品。</Empty>
       ) : (
-        <TableWrap maxH="70vh">
-          <thead>
-            <tr>
-              <th>商品</th>
-              <th className="text-right">實際在庫</th>
-              <th className="text-right">已保留</th>
-              <th className="text-right">可用庫存</th>
-              <th className="text-right">待到貨</th>
-              <th className="text-right">有效預購（未出貨）</th>
-              <th className="text-right">已出貨</th>
-              <th className="text-right">未分配需求</th>
-              <th className="text-right">缺貨</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
+        <>
+          {/* 手機：卡片 */}
+          <ul className="divide-y divide-line-2 md:hidden">
             {rows.map(({ p, s }) => (
-              <tr key={p.id}>
-                <td><Link href={`/products/${p.id}`} className="hover:underline">{p.name}</Link><div className="text-[12px] text-mute">{p.code}</div></td>
-                <td className="num text-right">{s.onHand}</td>
-                <td className="num text-right">{s.reserved}</td>
-                <td className="num text-right font-medium">{s.available}</td>
-                <td className="num text-right">{s.incoming}</td>
-                <td className="num text-right">{s.openDemand}</td>
-                <td className="num text-right">{s.shipped}</td>
-                <td className="num text-right">{s.unallocated}</td>
-                <td className="num text-right">{s.shortage > 0 ? <Badge tone="bad">缺 {s.shortage}</Badge> : 0}</td>
-                <td><Link href={`/inventory?tab=receive&productId=${p.id}`} className="text-sm text-ai hover:underline">登記到貨</Link></td>
-              </tr>
+              <li key={p.id} className="px-4 py-3">
+                <div className="flex items-start justify-between gap-2">
+                  <Link href={`/products/${p.id}`} className="font-medium hover:underline">{p.name}</Link>
+                  {s.shortage > 0 && <Badge tone="bad">缺 {s.shortage}</Badge>}
+                </div>
+                <dl className="mt-1.5 grid grid-cols-4 gap-1 text-center">
+                  {([["可售", s.available, true], ["已保留", s.reserved], ["自留", s.kept], ["待到貨", s.incoming]] as [string, number, boolean?][]).map(([k, v, strong]) => (
+                    <div key={k} className="rounded-lg bg-[#fafbfc] py-1">
+                      <dt className="text-[11px] text-mute">{k}</dt>
+                      <dd className={`num ${strong ? "text-[17px] font-semibold" : "text-[15px]"}`}>{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <div className="mt-2 flex gap-2">
+                  <KeepButton productId={p.id} name={p.name} available={s.available} kept={s.kept} />
+                  <Link href={`/inventory?tab=receive&productId=${p.id}`} className="rounded-lg border border-line px-3 py-1.5 text-sm text-ai">登記到貨</Link>
+                </div>
+              </li>
             ))}
-          </tbody>
-        </TableWrap>
+          </ul>
+          <div className="hidden md:block">
+            <TableWrap maxH="70vh">
+              <thead>
+                <tr>
+                  <th>商品</th>
+                  <th className="text-right">實際在庫</th>
+                  <th className="text-right">已保留</th>
+                  <th className="text-right">可售庫存</th>
+                  <th className="text-right">自留</th>
+                  <th className="text-right">待到貨</th>
+                  <th className="text-right">有效預購（未出貨）</th>
+                  <th className="text-right">已出貨</th>
+                  <th className="text-right">缺貨</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(({ p, s }) => (
+                  <tr key={p.id}>
+                    <td><Link href={`/products/${p.id}`} className="hover:underline">{p.name}</Link><div className="text-[12px] text-mute">{p.code}</div></td>
+                    <td className="num text-right">{s.onHand}</td>
+                    <td className="num text-right">{s.reserved}</td>
+                    <td className="num text-right font-medium">{s.available}</td>
+                    <td className="num text-right">{s.kept}</td>
+                    <td className="num text-right">{s.incoming}</td>
+                    <td className="num text-right">{s.openDemand}</td>
+                    <td className="num text-right">{s.shipped}</td>
+                    <td className="num text-right">{s.shortage > 0 ? <Badge tone="bad">缺 {s.shortage}</Badge> : 0}</td>
+                    <td className="whitespace-nowrap">
+                      <span className="flex gap-2">
+                        <KeepButton productId={p.id} name={p.name} available={s.available} kept={s.kept} small />
+                        <Link href={`/inventory?tab=receive&productId=${p.id}`} className="text-sm text-ai hover:underline">登記到貨</Link>
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </TableWrap>
+          </div>
+        </>
       )}
-      <p className="px-4 py-3 text-[12px] text-mute">缺貨 = 未分配需求 − 可用庫存 − 待到貨（不小於 0）。已取消的數量不計入任何需求。</p>
+      <p className="px-4 py-3 text-[12px] text-mute">可售 = 實際在庫 − 已保留給買家（自留的已不在可售裡）。缺貨 = 未分配需求 − 可售 − 待到貨（不小於 0）。已取消的數量不計入任何需求。</p>
     </Section>
   );
 }
@@ -157,45 +189,55 @@ async function DemandTab() {
   );
 }
 
-async function BatchesTab() {
-  const batches = await prisma.purchaseBatch.findMany({ orderBy: { createdAt: "desc" }, include: { supplierRef: true, items: { include: { movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } }, costs: true } });
+async function BatchesTab({ cat, open }: { cat?: string; open?: string }) {
+  const onlyOpen = open !== "0";
+  const batches = await prisma.purchaseBatch.findMany({
+    where: { ...(cat ? { categoryId: cat === "none" ? null : cat } : {}), ...(onlyOpen ? { status: { in: ["DRAFT", "ORDERED", "PARTIAL_RECEIVED"] } } : {}) },
+    orderBy: { createdAt: "desc" },
+    include: { supplierRef: true, category: { select: { id: true, name: true } }, items: { include: { movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } } },
+  });
+  const cats = await prisma.category.findMany({ where: { batches: { some: {} } }, orderBy: [{ active: "desc" }, { sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } });
+  const chip = (on: boolean) => `shrink-0 rounded-full border px-3 py-1.5 text-sm ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
+  const href = (c?: string, o?: string) => `/inventory?tab=batches${c ? `&cat=${c}` : ""}${o === "0" ? "&open=0" : ""}`;
+  const today = new Date();
   return (
-    <Section title="採購團" pad={false} actions={<LinkButton href="/inventory/batches/new" primary small>新增採購團</LinkButton>}>
+    <Section title="採購團" pad={false} actions={<LinkButton href={`/inventory/batches/new${cat && cat !== "none" ? `?categoryId=${cat}` : ""}`} primary small>新增採購團</LinkButton>}>
+      <div className="flex gap-1.5 overflow-x-auto border-b border-line-2 px-4 py-2.5">
+        <Link href={href(cat, onlyOpen ? "0" : undefined)} className={chip(!onlyOpen)}>{onlyOpen ? "顯示已完成" : "含已完成"}</Link>
+        <Link href={href(undefined, open)} className={chip(!cat)}>全部活動</Link>
+        {cats.map((c) => <Link key={c.id} href={href(c.id, open)} className={chip(cat === c.id)}>{c.name}</Link>)}
+        <Link href={href("none", open)} className={chip(cat === "none")}>未指定活動</Link>
+      </div>
       {batches.length === 0 ? (
-        <Empty action={<LinkButton href="/inventory/batches/new" primary>新增採購團</LinkButton>}>還沒有採購團。可以直接新增，或從「待下單」建立。</Empty>
+        <Empty action={<LinkButton href="/inventory/batches/new" primary>新增採購團</LinkButton>}>{onlyOpen ? "沒有進行中的採購團。" : "還沒有採購團。"}</Empty>
       ) : (
-        <TableWrap>
-          <thead>
-            <tr>
-              <th>採購團</th>
-              <th>狀態</th>
-              <th>供應商</th>
-              <th>下單日</th>
-              <th className="text-right">匯率</th>
-              <th className="text-right">採購件數</th>
-              <th className="text-right">已到貨</th>
-              <th className="text-right">共同費用筆數</th>
-            </tr>
-          </thead>
-          <tbody>
-            {batches.map((b) => {
-              const ordered = b.items.reduce((s, i) => s + i.qty - i.cancelledQty, 0);
-              const rec = b.items.reduce((s, i) => s + i.movements.reduce((a, m) => a + m.onHandDelta, 0), 0);
-              return (
-                <tr key={b.id}>
-                  <td><Link href={`/inventory/batches/${b.id}`} className="font-medium text-ai hover:underline">{b.code} {b.name}</Link></td>
-                  <td><StatusBadge map={batchStatus} value={b.status} /></td>
-                  <td>{b.supplierRef?.name ?? b.supplier ?? "—"}</td>
-                  <td className="num">{fmtDate(b.orderedAt)}</td>
-                  <td className="num text-right">{formatRateLabel(b.rateMicro)}</td>
-                  <td className="num text-right">{ordered}</td>
-                  <td className="num text-right">{rec}</td>
-                  <td className="num text-right">{b.costs.length}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </TableWrap>
+        <ul className="grid gap-2 p-3 md:grid-cols-2 xl:grid-cols-3">
+          {batches.map((b) => {
+            const ordered = b.items.reduce((s, i) => s + i.qty - i.cancelledQty, 0);
+            const rec = b.items.reduce((s, i) => s + i.movements.reduce((a, m) => a + m.onHandDelta, 0), 0);
+            const late = b.expectedAt && b.expectedAt < today && rec < ordered && b.status !== "CANCELLED";
+            return (
+              <li key={b.id}>
+                <Link href={`/inventory/batches/${b.id}`} className="block h-full rounded-xl border border-line bg-white p-3 hover:border-ai">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-semibold">{b.code} {b.name}</span>
+                    <StatusBadge map={batchStatus} value={b.status} />
+                  </div>
+                  <div className="mt-0.5 text-[13px] text-mute">
+                    {[b.supplierRef?.name ?? b.supplier, b.category?.name, `下單 ${fmtDate(b.orderedAt)}`].filter(Boolean).join("｜")}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-line-2" aria-hidden>
+                      <div className="h-full rounded-full bg-good" style={{ width: `${ordered ? Math.min(100, Math.round((rec / ordered) * 100)) : 0}%` }} />
+                    </div>
+                    <span className="num shrink-0 text-[13px]">到貨 {rec}／{ordered}</span>
+                  </div>
+                  {b.expectedAt && <div className={`mt-1 text-[12px] ${late ? "text-bad" : "text-mute"}`}>預計到貨 {fmtDay(b.expectedAt)}{late ? "（已超過）" : ""}</div>}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </Section>
   );

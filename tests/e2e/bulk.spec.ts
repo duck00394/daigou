@@ -87,7 +87,7 @@ test("桌面：批次新增 4 個角色（含新角色與貼上），再批次�
   await page.goto("/inventory?tab=stock&q=吉伊卡哇 吉伊");
   const stockRow = page.getByRole("row").filter({ hasText: "吉伊卡哇 吉伊 吊娃" });
   await expect(stockRow.getByRole("cell").nth(1)).toHaveText("0");
-  await expect(stockRow.getByRole("cell").nth(4)).toHaveText("5");
+  await expect(stockRow.getByRole("cell").nth(5)).toHaveText("5"); // 待到貨
 });
 
 test("桌面：第二團套用上次使用的角色，價格帶入上次設定且可獨立修改", async ({ page }) => {

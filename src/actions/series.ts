@@ -29,7 +29,7 @@ export async function saveTemplateAction(input: { seriesId: string; name: string
 export async function deleteTemplateAction(id: string) {
   return run((a) => tx((t) => sr.deleteTemplate(t, a, id)));
 }
-export async function saveSupplierAction(id: string | null, input: { name: string; defaultCurrency: "JPY" | "TWD"; contact?: string | null; notes?: string | null; active?: boolean }) {
+export async function saveSupplierAction(id: string | null, input: { name: string; defaultCurrency: "JPY" | "TWD"; kind?: string | null; contact?: string | null; paymentMethod?: string | null; orderUrl?: string | null; notes?: string | null; active?: boolean }) {
   return run((a) => tx((t) => sr.saveSupplier(t, a, id, { ...input, defaultCurrency: currency.parse(input.defaultCurrency) })).then((r) => ({ id: r.id, name: r.name })));
 }
 export async function saveCharacterQuickAction(name: string) {

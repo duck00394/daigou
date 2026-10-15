@@ -6,6 +6,7 @@ import { Button, ConfirmButton, inputCls, notify, useRun, useToast } from "@/com
 import { bulkUpdateItemsAction } from "@/actions/series";
 import { deleteBatchItemAction } from "@/actions/ops";
 import { formatTwd } from "@/lib/money";
+import { CancelItemButton } from "./manage";
 
 type Currency = "JPY" | "TWD";
 export type EditItem = {
@@ -24,6 +25,8 @@ export type EditItem = {
   goodsTwd: number;
   feesTwd: number;
   canDelete: boolean;
+  cancelledQty: number;
+  cancelReason: string | null;
 };
 
 type Draft = { qty: string; est: string; actual: string; currency: Currency; sale: string };
@@ -83,7 +86,7 @@ export function BulkEditTable({ batchId, items, editable }: { batchId: string; i
   return (
     <div>
       <div role="table" aria-label="採購品項" className="space-y-2 p-3 md:space-y-0 md:p-0">
-        <div role="row" className="hidden border-b border-line bg-[#fafbfc] px-4 py-2 text-[13px] font-medium text-ink-2 md:grid md:grid-cols-[minmax(10rem,1.6fr)_4.5rem_5.5rem_6.5rem_6.5rem_5rem_6.5rem_7rem_4.5rem] md:gap-2">
+        <div role="row" className="hidden border-b border-line bg-[#fafbfc] px-4 py-2 text-[13px] font-medium text-ink-2 md:grid md:grid-cols-[minmax(10rem,1.6fr)_4.5rem_5.5rem_6.5rem_6.5rem_5rem_6.5rem_7rem_7.5rem] md:gap-2">
           <span role="columnheader">商品</span>
           <span role="columnheader" className="text-right">已到貨</span>
           <span role="columnheader" className="text-right">數量</span>
@@ -99,11 +102,12 @@ export function BulkEditTable({ batchId, items, editable }: { batchId: string; i
           const err = allErrors[i.id];
           const dirty = JSON.stringify(d) !== JSON.stringify(toDraft(i));
           return (
-            <div key={i.id} role="row" className={`grid grid-cols-2 gap-2 rounded-xl border p-3 md:grid-cols-[minmax(10rem,1.6fr)_4.5rem_5.5rem_6.5rem_6.5rem_5rem_6.5rem_7rem_4.5rem] md:items-start md:rounded-none md:border-0 md:border-b md:px-4 md:py-1.5 ${err ? "border-[#f5c9c4] bg-bad-soft/40" : dirty ? "border-[#cfd9ea] bg-info-soft/60" : "border-line md:border-line-2"}`}>
+            <div key={i.id} role="row" className={`grid grid-cols-2 gap-2 rounded-xl border p-3 md:grid-cols-[minmax(10rem,1.6fr)_4.5rem_5.5rem_6.5rem_6.5rem_5rem_6.5rem_7rem_7.5rem] md:items-start md:rounded-none md:border-0 md:border-b md:px-4 md:py-1.5 ${err ? "border-[#f5c9c4] bg-bad-soft/40" : dirty ? "border-[#cfd9ea] bg-info-soft/60" : "border-line md:border-line-2"}`}>
               <div role="cell" className="col-span-2 md:col-span-1 md:pt-2">
                 <Link href={`/products/${i.productId}`} className="font-medium hover:underline">{i.name}</Link>
                 {i.specNote && <span className="ml-1 text-[12px] text-mute">{i.specNote}</span>}
                 {i.minQty > 0 && <div className="text-[12px] text-mute">最少 {i.minQty} 件（{i.promisedNote}）</div>}
+                {i.cancelledQty > 0 && <div className="text-[12px] text-bad">已砍單 {i.cancelledQty} 件{i.cancelReason ? `（${i.cancelReason}）` : ""}</div>}
               </div>
               <div role="cell" className="flex items-center justify-between md:block md:pt-2 md:text-right">
                 <span className="text-[12px] text-mute md:sr-only">已到貨</span>
@@ -137,7 +141,8 @@ export function BulkEditTable({ batchId, items, editable }: { batchId: string; i
                 <span className="num">{formatTwd(i.goodsTwd + i.feesTwd)}</span>
                 <span className="block text-[11px] text-mute">{i.actualUnitCost == null ? "依預估單價" : "依實際單價"}{i.feesTwd ? `，含費用 ${i.feesTwd}` : ""}</span>
               </div>
-              <div role="cell" className="col-span-2 flex justify-end md:col-span-1 md:pt-1">
+              <div role="cell" className="col-span-2 flex flex-wrap justify-end gap-1 md:col-span-1 md:pt-1">
+                {editable && <CancelItemButton itemId={i.id} name={i.name} max={i.qty - i.received} />}
                 {editable && i.canDelete && (
                   <ConfirmButton small variant="danger" label="刪除" title={`刪除「${i.name}」`} message="這個品項沒有到貨紀錄，也沒有買家依賴這批到貨，可以安全刪除。" confirmLabel="刪除品項" onConfirm={() => run(() => deleteBatchItemAction(i.id), { success: "已刪除品項" })} />
                 )}

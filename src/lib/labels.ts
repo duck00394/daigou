@@ -135,7 +135,7 @@ export const importBatchStatus: Record<string, [string, Tone]> = {
   DISCARDED: ["已放棄", "muted"],
 };
 
-export const movementKind: Record<string, string> = { RECEIVE: "到貨入庫", ADJUST: "盤點調整", RESERVE: "保留", UNRESERVE: "取消保留", SHIP: "出貨" };
+export const movementKind: Record<string, string> = { RECEIVE: "到貨入庫", ADJUST: "盤點調整", RESERVE: "保留", UNRESERVE: "取消保留", SHIP: "出貨", KEEP: "自留" };
 
 export function fmtDate(d: Date | string | null | undefined, withTime = false): string {
   if (!d) return "—";
@@ -201,3 +201,12 @@ export const supplierPaymentStatus: Record<string, [string, Tone]> = {
 export const paymentPurpose: Record<string, string> = { DEPOSIT: "訂金", BALANCE: "尾款", FULL: "全額", FEE: "費用", OTHER: "其他" };
 
 export const currencyName: Record<string, string> = { JPY: "日幣", TWD: "台幣" };
+
+export const supplierKind: Record<string, string> = {
+  OFFICIAL_ONLINE: "日本官方網站",
+  OFFICIAL_STORE: "官方實體店",
+  AGENT: "代購",
+  AGENT_GROUP: "代購群",
+  INDIVIDUAL: "個人賣家",
+  OTHER: "其他",
+};

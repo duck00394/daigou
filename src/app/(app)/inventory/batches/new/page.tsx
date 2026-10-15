@@ -8,14 +8,15 @@ import { formatRate } from "@/lib/money";
 
 export const metadata = { title: "新增採購團" };
 
-export default async function NewBatch({ searchParams }: { searchParams: Promise<{ from?: string }> }) {
+export default async function NewBatch({ searchParams }: { searchParams: Promise<{ from?: string; categoryId?: string }> }) {
   await requireUser();
   const sp = await searchParams;
-  const [suppliers, rate, operators, recent] = await Promise.all([
+  const [suppliers, rate, operators, recent, categories] = await Promise.all([
     prisma.supplier.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     getDefaultRateMicro(prisma),
     tx((t) => listOperators(t)),
     prisma.purchaseBatch.findMany({ where: { status: { not: "CANCELLED" } }, orderBy: { createdAt: "desc" }, take: 15, select: { id: true } }),
+    prisma.category.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
   ]);
   const ids = [...new Set([...(sp.from ? [sp.from] : []), ...recent.map((r) => r.id)])];
   const templates = (await Promise.all(ids.map((id) => tx((t) => responsibilityDefaults(t, id))))).filter((x) => x !== null);
@@ -28,6 +29,8 @@ export default async function NewBatch({ searchParams }: { searchParams: Promise
           defaultRate={formatRate(rate)}
           operators={operators.map((o) => ({ id: o.id, name: o.name, code: o.code }))}
           templates={templates}
+          categories={categories}
+          initialCategory={sp.categoryId && categories.some((c) => c.id === sp.categoryId) ? sp.categoryId : null}
           initialFrom={sp.from && templates.some((x) => x.fromBatch.id === sp.from) ? sp.from : null}
         />
       </Section>

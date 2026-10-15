@@ -2,6 +2,7 @@
 // 一個商品＝系列 × 商品類型 × 角色 × 規格（variantKey 唯一），不同規格就是不同商品 ID。
 // 批次新增只建立採購品項，不會增加庫存；庫存只會在到貨登記時增加。
 import { BizError, isUniqueViolation, prisma, tx, type Db, type Tx } from "@/server/db";
+import { supplierKind } from "@/lib/labels";
 import { normalizeKey } from "@/lib/normalize";
 import { audit, emptyToNull, nextCode, type Actor } from "./common";
 import { addBatchItem, updateBatchItem, type Currency } from "./purchase";
@@ -107,10 +108,26 @@ export async function deleteTemplate(t: Tx, actor: Actor, id: string) {
 
 // ── 供應商 ──
 
-export async function saveSupplier(t: Tx, actor: Actor, id: string | null, input: { name: string; defaultCurrency?: Currency; contact?: string | null; notes?: string | null; active?: boolean }) {
+export async function saveSupplier(
+  t: Tx,
+  actor: Actor,
+  id: string | null,
+  input: { name: string; defaultCurrency?: Currency; kind?: string | null; contact?: string | null; paymentMethod?: string | null; orderUrl?: string | null; notes?: string | null; active?: boolean },
+) {
   const name = input.name?.trim();
   if (!name) throw new BizError("請填寫供應商名稱");
-  const data = { name, defaultCurrency: input.defaultCurrency ?? "JPY", contact: emptyToNull(input.contact), notes: emptyToNull(input.notes), active: input.active ?? true };
+  if (input.kind && !(input.kind in supplierKind)) throw new BizError("供應商類型不正確");
+  if (input.orderUrl && !/^https?:\/\//i.test(input.orderUrl.trim())) throw new BizError("訂購連結請以 http:// 或 https:// 開頭");
+  const data = {
+    name,
+    defaultCurrency: input.defaultCurrency ?? "JPY",
+    contact: emptyToNull(input.contact),
+    notes: emptyToNull(input.notes),
+    active: input.active ?? true,
+    ...(input.kind !== undefined ? { kind: emptyToNull(input.kind) } : {}),
+    ...(input.paymentMethod !== undefined ? { paymentMethod: emptyToNull(input.paymentMethod) } : {}),
+    ...(input.orderUrl !== undefined ? { orderUrl: emptyToNull(input.orderUrl) } : {}),
+  };
   try {
     const row = id ? await t.supplier.update({ where: { id }, data }) : await t.supplier.create({ data });
     if (id) await t.purchaseBatch.updateMany({ where: { supplierId: id }, data: { supplier: name } });

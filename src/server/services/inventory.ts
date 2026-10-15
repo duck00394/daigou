@@ -138,7 +138,7 @@ export async function receiveStock(
   return { movement, duplicated: false };
 }
 
-async function refreshBatchStatus(t: Tx, batchItemId: string) {
+export async function refreshBatchStatus(t: Tx, batchItemId: string) {
   const bi = await t.purchaseBatchItem.findUniqueOrThrow({ where: { id: batchItemId }, select: { batchId: true } });
   const items = await t.purchaseBatchItem.findMany({
     where: { batchId: bi.batchId },
@@ -323,6 +323,11 @@ export async function inventorySummary(t: Tx, productIds?: string[]) {
     where: { ...where, kind: "SHIP" },
     _sum: { onHandDelta: true },
   });
+  const keptAgg = await t.inventoryMovement.groupBy({
+    by: ["productId"],
+    where: { ...where, kind: "KEEP" },
+    _sum: { onHandDelta: true },
+  });
   const batchItems = await t.purchaseBatchItem.findMany({
     where: { ...(productIds ? { productId: { in: productIds } } : {}), batch: { status: { notIn: ["CANCELLED", "DRAFT"] } } },
     select: { productId: true, qty: true, cancelledQty: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
@@ -333,12 +338,12 @@ export async function inventorySummary(t: Tx, productIds?: string[]) {
   });
   const map = new Map<
     string,
-    { onHand: number; reserved: number; available: number; incoming: number; shipped: number; activeOrdered: number; openDemand: number; unallocated: number; shortage: number }
+    { onHand: number; reserved: number; available: number; incoming: number; shipped: number; kept: number; activeOrdered: number; openDemand: number; unallocated: number; shortage: number }
   >();
   const get = (id: string) => {
     let v = map.get(id);
     if (!v) {
-      v = { onHand: 0, reserved: 0, available: 0, incoming: 0, shipped: 0, activeOrdered: 0, openDemand: 0, unallocated: 0, shortage: 0 };
+      v = { onHand: 0, reserved: 0, available: 0, incoming: 0, shipped: 0, kept: 0, activeOrdered: 0, openDemand: 0, unallocated: 0, shortage: 0 };
       map.set(id, v);
     }
     return v;
@@ -349,6 +354,7 @@ export async function inventorySummary(t: Tx, productIds?: string[]) {
     v.reserved = r._sum.reservedDelta ?? 0;
   }
   for (const r of shippedAgg) get(r.productId).shipped = -(r._sum.onHandDelta ?? 0);
+  for (const r of keptAgg) get(r.productId).kept = -(r._sum.onHandDelta ?? 0);
   for (const b of batchItems) {
     const rec = b.movements.reduce((s, m) => s + m.onHandDelta, 0);
     get(b.productId).incoming += Math.max(0, b.qty - b.cancelledQty - rec);
@@ -366,4 +372,63 @@ export async function inventorySummary(t: Tx, productIds?: string[]) {
     v.shortage = Math.max(0, v.unallocated - Math.max(0, v.available) - v.incoming);
   }
   return map;
+}
+
+/**
+ * 自留：把到貨的良品從可售庫存移到自己收藏（delta > 0），或改回出售（delta < 0）。
+ * 自留不刪除任何紀錄，以 KEEP 異動記錄並保留成本來源（採購批次）；自留的數量不算可用庫存。
+ */
+export async function keepStock(t: Tx, actor: Actor, input: { productId: string; delta: number; note?: string | null; dedupeKey?: string }) {
+  if (!Number.isInteger(input.delta) || input.delta === 0) throw new BizError("數量必須是非 0 整數");
+  if (input.dedupeKey) {
+    const dup = await t.inventoryMovement.findFirst({ where: { dedupeKey: { startsWith: `${input.dedupeKey}#` } } });
+    if (dup) return { duplicated: true };
+  }
+  await lockRows(t, "Product", [input.productId]);
+  const reason = input.delta > 0 ? `自留${input.note ? `：${input.note}` : ""}` : `改回出售${input.note ? `：${input.note}` : ""}`;
+  let n = 0;
+  const create = (delta: number, lot: string | null) =>
+    t.inventoryMovement.create({
+      data: { productId: input.productId, kind: "KEEP", onHandDelta: delta, purchaseBatchItemId: lot, reason, dedupeKey: input.dedupeKey ? `${input.dedupeKey}#${n++}` : undefined, actorId: actor.userId },
+    });
+  if (input.delta > 0) {
+    let left = input.delta;
+    const lots = await productLots(t, input.productId);
+    const free = lots.reduce((s, l) => s + Math.max(0, l.free), 0);
+    if (free < left) throw new BizError(`可用庫存只有 ${free} 件（已保留給買家的不能自留，請先取消保留）`);
+    for (const lot of lots) {
+      if (left <= 0) break;
+      const take = Math.min(left, Math.max(0, lot.free));
+      if (take <= 0) continue;
+      if (!lot.batchItemId && lot.unitCostTwd !== null) {
+        await t.inventoryMovement.create({
+          data: { productId: input.productId, kind: "KEEP", onHandDelta: -take, unitCostTwd: lot.unitCostTwd, reason, dedupeKey: input.dedupeKey ? `${input.dedupeKey}#${n++}` : undefined, actorId: actor.userId },
+        });
+      } else await create(-take, lot.batchItemId);
+      left -= take;
+    }
+  } else {
+    let left = -input.delta;
+    const keeps = await t.inventoryMovement.findMany({ where: { productId: input.productId, kind: "KEEP" }, orderBy: { createdAt: "desc" } });
+    const perLot = new Map<string, { lot: string | null; qty: number; cost: number | null }>();
+    for (const k of [...keeps].reverse()) {
+      const key = k.purchaseBatchItemId ?? "__manual__";
+      const v = perLot.get(key) ?? { lot: k.purchaseBatchItemId, qty: 0, cost: k.unitCostTwd };
+      v.qty -= k.onHandDelta;
+      perLot.set(key, v);
+    }
+    const total = [...perLot.values()].reduce((s, v) => s + v.qty, 0);
+    if (total < left) throw new BizError(`目前自留只有 ${total} 件`);
+    for (const v of [...perLot.values()].reverse()) {
+      if (left <= 0) break;
+      const take = Math.min(left, v.qty);
+      if (take <= 0) continue;
+      await t.inventoryMovement.create({
+        data: { productId: input.productId, kind: "KEEP", onHandDelta: take, purchaseBatchItemId: v.lot, unitCostTwd: v.lot ? null : v.cost, reason, dedupeKey: input.dedupeKey ? `${input.dedupeKey}#${n++}` : undefined, actorId: actor.userId },
+      });
+      left -= take;
+    }
+  }
+  await audit(t, actor, input.delta > 0 ? "inventory.keep" : "inventory.unkeep", "Product", input.productId, { qty: Math.abs(input.delta), note: input.note ?? null });
+  return { duplicated: false };
 }

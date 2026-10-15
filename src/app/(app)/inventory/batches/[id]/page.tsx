@@ -2,14 +2,15 @@ import { notFound } from "next/navigation";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { landedCosts, minCommittedQty } from "@/server/services/purchase";
-import { PageHeader, Section, TableWrap, Twd, Jpy, StatusBadge, Empty, KV, LinkButton, Stat } from "@/components/ui";
+import { PageHeader, Section, TableWrap, Twd, Jpy, StatusBadge, Empty, LinkButton, Stat } from "@/components/ui";
 import { AddCost, DeleteCost, CancelBatch, Collapsible } from "./parts";
 import { BulkAddGrid } from "./bulk-add";
 import { BulkEditTable, type EditItem } from "./bulk-edit";
+import { BatchInfoCard, CopyItemsButton } from "./manage";
 import { ResponsibilityCard, SupplierPayments, Receiving, type PaymentRow } from "./operators";
 import { listOperators } from "@/server/services/operators";
 import { supplierPaymentHistory } from "@/server/services/supplier-payments";
-import { allocMethod, batchStatus, costKind, currencyName, fmtDate, paymentPurpose, supplierPaymentStatus, toDateTimeInput } from "@/lib/labels";
+import { allocMethod, batchStatus, costKind, currencyName, dayInput, fmtDate, paymentPurpose, supplierPaymentStatus, toDateTimeInput } from "@/lib/labels";
 import { formatRate, jpyToTwd } from "@/lib/money";
 
 export default async function BatchPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ bulk?: string }> }) {
@@ -20,6 +21,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
     where: { id },
     include: {
       supplierRef: true,
+      category: { select: { id: true, name: true } },
       items: { orderBy: { createdAt: "asc" }, include: { product: true, movements: { select: { kind: true, onHandDelta: true } } } },
       costs: { orderBy: { createdAt: "asc" }, include: { allocations: true } },
       supplierPayments: { orderBy: [{ paidAt: "asc" }, { createdAt: "asc" }] },
@@ -56,6 +58,11 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       return `${when} 修改：${parts.join("；")}${d.reason ? `（原因：${d.reason}）` : ""}`;
     }),
   }));
+  const [suppliersList, categoriesList, otherBatches] = await Promise.all([
+    prisma.supplier.findMany({ where: { OR: [{ active: true }, { id: b.supplierId ?? "" }] }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.category.findMany({ where: { OR: [{ active: true }, { id: b.categoryId ?? "" }] }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
+    prisma.purchaseBatch.findMany({ where: { id: { not: b.id }, items: { some: {} } }, orderBy: { createdAt: "desc" }, take: 50, select: { id: true, code: true, name: true, supplierRef: { select: { name: true } } } }),
+  ]);
   const [landed, series, types] = await Promise.all([
     tx((t) => landedCosts(t, b.items.map((i) => i.id))),
     prisma.series.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
@@ -81,6 +88,8 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       goodsTwd: l.goodsTwd,
       feesTwd: l.feesTwd,
       canDelete: i.movements.length === 0 && m.min === 0,
+      cancelledQty: i.cancelledQty,
+      cancelReason: i.cancelReason,
     });
   }
   const open = b.status !== "CANCELLED";
@@ -94,7 +103,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       <PageHeader
         title={`${b.code} ${b.name}`}
         back={{ href: "/inventory?tab=batches", label: "採購團" }}
-        sub={<span className="flex flex-wrap items-center gap-2"><StatusBadge map={batchStatus} value={b.status} />{supplierName && <span>供應商：{supplierName}</span>}</span>}
+        sub={<span className="flex flex-wrap items-center gap-2"><StatusBadge map={batchStatus} value={b.status} />{supplierName && <span>供應商：{supplierName}</span>}{b.category && <a href={`/categories/${b.category.id}`} className="text-ai hover:underline">{b.category.name}</a>}</span>}
         actions={<><LinkButton href={`/inventory/batches/new?from=${b.id}`}>沿用負責人建立新團</LinkButton>{open && <CancelBatch id={b.id} />}</>}
       />
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -126,7 +135,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         </Collapsible>
       )}
 
-      <Section title={`採購品項（${editItems.length}）`} pad={false}>
+      <Section title={`採購品項（${editItems.length}）`} pad={false} actions={open && <CopyItemsButton toBatchId={b.id} batches={otherBatches.map((x) => ({ id: x.id, label: `${x.code} ${x.name}${x.supplierRef ? `（${x.supplierRef.name}）` : ""}` }))} />}>
         {editItems.length === 0 ? (
           <Empty>還沒有採購品項，請用上方「批次新增系列商品」加入。</Empty>
         ) : (
@@ -194,8 +203,26 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
           </TableWrap>
         )}
       </Section>
-      <Section>
-        <KV items={[["供應商", supplierName], ["下單日", fmtDate(b.orderedAt)], ["本團匯率", `1 日圓 = ${formatRate(b.rateMicro)} 台幣（建立時鎖定，修改預設匯率不會影響）`], ["備註", b.notes]]} />
+      <Section title="基本資料">
+        <BatchInfoCard
+          batchId={b.id}
+          editable={b.status !== "CANCELLED"}
+          suppliers={suppliersList}
+          categories={categoriesList}
+          info={{
+            name: b.name,
+            supplierId: b.supplierId,
+            supplierName: supplierName ?? null,
+            categoryId: b.categoryId,
+            categoryName: b.category?.name ?? null,
+            supplierOrderNo: b.supplierOrderNo,
+            orderUrl: b.orderUrl,
+            expectedAt: dayInput(b.expectedAt),
+            orderedAt: fmtDate(b.orderedAt),
+            rate: formatRate(b.rateMicro),
+            notes: b.notes,
+          }}
+        />
       </Section>
     </div>
   );
