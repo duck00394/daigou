@@ -7,7 +7,7 @@ import { correctQuickSaleAction, quickSaleAction } from "@/actions/sales";
 import { formatTwd } from "@/lib/money";
 import { toDateInput } from "@/lib/labels";
 
-type Fixed = { id: string; name: string; salePriceTwd: number | null; available?: number };
+type Fixed = { id: string; name: string; salePriceTwd: number | null; available?: number; avgCost?: number | null };
 export type CorrectFrom = { orderId: string; productId: string; productName: string; qty: number; unitPrice: number; buyerName: string | null; soldAt: string; note: string | null };
 
 export function SellButton({ product, small, label = "出售", primary, autoOpen, correct }: { product?: Fixed; small?: boolean; label?: string; primary?: boolean; autoOpen?: boolean; correct?: CorrectFrom }) {
@@ -69,6 +69,13 @@ export function SellButton({ product, small, label = "出售", primary, autoOpen
           <div className="space-y-3">
             {!product && !correct && <ProductPicker value={picked} onPick={(p) => { setPicked(p); if (p?.salePriceTwd != null && !f.price) setF((x) => ({ ...x, price: String(p.salePriceTwd) })); }} />}
             {max !== undefined && <p className="text-[13px] text-mute">可售庫存 {max} 件（已保留給買家、自留的不會被賣掉）</p>}
+            {product?.avgCost != null && (
+              <p className="text-[13px] text-mute">
+                平均成本約 {formatTwd(product.avgCost)}／件
+                {valid && <span className={price - product.avgCost < 0 ? " text-bad" : " text-good"}>，預估毛利 {formatTwd((price - product.avgCost) * qty)}</span>}
+                <span className="block text-[11px]">實際成本以先進先出的批次計算，儲存後會顯示。</span>
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-[13px] font-medium text-ink-2" htmlFor="qs-qty">數量</label>

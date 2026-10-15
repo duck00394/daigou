@@ -27,12 +27,12 @@ export function ResponsibilityCard({ batchId, operators, value, editable }: { ba
   if (!edit)
     return (
       <div>
-        <dl className="grid gap-2 sm:grid-cols-3">
+        <dl className="grid grid-cols-3 gap-2">
           {rows.map(([label, k, note]) => (
-            <div key={k} className="rounded-lg border border-line-2 px-3 py-2">
-              <dt className="text-[12px] text-mute">{label}</dt>
-              <dd data-testid={`resp-${k}`} className={`text-[16px] font-semibold ${value[k] ? "" : "text-mute"}`}>{operatorName(operators, value[k] as string | null)}</dd>
-              <dd className="text-[11px] text-mute">{note}</dd>
+            <div key={k} className="min-w-0 rounded-lg border border-line-2 px-2 py-2 sm:px-3">
+              <dt className="text-[12px] text-mute">{label.replace("主要", "")}</dt>
+              <dd data-testid={`resp-${k}`} className={`truncate text-[15px] font-semibold sm:text-[16px] ${value[k] ? "" : "text-mute"}`}>{operatorName(operators, value[k] as string | null)}</dd>
+              <dd className="hidden text-[11px] text-mute sm:block">{note}</dd>
             </div>
           ))}
         </dl>

@@ -12,7 +12,7 @@ test("手機版主要頁面沒有整頁橫向捲動，底部導覽可用", async
     await expect(page.locator("main")).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, `${p} 出現整頁橫向捲動 ${overflow}px`).toBeLessThanOrEqual(1);
-    await page.screenshot({ path: `test-results/mobile${p.replace(/[/?=]/g, "_") || "_home"}.png`, fullPage: false });
+    await page.screenshot({ path: `test-results/mobile${p === "/" ? "_home" : p.replace(/[/?=]/g, "_")}.png`, fullPage: false });
   }
   // 活動頁（含跨團比價表）
   await page.goto("/categories");

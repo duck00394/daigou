@@ -1,7 +1,9 @@
 import Link from "next/link";
-import { prisma } from "@/server/db";
+import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
-import { dashboard, unrealizedEstimate } from "@/server/services/reports";
+import { dashboard, stockValuation, unrealizedEstimate } from "@/server/services/reports";
+import { inventorySummary } from "@/server/services/inventory";
+import { listQuickSales } from "@/server/services/quick-sale";
 import { Section, Stat, Twd, Empty, StatusBadge } from "@/components/ui";
 import { batchStatus, fmtDate, fmtDay } from "@/lib/labels";
 
@@ -20,7 +22,24 @@ const QUICK = [
 
 export default async function Home() {
   await requireUser();
-  const [d, un] = await Promise.all([dashboard(prisma), unrealizedEstimate(prisma)]);
+  const monthStart = (() => {
+    const [y, m] = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit" }).format(new Date()).split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, 1, -8));
+  })();
+  const [d, un, val, inv, sales, unpaidSales] = await Promise.all([
+    dashboard(prisma),
+    unrealizedEstimate(prisma),
+    stockValuation(prisma),
+    tx((t) => inventorySummary(t)),
+    tx((t) => listQuickSales(t, { from: monthStart })),
+    prisma.order.aggregate({ where: { source: "QUICK", confirmation: "CONFIRMED", balanceCache: { gt: 0 } }, _sum: { balanceCache: true }, _count: true }),
+  ]);
+  const [overdue, openBatches] = await Promise.all([
+    prisma.purchaseBatch.count({ where: { status: { in: ["ORDERED", "PARTIAL_RECEIVED"] }, expectedAt: { lt: new Date() } } }),
+    prisma.purchaseBatch.count({ where: { status: { in: ["ORDERED", "PARTIAL_RECEIVED"] } } }),
+  ]);
+  const incoming = [...inv.values()].reduce((s, v) => s + v.incoming, 0);
+  const today = new Date();
   const todo = [
     { n: d.pendingConfirm, text: "張訂單待確認", href: "/orders?status=PENDING_CONFIRM" },
     { n: d.unpaidOrders, text: "張訂單尚有待收款", href: "/payments" },
@@ -28,6 +47,7 @@ export default async function Home() {
     { n: d.refundPending, text: "筆退款待執行", href: "/payments?tab=refunds" },
     { n: d.refundUnscheduled, text: "張訂單溢收、尚未建立退款", href: "/payments?tab=refunds" },
     { n: d.needProducts, text: "項商品有待下單需求", href: "/inventory?tab=demand" },
+    { n: overdue, text: "個採購團已超過預計到貨日", href: "/inventory?tab=batches" },
   ].filter((x) => x.n > 0);
 
   return (
@@ -44,6 +64,22 @@ export default async function Home() {
           </Link>
         ))}
       </nav>
+
+      <div>
+        <h2 className="mb-2 text-[15px] font-semibold">我的庫存</h2>
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <Stat label="可售" value={`${val.total.free} 件`} note={`成本 ${val.total.freeValue.toLocaleString()} 元${val.total.tentative ? "（含暫估）" : ""}`} href="/inventory?tab=stock" />
+          <Stat label="自留收藏" value={`${val.total.kept} 件`} note={`成本 ${val.total.keptValue.toLocaleString()} 元`} href="/inventory?tab=stock" />
+          <Stat label="待到貨" value={`${incoming} 件`} note={`${openBatches} 個採購團進行中`} href="/inventory?tab=batches" />
+          <Stat label="已保留給買家" value={`${val.total.reserved} 件`} note="待出貨" href="/shipping" />
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <Stat label="本月現貨出售" value={`${sales.total.qty} 件`} note={`收入 ${sales.total.revenue.toLocaleString()} 元`} href="/sales" />
+          <Stat label="本月出售毛利" value={<Twd v={sales.total.profit} />} note={sales.total.tentative ? "成本含暫估" : "收入 − 商品成本"} href="/sales" tone={sales.total.profit < 0 ? "bad" : undefined} />
+          {(unpaidSales._sum.balanceCache ?? 0) > 0 && <Stat label="出售未收款" value={<Twd v={unpaidSales._sum.balanceCache ?? 0} />} note={`${unpaidSales._count} 筆`} href="/payments" tone="warn" />}
+          {val.total.unknownCostUnits > 0 && <Stat label="沒有成本的庫存" value={`${val.total.unknownCostUnits} 件`} note="手動入庫未填成本" href="/inventory?tab=stock" tone="warn" />}
+        </div>
+      </div>
 
       <Section title="今日待辦" pad={false}>
         {todo.length === 0 ? (
@@ -103,8 +139,9 @@ export default async function Home() {
             <ul className="divide-y divide-line-2 text-sm">
               {d.incomingBatches.map((b) => (
                 <li key={b.id} className="flex items-center justify-between gap-2 px-4 py-2">
-                  <Link href={`/inventory/batches/${b.id}`} className="truncate hover:underline">
+                  <Link href={`/inventory/batches/${b.id}`} className="min-w-0 truncate hover:underline">
                     {b.code} {b.name}
+                    {b.expectedAt && <span className={`ml-1 text-[12px] ${b.expectedAt < today ? "text-bad" : "text-mute"}`}>預計 {fmtDay(b.expectedAt)}{b.expectedAt < today ? "・已逾期" : ""}</span>}
                   </Link>
                   <StatusBadge map={batchStatus} value={b.status} />
                 </li>

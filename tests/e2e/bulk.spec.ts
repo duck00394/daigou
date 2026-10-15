@@ -2,6 +2,9 @@
 import { test, expect, type Page } from "@playwright/test";
 import { login, toast } from "./helpers";
 
+// 本檔的測試依序共用資料（後一個測試使用前一個建立的商品、訂單），明確宣告為依序執行
+test.describe.configure({ mode: "serial" });
+
 const cell = (page: Page, row: number, col: number) => page.locator(`[data-row="${row}"][data-col="${col}"]`).first();
 
 async function newBatch(page: Page, name: string) {
@@ -12,8 +15,18 @@ async function newBatch(page: Page, name: string) {
   await expect(page.getByRole("heading", { name: new RegExp(name) })).toBeVisible();
 }
 
+/** 讀取某商品目前的實際在庫與待到貨（商品還不存在時為 0），讓斷言只看本測試造成的變化 */
+async function stockOf(page: Page, name: string) {
+  await page.goto(`/inventory?tab=stock&only=all&q=${encodeURIComponent(name)}`);
+  const row = page.getByRole("row").filter({ hasText: name });
+  if ((await row.count()) === 0) return { onHand: 0, incoming: 0 };
+  const cell = async (i: number) => Number((await row.first().getByRole("cell").nth(i).textContent())?.trim() ?? 0);
+  return { onHand: await cell(1), incoming: await cell(5) };
+}
+
 test("桌面：批次新增 4 個角色（含新角色與貼上），再批次修改與刪除", async ({ page }) => {
   await login(page);
+  const before = await stockOf(page, "吉伊卡哇 吉伊 吊娃");
   await newBatch(page, "E2E 批次團");
   await page.getByLabel("IP／系列").selectOption({ label: "吉伊卡哇" });
   await page.getByLabel("商品類型").selectOption({ label: "吊娃" });
@@ -83,11 +96,9 @@ test("桌面：批次新增 4 個角色（含新角色與貼上），再批次�
   await toast(page, "已刪除品項");
   await expect(table.getByRole("row")).toHaveCount(4);
 
-  // 批次新增不會增加庫存
-  await page.goto("/inventory?tab=stock&q=吉伊卡哇 吉伊");
-  const stockRow = page.getByRole("row").filter({ hasText: "吉伊卡哇 吉伊 吊娃" });
-  await expect(stockRow.getByRole("cell").nth(1)).toHaveText("0");
-  await expect(stockRow.getByRole("cell").nth(5)).toHaveText("5"); // 待到貨
+  // 批次新增不會增加庫存，只增加待到貨（吉伊數量已改成 5）
+  const after = await stockOf(page, "吉伊卡哇 吉伊 吊娃");
+  expect(after).toEqual({ onHand: before.onHand, incoming: before.incoming + 5 });
 });
 
 test("桌面：第二團套用上次使用的角色，價格帶入上次設定且可獨立修改", async ({ page }) => {
@@ -106,7 +117,7 @@ test("桌面：第二團套用上次使用的角色，價格帶入上次設定�
   await page.getByRole("button", { name: "知道了" }).click();
   // 回到第一團確認價格沒變
   await page.goto("/inventory?tab=batches");
-  await page.getByRole("link", { name: /E2E 批次團/ }).click();
+  await page.getByRole("link", { name: /E2E 批次團/ }).first().click(); // 清單依建立時間由新到舊
   const table = page.getByRole("table", { name: "採購品項", exact: true });
   await expect(table.getByRole("row").filter({ hasText: "吉伊卡哇 吉伊 吊娃" }).getByLabel("預估單價")).toHaveValue("350");
 });

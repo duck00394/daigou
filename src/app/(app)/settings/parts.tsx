@@ -1,9 +1,9 @@
 "use client";
 import { useState } from "react";
-import { Button, ConfirmButton, TextField, SelectField, useRun, useToast, useIdemKey, inputCls } from "@/components/client";
+import { Button, ConfirmButton, TextField, SelectField, useRun, useToast, useIdemKey, inputCls, notify as notifyError } from "@/components/client";
 import { setRateAction, addExpenseAction, deleteExpenseAction } from "@/actions/ops";
 import { saveCharacterAction, saveProductTypeAction } from "@/actions/catalog";
-import { verifyBackupAction, restoreBackupAction, logoutAllAction } from "@/actions/system";
+import { verifyBackupAction, restoreBackupAction, logoutAllAction, checkIntegrityAction, recomputeDerivedAction } from "@/actions/system";
 import { costKind } from "@/lib/labels";
 import { saveOperatorAction } from "@/actions/operators";
 
@@ -190,6 +190,41 @@ export function OperatorList({ items }: { items: { id: string; code: string; nam
       ) : (
         <Button small variant="ghost" onClick={() => setAdding({ code: "", name: "" })}>＋ 新增經營者</Button>
       )}
+    </div>
+  );
+}
+
+type Issue = { kind: string; message: string; href?: string };
+export function HealthCheck() {
+  const [issues, setIssues] = useState<Issue[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const { run, pending } = useRun();
+  const check = async () => {
+    setBusy(true);
+    const r = await checkIntegrityAction();
+    setBusy(false);
+    if (!r.ok) return notifyError(r.error);
+    setIssues(r.data);
+  };
+  return (
+    <div className="space-y-2 text-sm">
+      <p className="text-ink-2">依庫存流水、收貨、出貨、付款重新核對庫存數量、訂單金額、採購到貨與費用分攤，只檢查、不修改資料。</p>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={check} loading={busy}>執行檢查</Button>
+        {issues && issues.length > 0 && (
+          <Button loading={pending} onClick={() => run(() => recomputeDerivedAction(), { success: (d) => (d.issues.length ? `已重算，仍有 ${d.issues.length} 個問題` : "已重算，資料一致"), onOk: (d) => setIssues(d.issues) })}>
+            重算狀態與金額快取
+          </Button>
+        )}
+      </div>
+      {issues && (issues.length === 0 ? (
+        <p className="rounded-lg bg-good-soft px-3 py-2 text-good">資料一致，沒有發現問題。</p>
+      ) : (
+        <ul className="space-y-1 rounded-lg bg-warn-soft px-3 py-2 text-warn">
+          {issues.map((i, k) => <li key={k}>{i.href ? <a className="underline" href={i.href}>{i.message}</a> : i.message}</li>)}
+          <li className="text-[12px] text-ink-2">「重算」只會依原始紀錄重新計算採購團狀態與訂單金額，不會改動庫存流水、付款或訂單內容；若重算後仍有問題，請把畫面截圖回報。</li>
+        </ul>
+      ))}
     </div>
   );
 }

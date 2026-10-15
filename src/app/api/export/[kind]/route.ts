@@ -97,6 +97,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
         ]),
       ], format);
     }
+    case "sales": {
+      const { listQuickSales } = await import("@/server/services/quick-sale");
+      const data = await tx((t) => listQuickSales(t, { includeVoided: true }));
+      return sheetResponse("現貨出售", [
+        ["出售日", "訂單編號", "商品", "數量", "每件售價", "收入", "商品成本", "毛利", "成本含暫估", "買家", "已收款", "狀態", "備註／作廢原因"],
+        ...data.rows.map((r) => [fmtDate(r.soldAt), r.orderNo, r.productName, r.voided ? r.originalQty : r.qty, r.unitPrice, r.revenue, r.cost, r.profit, r.tentative ? "是" : "", r.buyer.name, r.paid, r.voided ? "已作廢" : "有效", [r.note, r.cancelReason].filter(Boolean).join("｜")]),
+      ], format);
+    }
     case "receivings": {
       const rows = await prisma.receivingLine.findMany({ include: { record: { include: { receivedBy: true, batch: true } }, batchItem: { include: { product: true } } }, orderBy: [{ record: { receivedAt: "asc" } }, { id: "asc" }] });
       return sheetResponse("收貨清點", [

@@ -100,3 +100,14 @@ export async function checkIntegrity(db: Db): Promise<IntegrityIssue[]> {
   }
   return issues;
 }
+
+/** 只重算衍生欄位（採購團狀態、訂單金額與數量快取），不改動任何流水或原始紀錄 */
+export async function recomputeDerived(t: Tx) {
+  const { refreshBatchStatusById } = await import("./inventory");
+  const { recomputeOrder } = await import("./recompute");
+  const batches = await t.purchaseBatch.findMany({ select: { id: true } });
+  for (const b of batches) await refreshBatchStatusById(t, b.id);
+  const orders = await t.order.findMany({ select: { id: true } });
+  for (const o of orders) await recomputeOrder(t, o.id);
+  return { batches: batches.length, orders: orders.length };
+}

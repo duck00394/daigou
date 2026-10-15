@@ -90,13 +90,15 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
   // 直接出售剩下的 1 件 → 出售紀錄 → 更正售價 → 作廢後庫存回來
   await stockRow.getByRole("button", { name: "出售" }).click();
   await dlg.getByLabel("每件售價（台幣）").fill("520");
+  await dlg.getByText("選填：買家、日期、備註").click();
+  await dlg.getByLabel("成交日期").fill("2025-02-10"); // 過去月份：不影響其他測試的本月報表
   await dlg.getByRole("button", { name: "確認出售 NT$520" }).click();
   await expect(dlg.getByText("收入")).toBeVisible();
   await expect(dlg).toContainText("NT$520");
   await dlg.getByRole("button", { name: "完成" }).click();
   await expect(stockRow.getByRole("cell").nth(3)).toHaveText("0");
 
-  await page.goto("/sales");
+  await page.goto("/sales?ym=2025-02");
   const sale = page.getByTestId("sale-row").filter({ hasText: "吉伊卡哇 吉伊 吊娃" }).first();
   await expect(sale).toContainText("散客");
   await expect(sale).toContainText("已收款");
@@ -114,4 +116,15 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
   await expect(page.getByTestId("sale-row").filter({ hasText: "已作廢" })).toHaveCount(2);
   await page.goto("/inventory?tab=stock&q=吉伊卡哇 吉伊 吊娃");
   await expect(stockRow.getByRole("cell").nth(3)).toHaveText("1");
+
+  // 出售紀錄匯出：包含作廢與有效紀錄、成本與毛利欄位
+  const csv = await (await page.request.get("/api/export/sales?format=csv")).text();
+  expect(csv).toContain("商品成本");
+  expect(csv).toContain("吉伊卡哇 吉伊 吊娃");
+  expect(csv).toContain("已作廢");
+
+  // 經過砍單、複製、收貨、自留、出售、更正、作廢後，資料健康檢查必須一致
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "執行檢查" }).click();
+  await expect(page.getByText("資料一致，沒有發現問題。")).toBeVisible();
 });

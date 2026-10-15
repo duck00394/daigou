@@ -39,3 +39,27 @@ export async function logoutAllAction() {
     await logoutAllSessions(u.id);
   }, "admin");
 }
+
+/** 資料健康檢查（唯讀） */
+export async function checkIntegrityAction() {
+  return run(async () => {
+    const { checkIntegrity } = await import("@/server/services/integrity");
+    const { prisma } = await import("@/server/db");
+    return checkIntegrity(prisma);
+  }, "read");
+}
+
+/** 重算衍生欄位（採購團狀態、訂單快取），不改動流水；之後再檢查一次 */
+export async function recomputeDerivedAction() {
+  return run(async (a) => {
+    const { recomputeDerived, checkIntegrity } = await import("@/server/services/integrity");
+    const { prisma, tx } = await import("@/server/db");
+    const { audit } = await import("@/server/services/common");
+    const r = await tx(async (t) => {
+      const res = await recomputeDerived(t);
+      await audit(t, a, "system.recomputeDerived", "System", null, res);
+      return res;
+    }, { timeout: 120_000 });
+    return { ...r, issues: await checkIntegrity(prisma) };
+  }, "admin");
+}

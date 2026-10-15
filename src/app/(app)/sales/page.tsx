@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { listQuickSales } from "@/server/services/quick-sale";
-import { PageHeader, Section, Stat, Twd, Empty } from "@/components/ui";
+import { PageHeader, Section, Stat, Twd, Empty, LinkButton } from "@/components/ui";
 import { SellButton } from "@/components/quick-sale";
 import { VoidSaleButton } from "./parts";
 import { fmtDate, toDateInput } from "@/lib/labels";
@@ -36,7 +36,7 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
   return (
     <div className="space-y-4">
       <datalist id="buyer-names">{buyers.map((b) => <option key={b.name} value={b.name} />)}</datalist>
-      <PageHeader title="出售紀錄" sub="直接從庫存賣出的現貨。收入、成本與毛利和「成本與利潤」報表同一套計算。" actions={<SellButton label="＋ 出售現貨" primary autoOpen={sp.new === "1"} />} />
+      <PageHeader title="出售紀錄" sub="直接從庫存賣出的現貨。收入、成本與毛利和「成本與利潤」報表同一套計算。" actions={<><LinkButton href="/api/export/sales">匯出</LinkButton><SellButton label="＋ 出售現貨" primary autoOpen={sp.new === "1"} /></>} />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat label="出售筆數／件數" value={`${data.total.count} / ${data.total.qty}`} />
         <Stat label="收入" value={<Twd v={data.total.revenue} />} />

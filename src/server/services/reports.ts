@@ -1,6 +1,6 @@
 // 統計與報表。所有數字都從流水與明細即時計算，口徑見 docs/計算口徑.md。
 import type { Db, Tx } from "@/server/db";
-import { mulDiv } from "@/lib/money";
+import { divRound, mulDiv } from "@/lib/money";
 import { computeOrder, realizedRevenue, type OrderResult } from "@/server/calc/order";
 import { landedCosts } from "./purchase";
 
@@ -375,4 +375,101 @@ export async function dashboard(db: Db) {
   const toShipBuyers = new Set(toShipItems.map((i) => i.order.buyerId)).size;
   const needProducts = new Set(purchaseNeeds.filter((i) => i.qty - i.cancelledQtyCache - i.shippedQtyCache - i.reservedQtyCache > 0).map((i) => i.productId)).size;
   return { ym, pendingConfirm, unpaidOrders, toShipQty, toShipBuyers, refundPending, refundUnscheduled, closingGroupBuys, incomingBatches, upcomingProducts, needProducts, month, snap };
+}
+
+// ── 庫存估值 ──
+export interface ProductValuation {
+  onHand: number; // 實際在庫（不含自留）
+  reserved: number; // 已保留給買家
+  free: number; // 可售
+  kept: number; // 自留
+  freeValue: number; // 可售部分的成本（台幣）
+  reservedValue: number;
+  keptValue: number;
+  avgUnitCost: number | null; // 目前持有（在庫＋自留）的加權平均單件成本
+  tentative: boolean; // 含暫估成本（實際單價未確認或該團未登記費用）
+  unknownCostUnits: number; // 手動入庫且沒有填成本的件數
+}
+
+/**
+ * 依成本批次計算庫存估值：每個批次的單件成本 = 該採購品項的完整成本（商品＋分攤費用）÷ 有效數量；
+ * 手動入庫以填寫的成本加權平均。與出貨時的銷貨成本使用同一套口徑。
+ */
+export async function stockValuation(db: Db, productIds?: string[]) {
+  const t = db as Tx;
+  const where = productIds ? { productId: { in: productIds } } : {};
+  const [lots, keeps, manualIn] = await Promise.all([
+    t.inventoryMovement.groupBy({ by: ["productId", "purchaseBatchItemId"], where, _sum: { onHandDelta: true, reservedDelta: true } }),
+    t.inventoryMovement.groupBy({ by: ["productId", "purchaseBatchItemId"], where: { ...where, kind: "KEEP" }, _sum: { onHandDelta: true } }),
+    t.inventoryMovement.findMany({ where: { ...where, purchaseBatchItemId: null, onHandDelta: { gt: 0 }, unitCostTwd: { not: null }, kind: { in: ["RECEIVE", "ADJUST"] } }, select: { productId: true, onHandDelta: true, unitCostTwd: true } }),
+  ]);
+  const lotIds = [...new Set(lots.map((l) => l.purchaseBatchItemId).filter(Boolean) as string[])];
+  const landed = await landedCosts(t, lotIds);
+  const info = lotIds.length ? await t.purchaseBatchItem.findMany({ where: { id: { in: lotIds } }, select: { id: true, actualUnitCost: true, batch: { select: { costs: { select: { id: true }, take: 1 } } } } }) : [];
+  const tentativeLot = new Set(info.filter((i) => i.actualUnitCost === null || i.batch.costs.length === 0).map((i) => i.id));
+  const manualAvg = new Map<string, { qty: number; sum: number }>();
+  for (const m of manualIn) {
+    const v = manualAvg.get(m.productId) ?? { qty: 0, sum: 0 };
+    v.qty += m.onHandDelta;
+    v.sum += m.onHandDelta * (m.unitCostTwd ?? 0);
+    manualAvg.set(m.productId, v);
+  }
+  const keptBy = new Map(keeps.map((k) => [`${k.productId}|${k.purchaseBatchItemId ?? ""}`, -(k._sum.onHandDelta ?? 0) || 0]));
+  const out = new Map<string, ProductValuation & { _qty: number; _val: number }>();
+  for (const l of lots) {
+    const v = out.get(l.productId) ?? { onHand: 0, reserved: 0, free: 0, kept: 0, freeValue: 0, reservedValue: 0, keptValue: 0, avgUnitCost: null, tentative: false, unknownCostUnits: 0, _qty: 0, _val: 0 };
+    const on = l._sum.onHandDelta ?? 0;
+    const rs = l._sum.reservedDelta ?? 0;
+    const kp = keptBy.get(`${l.productId}|${l.purchaseBatchItemId ?? ""}`) ?? 0;
+    const free = on - rs;
+    // 以整數比例計算（與出貨成本 costOfMove 相同），不使用浮點單價
+    let valueOf: ((q: number) => number) | null = null;
+    if (l.purchaseBatchItemId) {
+      const lc = landed.get(l.purchaseBatchItemId);
+      if (lc && lc.qty > 0) valueOf = (q) => mulDiv(lc.totalTwd, q, lc.qty);
+      if (tentativeLot.has(l.purchaseBatchItemId) && on + kp > 0) v.tentative = true;
+    } else {
+      const m = manualAvg.get(l.productId);
+      if (m && m.qty > 0) valueOf = (q) => mulDiv(m.sum, q, m.qty);
+      else v.unknownCostUnits += Math.max(0, on + kp);
+    }
+    v.onHand += on;
+    v.reserved += rs;
+    v.free += free;
+    v.kept += kp;
+    if (valueOf) {
+      v.freeValue += valueOf(free);
+      v.reservedValue += valueOf(rs);
+      v.keptValue += valueOf(kp);
+      v._qty += on + kp;
+      v._val += valueOf(on + kp);
+    }
+    out.set(l.productId, v);
+  }
+  const result = new Map<string, ProductValuation>();
+  const total = { free: 0, reserved: 0, kept: 0, freeValue: 0, reservedValue: 0, keptValue: 0, tentative: false, unknownCostUnits: 0 };
+  for (const [id, v] of out) {
+    const r: ProductValuation = {
+      onHand: v.onHand,
+      reserved: v.reserved,
+      free: v.free,
+      kept: v.kept,
+      freeValue: v.freeValue,
+      reservedValue: v.reservedValue,
+      keptValue: v.keptValue,
+      avgUnitCost: v._qty > 0 ? divRound(v._val, v._qty) : null,
+      tentative: v.tentative,
+      unknownCostUnits: v.unknownCostUnits,
+    };
+    result.set(id, r);
+    total.free += r.free;
+    total.reserved += r.reserved;
+    total.kept += r.kept;
+    total.freeValue += r.freeValue;
+    total.reservedValue += r.reservedValue;
+    total.keptValue += r.keptValue;
+    total.tentative ||= r.tentative;
+    total.unknownCostUnits += r.unknownCostUnits;
+  }
+  return { byProduct: result, total };
 }

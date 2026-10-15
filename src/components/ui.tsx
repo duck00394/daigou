@@ -59,9 +59,9 @@ export function PageHeader({ title, sub, actions, back }: { title: string; sub?:
   );
 }
 
-export function Section({ title, actions, children, className = "", pad = true }: { title?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; className?: string; pad?: boolean }) {
+export function Section({ title, actions, children, className = "", pad = true, id }: { title?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; className?: string; pad?: boolean; id?: string }) {
   return (
-    <section className={`rounded-xl border border-line bg-card ${className}`}>
+    <section id={id} className={`scroll-mt-28 rounded-xl border border-line bg-card ${className}`}>
       {(title || actions) && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line-2 px-4 py-2.5">
           {title && <h2 className="text-[15px] font-semibold">{title}</h2>}

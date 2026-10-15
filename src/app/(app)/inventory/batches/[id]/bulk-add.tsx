@@ -115,33 +115,56 @@ export function BulkAddGrid({
 
   const nameOf = (cid: string) => roster.find((c) => c.id === cid)?.name ?? "";
 
-  /** 依角色清單新增列，並帶入參考價格（逐角色不同，可再修改） */
+  /**
+   * 依角色清單新增列，並帶入參考價格（逐角色不同，可再修改）。
+   * 先立即加入列（不等伺服器），參考價回來後只補在使用者還沒自己填的欄位；
+   * 若已有「填了價格但還沒選角色」的列，優先把角色填進那一列，不會多出一列。
+   */
   async function addCharacters(items: { characterId: string; spec?: string | null }[], opts: { replace?: boolean; productTypeId?: string | null } = {}) {
     if (!seriesId) return notify("請先選擇系列");
     const replace = !!opts.replace;
     const tid = opts.productTypeId !== undefined ? opts.productTypeId : typeId || null;
     const specs: Record<string, string | null> = {};
     items.forEach((i) => (specs[i.characterId] = i.spec ?? null));
-    const d = await rowDefaultsAction({ seriesId, productTypeId: tid, supplierId, characterIds: items.map((i) => i.characterId), specs });
-    const defaults = d.ok ? d.data : [];
-    const newRows: RowState[] = items.map((i) => {
-      const df = defaults.find((x) => x.characterId === i.characterId);
-      return {
-        ...blankRow(df?.currency ?? supplierCurrency),
-        characterId: i.characterId,
-        spec: i.spec ?? "",
-        unitCost: df?.unitCost != null ? String(df.unitCost) : "",
-        salePrice: df?.salePriceTwd != null ? String(df.salePriceTwd) : "",
-        hint: df?.unitCost != null ? `參考：${df.source}` : "",
-      };
-    });
+    const pending = items.map((i) => ({ ...blankRow(supplierCurrency), characterId: i.characterId, spec: i.spec ?? "", hint: "讀取參考價…" }));
+    const placed = new Map<string, string>(); // characterId|spec → row key
     setRows((rs) => {
       const kept = replace ? [] : rs.filter((r) => !isBlank(r));
       const existing = new Set(kept.map((r) => `${r.characterId}|${r.spec.trim()}`));
-      const add = newRows.filter((r) => !existing.has(`${r.characterId}|${r.spec.trim()}`));
-      const out = [...kept, ...add];
+      const out = [...kept];
+      for (const n of pending) {
+        const k = `${n.characterId}|${n.spec.trim()}`;
+        if (existing.has(k)) continue;
+        existing.add(k);
+        const orphan = out.findIndex((r) => !r.characterId && !r.newName.trim());
+        if (orphan >= 0) {
+          out[orphan] = { ...out[orphan], characterId: n.characterId, spec: out[orphan].spec || n.spec, hint: n.hint };
+          placed.set(k, out[orphan].key);
+        } else {
+          out.push(n);
+          placed.set(k, n.key);
+        }
+      }
       return out.length ? out : [blankRow(supplierCurrency)];
     });
+    const d = await rowDefaultsAction({ seriesId, productTypeId: tid, supplierId, characterIds: items.map((i) => i.characterId), specs });
+    const defaults = d.ok ? d.data : [];
+    setRows((rs) =>
+      rs.map((r) => {
+        const isOurs = [...placed.values()].includes(r.key);
+        if (!isOurs) return r;
+        const df = defaults.find((x) => x.characterId === r.characterId);
+        if (!df) return { ...r, hint: r.hint === "讀取參考價…" ? "" : r.hint };
+        return {
+          ...r,
+          // 使用者已經自己輸入的不覆蓋
+          unitCost: r.unitCost || (df.unitCost != null ? String(df.unitCost) : ""),
+          currency: r.unitCost ? r.currency : ((df.currency as Currency | undefined) ?? r.currency),
+          salePrice: r.salePrice || (df.salePriceTwd != null ? String(df.salePriceTwd) : ""),
+          hint: df.unitCost != null ? `參考：${df.source}` : "",
+        };
+      }),
+    );
   }
 
   function toggleCharacter(cid: string) {

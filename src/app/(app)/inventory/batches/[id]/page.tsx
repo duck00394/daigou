@@ -113,14 +113,13 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         <Stat label="本團匯率（已鎖定）" value={formatRate(b.rateMicro)} note="1 日圓 = ? 台幣" />
       </div>
 
-      <Section title="負責人">
-        <ResponsibilityCard
-          batchId={b.id}
-          operators={ops}
-          editable={open}
-          value={{ orderedById: b.orderedById, paymentResponsibleById: b.paymentResponsibleById, receivingResponsibleById: b.receivingResponsibleById, responsibilityNote: b.responsibilityNote }}
-        />
-      </Section>
+      <nav aria-label="跳到段落" className="no-print sticky top-[49px] z-30 -mx-3 flex gap-1.5 overflow-x-auto bg-paper/95 px-3 py-2 backdrop-blur sm:-mx-5 sm:px-5 md:top-0">
+        {([["items", `品項 ${editItems.length}`], ["receiving", `收貨 ${b.receivings.length}`], ["payments", `付款 ${payments.filter((p) => p.status !== "VOIDED").length}`], ["people", "負責人"], ["costs", `費用 ${b.costs.length}`], ["info", "基本資料"]] as const).map(([id, label]) => (
+          <a key={id} href={`#${id}`} className="shrink-0 rounded-full border border-line bg-white px-3 py-1.5 text-sm text-ink-2 hover:border-ai">{label}</a>
+        ))}
+      </nav>
+
+
 
       {open && (
         <Collapsible title="批次新增系列商品" defaultOpen={sp.bulk === "1" || b.items.length === 0}>
@@ -135,7 +134,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         </Collapsible>
       )}
 
-      <Section title={`採購品項（${editItems.length}）`} pad={false} actions={open && <CopyItemsButton toBatchId={b.id} batches={otherBatches.map((x) => ({ id: x.id, label: `${x.code} ${x.name}${x.supplierRef ? `（${x.supplierRef.name}）` : ""}` }))} />}>
+      <Section id="items" title={`採購品項（${editItems.length}）`} pad={false} actions={open && <CopyItemsButton toBatchId={b.id} batches={otherBatches.map((x) => ({ id: x.id, label: `${x.code} ${x.name}${x.supplierRef ? `（${x.supplierRef.name}）` : ""}` }))} />}>
         {editItems.length === 0 ? (
           <Empty>還沒有採購品項，請用上方「批次新增系列商品」加入。</Empty>
         ) : (
@@ -145,7 +144,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       </Section>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Section title={`供應商付款（${payments.filter((p) => p.status !== "VOIDED").length}）`} pad={false}>
+        <Section id="payments" title={`供應商付款（${payments.filter((p) => p.status !== "VOIDED").length}）`} pad={false}>
           <SupplierPayments
             batchId={b.id}
             operators={ops}
@@ -155,7 +154,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
             defaultCurrency={(b.supplierRef?.defaultCurrency as "JPY" | "TWD") ?? "JPY"}
           />
         </Section>
-        <Section title={`收貨清點（${b.receivings.length}）`} pad={false}>
+        <Section id="receiving" title={`收貨清點（${b.receivings.length}）`} pad={false}>
           <Receiving
             batchId={b.id}
             operators={ops}
@@ -173,7 +172,16 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         </Section>
       </div>
 
-      <Section title="共同費用與分攤" pad={false} actions={open && <AddCost batchId={b.id} items={b.items.filter((i) => i.qty - i.cancelledQty > 0).map((i) => ({ id: i.id, name: i.product.name }))} />}>
+      <Section title="負責人" id="people">
+        <ResponsibilityCard
+          batchId={b.id}
+          operators={ops}
+          editable={open}
+          value={{ orderedById: b.orderedById, paymentResponsibleById: b.paymentResponsibleById, receivingResponsibleById: b.receivingResponsibleById, responsibilityNote: b.responsibilityNote }}
+        />
+      </Section>
+
+      <Section id="costs" title="共同費用與分攤" pad={false} actions={open && <AddCost batchId={b.id} items={b.items.filter((i) => i.qty - i.cancelledQty > 0).map((i) => ({ id: i.id, name: i.product.name }))} />}>
         {b.costs.length === 0 ? (
           <Empty>還沒有共同費用，例如代購費、國際運費、國內運費、關稅。</Empty>
         ) : (
@@ -203,7 +211,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
           </TableWrap>
         )}
       </Section>
-      <Section title="基本資料">
+      <Section id="info" title="基本資料">
         <BatchInfoCard
           batchId={b.id}
           editable={b.status !== "CANCELLED"}

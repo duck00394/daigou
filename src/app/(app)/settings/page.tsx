@@ -4,7 +4,7 @@ import { getDefaultRateMicro } from "@/server/services/settings";
 import { businessDataCount } from "@/server/services/backup";
 import { listOperators } from "@/server/services/operators";
 import { PageHeader, Section, LinkButton, Twd, Empty } from "@/components/ui";
-import { RateForm, NameList, OperatorList, ExpenseForm, DeleteExpense, RestoreForm, LogoutAll } from "./parts";
+import { RateForm, NameList, OperatorList, HealthCheck, ExpenseForm, DeleteExpense, RestoreForm, LogoutAll } from "./parts";
 import { costKind, fmtDate } from "@/lib/labels";
 import { formatRate } from "@/lib/money";
 
@@ -22,6 +22,7 @@ const EXPORTS: [string, string, string][] = [
   ["to-ship", "待出貨清單", "依買家排序"],
   ["supplier-payments", "供應商付款", "每筆付給供應商的款項、實際付款人、幣別與狀態（含已作廢）"],
   ["receivings", "收貨清點", "每次收貨的確認人、實收、瑕疵與缺少數量"],
+  ["sales", "現貨出售", "每筆出售的商品、數量、售價、成本與毛利（含已作廢）"],
 ];
 
 export default async function Settings() {
@@ -96,6 +97,10 @@ export default async function Settings() {
           <RestoreForm hasData={dataCount > 0} />
         </Section>
       </div>
+
+      <Section title="資料健康檢查">
+        <HealthCheck />
+      </Section>
 
       <Section title="最近的操作紀錄" pad={false}>
         <ul className="max-h-80 divide-y divide-line-2 overflow-y-auto text-[13px]">

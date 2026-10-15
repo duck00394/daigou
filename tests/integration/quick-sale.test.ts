@@ -122,4 +122,19 @@ describe("現貨直接出售", () => {
     expect(o.payments.map((p) => p.voidedAt)).toEqual([null]);
     expect(o.refundDueCache).toBe(250);
   });
+
+  it("庫存估值＋已賣出成本＝全部購入成本；自留、保留、可售分開估值", async () => {
+    const { stockValuation } = await import("@/server/services/reports");
+    const v0 = (await stockValuation(prisma, [s.p3.id])).byProduct.get(s.p3.id)!;
+    expect(v0).toMatchObject({ free: 5, freeValue: 220 + 450, avgUnitCost: 134, tentative: true });
+    const sold = await sell({ qty: 3 });
+    const order = await tx((t) => createOrder(t, actor, { buyerId: s.b1.id, items: [{ productId: s.p3.id, qty: 1 }] }));
+    await tx((t) => reserveForItem(t, actor, { orderItemId: order.items[0].id, qty: 1 }));
+    await tx((t) => keepStock(t, actor, { productId: s.p3.id, delta: 1 }));
+    const v = (await stockValuation(prisma, [s.p3.id])).byProduct.get(s.p3.id)!;
+    expect([v.free, v.reserved, v.kept]).toEqual([0, 1, 1]);
+    expect(sold.cost + v.freeValue + v.reservedValue + v.keptValue).toBe(220 + 450);
+    const inv = await stock();
+    expect([inv.available, inv.reserved, inv.kept]).toEqual([v.free, v.reserved, v.kept]);
+  });
 });

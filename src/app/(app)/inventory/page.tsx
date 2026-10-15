@@ -8,6 +8,8 @@ import { getDefaultRateMicro } from "@/server/services/settings";
 import { PageHeader, Section, TableWrap, Empty, StatusBadge, LinkButton, Badge } from "@/components/ui";
 import { ReceiveForm, AdjustForm, CreateBatchFromDemand, KeepButton } from "./parts";
 import { SellButton } from "@/components/quick-sale";
+import { stockValuation } from "@/server/services/reports";
+import { formatTwd } from "@/lib/money";
 import { batchStatus, fmtDate, fmtDay, formatRateLabel } from "./util";
 
 export const metadata = { title: "庫存與採購" };
@@ -54,6 +56,7 @@ async function StockTab({ q, only }: { q?: string; only?: string }) {
     select: { id: true, code: true, name: true, status: true, salePriceTwd: true },
   });
   const inv = await tx((t) => inventorySummary(t, products.map((p) => p.id)));
+  const val = (await stockValuation(prisma, products.map((p) => p.id))).byProduct;
   const buyerNames = await prisma.buyer.findMany({ where: { mergedIntoId: null }, orderBy: { updatedAt: "desc" }, take: 200, select: { name: true } });
   let rows = products.map((p) => ({ p, s: inv.get(p.id) ?? { onHand: 0, reserved: 0, available: 0, incoming: 0, shipped: 0, kept: 0, activeOrdered: 0, openDemand: 0, unallocated: 0, shortage: 0 } }));
   if (only === "active") rows = rows.filter((r) => r.s.onHand || r.s.incoming || r.s.openDemand || r.s.kept);
@@ -91,8 +94,14 @@ async function StockTab({ q, only }: { q?: string; only?: string }) {
                     </div>
                   ))}
                 </dl>
+                {val.get(p.id)?.avgUnitCost != null && (
+                  <p className="mt-1 text-[12px] text-mute">
+                    平均成本 {formatTwd(val.get(p.id)!.avgUnitCost)}／件{val.get(p.id)!.tentative ? "（含暫估）" : ""}
+                    {p.salePriceTwd != null ? `・參考售價 ${formatTwd(p.salePriceTwd)}` : ""}
+                  </p>
+                )}
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <SellButton primary product={{ id: p.id, name: p.name, salePriceTwd: p.salePriceTwd, available: s.available }} />
+                  <SellButton primary product={{ id: p.id, name: p.name, salePriceTwd: p.salePriceTwd, available: s.available, avgCost: val.get(p.id)?.avgUnitCost ?? null }} />
                   <KeepButton productId={p.id} name={p.name} available={s.available} kept={s.kept} />
                   <Link href={`/inventory?tab=receive&productId=${p.id}`} className="rounded-lg border border-line px-3 py-1.5 text-sm text-ai">登記到貨</Link>
                 </div>
@@ -111,6 +120,7 @@ async function StockTab({ q, only }: { q?: string; only?: string }) {
                   <th className="text-right">待到貨</th>
                   <th className="text-right">有效預購（未出貨）</th>
                   <th className="text-right">已出貨</th>
+                  <th className="text-right">平均成本</th>
                   <th className="text-right">缺貨</th>
                   <th></th>
                 </tr>
@@ -126,10 +136,11 @@ async function StockTab({ q, only }: { q?: string; only?: string }) {
                     <td className="num text-right">{s.incoming}</td>
                     <td className="num text-right">{s.openDemand}</td>
                     <td className="num text-right">{s.shipped}</td>
+                    <td className="num text-right">{val.get(p.id)?.avgUnitCost != null ? `${formatTwd(val.get(p.id)!.avgUnitCost)}${val.get(p.id)!.tentative ? "*" : ""}` : "—"}</td>
                     <td className="num text-right">{s.shortage > 0 ? <Badge tone="bad">缺 {s.shortage}</Badge> : 0}</td>
                     <td className="whitespace-nowrap">
                       <span className="flex gap-2">
-                        <SellButton small primary product={{ id: p.id, name: p.name, salePriceTwd: p.salePriceTwd, available: s.available }} />
+                        <SellButton small primary product={{ id: p.id, name: p.name, salePriceTwd: p.salePriceTwd, available: s.available, avgCost: val.get(p.id)?.avgUnitCost ?? null }} />
                         <KeepButton productId={p.id} name={p.name} available={s.available} kept={s.kept} small />
                         <Link href={`/inventory?tab=receive&productId=${p.id}`} className="text-sm text-ai hover:underline">登記到貨</Link>
                       </span>
@@ -141,7 +152,7 @@ async function StockTab({ q, only }: { q?: string; only?: string }) {
           </div>
         </>
       )}
-      <p className="px-4 py-3 text-[12px] text-mute">可售 = 實際在庫 − 已保留給買家（自留的已不在可售裡）。缺貨 = 未分配需求 − 可售 − 待到貨（不小於 0）。已取消的數量不計入任何需求。</p>
+      <p className="px-4 py-3 text-[12px] text-mute">可售 = 實際在庫 − 已保留給買家（自留的已不在可售裡）。平均成本含分攤運費等費用，* 表示含暫估。缺貨 = 未分配需求 − 可售 − 待到貨（不小於 0）。已取消的數量不計入任何需求。</p>
     </Section>
   );
 }
