@@ -102,3 +102,6 @@ export async function saveGroupBuyAction(id: string | null, form: z.infer<typeof
     return { id: row.id };
   });
 }
+export async function renameCategoryAction(id: string, name: string) {
+  return run((a) => tx((t) => cat.renameCategory(t, a, z.string().max(64).parse(id), z.string().max(50).parse(name))).then((r) => ({ id: r.id, name: r.name })));
+}

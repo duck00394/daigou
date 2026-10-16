@@ -94,6 +94,10 @@ export async function createBatchAction(input: {
   expectedAt?: string | null;
   ownership?: "PERSONAL" | "JOINT";
   progress?: "ASKED" | "AGENT_HAS" | "SHIPPED";
+  /** 開團時一起記的運費（不攤、算這團的） */
+  fees?: { kind: string; currency: "TWD" | "JPY"; amount: number; note?: string | null }[];
+  /** 開團時已付的訂金（台幣） */
+  deposit?: { amount: number; paidById: string | null } | null;
 }) {
   return run(async (a) => {
     const items = z.array(batchItem).max(300).parse(input.items);
@@ -102,7 +106,23 @@ export async function createBatchAction(input: {
     const extra = z
       .object({ categoryId: z.string().max(64).nullish(), supplierOrderNo: z.string().max(100).nullish(), orderUrl: z.string().max(500).nullish(), expectedAt: z.string().max(10).nullish(), ownership: z.enum(["PERSONAL", "JOINT"]).optional(), progress: z.enum(["ASKED", "AGENT_HAS", "SHIPPED"]).optional() })
       .parse(input);
-    const b = await tx((t) => pur.createBatch(t, a, { ...input, ...resp, ...extra, expectedAt: parseDay(extra.expectedAt), orderedAt: parseDateTimeInput(input.orderedAt), items }), { timeout: 120_000 });
+    const fees = z.array(z.object({ kind: z.enum(["AGENT_FEE", "JP_DOMESTIC_SHIPPING", "INTL_SHIPPING", "TW_DOMESTIC_SHIPPING", "DUTY", "PACKAGING", "PLATFORM_FEE", "OTHER"]), currency: z.enum(["TWD", "JPY"]), amount: z.number().int().min(0), note: z.string().max(100).nullish() })).max(10).parse(input.fees ?? []);
+    const deposit = z.object({ amount: z.number().int().min(0), paidById: z.string().max(64).nullable() }).nullish().parse(input.deposit);
+    const { fees: _f, deposit: _d, ...rest } = input;
+    void _f;
+    void _d;
+    const b = await tx(
+      async (t) => {
+        const row = await pur.createBatch(t, a, { ...rest, ...resp, ...extra, expectedAt: parseDay(extra.expectedAt), orderedAt: parseDateTimeInput(input.orderedAt), items });
+        for (const f of fees.filter((x) => x.amount > 0)) await pur.addBatchCost(t, a, { batchId: row.id, kind: f.kind, currency: f.currency, amount: f.amount, method: "NONE", note: f.note ?? null });
+        if (deposit && deposit.amount > 0) {
+          const { addSupplierPayment } = await import("@/server/services/supplier-payments");
+          await addSupplierPayment(t, a, { batchId: row.id, paidById: deposit.paidById, paidAt: new Date(), amount: deposit.amount, currency: "TWD", purpose: "DEPOSIT", note: "開團時付的訂金" });
+        }
+        return row;
+      },
+      { timeout: 120_000 },
+    );
     return { id: b.id };
   });
 }

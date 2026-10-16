@@ -9,6 +9,7 @@ import { BatchInfoCard, CopyItemsButton } from "./manage";
 import { ItemsPanel, PayOffButton } from "./items";
 import { batchPaySummary } from "@/server/services/batch-ops";
 import { getMe } from "@/server/me";
+import { listShippingMethods } from "@/server/services/shipping-methods";
 import { ProgressBar, ResponsibilityCard, SupplierPayments, Receiving, type PaymentRow } from "./operators";
 import { listOperators } from "@/server/services/operators";
 import { jointWeights, sharePercents } from "@/server/services/ownership";
@@ -34,6 +35,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
   if (!b) notFound();
   const [operators, history] = await Promise.all([tx((t) => listOperators(t, { includeInactive: true })), tx((t) => supplierPaymentHistory(t, b.supplierPayments.map((p) => p.id)))]);
   const ops = operators.map((o) => ({ id: o.id, name: o.name, code: o.code, active: o.active }));
+  const shippingPresets = (await listShippingMethods(prisma)).map((x) => ({ id: x.id, name: x.name, kind: x.kind, currency: x.currency, amount: x.amount }));
   const opName = (id: unknown) => (typeof id === "string" ? (ops.find((o) => o.id === id)?.name ?? "（已移除）") : "未指定");
   const feeTotal = b.costs.reduce((s, c) => s + (c.currency === "JPY" ? jpyToTwd(c.amount, b.rateMicro) : c.amount), 0);
   const ownerLabel = b.ownership === "JOINT" ? "跟著這團（合資）" : b.orderedById ? `${opName(b.orderedById)}（這團主人）` : "這團（未指定主人）";
@@ -192,7 +194,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         />
       </Section>
 
-      <Section id="costs" title="運費・代購費" pad={false} actions={open && <AddCost batchId={b.id} items={b.items.filter((i) => i.qty - i.cancelledQty > 0).map((i) => ({ id: i.id, name: i.product.name }))} operators={ops.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} owner={{ id: b.ownership === "JOINT" ? null : b.orderedById, label: ownerLabel }} />}>
+      <Section id="costs" title="運費・代購費" pad={false} actions={open && <AddCost batchId={b.id} items={b.items.filter((i) => i.qty - i.cancelledQty > 0).map((i) => ({ id: i.id, name: i.product.name }))} operators={ops.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} owner={{ id: b.ownership === "JOINT" ? null : b.orderedById, label: ownerLabel }} presets={shippingPresets} />}>
         {b.costs.length === 0 ? (
           <Empty>還沒有記運費。國際運費、國內運費、代購費、關稅都記在這裡。</Empty>
         ) : (

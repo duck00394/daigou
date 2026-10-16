@@ -275,3 +275,21 @@ export function productSearchWhere(q: string | null | undefined): Prisma.Product
     })),
   };
 }
+
+/** 只改活動名稱（不動類型、日期等其他設定） */
+export async function renameCategory(t: Tx, actor: Actor, id: string, name: string) {
+  const n = name?.trim();
+  if (!n) throw new BizError("請填寫活動名稱");
+  if (n.length > 50) throw new BizError("活動名稱請在 50 字以內");
+  const before = await t.category.findUnique({ where: { id } });
+  if (!before) throw new BizError("找不到活動");
+  if (before.name === n) return before;
+  try {
+    const row = await t.category.update({ where: { id }, data: { name: n } });
+    await audit(t, actor, "category.rename", "Category", id, { from: before.name, to: n });
+    return row;
+  } catch (e) {
+    if (isUniqueViolation(e)) throw new BizError(`活動「${n}」已存在`);
+    throw e;
+  }
+}

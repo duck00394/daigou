@@ -62,3 +62,10 @@ export async function payRemainingAction(batchId: string, paidById: string | nul
   const v = z.object({ batchId: z.string().max(64), paidById: z.string().max(64).nullable(), dedupeKey: z.string().min(8).max(100) }).parse({ batchId, paidById, dedupeKey });
   return run((a) => tx((t) => bo.payRemaining(t, a, v.batchId, { paidById: v.paidById, dedupeKey: `payoff:${v.dedupeKey}` })).then((r) => ({ duplicated: r.duplicated })));
 }
+
+/** 全部到了：還沒收到的一次入庫（重送不重複） */
+export async function receiveAllAction(batchId: string, receivedById: string | null, dedupeKey: string) {
+  const v = z.object({ batchId: z.string().max(64), receivedById: z.string().max(64).nullable(), dedupeKey: z.string().min(8).max(100) }).parse({ batchId, receivedById, dedupeKey });
+  const { receiveAll } = await import("@/server/services/receiving");
+  return run((a) => tx((t) => receiveAll(t, a, v.batchId, { receivedById: v.receivedById, dedupeKey: `all:${v.dedupeKey}` })));
+}

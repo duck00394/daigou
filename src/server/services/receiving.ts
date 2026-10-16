@@ -76,3 +76,24 @@ export async function createReceivingRecord(
   });
   return { record: await t.receivingRecord.findUniqueOrThrow({ where: { id: record.id }, include: { lines: true } }), duplicated: false };
 }
+
+/**
+ * 全部到了：把這團每個品項「還沒收到的數量」一次收貨入庫（現貨、或代購一次寄齊時用）。
+ * 沒有還沒到的就什麼都不做；收貨確認人預設這團的收貨負責人、主人，再來是傳入的人。
+ */
+export async function receiveAll(t: Tx, actor: Actor, batchId: string, input: { receivedById: string | null; dedupeKey?: string | null }) {
+  await lockRows(t, "PurchaseBatch", [batchId]);
+  const b = await t.purchaseBatch.findUnique({
+    where: { id: batchId },
+    include: { items: { select: { id: true, qty: true, cancelledQty: true, receivingLines: { select: { receivedQty: true } } } } },
+  });
+  if (!b) throw new BizError("找不到採購團");
+  const lines = b.items
+    .map((i) => ({ batchItemId: i.id, receivedQty: i.qty - i.cancelledQty - i.receivingLines.reduce((s, l) => s + l.receivedQty, 0) }))
+    .filter((l) => l.receivedQty > 0);
+  if (!lines.length) return { received: 0, duplicated: false };
+  const who = input.receivedById || b.receivingResponsibleById || b.orderedById;
+  if (!who) throw new BizError("請先選這團是誰的，或選收貨的人");
+  const r = await createReceivingRecord(t, actor, { batchId, receivedById: who, dedupeKey: input.dedupeKey ?? null, note: "全部到了", lines });
+  return { received: r.duplicated ? 0 : lines.reduce((s, l) => s + l.receivedQty, 0), duplicated: r.duplicated };
+}

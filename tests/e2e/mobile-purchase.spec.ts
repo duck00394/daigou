@@ -14,10 +14,10 @@ async function addRow(page: Page, character: string, price: string, qty: string)
 }
 
 async function newSupplier(page: Page, name: string) {
-  await page.getByRole("button", { name: "新增代購" }).click();
+  await page.getByRole("button", { name: "＋ 新代購" }).click();
   await page.getByLabel("代購名稱", { exact: true }).fill(name);
   await page.getByRole("button", { name: "建立", exact: true }).click();
-  await expect(page.getByLabel("向哪個代購買")).toHaveValue(/.+/);
+  await expect(page.getByRole("radiogroup", { name: "向哪個代購買" }).getByRole("radio", { name })).toHaveAttribute("aria-checked", "true");
 }
 
 test("手機：同一活動開三團（我的、對方的、合資），總表分人顯示", async ({ page }) => {
@@ -33,10 +33,10 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   if (await meBtn.isVisible()) await meBtn.click();
 
   // 1. 新增活動
-  await page.getByRole("button", { name: "新增活動" }).click();
+  await page.getByRole("button", { name: "＋ 新活動" }).click();
   await page.getByLabel("新活動名稱").fill(cat);
   await page.getByRole("button", { name: "建立", exact: true }).click();
-  await expect(page.getByLabel("活動／系列")).toHaveValue(/.+/);
+  await expect(page.getByRole("radiogroup", { name: "哪個活動" }).getByRole("radio", { name: cat })).toHaveAttribute("aria-checked", "true");
 
   // 2. 第一團：我的（預設），預設台幣
   await expect(page.getByRole("radio", { name: /新的一團/ })).toHaveAttribute("aria-checked", "true");
@@ -64,8 +64,9 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   await addRow(page, "吉伊", "610", "4");
 
   // 已有的團會列出來，可以直接加進去
+  // 再進來時，活動預設是上次用的
   await page.goto("/purchase");
-  await page.getByLabel("活動／系列").selectOption({ label: cat });
+  await expect(page.getByRole("radiogroup", { name: "哪個活動" }).getByRole("radio", { name: cat })).toHaveAttribute("aria-checked", "true");
   await expect(page.getByRole("radiogroup", { name: "哪一團" }).getByRole("radio")).toHaveCount(4); // 三團＋新的一團
 
   // 活動總表：總額與誰買的
@@ -104,4 +105,45 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   await expect(page.getByTestId("cat-due")).toHaveText("NT$3,760");
   await expect(page.getByTestId("cat-paid")).toHaveText("NT$1,941");
   await page.screenshot({ path: "test-results/mobile_category_pay.png", fullPage: true });
+});
+
+test("手機：開團時一起記運費（常用運費方式）和訂金，現貨存好就進庫存；活動可以改名", async ({ page }) => {
+  const tag = Date.now().toString(36).slice(-4);
+  const ship = `賣貨便${tag}`;
+  await login(page);
+  // 設定：先建常用運費方式
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "＋ 新增" }).first().click();
+  const dlg = page.getByRole("dialog");
+  await dlg.getByLabel("名稱").fill(ship);
+  await dlg.getByLabel("運費").fill("38");
+  await dlg.getByRole("button", { name: "儲存" }).click();
+  await toast(page, "已新增");
+  await expect(page.getByRole("list", { name: "常用運費方式" })).toContainText(ship);
+
+  await page.goto("/purchase");
+  const meBtn = page.getByRole("button", { name: /^我是/ }).first();
+  if (await meBtn.isVisible()) await meBtn.click();
+  await page.getByRole("button", { name: "＋ 新活動" }).click();
+  await page.getByLabel("新活動名稱").fill(`E2E 現貨 ${tag}`);
+  await page.getByRole("button", { name: "建立", exact: true }).click();
+  // 改活動名稱
+  await page.getByRole("button", { name: /✎ 改/ }).click();
+  await page.getByLabel("新名稱").fill(`E2E 現貨展 ${tag}`);
+  await page.getByRole("button", { name: "儲存", exact: true }).click();
+  await expect(page.getByRole("radiogroup", { name: "哪個活動" }).getByRole("radio", { name: `E2E 現貨展 ${tag}` })).toHaveAttribute("aria-checked", "true");
+
+  await newSupplier(page, `砂糖 ${tag}`);
+  await page.getByRole("radiogroup", { name: "進度" }).getByRole("radio", { name: "已經拿到了（現貨）" }).click();
+  await page.getByRole("button", { name: new RegExp(ship) }).click();
+  await expect(page.getByLabel(`${ship} 運費`)).toHaveValue("38");
+  await page.getByLabel("已付訂金").fill("500");
+  await page.screenshot({ path: "test-results/mobile_purchase_money.png", fullPage: true });
+  await addRow(page, "兔兔", "600", "2");
+  await expect(page.getByTestId("saved-banner")).toContainText("2 件已進庫存");
+  await page.getByTestId("saved-banner").getByRole("link", { name: "看這一團" }).click();
+  await expect(page.getByTestId("batch-total")).toHaveText("NT$1,238"); // 600×2 ＋ 運費 38
+  await expect(page.getByTestId("batch-due")).toHaveText("NT$738"); // 扣掉訂金 500
+  await expect(page.getByTestId("fee-row")).toContainText(ship);
+  await expect(page.getByRole("button", { name: "已全部到貨" })).toBeVisible();
 });

@@ -24,7 +24,7 @@ function Chips({ label, value, options, onChange }: { label: string; value: stri
  * 加運費／其他費用。預設：算這團的（個人團＝主人），不攤進商品成本、單獨記一筆。
  * 只有選「兩人一起付」才出現「兩人怎麼分」與「要不要攤進商品成本」。
  */
-export function AddCost({ batchId, items, operators, owner }: { batchId: string; items: { id: string; name: string }[]; operators: { id: string; name: string }[]; owner: { id: string | null; label: string } }) {
+export function AddCost({ batchId, items, operators, owner, presets = [] }: { batchId: string; items: { id: string; name: string }[]; operators: { id: string; name: string }[]; owner: { id: string | null; label: string }; presets?: { id: string; name: string; kind: string; currency: string; amount: number }[] }) {
   const [open, setOpen] = useState(false);
   const blank = { kind: "INTL_SHIPPING", currency: "TWD", amount: "", payer: "", method: "NONE", note: "" };
   const [f, setF] = useState(blank);
@@ -79,6 +79,18 @@ export function AddCost({ batchId, items, operators, owner }: { batchId: string;
         }
       >
         <div className="space-y-3">
+          {presets.length > 0 && (
+            <div>
+              <div className="mb-1 text-[13px] text-ink-2">常用運費（點一下帶入）</div>
+              <div className="flex flex-wrap gap-1.5">
+                {presets.map((p) => (
+                  <button key={p.id} type="button" className={`rounded-full border px-3 py-1.5 text-[14px] ${f.note === p.name ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`} onClick={() => { setF({ ...f, kind: p.kind, currency: p.currency, amount: String(p.amount), note: p.name }); if (joint) setSplit(half(p.amount)); }}>
+                    {p.name} {p.currency === "JPY" ? "¥" : "$"}{p.amount.toLocaleString()}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <Chips label="什麼費用" value={f.kind} options={FEE_KINDS} onChange={(kind) => setF({ ...f, kind })} />
           <div className="grid grid-cols-[1fr_auto] gap-2">
             <TextField label="金額" inputMode="numeric" value={f.amount} onChange={(e) => { setF({ ...f, amount: e.target.value }); if (joint) setSplit(half(Number(e.target.value) || 0)); }} />

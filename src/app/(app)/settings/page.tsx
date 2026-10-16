@@ -8,6 +8,8 @@ import { PageHeader, Section, LinkButton, Twd, Empty } from "@/components/ui";
 import { RateForm, NameList, OperatorList, HealthCheck, MeSelect, ExpenseForm, DeleteExpense, RestoreForm, LogoutAll } from "./parts";
 import { costKind, fmtDate } from "@/lib/labels";
 import { formatRate } from "@/lib/money";
+import { ShippingMethods } from "./shipping";
+import { listShippingMethods } from "@/server/services/shipping-methods";
 
 export const metadata = { title: "匯出、備份與設定" };
 
@@ -37,12 +39,16 @@ export default async function Settings() {
     prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 30 }),
     tx((t) => listOperators(t, { includeInactive: true })),
   ]);
+  const shipping = await listShippingMethods(prisma, { includeInactive: true });
   const me = await getMe();
   return (
     <div className="space-y-4">
       <PageHeader title="匯出、備份與設定" />
       <div className="grid gap-4 lg:grid-cols-2">
-        <Section title="預設匯率">
+        <Section title="常用運費方式">
+          <ShippingMethods rows={shipping.map((x) => ({ id: x.id, name: x.name, kind: x.kind, currency: x.currency, amount: x.amount, active: x.active }))} />
+        </Section>
+        <Section title="預設匯率（日幣才會用到）">
           <RateForm current={formatRate(rate)} />
         </Section>
         <Section title="經營者管理" actions={<LinkButton small href="/operators">經營者對帳</LinkButton>}>

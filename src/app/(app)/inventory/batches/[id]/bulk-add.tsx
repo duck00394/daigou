@@ -78,7 +78,12 @@ export function BulkAddGrid({
   onSaved,
   onClosed,
   category = null,
+  initialSeriesId = null,
+  initialTypeId = null,
 }: {
+  /** 預設帶上次用的 IP／系列、種類 */
+  initialSeriesId?: string | null;
+  initialTypeId?: string | null;
   /** 這團的活動：商品名稱＝活動＋角色＋種類，不同活動是不同商品 */
   category?: { id: string; name: string } | null;
   batchId: string | null; // 還沒建立採購團時為 null，送出時由 ensureBatch 建立
@@ -94,8 +99,8 @@ export function BulkAddGrid({
 }) {
   const [seriesList, setSeriesList] = useState(seriesInit);
   const [types, setTypes] = useState(typesInit);
-  const [seriesId, setSeriesId] = useState(seriesInit[0]?.id ?? "");
-  const [typeId, setTypeId] = useState("");
+  const [seriesId, setSeriesId] = useState((initialSeriesId && seriesInit.some((x) => x.id === initialSeriesId) ? initialSeriesId : null) ?? seriesInit[0]?.id ?? "");
+  const [typeId, setTypeId] = useState(initialTypeId && typesInit.some((x) => x.id === initialTypeId) ? initialTypeId : "");
   const [roster, setRoster] = useState<Opt[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [rows, setRows] = useState<RowState[]>([blankRow(supplierCurrency)]);

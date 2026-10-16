@@ -196,7 +196,7 @@ export interface RowDefault {
 export async function rowDefaults(db: Db, input: { seriesId: string; productTypeId: string | null; supplierId: string | null; characterIds: string[]; specs?: Record<string, string | null>; categoryId?: string | null }): Promise<RowDefault[]> {
   const category = input.categoryId ? await db.category.findUnique({ where: { id: input.categoryId }, select: { id: true, name: true } }) : null;
   const supplier = input.supplierId ? await db.supplier.findUnique({ where: { id: input.supplierId } }) : null;
-  const fallbackCurrency = (supplier?.defaultCurrency as Currency) ?? "JPY";
+  const fallbackCurrency = (supplier?.defaultCurrency as Currency) ?? "TWD";
   const chars = await db.character.findMany({ where: { id: { in: input.characterIds } } });
   const out: RowDefault[] = [];
   for (const cid of input.characterIds) {
