@@ -7,7 +7,7 @@ import { addBatchCost, addBatchItem, createBatch, landedCosts } from "@/server/s
 import { currentYm, monthlyReport } from "@/server/services/reports";
 import { createReceivingRecord } from "@/server/services/receiving";
 import { addSupplierPayment } from "@/server/services/supplier-payments";
-import { batchPaySummary, categoriesSummary, categoryOverview, payRemaining } from "@/server/services/batch-ops";
+import { batchPaySummary, categoriesSummary, categoryOverview, dueByOwner, payRemaining } from "@/server/services/batch-ops";
 import { keepStock } from "@/server/services/inventory";
 import { listQuickSales, quickSale } from "@/server/services/quick-sale";
 import { JOINT, stockByOwner } from "@/server/services/ownership";
@@ -120,6 +120,15 @@ describe("這團金額：總額、已付、待付款、一鍵付清", () => {
     const o = await tx((t) => categoryOverview(t, s.halloween.id));
     expect(o.total).toMatchObject({ paidTwd: 300, dueTwd: 500 + 1350 + 1500 });
     expect(o.batches.find((b) => b.id === ids.a)).toMatchObject({ paidTwd: 300, dueTwd: 500, ownerKey: A });
+  });
+
+  it("每個人還要付多少：個人團算主人、合資另外列，付清的不算", async () => {
+    await tx((t) => addSupplierPayment(t, actor, { batchId: ids.a, paidById: A, paidAt: new Date(), amount: 300, currency: "TWD" }));
+    await tx((t) => payRemaining(t, actor, ids.b, { paidById: B, dedupeKey: "due-owner-1" }));
+    const d = await tx((t) => dueByOwner(t));
+    expect(d.get(A)).toEqual({ due: 500, batches: 1 });
+    expect(d.has(B)).toBe(false);
+    expect(d.get("joint")).toEqual({ due: 1500, batches: 1 });
   });
 
   it("付清只登記剩下的金額，重送不重複，付清後再按會擋下", async () => {

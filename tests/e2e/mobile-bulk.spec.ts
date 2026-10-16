@@ -52,13 +52,13 @@ test("手機：卡片式表格可新增、修改、刪除列並確認儲存", as
   await page.getByRole("button", { name: "編輯", exact: true }).click();
   const items = page.getByRole("table", { name: "採購品項", exact: true }).getByRole("row");
   const chiikawa = items.filter({ hasText: "吉伊 吊娃" });
-  await chiikawa.getByLabel("數量").fill("4");
-  await page.getByRole("button", { name: "儲存修改" }).click();
-  await toast(page, "已儲存 1 列");
   // 手機上改數量用 ＋／−；砍單、刪除收在「⋯」
   await chiikawa.getByRole("button", { name: "吉伊 吊娃 多一件" }).click();
-  await expect(chiikawa.getByLabel("數量")).toHaveValue("5");
-  await chiikawa.getByRole("button", { name: "吉伊 吊娃 少一件" }).click();
+  await expect(chiikawa.getByLabel("數量")).toHaveValue("3");
+  await chiikawa.getByRole("button", { name: "吉伊 吊娃 多一件" }).click();
+  await expect(chiikawa.getByLabel("數量")).toHaveValue("4");
+  await page.getByRole("button", { name: "儲存修改" }).click();
+  await toast(page, "已儲存 1 列");
   await items.filter({ hasText: "兔兔 吊娃" }).getByRole("button", { name: /⋯/ }).click();
   await items.filter({ hasText: "兔兔 吊娃" }).getByRole("button", { name: "刪除" }).click();
   await page.getByRole("button", { name: "刪除品項" }).click();

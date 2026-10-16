@@ -3,7 +3,8 @@ import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { categoryOverview } from "@/server/services/reports";
 import { tx } from "@/server/db";
-import { categoriesSummary } from "@/server/services/batch-ops";
+import { categoriesSummary, dueByOwner } from "@/server/services/batch-ops";
+import { OwnerDue } from "@/components/owner-due";
 import { listOperators } from "@/server/services/operators";
 import { JOINT, NONE } from "@/server/services/ownership";
 import { formatTwd } from "@/lib/money";
@@ -15,12 +16,13 @@ export const metadata = { title: "活動與分類" };
 
 export default async function Categories() {
   await requireUser();
-  const [ov, buys, operators] = await Promise.all([categoryOverview(prisma), tx((t) => categoriesSummary(t)), tx((t) => listOperators(t, { includeInactive: true }))]);
+  const [ov, buys, operators, due] = await Promise.all([categoryOverview(prisma), tx((t) => categoriesSummary(t)), tx((t) => listOperators(t, { includeInactive: true })), tx((t) => dueByOwner(t))]);
   const who = (k: string) => (k === JOINT ? "合資（未分）" : k === NONE ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
   const withBuys = ov.categories.filter((c) => buys.has(c.id));
   return (
     <div className="space-y-4">
       <PageHeader title="活動與分類" sub="點一個活動，看總額、每一團的總額、誰買的和庫存。" actions={<><LinkButton href="/purchase">新增採購</LinkButton><CategoryEditButton label="新增活動" /></>} />
+      <OwnerDue due={due} operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} hrefFor={(k) => `/inventory?tab=batches&open=0${k === "none" ? "" : `&owner=${k}`}`} />
       {withBuys.length > 0 && (
         <Section title="活動總表（我們買了多少）" pad={false}>
           <ul className="grid gap-2 p-3 md:grid-cols-2 xl:grid-cols-3">

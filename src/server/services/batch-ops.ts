@@ -483,3 +483,23 @@ export async function payRemaining(t: Tx, actor: Actor, batchId: string, input: 
   const { addSupplierPayment } = await import("./supplier-payments");
   return addSupplierPayment(t, actor, { batchId, paidById: input.paidById, paidAt: new Date(), amount: s.dueTwd, currency: "TWD", purpose: s.paidTwd > 0 ? "BALANCE" : "FULL", note: "一鍵付清", dedupeKey: input.dedupeKey });
 }
+
+/** 每個人還要付多少（現金流）：個人團算主人、合資團另外列、沒指定的列在未指定。不含已取消的團 */
+export async function dueByOwner(t: Tx, where: { categoryId?: string | null } = {}) {
+  const batches = await t.purchaseBatch.findMany({
+    where: { status: { not: "CANCELLED" }, ...(where.categoryId !== undefined ? { categoryId: where.categoryId } : {}) },
+    select: { id: true, ownership: true, orderedById: true },
+  });
+  const pay = await batchPaySummary(t, batches.map((b) => b.id));
+  const out = new Map<string, { due: number; batches: number }>();
+  for (const b of batches) {
+    const due = pay.get(b.id)?.dueTwd ?? 0;
+    if (due <= 0) continue;
+    const k = b.ownership === "JOINT" ? "joint" : (b.orderedById ?? "none");
+    const v = out.get(k) ?? { due: 0, batches: 0 };
+    v.due += due;
+    v.batches += 1;
+    out.set(k, v);
+  }
+  return out;
+}

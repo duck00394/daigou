@@ -6,7 +6,9 @@ import { inventorySummary } from "@/server/services/inventory";
 import { listQuickSales } from "@/server/services/quick-sale";
 import { Section, Stat, Twd, Empty, StatusBadge, Badge } from "@/components/ui";
 import { batchStage, batchStageLabel, batchStatus, fmtDate, fmtDay } from "@/lib/labels";
-import { batchPaySummary } from "@/server/services/batch-ops";
+import { batchPaySummary, dueByOwner } from "@/server/services/batch-ops";
+import { OwnerDue } from "@/components/owner-due";
+import { listOperators } from "@/server/services/operators";
 import { getOrdersEnabled } from "@/server/services/settings";
 import { formatTwd } from "@/lib/money";
 
@@ -52,6 +54,7 @@ export default async function Home() {
   const dueTotal = dueList.reduce((s, b) => s + b.due, 0);
   // 有在用「接單」（訂單／買家）才顯示訂單相關數字
   const usesOrders = await getOrdersEnabled(prisma);
+  const [ops, due] = await Promise.all([tx((t) => listOperators(t)), tx((t) => dueByOwner(t))]);
   const today = new Date();
   const todo = [
     { n: d.pendingConfirm, text: "張訂單待確認", href: "/orders?status=PENDING_CONFIRM" },
@@ -78,6 +81,8 @@ export default async function Home() {
           </Link>
         ))}
       </nav>
+
+      <OwnerDue due={due} operators={ops.map((o) => ({ id: o.id, name: o.name }))} hrefFor={(k) => `/inventory?tab=batches&open=0${k === "none" ? "" : `&owner=${k}`}`} />
 
       <div>
         <h2 className="mb-2 text-[15px] font-semibold">錢與庫存</h2>

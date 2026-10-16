@@ -21,7 +21,8 @@ import { productSearchWhere } from "@/server/services/catalog";
 import { formatTwd } from "@/lib/money";
 import { fmtDate, fmtDay, formatRateLabel } from "./util";
 import { batchStage, batchStageLabel } from "@/lib/labels";
-import { batchPaySummary } from "@/server/services/batch-ops";
+import { batchPaySummary, dueByOwner } from "@/server/services/batch-ops";
+import { OwnerDue } from "@/components/owner-due";
 
 export const metadata = { title: "庫存與採購" };
 
@@ -308,6 +309,7 @@ async function BatchesTab({ cat, open, owner }: { cat?: string; open?: string; o
   const pay = await tx((t) => batchPaySummary(t, batches.map((b) => b.id)));
   return (
     <Section title="採購團" pad={false}>
+      <div className="border-b border-line-2 p-3"><OwnerDue title="每個人還要付（現金流）" due={await tx((t) => dueByOwner(t, cat ? { categoryId: cat === "none" ? null : cat } : {}))} operators={operators.map((o) => ({ id: o.id, name: o.name }))} hrefFor={(k) => href(cat, "0", k === "none" ? "" : k)} /></div>
       <div className="border-b border-line-2 px-4 pt-3 pb-1"><OwnerFilter operators={operators.map((o) => ({ id: o.id, name: o.name }))} current={owner} counts={counts} href={(k) => href(cat, open, k)} /></div>
       <div className="flex gap-1.5 overflow-x-auto border-b border-line-2 px-4 py-2.5">
         <Link href={href(cat, onlyOpen ? "0" : undefined)} className={chip(!onlyOpen)}>{onlyOpen ? "顯示已完成" : "含已完成"}</Link>

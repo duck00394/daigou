@@ -86,6 +86,10 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   expect(ov2).toBeLessThanOrEqual(1);
   await page.screenshot({ path: "test-results/mobile_category_owner.png", fullPage: true });
 
+  // 每個人還要付多少（現金流）
+  await page.goto("/");
+  await expect(page.getByTestId("due-owner-joint")).toContainText("NT$");
+  await page.screenshot({ path: "test-results/mobile_home_due.png", fullPage: false });
   // 選經營者：只看合資的團，顏色標籤一眼看出是誰的
   await page.goto("/inventory?tab=batches");
   await page.getByRole("navigation", { name: "誰的" }).getByRole("link", { name: /合資/ }).click();
