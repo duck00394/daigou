@@ -62,6 +62,7 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   await page.getByRole("radiogroup", { name: "這團是誰的" }).getByRole("radio", { name: "合資" }).click();
   await page.getByRole("radiogroup", { name: "進度" }).getByRole("radio", { name: "代購收到了，等寄出" }).click();
   await addRow(page, "吉伊", "610", "4");
+  await expect(page.getByText(/已存到「頑皮貓/)).toBeVisible();
 
   // 已有的團會列出來，可以直接加進去
   // 再進來時，活動預設是上次用的
