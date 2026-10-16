@@ -29,7 +29,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
     tx((t) => productLots(t, id)),
     prisma.inventoryMovement.findMany({ where: { productId: id }, orderBy: { createdAt: "desc" }, take: 30, include: { orderItem: { select: { order: { select: { id: true, orderNo: true } } } } } }),
     productBuyers(prisma, id, sp.categoryId),
-    prisma.purchaseBatchItem.findMany({ where: { productId: id }, include: { batch: { include: { supplierRef: true } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } }, orderBy: { createdAt: "desc" }, take: 30 }),
+    prisma.purchaseBatchItem.findMany({ where: { productId: id, batch: { status: { not: "CANCELLED" } } }, include: { batch: { include: { supplierRef: true } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } }, orderBy: { createdAt: "desc" }, take: 30 }),
   ]);
   const s = inv.get(id) ?? { onHand: 0, reserved: 0, available: 0, incoming: 0, shipped: 0, activeOrdered: 0, openDemand: 0, unallocated: 0, shortage: 0 };
   const batchName = new Map(batches.map((b) => [b.id, `${b.batch.code} ${b.batch.name}`]));

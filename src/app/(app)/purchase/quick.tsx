@@ -56,7 +56,7 @@ export function QuickPurchase(props: {
   // 運費：點常用的帶入金額（可以再改），也可以自己填
   const [fees, setFees] = useState<Record<string, string>>({});
   const [customFee, setCustomFee] = useState<string | null>(null);
-  const [saved, setSaved] = useState<{ id: string; name: string; count: number; inHand: number; paid: boolean } | null>(null);
+  const [saved, setSaved] = useState<{ id: string; name: string; count: number; stocked: boolean; paid: boolean } | null>(null);
   // 跟誰買：代購（要等寄來）或自己去實體店買（買了就拿到、當場付清）
   const [via, setVia] = useState<"AGENT" | "STORE">("AGENT");
   const [paidAtStore, setPaidAtStore] = useState(true);
@@ -404,22 +404,24 @@ export function QuickPurchase(props: {
             initialTypeId={props.lastTypeId}
             onSaved={async (id, count) => {
               const name = chosen?.label ?? (f.name.trim() || supplier?.name || "新的一團");
-              let inHand = 0;
+              let stocked = false;
               let paid = false;
-              if (pick === NEW && store) {
+              const storeBatch = pick === NEW ? store : !!chosen && chosen.stage === "實體店購買";
+              if (storeBatch) {
                 const who = f.owner === JOINT ? me : f.owner || me;
                 const r = await receiveAllAction(id, who, recvIdem.key);
                 recvIdem.renew();
+                // 實體店的品項存好時伺服器就已入庫；這裡補收沒收到的（例如合資團）
                 if (!r.ok) notify(`品項已存好，但入庫失敗：${r.error}`);
-                else inHand = r.data.received;
-                if (paidAtStore) {
+                else stocked = true;
+                if (pick === NEW && paidAtStore) {
                   const p = await payRemainingAction(id, who, payIdem.key);
                   payIdem.renew();
                   if (p.ok) paid = true;
                   else if (!p.error.includes("付清")) notify(`付款沒記到：${p.error}`);
                 }
               }
-              setSaved({ id, name, count, inHand, paid });
+              setSaved({ id, name, count, stocked, paid });
             }}
             supplierId={chosen?.supplierId ?? (f.supplierId || null)}
             supplierCurrency={currency}
@@ -430,9 +432,9 @@ export function QuickPurchase(props: {
         )}
         {saved && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-good-soft px-3 py-2 text-sm text-good" data-testid="saved-banner">
-            <span>已存到「{saved.name}」，共 {saved.count} 項{saved.inHand ? `，${saved.inHand} 件已進庫存` : ""}{saved.paid ? "，已記成付清" : ""}。</span>
+            <span>已存到「{saved.name}」，共 {saved.count} 項{saved.stocked ? "，已進庫存" : ""}{saved.paid ? "，已記成付清" : ""}。</span>
             <span className="flex gap-2">
-              {saved.inHand > 0 && <Link className="underline" href="/inventory?tab=stock">看庫存</Link>}
+              {saved.stocked && <Link className="underline" href="/inventory?tab=stock">看庫存</Link>}
               <Link className="underline" href={`/inventory/batches/${saved.id}`}>看這一團</Link>
               <button type="button" className="underline" onClick={() => { setPick(NEW); created.current = null; setSaved(null); setFees({}); setCustomFee(null); setF((x) => ({ ...x, name: "", supplierId: "", deposit: "" })); }}>再開新的一團</button>
             </span>

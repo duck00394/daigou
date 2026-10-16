@@ -288,11 +288,12 @@ async function DemandTab() {
 }
 
 async function BatchesTab({ cat, open, owner }: { cat?: string; open?: string; owner: string }) {
-  const onlyOpen = open !== "0";
+  // 進行中（預設）／含已完成／已取消：已取消的只在「已取消」裡看，平常不出現
+  const mode = open === "cancelled" ? "cancelled" : open === "0" ? "all" : "open";
   const operators = await tx((t) => listOperators(t));
   const ids = operators.map((o) => o.id);
   const allBatches = await prisma.purchaseBatch.findMany({
-    where: { ...(cat ? { categoryId: cat === "none" ? null : cat } : {}), ...(onlyOpen ? { status: { in: ["DRAFT", "ORDERED", "PARTIAL_RECEIVED"] } } : {}) },
+    where: { ...(cat ? { categoryId: cat === "none" ? null : cat } : {}), ...(mode === "open" ? { status: { in: ["DRAFT", "ORDERED", "PARTIAL_RECEIVED"] } } : mode === "cancelled" ? { status: "CANCELLED" as const } : { status: { not: "CANCELLED" as const } }) },
     orderBy: { createdAt: "desc" },
     include: { supplierRef: true, orderedBy: { select: { name: true } }, category: { select: { id: true, name: true } }, items: { include: { movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } } },
   });
@@ -304,21 +305,25 @@ async function BatchesTab({ cat, open, owner }: { cat?: string; open?: string; o
   const batches = allBatches.filter((b) => ownerMatch(owner, b));
   const cats = await prisma.category.findMany({ where: { batches: { some: {} } }, orderBy: [{ active: "desc" }, { sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } });
   const chip = (on: boolean) => `shrink-0 rounded-full border px-3 py-1.5 text-sm ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
-  const href = (c?: string, o?: string, w: string = owner) => `/inventory?tab=batches${c ? `&cat=${c}` : ""}${o === "0" ? "&open=0" : ""}${w ? `&owner=${w}` : ""}`;
+  const href = (c?: string, o?: string, w: string = owner) => `/inventory?tab=batches${c ? `&cat=${c}` : ""}${o === "0" || o === "cancelled" ? `&open=${o}` : ""}${w ? `&owner=${w}` : ""}`;
+  const cancelledCount = await prisma.purchaseBatch.count({ where: { status: "CANCELLED", ...(cat ? { categoryId: cat === "none" ? null : cat } : {}) } });
   const today = new Date();
   const pay = await tx((t) => batchPaySummary(t, batches.map((b) => b.id)));
   return (
     <Section title="採購團" pad={false}>
-      <div className="border-b border-line-2 p-3"><OwnerDue title="每個人還要付（現金流）" due={await tx((t) => dueByOwner(t, cat ? { categoryId: cat === "none" ? null : cat } : {}))} operators={operators.map((o) => ({ id: o.id, name: o.name }))} hrefFor={(k) => href(cat, "0", k === "none" ? "" : k)} /></div>
+      <div className="border-b border-line-2 px-4 py-2.5"><OwnerDue compact title="每個人還要付（現金流）" due={await tx((t) => dueByOwner(t, cat ? { categoryId: cat === "none" ? null : cat } : {}))} operators={operators.map((o) => ({ id: o.id, name: o.name }))} hrefFor={(k) => href(cat, "0", k === "none" ? "" : k)} /></div>
       <div className="border-b border-line-2 px-4 pt-3 pb-1"><OwnerFilter operators={operators.map((o) => ({ id: o.id, name: o.name }))} current={owner} counts={counts} href={(k) => href(cat, open, k)} /></div>
       <div className="flex gap-1.5 overflow-x-auto border-b border-line-2 px-4 py-2.5">
-        <Link href={href(cat, onlyOpen ? "0" : undefined)} className={chip(!onlyOpen)}>{onlyOpen ? "顯示已完成" : "含已完成"}</Link>
+        <Link href={href(cat, undefined)} className={chip(mode === "open")}>進行中</Link>
+        <Link href={href(cat, "0")} className={chip(mode === "all")}>含已完成</Link>
+        {cancelledCount > 0 && <Link href={href(cat, "cancelled")} className={chip(mode === "cancelled")}>已取消 {cancelledCount}</Link>}
+        <span aria-hidden className="mx-1 w-px shrink-0 bg-line" />
         <Link href={href(undefined, open)} className={chip(!cat)}>全部活動</Link>
         {cats.map((c) => <Link key={c.id} href={href(c.id, open)} className={chip(cat === c.id)}>{c.name}</Link>)}
         <Link href={href("none", open)} className={chip(cat === "none")}>未指定活動</Link>
       </div>
       {batches.length === 0 ? (
-        <Empty action={<LinkButton href="/purchase" primary>新增採購</LinkButton>}>{onlyOpen ? "沒有進行中的採購團。" : "還沒有採購團。"}</Empty>
+        <Empty action={<LinkButton href="/purchase" primary>新增採購</LinkButton>}>{mode === "open" ? "沒有進行中的採購團。" : mode === "cancelled" ? "沒有取消的團。" : "還沒有採購團。"}</Empty>
       ) : (
         <ul className="grid gap-2 p-3 md:grid-cols-2 xl:grid-cols-3">
           {batches.map((b) => {
@@ -338,16 +343,20 @@ async function BatchesTab({ cat, open, owner }: { cat?: string; open?: string; o
                   <div className="mt-0.5 text-[13px] text-mute">
                     {[b.supplierRef?.name ?? b.supplier, b.category?.name, `下單 ${fmtDate(b.orderedAt)}`].filter(Boolean).join("｜")}
                   </div>
+                  {isStoreKind(b.supplierRef?.kind) ? (
+                    <div className="mt-2 text-[13px] text-ink-2">實體店買的・{ordered} 件</div>
+                  ) : (
                   <div className="mt-2 flex items-center gap-2">
                     <div className="h-2 flex-1 overflow-hidden rounded-full bg-line-2" aria-hidden>
                       <div className="h-full rounded-full bg-good" style={{ width: `${ordered ? Math.min(100, Math.round((rec / ordered) * 100)) : 0}%` }} />
                     </div>
                     <span className="num shrink-0 text-[13px]">到貨 {rec}／{ordered}</span>
                   </div>
+                  )}
                   {pay.get(b.id) && pay.get(b.id)!.totalTwd > 0 && (
                     <div className="mt-1.5 flex items-baseline justify-between text-[13px]" data-testid="batch-card-money">
                       <span className="text-ink-2">總額 <span className="num font-semibold">{formatTwd(pay.get(b.id)!.totalTwd)}</span></span>
-                      {pay.get(b.id)!.dueTwd > 0 ? <span className="num font-semibold text-bad">還要付 {formatTwd(pay.get(b.id)!.dueTwd)}</span> : <span className="text-good">已付清</span>}
+                      {b.status === "CANCELLED" ? <span className="text-mute">已取消{pay.get(b.id)!.paidTwd ? `・已付 ${formatTwd(pay.get(b.id)!.paidTwd)}` : ""}</span> : pay.get(b.id)!.dueTwd > 0 ? <span className="num font-semibold text-bad">還要付 {formatTwd(pay.get(b.id)!.dueTwd)}</span> : <span className="text-good">已付清</span>}
                     </div>
                   )}
                   {b.expectedAt && <div className={`mt-1 text-[12px] ${late ? "text-bad" : "text-mute"}`}>預計到貨 {fmtDay(b.expectedAt)}{late ? "（已超過）" : ""}</div>}

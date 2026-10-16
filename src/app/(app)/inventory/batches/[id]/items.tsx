@@ -131,7 +131,7 @@ export function PayOffButton({ batchId, due, operators, defaultPayer, big }: { b
 }
 
 /** 全部到了：還沒收到的一次入庫，收貨的人預設這團的收貨負責人或主人 */
-export function ReceiveAllButton({ batchId, outstanding, operators, defaultReceiver }: { batchId: string; outstanding: number; operators: OperatorOption[]; defaultReceiver: string | null }) {
+export function ReceiveAllButton({ batchId, outstanding, operators, defaultReceiver, doneLabel = "全部到手了" }: { batchId: string; outstanding: number; operators: OperatorOption[]; defaultReceiver: string | null; doneLabel?: string }) {
   const [open, setOpen] = useState(false);
   const [who, setWho] = useState<string | null>(defaultReceiver);
   const idem = useIdemKey();
@@ -141,7 +141,7 @@ export function ReceiveAllButton({ batchId, outstanding, operators, defaultRecei
       success: (r) => (r.received ? `${r.received} 件已進庫存` : "沒有還沒到的了"),
       onOk: () => { idem.renew(); setOpen(false); },
     });
-  if (outstanding <= 0) return <span className="flex items-center justify-center rounded-lg bg-good-soft px-3 py-2 text-[14px] text-good">全部到手了</span>;
+  if (outstanding <= 0) return <span className="flex items-center justify-center rounded-lg bg-good-soft px-3 py-2 text-[14px] text-good">{doneLabel}</span>;
   return (
     <>
       <Button variant="primary" className="w-full" loading={pending && !open} onClick={() => (defaultReceiver ? go() : setOpen(true))}>全部到了</Button>

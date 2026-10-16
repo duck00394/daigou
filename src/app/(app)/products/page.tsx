@@ -3,7 +3,7 @@ import { productSearchWhere } from "@/server/services/catalog";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { inventorySummary } from "@/server/services/inventory";
-import { PageHeader, Section, TableWrap, StatusBadge, Twd, Jpy, LinkButton, Empty, Pager, Badge } from "@/components/ui";
+import { PageHeader, Section, TableWrap, Twd, Jpy, LinkButton, Empty, Pager, Badge } from "@/components/ui";
 import { FilterBar, FSearch, FSelect, FCheck, qs } from "@/components/filters";
 import { ProductImage } from "@/components/client";
 import { productStatus } from "@/lib/labels";
@@ -52,7 +52,7 @@ export default async function Products({ searchParams }: { searchParams: Promise
     <div>
       <PageHeader
         title="商品"
-        sub="日幣官方價、代購售價、預估成本與庫存一覽"
+        sub="每個商品現在可賣幾件、還沒到幾件"
         actions={
           <>
             <LinkButton href={`/api/export/products${qs(sp)}`}>匯出 Excel</LinkButton>
@@ -80,13 +80,13 @@ export default async function Products({ searchParams }: { searchParams: Promise
             <thead>
               <tr>
                 <th>商品</th>
-                <th>狀態</th>
-                <th className="text-right">日幣官方價</th>
-                <th className="text-right">代購售價</th>
-                <th className="text-right">預估成本</th>
+                <th>現在</th>
+                <th className="text-right">可賣</th>
+                <th className="text-right">還沒到</th>
                 <th className="text-right">手上有</th>
-                <th className="text-right">可用</th>
-                <th className="text-right">待到貨</th>
+                <th className="text-right">想賣價</th>
+                <th className="text-right">預估成本</th>
+                <th className="text-right">日幣官方價</th>
                 <th className="text-right">有效訂購</th>
                 <th className="text-right">缺貨</th>
                 <th>分類</th>
@@ -112,15 +112,16 @@ export default async function Products({ searchParams }: { searchParams: Promise
                         </span>
                       </Link>
                     </td>
-                    <td>
-                      <StatusBadge map={productStatus} value={p.status} />
+                    <td className="whitespace-nowrap">
+                      {/* 依實際庫存顯示，不用手動切換狀態 */}
+                      {(s?.available ?? 0) > 0 ? <Badge tone="good">有庫存</Badge> : (s?.incoming ?? 0) > 0 ? <Badge tone="info">還沒到</Badge> : (s?.kept ?? 0) > 0 ? <Badge tone="muted">都自留了</Badge> : <Badge tone="muted">沒有</Badge>}
                     </td>
-                    <td className="text-right"><Jpy v={p.officialPriceJpy} /></td>
+                    <td className="num text-right font-semibold">{s?.available ?? 0}</td>
+                    <td className="num text-right">{s?.incoming ?? 0}</td>
+                    <td className="num text-right">{s?.onHand ?? 0}</td>
                     <td className="text-right"><Twd v={p.salePriceTwd} /></td>
                     <td className="text-right"><Twd v={p.estCostTwd} /></td>
-                    <td className="num text-right">{s?.onHand ?? 0}</td>
-                    <td className="num text-right">{s?.available ?? 0}</td>
-                    <td className="num text-right">{s?.incoming ?? 0}</td>
+                    <td className="text-right"><Jpy v={p.officialPriceJpy} /></td>
                     <td className="num text-right">{s?.activeOrdered ?? 0}</td>
                     <td className="num text-right">{s?.shortage ? <Badge tone="bad">{s.shortage}</Badge> : 0}</td>
                     <td className="max-w-[14rem]">

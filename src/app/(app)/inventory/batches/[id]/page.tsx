@@ -126,6 +126,11 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         sub={<span className="flex flex-wrap items-center gap-2"><OwnerBadge k={b.ownership === "JOINT" ? "joint" : b.orderedById} name={b.ownership === "JOINT" ? "合資" : opName(b.orderedById)} ids={ops.map((o) => o.id)} />{isStoreKind(b.supplierRef?.kind) ? <Badge tone="info">實體店購買</Badge> : <StatusBadge map={batchStageLabel} value={batchStage(b)} />}{b.category && <a href={`/categories/${b.category.id}`} className="text-ai hover:underline">{b.category.name}</a>}{supplierName && supplierName !== b.name && <span>{isStoreKind(b.supplierRef?.kind) ? "店家" : "代購"}：{supplierName}</span>}<span className="text-[12px] text-mute">{b.code}</span></span>}
         actions={<><LinkButton href={`/purchase${b.categoryId ? `?categoryId=${b.categoryId}` : ""}`}>同活動再開一團</LinkButton>{open && <CancelBatch id={b.id} />}</>}
       />
+      {!open && (
+        <div className="rounded-xl border border-line bg-line-2 px-4 py-3 text-[14px] text-ink-2" role="status">
+          這團已取消，不會算進總額、還要付和庫存。{pay.paidTwd > 0 ? `之前登記的付款 ${formatTwd(pay.paidTwd)} 還留著，要退回的話記得跟代購確認。` : ""}
+        </div>
+      )}
       <section className="rounded-xl border border-line bg-card p-4" aria-label="這團金額">
         <div className="grid grid-cols-3 gap-2">
           <div><div className="text-[12px] text-mute">總額{estimated ? "（含預估）" : ""}</div><div className="num text-[20px] font-semibold" data-testid="batch-total">{formatTwd(pay.totalTwd)}</div></div>
@@ -135,7 +140,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         <div className="mt-1 text-[13px] text-mute">{totalQty} 件・已到 {received}{feeTotal > 0 ? `・含運費等 ${formatTwd(feeTotal)}` : ""}</div>
         {open && (
           <div className="mt-3 grid grid-cols-3 gap-2" aria-label="常用動作">
-            <ReceiveAllButton batchId={b.id} outstanding={Math.max(0, totalQty - received)} operators={ops.filter((o) => o.active)} defaultReceiver={b.receivingResponsibleById ?? b.orderedById ?? null} />
+            <ReceiveAllButton batchId={b.id} outstanding={Math.max(0, totalQty - received)} operators={ops.filter((o) => o.active)} defaultReceiver={b.receivingResponsibleById ?? b.orderedById ?? null} doneLabel={isStoreKind(b.supplierRef?.kind) ? "實體店買的" : "全部到手了"} />
             {pay.dueTwd > 0 ? <PayOffButton big batchId={b.id} due={pay.dueTwd} operators={ops.filter((o) => o.active)} defaultPayer={b.ownership === "JOINT" ? me : (b.orderedById ?? me)} /> : <span className="flex items-center justify-center rounded-lg bg-good-soft px-3 py-2 text-[14px] text-good">已付清</span>}
             <Link href={`/inventory/batches/${b.id}?bulk=1#items`} className="flex items-center justify-center rounded-lg border border-line bg-white px-3 py-2 text-[14px] hover:border-ai">＋ 加商品</Link>
           </div>

@@ -3,11 +3,28 @@ import Link from "next/link";
 import { ownerTone } from "@/lib/owner-colors";
 import { formatTwd } from "@/lib/money";
 
-export function OwnerDue({ due, operators, hrefFor, title = "每個人還要付" }: { due: Map<string, { due: number; batches: number }>; operators: { id: string; name: string }[]; hrefFor?: (key: string) => string; title?: string }) {
+export function OwnerDue({ due, operators, hrefFor, title = "每個人還要付", compact }: { due: Map<string, { due: number; batches: number }>; operators: { id: string; name: string }[]; hrefFor?: (key: string) => string; title?: string; compact?: boolean }) {
   const ids = operators.map((o) => o.id);
   const keys = [...operators.map((o) => o.id), "joint", "none"].filter((k) => k !== "none" || due.has("none"));
   const name = (k: string) => (k === "joint" ? "合資" : k === "none" ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
   const total = [...due.values()].reduce((s, v) => s + v.due, 0);
+  if (compact)
+    // 精簡版：一排小標籤，不佔版面
+    return (
+      <div aria-label={title} className="flex items-center gap-1.5 overflow-x-auto text-[13px]">
+        <span className="shrink-0 whitespace-nowrap text-mute">還要付</span>
+        {keys.map((k) => {
+          const v = due.get(k);
+          const t = ownerTone(k, ids);
+          const inner = (
+            <span className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 ${t.chip}`} data-testid={`due-owner-${k}`}>
+              {name(k)} <b className="num">{formatTwd(v?.due ?? 0)}</b>
+            </span>
+          );
+          return hrefFor ? <Link key={k} href={hrefFor(k)}>{inner}</Link> : <span key={k}>{inner}</span>;
+        })}
+      </div>
+    );
   return (
     <section aria-label={title} className="rounded-xl border border-line bg-card p-3">
       <div className="mb-2 flex items-baseline justify-between">

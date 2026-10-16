@@ -42,6 +42,8 @@ export async function CategoryBatches({ categoryId, view, owner = "" }: { catego
       </Section>
     );
   const ids = operators.map((x) => x.id);
+  const shownBatches = o.batches.filter((b) => b.status !== "CANCELLED" && (!owner || b.ownerKey === owner));
+  const cancelledN = o.batches.filter((b) => b.status === "CANCELLED").length;
   const inOwner = (b: { ownerKey: string }) => !owner || b.ownerKey === owner;
   const cols = o.batches.filter((b) => b.status !== "CANCELLED" && inOwner(b));
   const fullView = view !== "unit"; // 預設看含運費的成本
@@ -132,12 +134,13 @@ export async function CategoryBatches({ categoryId, view, owner = "" }: { catego
             </li>
           ))}
         </ul>
+        {cancelledN > 0 && <p className="px-4 pb-3 text-[13px] text-mute">另外有 {cancelledN} 團已取消，<Link href={`/inventory?tab=batches&open=cancelled&cat=${categoryId}`} className="text-ai underline">到「已取消」看</Link>。</p>}
       </Section>
 
 
-      <Section title={`採購團（${o.batches.filter(inOwner).length}）`} pad={false} actions={add}>
+      <Section title={`採購團（${shownBatches.length}）`} pad={false} actions={add}>
         <ul className="grid gap-2 p-3 md:grid-cols-2">
-          {o.batches.filter(inOwner).map((b) => (
+          {shownBatches.map((b) => (
             <li key={b.id}>
               <Link href={`/inventory/batches/${b.id}`} className={`block h-full rounded-xl border p-3 hover:border-ai ${b.issues.length ? "border-[#f0dfa8]" : "border-line"} ${ownerTone(b.ownerKey, ids).stripe} ${b.status === "CANCELLED" ? "opacity-60" : ""}`}>
                 <div className="flex items-start justify-between gap-2">

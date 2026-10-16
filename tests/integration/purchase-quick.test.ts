@@ -110,3 +110,26 @@ describe("手誤：已經收進庫存的也能刪／取消（東西還沒動過�
     expect((await prisma.purchaseBatch.findUniqueOrThrow({ where: { id: b.id } })).status).toBe("CANCELLED");
   });
 });
+
+describe("實體店買的團：之後再加的品項也直接入庫", () => {
+  it("加進實體店的團就入庫；跟代購買的團不會", async () => {
+    const { bulkAddSeriesItems, saveSeries, saveSupplier, addCharactersToSeries } = await import("@/server/services/series");
+    const { upsertCharacter } = await import("@/server/services/catalog");
+    const ctx = await tx(async (t) => {
+      const series = await saveSeries(t, actor, null, { name: "店測系列" });
+      const c = await upsertCharacter(t, actor, { name: "店測角色" });
+      await addCharactersToSeries(t, actor, series.id, { characterIds: [c.id] });
+      const store = await saveSupplier(t, actor, null, { name: "常設店測試", kind: "STORE" });
+      const agent = await saveSupplier(t, actor, null, { name: "代購測試", kind: "AGENT" });
+      const sb = await createBatch(t, actor, { name: "店", supplierId: store.id, orderedById: "op_a" });
+      const ab = await createBatch(t, actor, { name: "代", supplierId: agent.id, orderedById: "op_a" });
+      return { series: series.id, c: c.id, sb: sb.id, ab: ab.id };
+    });
+    await bulkAddSeriesItems(actor, { batchId: ctx.sb, seriesId: ctx.series, productTypeId: null, submissionKey: "store-add-1", rows: [{ rowKey: "a", characterId: ctx.c, unitCost: 500, currency: "TWD", qty: 2 }] });
+    await bulkAddSeriesItems(actor, { batchId: ctx.ab, seriesId: ctx.series, productTypeId: null, submissionKey: "agent-add-1", rows: [{ rowKey: "a", characterId: ctx.c, unitCost: 500, currency: "TWD", qty: 3 }] });
+    const items = await prisma.purchaseBatchItem.findMany({ where: { batchId: { in: [ctx.sb, ctx.ab] } }, include: { receivingLines: true } });
+    expect(items.find((i) => i.batchId === ctx.sb)!.receivingLines.reduce((s, l) => s + l.receivedQty, 0)).toBe(2);
+    expect(items.find((i) => i.batchId === ctx.ab)!.receivingLines.length).toBe(0);
+    expect((await prisma.purchaseBatch.findUniqueOrThrow({ where: { id: ctx.sb } })).status).toBe("RECEIVED");
+  });
+});

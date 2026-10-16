@@ -170,7 +170,7 @@ test("手機：開團時一起記運費（常用運費方式）和訂金；實�
   await expect(page.getByLabel(/在店裡已經付清/)).toBeChecked();
   await page.screenshot({ path: "test-results/mobile_purchase_store.png", fullPage: true });
   await addRow(page, "吉伊", "520", "1");
-  await expect(page.getByTestId("saved-banner")).toContainText("1 件已進庫存，已記成付清");
+  await expect(page.getByTestId("saved-banner")).toContainText("已進庫存，已記成付清");
   await page.getByTestId("saved-banner").getByRole("link", { name: "看這一團" }).click();
   await expect(page.getByText("實體店購買").first()).toBeVisible();
   await expect(page.getByTestId("batch-due")).toHaveText("NT$0");

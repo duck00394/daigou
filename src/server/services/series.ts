@@ -329,6 +329,8 @@ export async function bulkAddSeriesItems(
   if (!series) throw new BizError("找不到系列");
   if (input.productTypeId && !type) throw new BizError("找不到商品類型");
   const category = batch.categoryId ? await prisma.category.findUnique({ where: { id: batch.categoryId }, select: { id: true, name: true } }) : null;
+  const supplierKindOf = batch.supplierId ? (await prisma.supplier.findUnique({ where: { id: batch.supplierId }, select: { kind: true } }))?.kind : null;
+  const storeBatch = supplierKindOf === "STORE" || supplierKindOf === "OFFICIAL_STORE";
 
   const rows = input.rows.filter((r) => !isBlankRow(r));
   const skippedBlank = input.rows.length - rows.length;
@@ -416,6 +418,12 @@ export async function bulkAddSeriesItems(
           specNote: spec,
           dedupeKey,
         });
+        // 實體店買的：一加進來就算拿到了，直接入庫（合資團沒有主人時，留給使用者按「全部到了」）
+        const receiver = storeBatch ? (batch.receivingResponsibleById ?? batch.orderedById) : null;
+        if (receiver) {
+          const { createReceivingRecord } = await import("./receiving");
+          await createReceivingRecord(t, actor, { batchId: batch.id, receivedById: receiver, note: "實體店買的", dedupeKey: `store:${dedupeKey}`, lines: [{ batchItemId: item.id, receivedQty: r.qty! }] });
+        }
         return { rowKey: r.rowKey, ok: true, itemId: item.id, productId: product.id, productName: product.name, createdProduct } satisfies BulkRowResult;
       });
       results.set(r.rowKey, res);
