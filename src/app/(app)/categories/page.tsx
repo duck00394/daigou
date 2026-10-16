@@ -10,18 +10,22 @@ import { JOINT, NONE } from "@/server/services/ownership";
 import { formatTwd } from "@/lib/money";
 import { PageHeader, Section, TableWrap, Badge, Empty, LinkButton } from "@/components/ui";
 import { CategoryEditButton } from "./forms";
-import { categoryType, fmtDay } from "@/lib/labels";
+import { categoryType, dayInput, fmtDay } from "@/lib/labels";
+import { listCustomCategoryTypes } from "@/server/services/catalog";
 
 export const metadata = { title: "活動與分類" };
 
 export default async function Categories() {
   await requireUser();
-  const [ov, buys, operators, due] = await Promise.all([categoryOverview(prisma), tx((t) => categoriesSummary(t)), tx((t) => listOperators(t, { includeInactive: true })), tx((t) => dueByOwner(t))]);
+  const [ov, buys, operators, due, customTypes] = await Promise.all([categoryOverview(prisma), tx((t) => categoriesSummary(t)), tx((t) => listOperators(t, { includeInactive: true })), tx((t) => dueByOwner(t)), tx((t) => listCustomCategoryTypes(t))]);
+  const edit = (c: (typeof ov.categories)[number]) => (
+    <CategoryEditButton customTypes={customTypes} cat={{ id: c.id, name: c.name, type: c.type, customType: c.customType, startDate: dayInput(c.startDate) || null, endDate: dayInput(c.endDate) || null, notes: c.notes, active: c.active }} />
+  );
   const who = (k: string) => (k === JOINT ? "合資（未分）" : k === NONE ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
   const withBuys = ov.categories.filter((c) => buys.has(c.id));
   return (
     <div className="space-y-4">
-      <PageHeader title="活動與分類" sub="點一個活動，看總額、每一團的總額、誰買的和庫存。" actions={<><LinkButton href="/purchase">新增採購</LinkButton><CategoryEditButton label="新增活動" /></>} />
+      <PageHeader title="活動與分類" sub="點一個活動，看總額、每一團的總額、誰買的和庫存。" actions={<><LinkButton href="/purchase">新增採購</LinkButton><CategoryEditButton label="新增活動" customTypes={customTypes} /></>} />
       <OwnerDue due={due} operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} hrefFor={(k) => `/inventory?tab=batches&open=0${k === "none" ? "" : `&owner=${k}`}`} />
       {withBuys.length > 0 && (
         <Section title="活動總表（我們買了多少）" pad={false}>
@@ -29,8 +33,9 @@ export default async function Categories() {
             {withBuys.map((c) => {
               const b = buys.get(c.id)!;
               return (
-                <li key={c.id}>
-                  <Link href={`/categories/${c.id}`} className="block h-full rounded-xl border border-line bg-white p-3 hover:border-ai" data-testid={`cat-card-${c.name}`}>
+                <li key={c.id} className="relative">
+                  <div className="absolute right-2 bottom-2 z-10">{edit(c)}</div>
+                  <Link href={`/categories/${c.id}`} className="block h-full rounded-xl border border-line bg-white p-3 pb-12 hover:border-ai" data-testid={`cat-card-${c.name}`}>
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="font-semibold">{c.name}</span>
                       <span className="num text-[17px] font-semibold">{formatTwd(b.totalTwd)}</span>
@@ -48,7 +53,7 @@ export default async function Categories() {
       )}
       <Section title="買家預購統計" pad={false}>
         {ov.categories.length === 0 ? (
-          <Empty action={<CategoryEditButton label="新增分類" />}>還沒有分類。</Empty>
+          <Empty action={<CategoryEditButton label="新增活動" customTypes={customTypes} />}>還沒有分類。</Empty>
         ) : (
           <TableWrap maxH="75vh">
             <thead>
@@ -74,6 +79,7 @@ export default async function Categories() {
                       {c.name}
                     </Link>
                     {!c.active && <Badge tone="muted">停用</Badge>}
+                    <span className="ml-2">{edit(c)}</span>
                   </td>
                   <td>{c.type === "CUSTOM" ? (c.customType ?? "自訂") : categoryType[c.type]}</td>
                   <td className="num whitespace-nowrap text-mute">{c.startDate || c.endDate ? `${fmtDay(c.startDate)} – ${fmtDay(c.endDate)}` : "—"}</td>

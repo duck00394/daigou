@@ -196,15 +196,17 @@ export async function saveCategory(t: Tx, actor: Actor, id: string | null, input
   const name = input.name?.trim();
   if (!name) throw new BizError("請填寫分類名稱");
   if (input.startDate && input.endDate && input.startDate > input.endDate) throw new BizError("結束日期不可早於開始日期");
+  // 選了自訂卻沒打名字（舊資料）就當一般分類，不擋改名
+  const type = input.type === "CUSTOM" && !input.customType?.trim() ? "GENERAL" : (input.type ?? "GENERAL");
   const data = {
     name,
-    type: input.type ?? "GENERAL",
-    customType: input.type === "CUSTOM" ? emptyToNull(input.customType) : null,
+    type,
+    customType: type === "CUSTOM" ? input.customType!.trim() : null,
     startDate: input.startDate ?? null,
     endDate: input.endDate ?? null,
     notes: emptyToNull(input.notes),
     active: input.active ?? true,
-    sortOrder: input.sortOrder ?? 0,
+    ...(input.sortOrder != null || !id ? { sortOrder: input.sortOrder ?? 0 } : {}),
   };
   try {
     const row = id ? await t.category.update({ where: { id }, data }) : await t.category.create({ data });
@@ -214,6 +216,12 @@ export async function saveCategory(t: Tx, actor: Actor, id: string | null, input
     if (isUniqueViolation(e)) throw new BizError(`分類「${name}」已存在`);
     throw e;
   }
+}
+
+/** 以前自己打過的類型名稱（新增活動時當選項） */
+export async function listCustomCategoryTypes(t: Tx) {
+  const rows = await t.category.findMany({ where: { type: "CUSTOM", customType: { not: null } }, select: { customType: true }, distinct: ["customType"], orderBy: { createdAt: "desc" } });
+  return rows.map((r) => r.customType!).filter(Boolean);
 }
 
 export async function setCategoryActive(t: Tx, actor: Actor, id: string, active: boolean) {

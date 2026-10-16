@@ -10,6 +10,7 @@ import { CategoryBatches } from "./batches";
 import { RenameNames } from "./rename";
 import { MergeDuplicates } from "./merge";
 import { duplicateGroups } from "@/server/services/merge";
+import { listCustomCategoryTypes } from "@/server/services/catalog";
 import { renamePlan } from "@/server/services/series";
 import { categoryType, dayInput, fmtDay, productStatus } from "@/lib/labels";
 
@@ -27,6 +28,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
   const c = d.category;
   const plan = await renamePlan(prisma, id);
   const dups = await tx((t) => duplicateGroups(t, id));
+  const customTypes = await tx((t) => listCustomCategoryTypes(t));
   return (
     <div className="space-y-4">
       <PageHeader
@@ -40,9 +42,9 @@ export default async function CategoryPage({ params, searchParams }: { params: P
         }
         actions={
           <>
+            <CategoryEditButton label="編輯名稱" customTypes={customTypes} cat={{ id: c.id, name: c.name, type: c.type, customType: c.customType, startDate: dayInput(c.startDate) || null, endDate: dayInput(c.endDate) || null, notes: c.notes, active: c.active }} />
             <LinkButton href={`/api/export/category?id=${c.id}`}>匯出 Excel</LinkButton>
             <LinkButton href={`/products/new?categoryId=${c.id}`}>新增商品到此分類</LinkButton>
-            <CategoryEditButton cat={{ id: c.id, name: c.name, type: c.type, customType: c.customType, startDate: dayInput(c.startDate) || null, endDate: dayInput(c.endDate) || null, notes: c.notes, active: c.active }} />
             <CategoryActiveButton id={c.id} active={c.active} />
           </>
         }

@@ -7,45 +7,63 @@ import { categoryType, groupBuyStatus } from "@/lib/labels";
 
 type Cat = { id: string; name: string; type: string; customType: string | null; startDate: string | null; endDate: string | null; notes: string | null; active: boolean };
 
-export function CategoryEditButton({ cat, label = "編輯" }: { cat?: Cat; label?: string }) {
+const EMPTY: Cat = { id: "", name: "", type: "GENERAL", customType: null, startDate: null, endDate: null, notes: null, active: true };
+// 內建類型（不含「自訂」：自訂的會變成自己的選項，下次直接點）
+const BUILTIN = Object.entries(categoryType).filter(([k]) => k !== "CUSTOM");
+
+/**
+ * 新增／編輯活動：名稱、類型用點的。
+ * 自己打的類型（例：快閃店）存好後，下次會直接出現在類型選項裡。
+ */
+export function CategoryEditButton({ cat, label = "編輯", customTypes = [], small }: { cat?: Cat; label?: string; customTypes?: string[]; small?: boolean }) {
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState<Cat>(cat ?? { id: "", name: "", type: "FESTIVAL", customType: null, startDate: null, endDate: null, notes: null, active: true });
+  const [f, setF] = useState<Cat>(cat ?? EMPTY);
+  const [typing, setTyping] = useState(false);
   const { run, pending } = useRun();
   const router = useRouter();
+  const customs = [...new Set([...customTypes, ...(cat?.type === "CUSTOM" && cat.customType ? [cat.customType] : [])])];
+  const isOn = (k: string, custom?: string) => !typing && (custom ? f.type === "CUSTOM" && f.customType === custom : f.type === k);
+  const chip = (on: boolean) => `min-h-10 rounded-lg border px-3 text-[15px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white"}`;
+  const openIt = () => {
+    setF(cat ?? EMPTY);
+    setTyping(false);
+    setOpen(true);
+  };
+  const save = () => {
+    if (f.type === "CUSTOM" && !f.customType?.trim()) return run(async () => ({ ok: false as const, error: "請打上自訂的類型名稱" }));
+    return run(() => saveCategoryAction(cat?.id ?? null, { name: f.name, type: f.type as never, customType: f.customType?.trim() || null, startDate: f.startDate, endDate: f.endDate, notes: f.notes, active: f.active }), {
+      success: cat ? "已儲存" : "已新增",
+      onOk: (d) => {
+        setOpen(false);
+        if (!cat) router.push(`/categories/${d.id}`);
+      },
+    });
+  };
   return (
     <>
-      <Button variant={cat ? "default" : "primary"} small={!!cat} onClick={() => setOpen(true)}>
+      <Button variant={cat ? "default" : "primary"} small={small ?? !!cat} onClick={openIt}>
         {label}
       </Button>
-      <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title={cat ? "編輯分類" : "新增分類"}
-        footer={
-          <Button
-            variant="primary"
-            loading={pending}
-            onClick={() =>
-              run(() => saveCategoryAction(cat?.id ?? null, { name: f.name, type: f.type as never, customType: f.customType, startDate: f.startDate, endDate: f.endDate, notes: f.notes, active: f.active }), {
-                success: cat ? "已儲存分類" : "已新增分類",
-                onOk: (d) => {
-                  setOpen(false);
-                  if (!cat) router.push(`/categories/${d.id}`);
-                },
-              })
-            }
-          >
-            {cat ? "儲存分類" : "新增分類"}
-          </Button>
-        }
-      >
+      <Modal open={open} onClose={() => setOpen(false)} title={cat ? `編輯「${cat.name}」` : "新增活動"} footer={<Button variant="primary" loading={pending} onClick={save}>{cat ? "儲存" : "新增"}</Button>}>
         <div className="grid gap-3 sm:grid-cols-2">
-          <TextField label="分類名稱" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className="sm:col-span-2" />
-          <SelectField label="分類類型" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} options={Object.entries(categoryType)} />
-          {f.type === "CUSTOM" ? <TextField label="自訂類型名稱" value={f.customType ?? ""} onChange={(e) => setF({ ...f, customType: e.target.value })} /> : <div />}
-          <TextField label="活動開始日期" type="date" value={f.startDate ?? ""} onChange={(e) => setF({ ...f, startDate: e.target.value || null })} />
-          <TextField label="活動結束日期" type="date" value={f.endDate ?? ""} onChange={(e) => setF({ ...f, endDate: e.target.value || null })} />
-          <TextArea label="備註" rows={3} value={f.notes ?? ""} onChange={(e) => setF({ ...f, notes: e.target.value })} className="sm:col-span-2" />
+          <TextField label="名稱" placeholder="例：ANA、手遊、萬聖節" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className="sm:col-span-2" />
+          <div className="sm:col-span-2">
+            <div className="mb-1 text-[13px] font-medium text-ink-2">類型</div>
+            <div role="radiogroup" aria-label="類型" className="flex flex-wrap gap-1.5">
+              {BUILTIN.map(([k, v]) => (
+                <button key={k} type="button" role="radio" aria-checked={isOn(k)} className={chip(isOn(k))} onClick={() => { setTyping(false); setF({ ...f, type: k, customType: null }); }}>{v}</button>
+              ))}
+              {customs.map((c) => (
+                <button key={`c:${c}`} type="button" role="radio" aria-checked={isOn("CUSTOM", c)} className={chip(isOn("CUSTOM", c))} onClick={() => { setTyping(false); setF({ ...f, type: "CUSTOM", customType: c }); }}>{c}</button>
+              ))}
+              <button type="button" role="radio" aria-checked={typing} className={chip(typing)} onClick={() => { setTyping(true); setF({ ...f, type: "CUSTOM", customType: "" }); }}>＋ 自訂</button>
+            </div>
+            {typing && <TextField label="自訂類型叫什麼" placeholder="例：快閃店" autoFocus value={f.customType ?? ""} onChange={(e) => setF({ ...f, type: "CUSTOM", customType: e.target.value })} className="mt-2" />}
+            {typing && <p className="mt-1 text-[12px] text-mute">存好後，下次新增會直接出現在上面可以點。</p>}
+          </div>
+          <TextField label="開始日期（可不填）" type="date" value={f.startDate ?? ""} onChange={(e) => setF({ ...f, startDate: e.target.value || null })} />
+          <TextField label="結束日期（可不填）" type="date" value={f.endDate ?? ""} onChange={(e) => setF({ ...f, endDate: e.target.value || null })} />
+          <TextArea label="備註" rows={2} value={f.notes ?? ""} onChange={(e) => setF({ ...f, notes: e.target.value })} className="sm:col-span-2" />
         </div>
       </Modal>
     </>
