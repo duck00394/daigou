@@ -6,7 +6,7 @@ import { getDefaultRateMicro } from "@/server/services/settings";
 import { PageHeader } from "@/components/ui";
 import { QuickPurchase } from "./quick";
 import { listShippingMethods } from "@/server/services/shipping-methods";
-import { batchStage, batchStageLabel } from "@/lib/labels";
+import { batchStage, batchStageLabel, isStoreKind } from "@/lib/labels";
 import { formatRate } from "@/lib/money";
 
 export const metadata = { title: "新增採購" };
@@ -18,12 +18,12 @@ export default async function PurchasePage({ searchParams }: { searchParams: Pro
     getMe(),
     tx((t) => listOperators(t)),
     prisma.category.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
-    prisma.supplier.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, defaultCurrency: true } }),
+    prisma.supplier.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, defaultCurrency: true, kind: true } }),
     prisma.purchaseBatch.findMany({
       where: { status: { not: "CANCELLED" } },
       orderBy: { createdAt: "desc" },
       take: 200,
-      select: { id: true, code: true, name: true, categoryId: true, ownership: true, orderedById: true, status: true, progress: true, rateMicro: true, supplierId: true, supplierRef: { select: { name: true, defaultCurrency: true } }, _count: { select: { items: true } } },
+      select: { id: true, code: true, name: true, categoryId: true, ownership: true, orderedById: true, status: true, progress: true, rateMicro: true, supplierId: true, supplierRef: { select: { name: true, defaultCurrency: true, kind: true } }, _count: { select: { items: true } } },
     }),
     prisma.series.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
     prisma.productType.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
@@ -54,7 +54,7 @@ export default async function PurchasePage({ searchParams }: { searchParams: Pro
         shipping={shipping.map((x) => ({ id: x.id, name: x.name, kind: x.kind, currency: x.currency === "JPY" ? "JPY" : "TWD", amount: x.amount }))}
         lastSeriesId={lastItem?.product.seriesId ?? null}
         lastTypeId={lastItem?.product.productTypeId ?? null}
-        suppliers={sortedSups.map((s) => ({ id: s.id, name: s.name, currency: (s.defaultCurrency as "JPY" | "TWD") ?? "TWD" }))}
+        suppliers={sortedSups.map((s) => ({ id: s.id, name: s.name, currency: (s.defaultCurrency as "JPY" | "TWD") ?? "TWD", store: isStoreKind(s.kind) }))}
         batches={batches.map((b) => ({
           id: b.id,
           label: `${b.name}`,
@@ -62,7 +62,7 @@ export default async function PurchasePage({ searchParams }: { searchParams: Pro
           categoryId: b.categoryId,
           owner: b.ownership === "JOINT" ? "合資" : opName(b.orderedById),
           ownerKey: b.ownership === "JOINT" ? "JOINT" : (b.orderedById ?? "none"),
-          stage: batchStageLabel[batchStage(b)][0],
+          stage: isStoreKind(b.supplierRef?.kind) ? "實體店購買" : batchStageLabel[batchStage(b)][0],
           supplierId: b.supplierId,
           supplierName: b.supplierRef?.name ?? null,
           currency: (b.supplierRef?.defaultCurrency as "JPY" | "TWD") ?? "TWD",

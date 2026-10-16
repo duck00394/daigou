@@ -3,7 +3,9 @@ import { prisma, tx } from "@/server/db";
 import { checkIntegrity } from "@/server/services/integrity";
 import { actor, resetDb, seedBasics } from "../helpers";
 import { ensureDefaultOperators } from "@/server/services/operators";
-import { addBatchItem, createBatch } from "@/server/services/purchase";
+import { addBatchItem, cancelBatch, createBatch, deleteBatchItem } from "@/server/services/purchase";
+import { keepStock } from "@/server/services/inventory";
+import { createProduct } from "@/server/services/catalog";
 import { receiveAll } from "@/server/services/receiving";
 import { listShippingMethods, saveShippingMethod } from "@/server/services/shipping-methods";
 import { renameCategory } from "@/server/services/catalog";
@@ -62,5 +64,34 @@ describe("常用運費方式、活動改名", () => {
     const after = await prisma.category.findUniqueOrThrow({ where: { id: s.halloween.id } });
     expect([after.name, after.type, after.active]).toEqual(["萬聖節 2026", before.type, before.active]);
     await expect(tx((t) => renameCategory(t, actor, s.halloween.id, "上海限定"))).rejects.toThrow("已存在");
+  });
+});
+
+describe("手誤：已經收進庫存的也能刪／取消（東西還沒動過才可以）", () => {
+  it("刪掉已入庫的品項：庫存一起拿掉；自留過的就不能刪", async () => {
+    const [pa, pb] = await tx(async (t) => [await createProduct(t, actor, { name: "手誤商品 A" }), await createProduct(t, actor, { name: "手誤商品 B" })]);
+    const b = await tx((t) => createBatch(t, actor, { name: "常設店", supplier: "常設店", orderedById: "op_a" }));
+    const wrong = await tx((t) => addBatchItem(t, actor, b.id, { productId: pa.id, qty: 1, unitCost: 0, currency: "TWD" }));
+    const kept = await tx((t) => addBatchItem(t, actor, b.id, { productId: pb.id, qty: 1, unitCost: 300, currency: "TWD" }));
+    const before = (await tx((t) => inventorySummary(t, [pa.id]))).get(pa.id)?.onHand ?? 0;
+    await tx((t) => receiveAll(t, actor, b.id, { receivedById: null }));
+    expect((await tx((t) => inventorySummary(t, [pa.id]))).get(pa.id)!.onHand).toBe(before + 1);
+    const r = await tx((t) => deleteBatchItem(t, actor, wrong.id));
+    expect(r.undone).toBe(1);
+    expect((await tx((t) => inventorySummary(t, [pa.id]))).get(pa.id)?.onHand ?? 0).toBe(before);
+    expect(await prisma.receivingLine.count({ where: { batchItemId: wrong.id } })).toBe(0);
+    await tx((t) => keepStock(t, actor, { productId: pb.id, delta: 1, owner: "op_a" }));
+    await expect(tx((t) => deleteBatchItem(t, actor, kept.id))).rejects.toThrow("已經賣出、自留");
+  });
+
+  it("取消已收貨的團：還沒動過的庫存一起拿掉", async () => {
+    const pa = await tx((t) => createProduct(t, actor, { name: "手誤商品 C" }));
+    const b = await tx((t) => createBatch(t, actor, { name: "買錯的團", supplier: "常設店", orderedById: "op_a" }));
+    await tx((t) => addBatchItem(t, actor, b.id, { productId: pa.id, qty: 2, unitCost: 500, currency: "TWD" }));
+    const before = (await tx((t) => inventorySummary(t, [pa.id]))).get(pa.id)?.onHand ?? 0;
+    await tx((t) => receiveAll(t, actor, b.id, { receivedById: null }));
+    expect((await tx((t) => cancelBatch(t, actor, b.id))).undone).toBe(2);
+    expect((await tx((t) => inventorySummary(t, [pa.id]))).get(pa.id)?.onHand ?? 0).toBe(before);
+    expect((await prisma.purchaseBatch.findUniqueOrThrow({ where: { id: b.id } })).status).toBe("CANCELLED");
   });
 });

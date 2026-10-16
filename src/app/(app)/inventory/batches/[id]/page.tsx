@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { landedCosts, minCommittedQty } from "@/server/services/purchase";
-import { PageHeader, Section, Jpy, StatusBadge, Empty, LinkButton } from "@/components/ui";
+import { PageHeader, Section, Jpy, StatusBadge, Empty, LinkButton, Badge } from "@/components/ui";
 import { AddCost, DeleteCost, CancelBatch } from "./parts";
 import { type EditItem } from "./bulk-edit";
 import { BatchInfoCard, CopyItemsButton } from "./manage";
@@ -16,7 +16,7 @@ import { ProgressBar, ResponsibilityCard, SupplierPayments, Receiving, type Paym
 import { listOperators } from "@/server/services/operators";
 import { jointWeights, sharePercents } from "@/server/services/ownership";
 import { supplierPaymentHistory } from "@/server/services/supplier-payments";
-import { allocMethod, batchStage, batchStageLabel, costKind, currencyName, dayInput, fmtDate, paymentPurpose, supplierPaymentStatus, toDateTimeInput } from "@/lib/labels";
+import { isStoreKind, allocMethod, batchStage, batchStageLabel, costKind, currencyName, dayInput, fmtDate, paymentPurpose, supplierPaymentStatus, toDateTimeInput } from "@/lib/labels";
 import { formatRate, formatTwd, jpyToTwd } from "@/lib/money";
 
 export default async function BatchPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ bulk?: string }> }) {
@@ -98,7 +98,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       salePriceTwd: i.salePriceTwd,
       goodsTwd: l.goodsTwd,
       feesTwd: l.feesTwd,
-      canDelete: i.movements.length === 0 && m.min === 0,
+      canDelete: i.movements.every((x) => x.kind === "RECEIVE") && m.dependentIfRemoved === 0,
       cancelledQty: i.cancelledQty,
       cancelReason: i.cancelReason,
     });
@@ -116,7 +116,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       <PageHeader
         title={b.name}
         back={{ href: "/inventory?tab=batches", label: "採購團" }}
-        sub={<span className="flex flex-wrap items-center gap-2"><OwnerBadge k={b.ownership === "JOINT" ? "joint" : b.orderedById} name={b.ownership === "JOINT" ? "合資" : opName(b.orderedById)} ids={ops.map((o) => o.id)} /><StatusBadge map={batchStageLabel} value={batchStage(b)} />{b.category && <a href={`/categories/${b.category.id}`} className="text-ai hover:underline">{b.category.name}</a>}{supplierName && supplierName !== b.name && <span>代購：{supplierName}</span>}<span className="text-[12px] text-mute">{b.code}</span></span>}
+        sub={<span className="flex flex-wrap items-center gap-2"><OwnerBadge k={b.ownership === "JOINT" ? "joint" : b.orderedById} name={b.ownership === "JOINT" ? "合資" : opName(b.orderedById)} ids={ops.map((o) => o.id)} />{isStoreKind(b.supplierRef?.kind) ? <Badge tone="info">實體店購買</Badge> : <StatusBadge map={batchStageLabel} value={batchStage(b)} />}{b.category && <a href={`/categories/${b.category.id}`} className="text-ai hover:underline">{b.category.name}</a>}{supplierName && supplierName !== b.name && <span>{isStoreKind(b.supplierRef?.kind) ? "店家" : "代購"}：{supplierName}</span>}<span className="text-[12px] text-mute">{b.code}</span></span>}
         actions={<><LinkButton href={`/purchase${b.categoryId ? `?categoryId=${b.categoryId}` : ""}`}>同活動再開一團</LinkButton>{open && <CancelBatch id={b.id} />}</>}
       />
       <section className="rounded-xl border border-line bg-card p-4" aria-label="這團金額">
@@ -135,7 +135,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         )}
       </section>
 
-      <ProgressBar batchId={b.id} progress={b.progress} stage={batchStage(b)} editable={b.status !== "CANCELLED"} />
+      {!isStoreKind(b.supplierRef?.kind) && <ProgressBar batchId={b.id} progress={b.progress} stage={batchStage(b)} editable={b.status !== "CANCELLED"} />}
 
 
 

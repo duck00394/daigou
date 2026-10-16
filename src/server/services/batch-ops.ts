@@ -216,7 +216,7 @@ export async function categoryOverview(t: Tx, categoryId: string) {
     where: { categoryId },
     orderBy: [{ orderedAt: "asc" }, { createdAt: "asc" }],
     include: {
-      supplierRef: { select: { name: true } },
+      supplierRef: { select: { name: true, kind: true } },
       orderedBy: { select: { name: true } },
       paymentResponsibleBy: { select: { name: true } },
       receivingResponsibleBy: { select: { name: true } },
@@ -296,6 +296,7 @@ export async function categoryOverview(t: Tx, categoryId: string) {
       name: b.name,
       status: b.status,
       supplier: b.supplierRef?.name ?? b.supplier,
+      store: b.supplierRef?.kind === "STORE" || b.supplierRef?.kind === "OFFICIAL_STORE",
       orderedBy: b.orderedBy?.name ?? null,
       ownership: b.ownership,
       ownerKey: batchOwnerKey(b),

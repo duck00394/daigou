@@ -142,7 +142,7 @@ export async function CategoryBatches({ categoryId, view, owner = "" }: { catego
               <Link href={`/inventory/batches/${b.id}`} className={`block h-full rounded-xl border p-3 hover:border-ai ${b.issues.length ? "border-[#f0dfa8]" : "border-line"} ${ownerTone(b.ownerKey, ids).stripe} ${b.status === "CANCELLED" ? "opacity-60" : ""}`}>
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-semibold">{b.name}</span>
-                  <span className="flex shrink-0 items-center gap-1"><OwnerBadge k={b.ownerKey} name={nameOf(b.ownerKey)} ids={ids} /><StatusBadge map={batchStageLabel} value={b.stage} /></span>
+                  <span className="flex shrink-0 items-center gap-1"><OwnerBadge k={b.ownerKey} name={nameOf(b.ownerKey)} ids={ids} />{b.store ? <span className="rounded-full bg-info-soft px-2 py-0.5 text-[12px] text-info">實體店購買</span> : <StatusBadge map={batchStageLabel} value={b.stage} />}</span>
                 </div>
                 <div className="text-[13px] text-mute">
                   <span className="font-medium text-ink-2">{b.ownership === "JOINT" ? `合資${o.jointShares[b.id]?.length ? `（${o.jointShares[b.id].map((x) => `${who(x.key)} ${x.percent}%`).join("・")}）` : ""}` : `${b.orderedBy ?? "未指定"}的`}</span>｜{b.supplier ?? "未指定代購"}
@@ -154,7 +154,7 @@ export async function CategoryBatches({ categoryId, view, owner = "" }: { catego
                 </div>
                 {Object.keys(b.pending).length > 0 && <div className="mt-1 text-[12px] text-warn">待付款 {sums(b.pending)}</div>}
                 {b.expectedAt && <div className="mt-1 text-[12px] text-mute">預計到貨 {fmtDay(b.expectedAt)}</div>}
-                {b.issues.length > 0 && <div className="mt-1 text-[12px] text-warn">⚠ {b.issues.join("、")}</div>}
+                {b.issues.filter((x) => !(b.store && x === "尚未登記付款")).length > 0 && <div className="mt-1 text-[12px] text-warn">⚠ {b.issues.filter((x) => !(b.store && x === "尚未登記付款")).join("、")}</div>}
               </Link>
             </li>
           ))}

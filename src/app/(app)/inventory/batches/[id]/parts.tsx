@@ -140,7 +140,7 @@ export function DeleteCost({ id }: { id: string }) {
 
 export function CancelBatch({ id }: { id: string }) {
   const { run } = useRun();
-  return <ConfirmButton variant="danger" label="取消採購團" title="取消採購團" message="只有完全沒有到貨紀錄的採購團可以取消。相關訂單明細的採購狀態不會自動改回，請視需要調整。" confirmLabel="取消採購團" onConfirm={() => run(() => cancelBatchAction(id), { success: "已取消採購團" })} />;
+  return <ConfirmButton variant="danger" label="取消採購團" title="取消採購團" message="已經收進庫存、但還沒賣也沒自留的東西會一起從庫存拿掉。已經賣掉或自留的，要先作廢那些紀錄才能取消。付款紀錄會留著。" confirmLabel="取消採購團" onConfirm={() => run(() => cancelBatchAction(id), { success: "已取消採購團" })} />;
 }
 
 export function Collapsible({ title, defaultOpen, children }: { title: React.ReactNode; defaultOpen?: boolean; children: React.ReactNode }) {

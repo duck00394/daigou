@@ -9,18 +9,17 @@ import { createBatchAction } from "@/actions/ops";
 import { saveSupplierAction } from "@/actions/series";
 import { renameCategoryAction, saveCategoryAction } from "@/actions/catalog";
 import { setMeAction } from "@/actions/operators";
-import { receiveAllAction } from "@/actions/batches";
+import { payRemainingAction, receiveAllAction } from "@/actions/batches";
 import { batchProgress } from "@/lib/labels";
 import { formatJpy, formatTwd, parseRate } from "@/lib/money";
 import { ownerTone } from "@/lib/owner-colors";
 
 type Op = { id: string; name: string; code: string };
 type BatchOpt = { id: string; label: string; code: string; categoryId: string | null; owner: string; ownerKey: string; stage: string; supplierId: string | null; supplierName: string | null; currency: "JPY" | "TWD"; rateMicro: number; items: number };
-type Supplier = { id: string; name: string; currency: "JPY" | "TWD" };
+type Supplier = { id: string; name: string; currency: "JPY" | "TWD"; store: boolean };
 type Ship = { id: string; name: string; kind: string; currency: "TWD" | "JPY"; amount: number };
 const NEW = "__new__";
 const JOINT = "JOINT";
-const IN_HAND = "IN_HAND";
 const TOP = 6;
 
 const card = (on: boolean) => `min-h-11 rounded-xl border px-3 py-2 text-left text-[15px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink hover:border-ai"}`;
@@ -57,7 +56,11 @@ export function QuickPurchase(props: {
   // 運費：點常用的帶入金額（可以再改），也可以自己填
   const [fees, setFees] = useState<Record<string, string>>({});
   const [customFee, setCustomFee] = useState<string | null>(null);
-  const [saved, setSaved] = useState<{ id: string; name: string; count: number; inHand: number } | null>(null);
+  const [saved, setSaved] = useState<{ id: string; name: string; count: number; inHand: number; paid: boolean } | null>(null);
+  // 跟誰買：代購（要等寄來）或自己去實體店買（買了就拿到、當場付清）
+  const [via, setVia] = useState<"AGENT" | "STORE">("AGENT");
+  const [paidAtStore, setPaidAtStore] = useState(true);
+  const payIdem = useIdemKey();
   const created = useRef<string | null>(null);
   const recvIdem = useIdemKey();
 
@@ -80,8 +83,10 @@ export function QuickPurchase(props: {
   ];
   const topCats = cats.slice(0, TOP);
   const moreCats = cats.slice(TOP);
-  const topSups = suppliers.slice(0, 5);
-  const moreSups = suppliers.slice(5);
+  const store = via === "STORE";
+  const shown = suppliers.filter((x) => x.store === store);
+  const topSups = shown.slice(0, 5);
+  const moreSups = shown.slice(5);
   const catName = cats.find((c) => c.id === categoryId)?.name ?? null;
 
   const chooseCategory = (id: string) => {
@@ -101,18 +106,18 @@ export function QuickPurchase(props: {
       notify("請選擇代購，或填寫團名");
       return null;
     }
-    const feeList = Object.entries(fees)
+    const feeList = (store ? [] : Object.entries(fees))
       .map(([k, v]) => {
         const m = props.shipping.find((s) => s.id === k);
         const amount = Number(v);
         return { kind: m?.kind ?? "TW_DOMESTIC_SHIPPING", currency: m?.currency ?? "TWD", amount, note: m?.name ?? null };
       })
-      .concat(customFee && Number(customFee) > 0 ? [{ kind: "TW_DOMESTIC_SHIPPING", currency: "TWD" as const, amount: Number(customFee), note: null }] : []);
+      .concat(!store && customFee && Number(customFee) > 0 ? [{ kind: "TW_DOMESTIC_SHIPPING", currency: "TWD" as const, amount: Number(customFee), note: null }] : []);
     if (feeList.some((x) => !Number.isInteger(x.amount) || x.amount < 0)) {
       notify("運費請填整數");
       return null;
     }
-    const dep = f.deposit.trim() ? Number(f.deposit) : 0;
+    const dep = !store && f.deposit.trim() ? Number(f.deposit) : 0;
     if (!Number.isInteger(dep) || dep < 0) {
       notify("訂金請填整數");
       return null;
@@ -128,7 +133,7 @@ export function QuickPurchase(props: {
       expectedAt: f.expectedAt || null,
       ownership: f.owner === JOINT ? "JOINT" : "PERSONAL",
       orderedById: f.owner === JOINT ? null : f.owner || null,
-      progress: (f.progress === IN_HAND ? "ASKED" : f.progress) as "ASKED",
+      progress: (store ? "ASKED" : f.progress) as "ASKED",
       fees: feeList as never,
       deposit: dep > 0 ? { amount: dep, paidById: f.owner === JOINT ? me : f.owner || me } : null,
     });
@@ -246,40 +251,49 @@ export function QuickPurchase(props: {
           ))}
           <button type="button" role="radio" aria-checked={pick === NEW} className={card(pick === NEW)} onClick={() => { setPick(NEW); created.current = null; setSaved(null); }}>
             <span className="block font-medium">＋ 新的一團</span>
-            <span className={`block text-[12px] ${pick === NEW ? "text-white/80" : "text-mute"}`}>向某個代購買的一批</span>
+            <span className={`block text-[12px] ${pick === NEW ? "text-white/80" : "text-mute"}`}>這次買的一批（代購或實體店）</span>
           </button>
         </div>
 
         {pick === NEW && !created.current && (
           <div className="space-y-3 border-t border-line-2 pt-3">
             <div>
-              <div className="mb-1 text-[13px] font-medium text-ink-2">向哪個代購買</div>
+              <div className="mb-1 text-[13px] font-medium text-ink-2">在哪裡買的？</div>
+              <div role="radiogroup" aria-label="在哪裡買的" className="mb-3 grid grid-cols-2 gap-1.5">
+                {([["AGENT", "跟代購買", "要等代購寄來"], ["STORE", "實體店買", "自己去店裡，買了就拿到"]] as const).map(([v, l, h]) => (
+                  <button key={v} type="button" role="radio" aria-checked={via === v} className={card(via === v)} onClick={() => { setVia(v); setF((x) => ({ ...x, supplierId: "" })); setNewSup(null); }}>
+                    <span className="block font-medium">{l}</span>
+                    <span className={`block text-[12px] ${via === v ? "text-white/80" : "text-mute"}`}>{h}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="mb-1 text-[13px] font-medium text-ink-2">{store ? "哪家店" : "向哪個代購買"}</div>
               {newSup === null ? (
-                <div role="radiogroup" aria-label="向哪個代購買" className="flex flex-wrap gap-1.5">
+                <div role="radiogroup" aria-label={store ? "哪家店" : "向哪個代購買"} className="flex flex-wrap gap-1.5">
                   {topSups.map((s) => (
                     <button key={s.id} type="button" role="radio" aria-checked={f.supplierId === s.id} className={pill(f.supplierId === s.id)} onClick={() => setF({ ...f, supplierId: s.id })}>{s.name}</button>
                   ))}
                   {moreSups.length > 0 && (
-                    <select aria-label="其他代購" className="min-h-10 rounded-full border border-line bg-white px-3 text-[15px]" value={moreSups.some((s) => s.id === f.supplierId) ? f.supplierId : ""} onChange={(e) => setF({ ...f, supplierId: e.target.value })}>
+                    <select aria-label={store ? "其他店家" : "其他代購"} className="min-h-10 rounded-full border border-line bg-white px-3 text-[15px]" value={moreSups.some((s) => s.id === f.supplierId) ? f.supplierId : ""} onChange={(e) => setF({ ...f, supplierId: e.target.value })}>
                       <option value="">其他…</option>
                       {moreSups.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   )}
-                  <button type="button" className="min-h-10 rounded-full border border-dashed border-line px-3.5 text-[15px] text-mute" onClick={() => setNewSup("")}>＋ 新代購</button>
+                  <button type="button" className="min-h-10 rounded-full border border-dashed border-line px-3.5 text-[15px] text-mute" onClick={() => setNewSup("")}>{store ? "＋ 新店家" : "＋ 新代購"}</button>
                 </div>
               ) : (
                 <div className="flex items-end gap-2">
                   <label className="flex-1 text-[13px] font-medium text-ink-2">
-                    代購名稱
-                    <input autoFocus className={`${inputCls} mt-1`} value={newSup} onChange={(e) => setNewSup(e.target.value)} placeholder="例：YUANS、QQ Shop" />
+                    {store ? "店名" : "代購名稱"}
+                    <input autoFocus className={`${inputCls} mt-1`} value={newSup} onChange={(e) => setNewSup(e.target.value)} placeholder={store ? "例：吉伊卡哇樂園、常設店" : "例：YUANS、QQ Shop"} />
                   </label>
                   <Button
                     variant="primary"
                     onClick={async () => {
-                      if (!newSup.trim()) return notify("請填寫代購名稱");
-                      const r = await saveSupplierAction(null, { name: newSup.trim(), defaultCurrency: "TWD", kind: "AGENT" });
+                      if (!newSup.trim()) return notify(store ? "請填寫店名" : "請填寫代購名稱");
+                      const r = await saveSupplierAction(null, { name: newSup.trim(), defaultCurrency: "TWD", kind: store ? "STORE" : "AGENT" });
                       if (!r.ok) return notify(r.error);
-                      setSuppliers((l) => [{ id: r.data.id, name: r.data.name, currency: "TWD" }, ...l]);
+                      setSuppliers((l) => [{ id: r.data.id, name: r.data.name, currency: "TWD", store }, ...l]);
                       setF((x) => ({ ...x, supplierId: r.data.id }));
                       setNewSup(null);
                     }}
@@ -299,14 +313,21 @@ export function QuickPurchase(props: {
               </div>
               {f.owner === JOINT && <p className="mt-1 text-[12px] text-mute">合資：賣掉的錢依各自實際付給代購的金額比例分（誰付錢誰拿錢）。</p>}
             </div>
+            {store ? (
+              <label className="flex items-center gap-2 rounded-xl border border-line-2 bg-[#fafbfc] p-3 text-[15px]">
+                <input type="checkbox" className="h-5 w-5" checked={paidAtStore} onChange={(e) => setPaidAtStore(e.target.checked)} />
+                在店裡已經付清了
+                <span className="text-[12px] text-mute">（存好就進庫存{paidAtStore ? "、記成已付款" : ""}）</span>
+              </label>
+            ) : (
+            <>
             <div>
               <div className="mb-1 text-[13px] font-medium text-ink-2">現在到哪了？</div>
               <div role="radiogroup" aria-label="進度" className="flex flex-wrap gap-1.5">
-                {[...Object.entries(batchProgress), [IN_HAND, "已經拿到了（現貨）"]].map(([v, l]) => (
+                {Object.entries(batchProgress).map(([v, l]) => (
                   <button key={v} type="button" role="radio" aria-checked={f.progress === v} className={pill(f.progress === v)} onClick={() => setF({ ...f, progress: v })}>{l}</button>
                 ))}
               </div>
-              {f.progress === IN_HAND && <p className="mt-1 text-[12px] text-good">存好就直接進庫存，不用再按收貨。</p>}
             </div>
             <div className="space-y-2 rounded-xl border border-line-2 bg-[#fafbfc] p-3">
               <div className="text-[13px] font-medium text-ink-2">運費（點常用的就帶入，可以再改）</div>
@@ -351,6 +372,8 @@ export function QuickPurchase(props: {
               </label>
               <p className="text-[12px] text-mute">運費：不攤、算這團主人的。訂金：記成一筆今天的付款。</p>
             </div>
+            </>
+            )}
             <details className="text-[14px]">
               <summary className="cursor-pointer select-none text-mute">更多（團名、預計到貨日{currency === "JPY" ? "、匯率" : ""}）</summary>
               <div className="mt-2 grid gap-3 sm:grid-cols-2">
@@ -382,13 +405,21 @@ export function QuickPurchase(props: {
             onSaved={async (id, count) => {
               const name = chosen?.label ?? (f.name.trim() || supplier?.name || "新的一團");
               let inHand = 0;
-              if (pick === NEW && f.progress === IN_HAND) {
-                const r = await receiveAllAction(id, f.owner === JOINT ? me : f.owner || me, recvIdem.key);
+              let paid = false;
+              if (pick === NEW && store) {
+                const who = f.owner === JOINT ? me : f.owner || me;
+                const r = await receiveAllAction(id, who, recvIdem.key);
                 recvIdem.renew();
                 if (!r.ok) notify(`品項已存好，但入庫失敗：${r.error}`);
                 else inHand = r.data.received;
+                if (paidAtStore) {
+                  const p = await payRemainingAction(id, who, payIdem.key);
+                  payIdem.renew();
+                  if (p.ok) paid = true;
+                  else if (!p.error.includes("付清")) notify(`付款沒記到：${p.error}`);
+                }
               }
-              setSaved({ id, name, count, inHand });
+              setSaved({ id, name, count, inHand, paid });
             }}
             supplierId={chosen?.supplierId ?? (f.supplierId || null)}
             supplierCurrency={currency}
@@ -399,7 +430,7 @@ export function QuickPurchase(props: {
         )}
         {saved && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-good-soft px-3 py-2 text-sm text-good" data-testid="saved-banner">
-            <span>已存到「{saved.name}」，共 {saved.count} 項{saved.inHand ? `，${saved.inHand} 件已進庫存` : ""}。</span>
+            <span>已存到「{saved.name}」，共 {saved.count} 項{saved.inHand ? `，${saved.inHand} 件已進庫存` : ""}{saved.paid ? "，已記成付清" : ""}。</span>
             <span className="flex gap-2">
               {saved.inHand > 0 && <Link className="underline" href="/inventory?tab=stock">看庫存</Link>}
               <Link className="underline" href={`/inventory/batches/${saved.id}`}>看這一團</Link>

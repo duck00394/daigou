@@ -205,11 +205,15 @@ export const currencyName: Record<string, string> = { JPY: "日幣", TWD: "台�
 export const supplierKind: Record<string, string> = {
   OFFICIAL_ONLINE: "日本官方網站",
   OFFICIAL_STORE: "官方實體店",
+  STORE: "實體店",
   AGENT: "代購",
   AGENT_GROUP: "代購群",
   INDIVIDUAL: "個人賣家",
   OTHER: "其他",
 };
+
+/** 自己去實體店買的（不是跟代購買）：買了就拿到、當場付清，不顯示代購進度 */
+export const isStoreKind = (kind: string | null | undefined) => kind === "STORE" || kind === "OFFICIAL_STORE";
 
 /** 採購團進度（口語）：前三個自己點選，到手與否由收貨自動判斷 */
 export const batchProgress: Record<string, string> = {

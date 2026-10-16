@@ -152,7 +152,7 @@ export function BulkEditTable({ batchId, items, editable }: { batchId: string; i
               <div role="cell" className={`col-span-2 flex-wrap justify-end gap-1 md:col-span-1 md:flex md:pt-1 ${more[i.id] ? "flex" : "hidden"}`}>
                 {editable && <CancelItemButton itemId={i.id} name={i.name} max={i.qty - i.received} />}
                 {editable && i.canDelete && (
-                  <ConfirmButton small variant="danger" label="刪除" title={`刪除「${i.name}」`} message="這個品項沒有到貨紀錄，也沒有買家依賴這批到貨，可以安全刪除。" confirmLabel="刪除品項" onConfirm={() => run(() => deleteBatchItemAction(i.id), { success: "已刪除品項" })} />
+                  <ConfirmButton small variant="danger" label="刪除" title={`刪除「${i.name}」`} message={i.received > 0 ? `已經收進庫存的 ${i.received} 件會一起從庫存拿掉（還沒賣、沒自留才可以刪）。` : "這個品項還沒到貨，刪掉就不見了。"} confirmLabel="刪除品項" onConfirm={() => run(() => deleteBatchItemAction(i.id), { success: "已刪除品項" })} />
                 )}
               </div>
               {err && <p role="alert" className="col-span-2 text-[13px] text-bad md:col-span-9">{err}</p>}

@@ -121,7 +121,7 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   await page.screenshot({ path: "test-results/mobile_category_pay.png", fullPage: true });
 });
 
-test("手機：開團時一起記運費（常用運費方式）和訂金，現貨存好就進庫存；活動可以改名", async ({ page }) => {
+test("手機：開團時一起記運費（常用運費方式）和訂金；實體店買的存好就進庫存並記付清；買錯的可以刪；活動可以改名", async ({ page }) => {
   const tag = Date.now().toString(36).slice(-4);
   const ship = `賣貨便${tag}`;
   await login(page);
@@ -148,16 +148,38 @@ test("手機：開團時一起記運費（常用運費方式）和訂金，現�
   await expect(page.getByRole("radiogroup", { name: "哪個活動" }).getByRole("radio", { name: `E2E 現貨展 ${tag}` })).toHaveAttribute("aria-checked", "true");
 
   await newSupplier(page, `砂糖 ${tag}`);
-  await page.getByRole("radiogroup", { name: "進度" }).getByRole("radio", { name: "已經拿到了（現貨）" }).click();
   await page.getByRole("button", { name: new RegExp(ship) }).click();
   await expect(page.getByLabel(`${ship} 運費`)).toHaveValue("38");
   await page.getByLabel("已付訂金").fill("500");
   await page.screenshot({ path: "test-results/mobile_purchase_money.png", fullPage: true });
   await addRow(page, "兔兔", "600", "2");
-  await expect(page.getByTestId("saved-banner")).toContainText("2 件已進庫存");
   await page.getByTestId("saved-banner").getByRole("link", { name: "看這一團" }).click();
   await expect(page.getByTestId("batch-total")).toHaveText("NT$1,238"); // 600×2 ＋ 運費 38
   await expect(page.getByTestId("batch-due")).toHaveText("NT$738"); // 扣掉訂金 500
   await expect(page.getByTestId("fee-row")).toContainText(ship);
-  await expect(page.getByRole("button", { name: "已全部到貨" })).toBeVisible();
+
+  // 實體店買：不是跟代購買，存好就進庫存、記成付清；畫面顯示「實體店購買」
+  await page.goto("/purchase");
+  await page.getByRole("radio", { name: /新的一團/ }).click();
+  await page.getByRole("radiogroup", { name: "在哪裡買的" }).getByRole("radio", { name: /實體店買/ }).click();
+  await page.getByRole("button", { name: "＋ 新店家" }).click();
+  await page.getByLabel("店名", { exact: true }).fill(`常設店 ${tag}`);
+  await page.getByRole("button", { name: "建立", exact: true }).click();
+  await expect(page.getByRole("radiogroup", { name: "進度" })).toHaveCount(0);
+  await expect(page.getByLabel(/在店裡已經付清/)).toBeChecked();
+  await page.screenshot({ path: "test-results/mobile_purchase_store.png", fullPage: true });
+  await addRow(page, "吉伊", "520", "1");
+  await expect(page.getByTestId("saved-banner")).toContainText("1 件已進庫存，已記成付清");
+  await page.getByTestId("saved-banner").getByRole("link", { name: "看這一團" }).click();
+  await expect(page.getByText("實體店購買").first()).toBeVisible();
+  await expect(page.getByTestId("batch-due")).toHaveText("NT$0");
+  await expect(page.getByRole("radiogroup", { name: "現在到哪了" })).toHaveCount(0);
+  // 買錯了：已入庫但還沒動過，可以直接刪
+  await page.getByRole("button", { name: "編輯", exact: true }).click();
+  const row = page.getByRole("table", { name: "採購品項", exact: true }).getByRole("row").filter({ hasText: "吉伊 吊娃" });
+  await row.getByRole("button", { name: /⋯/ }).click();
+  await row.getByRole("button", { name: "刪除" }).click();
+  await expect(page.getByRole("dialog")).toContainText("已經收進庫存的 1 件會一起從庫存拿掉");
+  await page.getByRole("button", { name: "刪除品項" }).click();
+  await toast(page, "已刪除品項");
 });

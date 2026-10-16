@@ -10,7 +10,7 @@ import { inventorySummary } from "@/server/services/inventory";
 import { purchaseDemand } from "@/server/services/purchase";
 import { listOperators } from "@/server/services/operators";
 import { getDefaultRateMicro } from "@/server/services/settings";
-import { PageHeader, Section, TableWrap, Empty, StatusBadge, LinkButton } from "@/components/ui";
+import { PageHeader, Section, TableWrap, Empty, StatusBadge, LinkButton, Badge } from "@/components/ui";
 import { ReceiveForm, AdjustForm, CreateBatchFromDemand, KeepButton } from "./parts";
 import { SellButton } from "@/components/quick-sale";
 import { getMe } from "@/server/me";
@@ -20,7 +20,7 @@ import { stockValuation } from "@/server/services/reports";
 import { productSearchWhere } from "@/server/services/catalog";
 import { formatTwd } from "@/lib/money";
 import { fmtDate, fmtDay, formatRateLabel } from "./util";
-import { batchStage, batchStageLabel } from "@/lib/labels";
+import { batchStage, batchStageLabel, isStoreKind } from "@/lib/labels";
 import { batchPaySummary, dueByOwner } from "@/server/services/batch-ops";
 import { OwnerDue } from "@/components/owner-due";
 
@@ -332,7 +332,7 @@ async function BatchesTab({ cat, open, owner }: { cat?: string; open?: string; o
                     <span className="font-semibold">{b.name}</span>
                     <span className="flex shrink-0 items-center gap-1">
                       <OwnerBadge k={b.ownership === "JOINT" ? "joint" : b.orderedById} name={b.ownership === "JOINT" ? "合資" : (b.orderedBy?.name ?? "未指定")} ids={ids} />
-                      <StatusBadge map={batchStageLabel} value={batchStage(b)} />
+                      {isStoreKind(b.supplierRef?.kind) ? <Badge tone="info">實體店購買</Badge> : <StatusBadge map={batchStageLabel} value={batchStage(b)} />}
                     </span>
                   </div>
                   <div className="mt-0.5 text-[13px] text-mute">
