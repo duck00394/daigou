@@ -1,4 +1,5 @@
 // 採購團的日常操作：修改基本資料、砍單、跨團複製品項、活動（代購系列）總覽與跨團價格比較
+import { summarizeFees } from "./fees";
 import { BizError, lockRows, type Tx } from "@/server/db";
 import { jpyToTwd } from "@/lib/money";
 import { audit, emptyToNull, type Actor } from "./common";
@@ -219,7 +220,7 @@ export async function categoryOverview(t: Tx, categoryId: string) {
       orderedBy: { select: { name: true } },
       paymentResponsibleBy: { select: { name: true } },
       receivingResponsibleBy: { select: { name: true } },
-      costs: { select: { id: true } },
+      costs: { select: { id: true, currency: true, amount: true, method: true, payer: true, shareSplit: true } },
       supplierPayments: { where: { status: { in: ["PAID", "PENDING"] } }, select: { amount: true, currency: true, status: true } },
       receivings: { select: { lines: { select: { defectQty: true, missingQty: true } } } },
       items: {
@@ -272,6 +273,8 @@ export async function categoryOverview(t: Tx, categoryId: string) {
       arr.push(cell);
       row.cells.set(b.id, arr);
     }
+    const fee = summarizeFees(b.costs, b.rateMicro);
+    feesTwd += fee.unallocTwd; // 不攤的費用也算在這團總額
     const paid: Record<string, number> = {};
     const pending: Record<string, number> = {};
     for (const p of b.supplierPayments) {
@@ -309,6 +312,7 @@ export async function categoryOverview(t: Tx, categoryId: string) {
       totalTwd: goodsTwd + feesTwd,
       estimated,
       feesRecorded: b.costs.length > 0,
+      fee,
       paid,
       pending,
       issues,
@@ -345,13 +349,16 @@ export async function categoryOverview(t: Tx, categoryId: string) {
   };
   const jointShares: Record<string, { key: string; amount: number; percent: number }[]> = {};
   for (const b of active) {
+    // 有指定「誰付的」費用直接算給那個人；其餘跟著這團的歸屬
+    for (const [k, v] of b.fee.byPayer) addOwner(k, v, 0, 0);
+    const base = b.totalTwd - b.fee.overrideTwd;
     if (b.ownership !== "JOINT") {
-      addOwner(b.ownerKey, b.totalTwd, 1, b.qty);
+      addOwner(b.ownerKey, base, 1, b.qty);
       continue;
     }
     jointShares[b.id] = sharePercents(weights.get(b.id));
-    const split = splitByWeights(b.totalTwd, weights.get(b.id));
-    if (!split) addOwner(JOINT, b.totalTwd, 1, b.qty);
+    const split = splitByWeights(base, weights.get(b.id));
+    if (!split) addOwner(JOINT, base, 1, b.qty);
     else {
       addOwner(JOINT, 0, 1, b.qty);
       for (const [k, v] of split) addOwner(k, v, 0, 0);
@@ -380,7 +387,7 @@ export async function categoryOverview(t: Tx, categoryId: string) {
       stock.set(k, x);
     }
   return {
-    batches: summariesWithPay,
+    batches: summariesWithPay.map(({ fee: f, ...x }) => ({ ...x, unallocFeesTwd: f.unallocTwd })),
     matrix,
     byOwner: Object.fromEntries(byOwner),
     byStage: Object.fromEntries(byStage),
@@ -410,6 +417,7 @@ export async function categoriesSummary(t: Tx) {
       orderedById: true,
       rateMicro: true,
       items: { select: { qty: true, cancelledQty: true, currency: true, estUnitCost: true, actualUnitCost: true, allocations: { select: { amountTwd: true } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } },
+      costs: { select: { currency: true, amount: true, method: true, payer: true, shareSplit: true } },
     },
   });
   const weights = await jointWeights(t, batches.filter((b) => b.ownership === "JOINT").map((b) => b.id));
@@ -421,12 +429,16 @@ export async function categoriesSummary(t: Tx) {
       total += itemGoodsTwd(i, b.rateMicro) + i.allocations.reduce((s, a) => s + a.amountTwd, 0);
       v.outstanding += Math.max(0, i.qty - i.cancelledQty - i.movements.reduce((s, m) => s + m.onHandDelta, 0));
     }
+    const fee = summarizeFees(b.costs, b.rateMicro);
+    total += fee.unallocTwd;
     v.batches += 1;
     v.totalTwd += total;
+    for (const [k, x] of fee.byPayer) v.byOwner[k] = (v.byOwner[k] ?? 0) + x;
+    const base = total - fee.overrideTwd;
     const key = batchOwnerKey(b);
-    const split = key === JOINT ? splitByWeights(total, weights.get(b.id)) : null;
+    const split = key === JOINT ? splitByWeights(base, weights.get(b.id)) : null;
     if (split) for (const [k, x] of split) v.byOwner[k] = (v.byOwner[k] ?? 0) + x;
-    else v.byOwner[key] = (v.byOwner[key] ?? 0) + total;
+    else v.byOwner[key] = (v.byOwner[key] ?? 0) + base;
     out.set(b.categoryId!, v);
   }
   return out;
@@ -447,10 +459,11 @@ export async function batchPaySummary(t: Tx, batchIds: string[]) {
       rateMicro: true,
       items: { select: { qty: true, cancelledQty: true, currency: true, estUnitCost: true, actualUnitCost: true, allocations: { select: { amountTwd: true } } } },
       supplierPayments: { where: { status: "PAID" }, select: { amount: true, currency: true, rateMicro: true } },
+      costs: { select: { currency: true, amount: true, method: true, payer: true, shareSplit: true } },
     },
   });
   for (const b of batches) {
-    const total = b.items.reduce((s, i) => s + itemGoodsTwd(i, b.rateMicro) + i.allocations.reduce((a, x) => a + x.amountTwd, 0), 0);
+    const total = b.items.reduce((s, i) => s + itemGoodsTwd(i, b.rateMicro) + i.allocations.reduce((a, x) => a + x.amountTwd, 0), 0) + summarizeFees(b.costs, b.rateMicro).unallocTwd;
     const paid = b.supplierPayments.reduce((s, p) => s + (p.currency === "TWD" ? p.amount : jpyToTwd(p.amount, p.rateMicro ?? b.rateMicro)), 0);
     out.set(b.id, { totalTwd: total, paidTwd: paid, dueTwd: Math.max(0, total - paid) });
   }

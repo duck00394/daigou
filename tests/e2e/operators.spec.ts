@@ -37,7 +37,7 @@ test("桌面：A 下單、A 付訂金 B 付尾款、A B 分批收貨，對帳依
 
   // 3. 加入兩個品項
   await page.getByLabel("IP／系列").selectOption({ label: "吉伊卡哇" });
-  await page.getByLabel("商品類型").selectOption({ label: "吊娃" });
+  await page.getByRole("radiogroup", { name: "種類" }).getByRole("radio", { name: "吊娃" }).click();
   await page.getByRole("button", { name: "＋ 吉伊" }).click();
   await page.getByRole("button", { name: "＋ 小八" }).click();
   await cell(page, 0, 2).fill("1650");
@@ -83,16 +83,16 @@ test("桌面：A 下單、A 付訂金 B 付尾款、A B 分批收貨，對帳依
   await page.getByRole("button", { name: "＋ 登記這次收貨" }).click();
   await expect(rcvForm().getByRole("radio", { name: "阿強" })).toHaveAttribute("aria-checked", "true");
   await rcvForm().getByRole("radio", { name: "阿珍" }).click();
-  await rcvForm().getByLabel("吉伊卡哇 吉伊 吊娃 實收").fill("2");
-  await rcvForm().getByLabel("吉伊卡哇 吉伊 吊娃 瑕疵").fill("1");
-  await rcvForm().getByLabel("吉伊卡哇 吉伊 吊娃 備註").fill("耳朵脫線");
+  await rcvForm().getByLabel("吉伊 吊娃 實收").fill("2");
+  await rcvForm().getByLabel("吉伊 吊娃 瑕疵").fill("1");
+  await rcvForm().getByLabel("吉伊 吊娃 備註").fill("耳朵脫線");
   await rcvForm().getByRole("button", { name: "儲存收貨" }).click();
   await toast(page, "良品 1 件已入庫");
 
   await page.getByRole("button", { name: "＋ 登記這次收貨" }).click();
   await rcvForm().getByRole("radio", { name: "阿強" }).click();
   await rcvForm().getByRole("button", { name: "全部到齊" }).click();
-  await expect(rcvForm().getByLabel("吉伊卡哇 吉伊 吊娃 實收")).toHaveValue("2");
+  await expect(rcvForm().getByLabel("吉伊 吊娃 實收")).toHaveValue("2");
   await rcvForm().getByRole("button", { name: "儲存收貨" }).click();
   await toast(page, "良品 4 件已入庫");
   await expect(page.getByRole("button", { name: "已全部到貨" })).toBeVisible();

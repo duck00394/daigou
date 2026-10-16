@@ -650,6 +650,7 @@ enum AllocationMethod {
   BY_WEIGHT // 依重量
   BY_VALUE // 依商品金額
   MANUAL // 手動分配
+  NONE // 不攤進商品成本，單獨記一筆
 }
 
 model PurchaseBatch {
@@ -828,6 +829,8 @@ model BatchCost {
   amount      Int
   method      AllocationMethod @default(BY_QTY)
   manualSplit Json? // MANUAL 時：{ batchItemId: 台幣金額 }
+  payer       String? // 誰付的：經營者 id，或 "joint"（兩人一起付）；null＝跟著這團的歸屬
+  shareSplit  Json? // payer = "joint" 時：{ 經營者 id: 台幣金額 }，合計等於費用台幣金額
   note        String?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt

@@ -44,7 +44,7 @@ export async function saveProductTypeQuickAction(name: string) {
   });
 }
 
-export async function rowDefaultsAction(input: { seriesId: string; productTypeId: string | null; supplierId: string | null; characterIds: string[]; specs?: Record<string, string | null> }) {
+export async function rowDefaultsAction(input: { seriesId: string; productTypeId: string | null; supplierId: string | null; characterIds: string[]; specs?: Record<string, string | null>; categoryId?: string | null }) {
   return run(() => sr.rowDefaults(prisma, { ...input, characterIds: z.array(z.string()).max(200).parse(input.characterIds) }), "read");
 }
 export async function lastUsedRosterAction(seriesId: string, excludeBatchId: string | null) {
@@ -87,4 +87,8 @@ const updRow = z.object({
 });
 export async function bulkUpdateItemsAction(batchId: string, rows: z.infer<typeof updRow>[]) {
   return run((a) => sr.bulkUpdateBatchItems(a, batchId, z.array(updRow).max(300).parse(rows)));
+}
+export async function applyRenameAction(categoryId: string, productIds: string[]) {
+  const ids = z.array(z.string().max(64)).max(1000).parse(productIds);
+  return run((a) => tx((t) => sr.applyRename(t, a, z.string().max(64).parse(categoryId), ids)));
 }

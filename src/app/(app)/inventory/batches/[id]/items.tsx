@@ -24,6 +24,7 @@ export function ItemsPanel(props: {
   series: Opt[];
   types: Opt[];
   copyButton?: React.ReactNode;
+  category?: { id: string; name: string } | null;
 }) {
   const { items, editable } = props;
   const [mode, setMode] = useState<"view" | "edit" | "add">(props.initialMode);
@@ -61,7 +62,7 @@ export function ItemsPanel(props: {
 
       {mode === "add" && (
         <div className="border-b border-line-2 p-4">
-          <BulkAddGrid batchId={props.batchId} supplierId={props.supplierId} supplierCurrency={props.supplierCurrency} rateMicro={props.rateMicro} series={props.series} types={props.types} onClosed={(allOk) => allOk && setMode("view")} />
+          <BulkAddGrid category={props.category ?? null} batchId={props.batchId} supplierId={props.supplierId} supplierCurrency={props.supplierCurrency} rateMicro={props.rateMicro} series={props.series} types={props.types} onClosed={(allOk) => allOk && setMode("view")} />
         </div>
       )}
 

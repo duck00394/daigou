@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { costKind } from "@/lib/labels";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { currentYm, monthlyReport, receivablesSnapshot, unrealizedEstimate } from "@/server/services/reports";
@@ -48,7 +50,7 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <Stat label="已實現營收" value={<Twd v={r.revenue} />} note={`其中運費收入 ${r.shippingIncome.toLocaleString()} 元`} />
         <Stat label="銷貨成本" value={<Twd v={r.cogs} />} note={r.estimatedCostUnits > 0 ? `${r.estimatedCostUnits} 件以預估成本計` : "依採購團實際成本"} tone={r.estimatedCostUnits > 0 ? "warn" : undefined} />
-        <Stat label="其他費用" value={<Twd v={r.expenses} />} note="不屬於採購團的費用" />
+        <Stat label="其他費用" value={<Twd v={r.expenses} />} note="含採購團裡沒攤進商品的運費等" />
         <Stat label="已實現利潤" value={<Twd v={r.realizedProfit} />} note={`毛利率 ${margin(r.revenue, r.cogs)}`} />
         <Stat label="本月新訂單金額" value={<Twd v={r.bookedSales} />} note="以訂單日期計的有效應收" />
         <Stat label="本月收款" value={<Twd v={r.cashIn} />} note={`本月退款 ${r.cashOut.toLocaleString()} 元`} />
@@ -90,8 +92,11 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
           )}
         </Section>
         <Section title="本月其他費用" pad={false}>
-          {expenses.length === 0 ? <Empty>沒有其他費用。可在「設定」新增。</Empty> : (
-            <ul className="divide-y divide-line-2 text-sm">{expenses.map((e) => <li key={e.id} className="flex justify-between px-4 py-2"><span>{e.date.toISOString().slice(0, 10)}｜{e.note ?? ""}</span><Twd v={e.amountTwd} /></li>)}</ul>
+          {expenses.length === 0 && r.batchFeeItems.length === 0 ? <Empty>沒有其他費用。可在「設定」新增。</Empty> : (
+            <ul className="divide-y divide-line-2 text-sm">
+              {expenses.map((e) => <li key={e.id} className="flex justify-between px-4 py-2"><span>{e.date.toISOString().slice(0, 10)}｜{e.note ?? ""}</span><Twd v={e.amountTwd} /></li>)}
+              {r.batchFeeItems.map((e) => <li key={e.id} className="flex justify-between gap-2 px-4 py-2"><Link href={`/inventory/batches/${e.batch.id}`} className="hover:underline">{e.date.toISOString().slice(0, 10)}｜{costKind[e.kind]}・{e.batch.code} {e.batch.name}{e.note ? `｜${e.note}` : ""}</Link><Twd v={e.amountTwd} /></li>)}
+            </ul>
           )}
         </Section>
       </div>

@@ -18,18 +18,18 @@ async function newBatch(page: Page, name: string) {
 /** 讀取某商品目前的實際在庫與待到貨（商品還不存在時為 0），讓斷言只看本測試造成的變化 */
 async function stockOf(page: Page, name: string) {
   await page.goto(`/inventory?tab=stock&only=all&q=${encodeURIComponent(name)}`);
-  const row = page.getByRole("row").filter({ hasText: name });
+  const row = page.locator(`[data-testid="stock-row"][data-name="${name}"]`);
   if ((await row.count()) === 0) return { onHand: 0, incoming: 0 };
-  const cell = async (i: number) => Number((await row.first().getByRole("cell").nth(i).textContent())?.trim() ?? 0);
-  return { onHand: await cell(1), incoming: await cell(5) };
+  const n = async (k: string) => Number((await row.locator(`[data-k="${k}"]`).textContent())?.trim() ?? 0);
+  return { onHand: await n("free"), incoming: await n("incoming") };
 }
 
 test("桌面：批次新增 4 個角色（含新角色與貼上），再批次修改與刪除", async ({ page }) => {
   await login(page);
-  const before = await stockOf(page, "吉伊卡哇 吉伊 吊娃");
+  const before = await stockOf(page, "吉伊 吊娃");
   await newBatch(page, "E2E 批次團");
   await page.getByLabel("IP／系列").selectOption({ label: "吉伊卡哇" });
-  await page.getByLabel("商品類型").selectOption({ label: "吊娃" });
+  await page.getByRole("radiogroup", { name: "種類" }).getByRole("radio", { name: "吊娃" }).click();
   for (const n of ["吉伊", "小八", "兔兔"]) await page.getByRole("button", { name: `＋ ${n}` }).click();
   await expect(page.locator('[data-row="2"][data-col="0"]').first()).toHaveValue(/.+/);
 
@@ -78,27 +78,27 @@ test("桌面：批次新增 4 個角色（含新角色與貼上），再批次�
   await page.getByRole("button", { name: "編輯", exact: true }).click();
   const table = page.getByRole("table", { name: "採購品項", exact: true });
   await expect(table.getByRole("row")).toHaveCount(5); // 表頭 + 4
-  await expect(table).toContainText("吉伊卡哇 栗子饅頭 吊娃");
+  await expect(table).toContainText("栗子饅頭 吊娃");
 
   // 批次修改：吉伊數量 3 → 5、小八單價 350 → 360
   const rowOf = (name: string) => table.getByRole("row").filter({ hasText: name });
-  await rowOf("吉伊卡哇 吉伊 吊娃").getByLabel("數量").fill("5");
-  await rowOf("吉伊卡哇 小八 吊娃").getByLabel("預估單價").fill("360");
+  await rowOf("吉伊 吊娃").getByLabel("數量").fill("5");
+  await rowOf("小八 吊娃").getByLabel("預估單價").fill("360");
   await page.getByRole("button", { name: "儲存修改" }).click();
   await toast(page, "已儲存 2 列");
   await page.reload();
   await page.getByRole("button", { name: "編輯", exact: true }).click();
-  await expect(rowOf("吉伊卡哇 吉伊 吊娃").getByLabel("數量")).toHaveValue("5");
-  await expect(rowOf("吉伊卡哇 小八 吊娃").getByLabel("預估單價")).toHaveValue("360");
+  await expect(rowOf("吉伊 吊娃").getByLabel("數量")).toHaveValue("5");
+  await expect(rowOf("小八 吊娃").getByLabel("預估單價")).toHaveValue("360");
 
   // 刪除一列
-  await rowOf("吉伊卡哇 栗子饅頭 吊娃").getByRole("button", { name: "刪除" }).click();
+  await rowOf("栗子饅頭 吊娃").getByRole("button", { name: "刪除" }).click();
   await page.getByRole("button", { name: "刪除品項" }).click();
   await toast(page, "已刪除品項");
   await expect(table.getByRole("row")).toHaveCount(4);
 
   // 批次新增不會增加庫存，只增加待到貨（吉伊數量已改成 5）
-  const after = await stockOf(page, "吉伊卡哇 吉伊 吊娃");
+  const after = await stockOf(page, "吉伊 吊娃");
   expect(after).toEqual({ onHand: before.onHand, incoming: before.incoming + 5 });
 });
 
@@ -118,5 +118,5 @@ test("桌面：第二團套用上次使用的角色，價格帶入上次設定�
   // 回到第一團確認價格沒變
   await page.goto("/inventory?tab=batches");
   await page.getByRole("link", { name: /E2E 批次團/ }).first().click(); // 清單依建立時間由新到舊
-  await expect(page.getByRole("list", { name: "品項清單" }).getByRole("listitem").filter({ hasText: "吉伊卡哇 吉伊 吊娃" })).toContainText("NT$350 ×");
+  await expect(page.getByRole("list", { name: "品項清單" }).getByRole("listitem").filter({ hasText: "吉伊 吊娃" })).toContainText("NT$350 ×");
 });

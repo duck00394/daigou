@@ -88,11 +88,13 @@ export function matchProduct(lex: Lexicon, text: string | null | undefined): Mat
   const key = normalizeKey(text ?? "");
   if (!key) return { status: "none", match: null, candidates: [] };
   const exact = new Map<string, ProductCand>();
+  const literal = new Set<string>(); // 連空白都一模一樣的（例：「吉伊吊娃」不會和「吉伊 吊娃」搞混）
   const fuzzy = new Map<string, ProductCand>();
   for (const p of lex.products) {
     for (const k of p.keys) {
       if (k.key === key) {
         exact.set(p.id, { id: p.id, code: p.code, name: p.name, salePriceTwd: p.salePriceTwd, via: k.via, score: 1 });
+        if (k.label.trim() === (text ?? "").trim()) literal.add(p.id);
       } else {
         const contains = key.length >= 2 && (k.key.includes(key) || key.includes(k.key));
         const s = Math.max(similarity(k.key, key), contains ? 0.65 : 0);
@@ -106,6 +108,10 @@ export function matchProduct(lex: Lexicon, text: string | null | undefined): Mat
   const ex = [...exact.values()];
   const fz = [...fuzzy.values()].filter((c) => !exact.has(c.id)).sort((a, b) => b.score - a.score).slice(0, 6);
   if (ex.length === 1) return { status: "exact", match: ex[0], candidates: [...ex, ...fz] };
+  if (ex.length > 1 && literal.size === 1) {
+    const m = ex.find((c) => literal.has(c.id))!;
+    return { status: "exact", match: m, candidates: [m, ...ex.filter((c) => c !== m), ...fz] };
+  }
   if (ex.length > 1) return { status: "ambiguous", match: null, candidates: [...ex, ...fz] };
   return { status: "none", match: null, candidates: fz };
 }

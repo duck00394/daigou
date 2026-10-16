@@ -74,6 +74,10 @@ export async function checkIntegrity(db: Db): Promise<IntegrityIssue[]> {
     const twd = c.currency === "JPY" ? jpyToTwd(c.amount, c.batch.rateMicro) : c.amount;
     const sum = c.allocations.reduce((s, a) => s + a.amountTwd, 0);
     const hasItems = c.batch.items.some((i) => i.qty - i.cancelledQty > 0);
+    if (c.method === "NONE") {
+      if (sum !== 0) add("cost", `${c.batch.code} 不攤的費用卻有分攤紀錄 ${sum} 元`, `/inventory/batches/${c.batch.id}`);
+      continue;
+    }
     if (hasItems && twd > 0 && sum !== twd) add("cost", `${c.batch.code} 費用 ${twd} 元的分攤合計為 ${sum} 元`, `/inventory/batches/${c.batch.id}`);
   }
 

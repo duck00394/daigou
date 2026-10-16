@@ -115,7 +115,7 @@ export const costKind: Record<string, string> = {
   OTHER: "其他",
 };
 
-export const allocMethod: Record<string, string> = { BY_QTY: "依件數", BY_WEIGHT: "依重量", BY_VALUE: "依商品金額", MANUAL: "手動分配" };
+export const allocMethod: Record<string, string> = { NONE: "不攤，單獨記", BY_QTY: "每件平均攤", BY_VALUE: "照價格比例", BY_WEIGHT: "依重量", MANUAL: "手動分配" };
 
 export const importRowStatus: Record<string, [string, Tone]> = {
   PENDING_REVIEW: ["待確認", "warn"],

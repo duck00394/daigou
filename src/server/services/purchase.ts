@@ -7,6 +7,7 @@ import { recomputeOrder } from "./recompute";
 import { checkOperator } from "./operators";
 import { refreshBatchStatusById } from "./inventory";
 import type { AllocationMethod, BatchCostKind } from "@prisma/client";
+import { JOINT_PAYER, feeTwd } from "./fees";
 
 export type Currency = "JPY" | "TWD";
 export const CURRENCIES: Currency[] = ["JPY", "TWD"];
@@ -260,10 +261,36 @@ export function itemGoodsTwd(i: { estUnitCost: number; actualUnitCost: number | 
 export async function addBatchCost(
   t: Tx,
   actor: Actor,
-  input: { batchId: string; kind: BatchCostKind; currency: "TWD" | "JPY"; amount: number; method: AllocationMethod; manualSplit?: Record<string, number> | null; note?: string | null },
+  input: {
+    batchId: string;
+    kind: BatchCostKind;
+    currency: "TWD" | "JPY";
+    amount: number;
+    method: AllocationMethod;
+    manualSplit?: Record<string, number> | null;
+    note?: string | null;
+    payer?: string | null; // 經營者 id、"joint"（兩人一起付）或 null（跟著這團）
+    shareSplit?: Record<string, number> | null; // payer = "joint" 時每人台幣金額
+  },
 ) {
   if (!Number.isInteger(input.amount) || input.amount < 0) throw new BizError("費用金額必須是不小於 0 的整數");
   await lockRows(t, "PurchaseBatch", [input.batchId]);
+  const batch = await t.purchaseBatch.findUnique({ where: { id: input.batchId }, select: { rateMicro: true } });
+  if (!batch) throw new BizError("找不到採購團");
+  let payer: string | null = input.payer ?? null;
+  let shareSplit: Record<string, number> | null = null;
+  if (payer === JOINT_PAYER) {
+    const twd = feeTwd(input, batch.rateMicro);
+    const split = Object.entries(input.shareSplit ?? {}).filter(([, v]) => Number(v) !== 0);
+    if (split.length < 1) throw new BizError("兩人一起付時，請填每個人付多少");
+    for (const [k, v] of split) {
+      if (!Number.isInteger(v) || v < 0) throw new BizError("每人金額必須是不小於 0 的整數");
+      await checkOperator(t, k, "付款人");
+    }
+    const sum = split.reduce((a, [, v]) => a + v, 0);
+    if (sum !== twd) throw new BizError(`兩人金額合計 ${sum} 元，和費用 ${twd} 元不一樣`);
+    shareSplit = Object.fromEntries(split);
+  } else if (payer) payer = await checkOperator(t, payer, "付款人");
   const c = await t.batchCost.create({
     data: {
       batchId: input.batchId,
@@ -272,11 +299,13 @@ export async function addBatchCost(
       amount: input.amount,
       method: input.method,
       manualSplit: input.manualSplit ?? undefined,
+      payer,
+      shareSplit: shareSplit ?? undefined,
       note: emptyToNull(input.note ?? null),
     },
   });
   await reallocateBatch(t, input.batchId);
-  await audit(t, actor, "batch.addCost", "PurchaseBatch", input.batchId, { costId: c.id, kind: input.kind, amount: input.amount, currency: input.currency, method: input.method });
+  await audit(t, actor, "batch.addCost", "PurchaseBatch", input.batchId, { costId: c.id, kind: input.kind, amount: input.amount, currency: input.currency, method: input.method, payer, shareSplit });
   return c;
 }
 
@@ -294,6 +323,7 @@ export async function reallocateBatch(t: Tx, batchId: string) {
   const items = batch.items.filter((i) => i.qty - i.cancelledQty > 0);
   await t.costAllocation.deleteMany({ where: { batchCost: { batchId } } });
   for (const cost of batch.costs) {
+    if (cost.method === "NONE") continue; // 不攤，單獨記
     const amountTwd = cost.currency === "JPY" ? jpyToTwd(cost.amount, batch.rateMicro) : cost.amount;
     if (items.length === 0 || amountTwd === 0) continue;
     let parts: number[];

@@ -4,7 +4,7 @@ import { login, toast } from "./helpers";
 
 async function addRow(page: Page, character: string, price: string, qty: string) {
   await page.getByLabel("IP／系列").selectOption({ label: "吉伊卡哇" });
-  await page.getByLabel("商品類型").selectOption({ label: "吊娃" });
+  await page.getByRole("radiogroup", { name: "種類" }).getByRole("radio", { name: "吊娃" }).click();
   await page.getByRole("button", { name: `＋ ${character}` }).click();
   const r1 = page.getByRole("table", { name: "批次新增採購品項" }).getByRole("row").filter({ hasText: "第 1 列" });
   await r1.getByLabel("單價").fill(price);
@@ -91,7 +91,8 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   await toast(page, "進度：寄出了，在路上");
 
   // 一打開就看到品項與這團金額；按「付清」一鍵登記
-  await expect(page.getByRole("list", { name: "品項清單" })).toContainText("吉伊");
+  // 商品名稱＝活動＋角色＋種類
+  await expect(page.getByRole("list", { name: "品項清單" })).toContainText(`${cat}兔兔 吊娃`);
   await expect(page.getByTestId("batch-due")).toHaveText("NT$1,941");
   await page.getByRole("button", { name: "付清" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "登記已付 NT$1,941" }).click();

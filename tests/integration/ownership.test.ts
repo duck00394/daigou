@@ -3,7 +3,8 @@ import { prisma, tx } from "@/server/db";
 import { checkIntegrity } from "@/server/services/integrity";
 import { actor, resetDb, seedBasics } from "../helpers";
 import { ensureDefaultOperators, updateBatchProgress, updateBatchResponsibility } from "@/server/services/operators";
-import { addBatchItem, createBatch } from "@/server/services/purchase";
+import { addBatchCost, addBatchItem, createBatch, landedCosts } from "@/server/services/purchase";
+import { currentYm, monthlyReport } from "@/server/services/reports";
 import { createReceivingRecord } from "@/server/services/receiving";
 import { addSupplierPayment } from "@/server/services/supplier-payments";
 import { batchPaySummary, categoriesSummary, categoryOverview, payRemaining } from "@/server/services/batch-ops";
@@ -132,6 +133,35 @@ describe("這團金額：總額、已付、待付款、一鍵付清", () => {
     await expect(tx((t) => payRemaining(t, actor, ids.a, { paidById: A, dedupeKey: "payoff-test-2" }))).rejects.toThrow("這團已經付清了");
     const full = await tx((t) => payRemaining(t, actor, ids.b, { paidById: B, dedupeKey: "payoff-test-3" }));
     expect([full.payment.amount, full.payment.purpose]).toEqual([1350, "FULL"]);
+  });
+});
+
+describe("運費：預設不攤、單獨記；兩人一起付才分擔", () => {
+  it("不攤的運費：算在這團總額與還要付，不進商品成本，算這團主人的，也算進當月其他費用", async () => {
+    const before = (await tx((t) => landedCosts(t, [ids.ai]))).get(ids.ai)!.totalTwd;
+    const exp0 = (await monthlyReport(prisma, currentYm())).expenses;
+    await tx((t) => addBatchCost(t, actor, { batchId: ids.a, kind: "INTL_SHIPPING", currency: "TWD", amount: 120, method: "NONE" }));
+    expect(await prisma.costAllocation.count()).toBe(0);
+    expect((await tx((t) => landedCosts(t, [ids.ai]))).get(ids.ai)!.totalTwd).toBe(before);
+    expect((await tx((t) => batchPaySummary(t, [ids.a]))).get(ids.a)).toEqual({ totalTwd: 920, paidTwd: 0, dueTwd: 920 });
+    const o = await tx((t) => categoryOverview(t, s.halloween.id));
+    expect(o.byOwner[A].amount).toBe(920);
+    expect(o.batches.find((b) => b.id === ids.a)!.totalTwd).toBe(920);
+    expect((await tx((t) => categoriesSummary(t))).get(s.halloween.id)!.byOwner[A]).toBe(920);
+    expect((await monthlyReport(prisma, currentYm())).expenses).toBe(exp0 + 120);
+  });
+
+  it("指定別人付的、兩人一起付的：算給付錢的人；兩人金額要等於費用", async () => {
+    await tx((t) => addBatchCost(t, actor, { batchId: ids.a, kind: "AGENT_FEE", currency: "TWD", amount: 50, method: "NONE", payer: B }));
+    await expect(tx((t) => addBatchCost(t, actor, { batchId: ids.a, kind: "INTL_SHIPPING", currency: "TWD", amount: 300, method: "BY_QTY", payer: "joint", shareSplit: { [A]: 100, [B]: 100 } }))).rejects.toThrow("和費用 300 元不一樣");
+    await tx((t) => addBatchCost(t, actor, { batchId: ids.a, kind: "INTL_SHIPPING", currency: "TWD", amount: 300, method: "BY_QTY", payer: "joint", shareSplit: { [A]: 150, [B]: 150 } }));
+    // 共同付的這筆有攤進商品成本：2 件各 +150
+    expect((await tx((t) => landedCosts(t, [ids.ai]))).get(ids.ai)!.feesTwd).toBe(300);
+    const o = await tx((t) => categoryOverview(t, s.halloween.id));
+    expect(o.batches.find((b) => b.id === ids.a)!.totalTwd).toBe(800 + 50 + 300);
+    expect(o.byOwner[A].amount).toBe(800 + 150);
+    expect(o.byOwner[B].amount).toBe(1350 + 50 + 150);
+    expect(Object.values(o.byOwner).reduce((x, v) => x + v.amount, 0)).toBe(o.total.totalTwd); // 分完合計不變
   });
 });
 

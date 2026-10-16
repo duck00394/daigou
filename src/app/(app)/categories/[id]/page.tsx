@@ -7,6 +7,8 @@ import { PageHeader, Section, TableWrap, Stat, Twd, Empty, LinkButton, StatusBad
 import { ProductImage } from "@/components/client";
 import { CategoryEditButton, CategoryActiveButton } from "../forms";
 import { CategoryBatches } from "./batches";
+import { RenameNames } from "./rename";
+import { renamePlan } from "@/server/services/series";
 import { categoryType, dayInput, fmtDay, productStatus } from "@/lib/labels";
 
 export default async function CategoryPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ q?: string; sort?: string; view?: string }> }) {
@@ -21,6 +23,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
   if (sp.sort === "qty") products = [...products].sort((a, b) => b.stats.activeQty - a.stats.activeQty);
   if (sp.sort === "buyers") products = [...products].sort((a, b) => b.stats.buyers.size - a.stats.buyers.size);
   const c = d.category;
+  const plan = await renamePlan(prisma, id);
   return (
     <div className="space-y-4">
       <PageHeader
@@ -46,6 +49,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
           <KV items={[["活動期間", `${fmtDay(c.startDate)} – ${fmtDay(c.endDate)}`], ["備註", c.notes]]} />
         </Section>
       )}
+      <RenameNames categoryId={c.id} plan={plan} />
       <CategoryBatches categoryId={c.id} view={sp.view} />
       {(d.total.activeQty > 0 || d.total.cancelledQty > 0) && (
         <div>

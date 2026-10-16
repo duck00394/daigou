@@ -7,7 +7,8 @@ import { createBatch, deleteBatchItem, landedCosts, minCommittedQty, updateBatch
 import { inventorySummary, receiveStock, reserveForItem } from "@/server/services/inventory";
 import { createOrder, updateItem } from "@/server/services/orders";
 import { createShipment } from "@/server/services/shipping";
-import { updateProduct, upsertCharacter, upsertProductType } from "@/server/services/catalog";
+import { saveCategory, updateProduct, upsertCharacter, upsertProductType } from "@/server/services/catalog";
+import { applyRename, renamePlan } from "@/server/services/series";
 
 let s: Awaited<ReturnType<typeof seedBasics>>;
 let ctx: { seriesId: string; typeId: string; chiikawa: string; hachi: string; usagi: string; supplierId: string; batchId: string };
@@ -48,9 +49,9 @@ describe("批次新增系列商品", () => {
     expect([r.created, r.failed]).toEqual([3, 0]);
     const items = await prisma.purchaseBatchItem.findMany({ where: { batchId: ctx.batchId }, include: { product: true }, orderBy: { createdAt: "asc" } });
     expect(items.map((i) => [i.product.name, i.estUnitCost, i.qty, i.currency])).toEqual([
-      ["吉伊卡哇 吉伊 吊娃", 350, 3, "TWD"],
-      ["吉伊卡哇 小八 吊娃", 350, 2, "TWD"],
-      ["吉伊卡哇 兔兔 吊娃", 420, 4, "TWD"],
+      ["吉伊 吊娃", 350, 3, "TWD"],
+      ["小八 吊娃", 350, 2, "TWD"],
+      ["兔兔 吊娃", 420, 4, "TWD"],
     ]);
     // 每個角色是獨立商品，掛在系列與類型下
     expect(new Set(items.map((i) => i.productId)).size).toBe(3);
@@ -245,10 +246,52 @@ describe("商品搜尋", () => {
     const { productSearchWhere } = await import("@/server/services/catalog");
     await add([row("a", { characterId: ctx.hachi, unitCost: 300, qty: 1 }), row("b", { characterId: ctx.usagi, unitCost: 300, qty: 1 })]);
     const find = async (q: string) => (await prisma.product.findMany({ where: productSearchWhere(q), select: { name: true }, orderBy: { name: "asc" } })).map((p) => p.name);
-    expect(await find("吊娃 小八")).toEqual(["吉伊卡哇 小八 吊娃"]);
-    expect(await find("兔兔  吉伊卡哇")).toEqual(["吉伊卡哇 兔兔 吊娃"]);
+    expect(await find("吊娃 小八")).toEqual(["小八 吊娃"]);
+    expect(await find("兔兔  吉伊卡哇")).toEqual(["兔兔 吊娃"]);
     expect(await find("吉伊娃娃")).toEqual(["吉伊吊娃"]); // 別名
     expect(await find("小八 扭蛋")).toEqual([]);
     expect((await find("")).length).toBeGreaterThan(3);
+  });
+});
+
+describe("商品名稱：活動＋角色＋種類", () => {
+  it("同一角色在不同活動是不同商品；名稱像 ANA兔兔 吊娃；商品掛到活動底下", async () => {
+    const [ana, xmas] = await tx(async (t) => [await saveCategory(t, actor, null, { name: "ANA", type: "CUSTOM" }), await saveCategory(t, actor, null, { name: "聖誕節", type: "FESTIVAL" })]);
+    const b1 = await tx((t) => createBatch(t, actor, { name: "ANA 團", supplierId: ctx.supplierId, categoryId: ana.id }));
+    const b2 = await tx((t) => createBatch(t, actor, { name: "聖誕團", supplierId: ctx.supplierId, categoryId: xmas.id }));
+    await add([row("a", { characterId: ctx.usagi, unitCost: 600, qty: 1 })], "n-0"); // 沒有活動的團：兔兔 吊娃
+    await add([row("a", { characterId: ctx.usagi, unitCost: 670, qty: 1 })], "n-1", b1.id);
+    await add([row("a", { characterId: ctx.usagi, unitCost: 700, qty: 1 })], "n-2", b2.id);
+    const items = await prisma.purchaseBatchItem.findMany({ where: { batchId: { in: [b1.id, b2.id] } }, include: { product: { include: { categories: true } } }, orderBy: { createdAt: "asc" } });
+    expect(items.map((i) => i.product.name)).toEqual(["ANA兔兔 吊娃", "聖誕節兔兔 吊娃"]);
+    expect(items[0].productId).not.toBe(items[1].productId);
+    const plain = await prisma.purchaseBatchItem.findFirstOrThrow({ where: { batchId: ctx.batchId }, include: { product: true } });
+    expect(plain.product.name).toBe("兔兔 吊娃");
+    expect(plain.productId).not.toBe(items[0].productId); // 沒有活動的商品不會被拿去當 ANA 的商品
+    expect(items[0].product.categories.map((c) => c.categoryId)).toEqual([ana.id]);
+    // 同活動再開一團：沿用同一個商品
+    const b3 = await tx((t) => createBatch(t, actor, { name: "ANA 第二團", supplierId: ctx.supplierId, categoryId: ana.id }));
+    await add([row("a", { characterId: ctx.usagi, unitCost: 650, qty: 2 })], "n-3", b3.id);
+    expect((await prisma.purchaseBatchItem.findFirstOrThrow({ where: { batchId: b3.id } })).productId).toBe(items[0].productId);
+  });
+
+  it("舊格式商品（規格填活動名）會被沿用，不會拆成兩個商品；按了才改成新名稱", async () => {
+    const ana = await tx((t) => saveCategory(t, actor, null, { name: "ANA", type: "CUSTOM" }));
+    // 舊做法：沒有活動、規格填 ANA
+    await add([row("a", { characterId: ctx.usagi, unitCost: 670, qty: 1, spec: "ANA" })], "o-1");
+    const old = await prisma.purchaseBatchItem.findFirstOrThrow({ where: { batchId: ctx.batchId }, include: { product: true } });
+    expect(old.product.name).toBe("兔兔 吊娃 ANA");
+    await prisma.purchaseBatch.update({ where: { id: ctx.batchId }, data: { categoryId: ana.id } });
+    const b = await tx((t) => createBatch(t, actor, { name: "ANA 新團", supplierId: ctx.supplierId, categoryId: ana.id }));
+    await add([row("a", { characterId: ctx.usagi, unitCost: 680, qty: 1 })], "o-2", b.id);
+    expect((await prisma.purchaseBatchItem.findFirstOrThrow({ where: { batchId: b.id } })).productId).toBe(old.productId);
+    // 改名：先列出，按了才改
+    await prisma.product.update({ where: { id: old.productId }, data: { name: "吉伊卡哇 兔兔 吊娃 ANA" } });
+    const plan = await renamePlan(prisma, ana.id);
+    expect(plan).toEqual([{ productId: old.productId, from: "吉伊卡哇 兔兔 吊娃 ANA", to: "ANA兔兔 吊娃" }]);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: old.productId } })).name).toBe("吉伊卡哇 兔兔 吊娃 ANA");
+    expect(await tx((t) => applyRename(t, actor, ana.id, [old.productId]))).toBe(1);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: old.productId } })).name).toBe("ANA兔兔 吊娃");
+    expect(await renamePlan(prisma, ana.id)).toEqual([]);
   });
 });

@@ -141,8 +141,38 @@ export async function saveSupplier(
 
 // ── 商品變體 ──
 
-export function variantKey(seriesId: string, productTypeId: string | null, characterId: string, spec: string | null | undefined) {
-  return [seriesId, productTypeId ?? "-", characterId, normalizeKey(spec ?? "")].join("|");
+export function variantKey(seriesId: string, productTypeId: string | null, characterId: string, spec: string | null | undefined, categoryId?: string | null) {
+  const base = [seriesId, productTypeId ?? "-", characterId, normalizeKey(spec ?? "")].join("|");
+  // 有活動時，不同活動（例：ANA、聖誕節）是不同商品
+  return categoryId ? `${base}|c:${categoryId}` : base;
+}
+
+/** 商品名稱：活動＋角色＋種類（＋規格），例：ANA兔兔 吊娃；沒有活動時：兔兔 吊娃 */
+export function variantName(p: { category?: string | null; character: string; type?: string | null; spec?: string | null }) {
+  const spec = p.spec?.trim() && p.spec.trim() !== p.category ? p.spec.trim() : null;
+  return [`${p.category ?? ""}${p.character}`, p.type, spec].filter(Boolean).join(" ");
+}
+
+/**
+ * 找回同一商品：先找「含活動」的新格式；找不到再沿用舊格式建立的商品
+ * （舊格式沒有活動，常把活動名稱填在規格，例：規格 ANA），避免同一款被拆成兩個商品、庫存分開。
+ */
+export async function findVariant(db: Db, k: { seriesId: string; productTypeId: string | null; characterId: string; spec: string | null; category: { id: string; name: string } | null }) {
+  const own = await db.product.findUnique({ where: { variantKey: variantKey(k.seriesId, k.productTypeId, k.characterId, k.spec, k.category?.id) } });
+  if (own || !k.category) return own;
+  // 舊格式（沒有活動）：規格就是活動名，例如規格 ANA → 一定是這個活動的商品
+  if (!k.spec?.trim()) {
+    const bySpec = await db.product.findUnique({ where: { variantKey: variantKey(k.seriesId, k.productTypeId, k.characterId, k.category.name) } });
+    if (bySpec) return bySpec;
+  }
+  // 舊格式、規格相同：只有以前就是在這個活動（而且只在這個活動）買的，才算同一個商品
+  const legacy = await db.product.findUnique({
+    where: { variantKey: variantKey(k.seriesId, k.productTypeId, k.characterId, k.spec) },
+    include: { purchaseItems: { select: { batch: { select: { categoryId: true } } } } },
+  });
+  if (!legacy) return null;
+  const cats = new Set(legacy.purchaseItems.map((i) => i.batch.categoryId));
+  return cats.size === 1 && cats.has(k.category.id) ? legacy : null;
 }
 
 // ── 批次新增前的參考帶入 ──
@@ -163,7 +193,8 @@ export interface RowDefault {
  * 每個角色的參考設定：優先使用同供應商最近一次的採購品項，其次任何採購團最近一次，再其次商品主檔。
  * 只是預填，前端必須允許逐列修改。
  */
-export async function rowDefaults(db: Db, input: { seriesId: string; productTypeId: string | null; supplierId: string | null; characterIds: string[]; specs?: Record<string, string | null> }): Promise<RowDefault[]> {
+export async function rowDefaults(db: Db, input: { seriesId: string; productTypeId: string | null; supplierId: string | null; characterIds: string[]; specs?: Record<string, string | null>; categoryId?: string | null }): Promise<RowDefault[]> {
+  const category = input.categoryId ? await db.category.findUnique({ where: { id: input.categoryId }, select: { id: true, name: true } }) : null;
   const supplier = input.supplierId ? await db.supplier.findUnique({ where: { id: input.supplierId } }) : null;
   const fallbackCurrency = (supplier?.defaultCurrency as Currency) ?? "JPY";
   const chars = await db.character.findMany({ where: { id: { in: input.characterIds } } });
@@ -172,7 +203,7 @@ export async function rowDefaults(db: Db, input: { seriesId: string; productType
     const ch = chars.find((c) => c.id === cid);
     if (!ch) continue;
     const spec = input.specs?.[cid] ?? null;
-    const product = await db.product.findUnique({ where: { variantKey: variantKey(input.seriesId, input.productTypeId, cid, spec) } });
+    const product = await findVariant(db, { seriesId: input.seriesId, productTypeId: input.productTypeId, characterId: cid, spec, category });
     let last = null;
     let source = "";
     if (product) {
@@ -290,6 +321,7 @@ export async function bulkAddSeriesItems(
   if (batch.status === "CANCELLED") throw new BizError("已取消的採購團不能新增品項");
   if (!series) throw new BizError("找不到系列");
   if (input.productTypeId && !type) throw new BizError("找不到商品類型");
+  const category = batch.categoryId ? await prisma.category.findUnique({ where: { id: batch.categoryId }, select: { id: true, name: true } }) : null;
 
   const rows = input.rows.filter((r) => !isBlankRow(r));
   const skippedBlank = input.rows.length - rows.length;
@@ -339,11 +371,11 @@ export async function bulkAddSeriesItems(
         });
         const character = await t.character.findUniqueOrThrow({ where: { id: characterId } });
         const spec = emptyToNull(r.spec ?? null);
-        const key = variantKey(series.id, input.productTypeId, characterId, spec);
-        let product = await t.product.findUnique({ where: { variantKey: key } });
+        const key = variantKey(series.id, input.productTypeId, characterId, spec, category?.id);
+        let product = await findVariant(t, { seriesId: series.id, productTypeId: input.productTypeId, characterId, spec, category });
         let createdProduct = false;
         if (!product) {
-          const name = [series.name, character.name, type?.name, spec].filter(Boolean).join(" ");
+          const name = variantName({ category: category?.name, character: character.name, type: type?.name, spec });
           product = await t.product.create({
             data: {
               code: await nextCode(t, "product"),
@@ -364,6 +396,8 @@ export async function bulkAddSeriesItems(
           await audit(t, actor, "product.create", "Product", product.id, { name, via: "bulk" });
         }
         if (product.archivedAt) throw new BizError(`商品「${product.name}」已封存`);
+        // 商品掛到這團的活動底下（庫存可以依活動篩選）
+        if (category) await t.productCategory.upsert({ where: { productId_categoryId: { productId: product.id, categoryId: category.id } }, update: {}, create: { productId: product.id, categoryId: category.id } });
         const same = await t.purchaseBatchItem.findFirst({ where: { batchId: batch.id, productId: product.id } });
         if (same) throw new BizError(`這個採購團已經有「${product.name}」，請直接修改該品項的數量或單價`);
         const item = await addBatchItem(t, actor, batch.id, {
@@ -438,4 +472,42 @@ export async function bulkUpdateBatchItems(
     if (!(e instanceof BizError && e.message === "BULK_ROLLBACK")) throw e;
   });
   return { ok: errors.length === 0, errors };
+}
+
+// ── 舊商品名稱改成新格式（活動＋角色＋種類） ──
+
+/** 列出這個活動裡、名稱還不是新格式的商品（只看單一角色、只在這個活動買過的商品） */
+export async function renamePlan(db: Db, categoryId: string) {
+  const cat = await db.category.findUnique({ where: { id: categoryId }, select: { id: true, name: true } });
+  if (!cat) throw new BizError("找不到活動");
+  const products = await db.product.findMany({
+    where: { archivedAt: null, OR: [{ purchaseItems: { some: { batch: { categoryId } } } }, { categories: { some: { categoryId } } }] },
+    select: {
+      id: true,
+      name: true,
+      spec: true,
+      productType: { select: { name: true } },
+      characters: { select: { character: { select: { name: true } } } },
+      purchaseItems: { select: { batch: { select: { categoryId: true } } } },
+    },
+  });
+  const out: { productId: string; from: string; to: string }[] = [];
+  for (const p of products) {
+    if (p.characters.length !== 1) continue;
+    const cats = new Set(p.purchaseItems.map((i) => i.batch.categoryId).filter(Boolean));
+    if (cats.size > 1) continue; // 在不同活動都買過：不確定該叫什麼，不動
+    const to = variantName({ category: cat.name, character: p.characters[0].character.name, type: p.productType?.name, spec: p.spec });
+    if (to !== p.name) out.push({ productId: p.id, from: p.name, to });
+  }
+  return out.sort((a, b) => a.to.localeCompare(b.to, "zh-Hant"));
+}
+
+/** 套用改名：只改顯示名稱，不影響庫存、成本與歷史紀錄 */
+export async function applyRename(t: Tx, actor: Actor, categoryId: string, productIds: string[]) {
+  const plan = (await renamePlan(t, categoryId)).filter((x) => productIds.includes(x.productId));
+  for (const x of plan) {
+    await t.product.update({ where: { id: x.productId }, data: { name: x.to } });
+    await audit(t, actor, "product.rename", "Product", x.productId, { from: x.from, to: x.to });
+  }
+  return plan.length;
 }

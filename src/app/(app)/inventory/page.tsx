@@ -1,11 +1,13 @@
 import Link from "next/link";
+import { Fragment } from "react";
+import { StockFilters } from "./stock-filters";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { inventorySummary } from "@/server/services/inventory";
 import { purchaseDemand } from "@/server/services/purchase";
 import { listOperators } from "@/server/services/operators";
 import { getDefaultRateMicro } from "@/server/services/settings";
-import { PageHeader, Section, TableWrap, Empty, StatusBadge, LinkButton, Badge } from "@/components/ui";
+import { PageHeader, Section, TableWrap, Empty, StatusBadge, LinkButton } from "@/components/ui";
 import { ReceiveForm, AdjustForm, CreateBatchFromDemand, KeepButton } from "./parts";
 import { SellButton } from "@/components/quick-sale";
 import { getMe } from "@/server/me";
@@ -42,7 +44,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
           </Link>
         ))}
       </nav>
-      {tab === "stock" && <StockTab q={sp.q} only={sp.only} />}
+      {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} />}
       {tab === "demand" && <DemandTab />}
       {tab === "batches" && <BatchesTab cat={sp.cat} open={sp.open} />}
       {tab === "receive" && <ReceiveTab productId={sp.productId} />}
@@ -55,123 +57,166 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
   );
 }
 
-async function StockTab({ q, only }: { q?: string; only?: string }) {
+async function StockTab({ q, only, cat = "", type = "" }: { q?: string; only?: string; cat?: string; type?: string }) {
+  const catWhere = !cat
+    ? {}
+    : cat === "none"
+      ? { categories: { none: {} }, purchaseItems: { none: { batch: { categoryId: { not: null } } } } }
+      : { OR: [{ categories: { some: { categoryId: cat } } }, { purchaseItems: { some: { batch: { categoryId: cat } } } }] };
   const products = await prisma.product.findMany({
-    where: { archivedAt: null, ...productSearchWhere(q) },
+    where: { archivedAt: null, AND: [productSearchWhere(q), catWhere] },
     orderBy: { name: "asc" },
-    select: { id: true, code: true, name: true, status: true, salePriceTwd: true },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      spec: true,
+      salePriceTwd: true,
+      productType: { select: { id: true, name: true } },
+      characters: { select: { character: { select: { name: true } } } },
+      categories: { select: { category: { select: { id: true, name: true } } } },
+      purchaseItems: { select: { batch: { select: { category: { select: { id: true, name: true } } } } }, take: 5 },
+    },
   });
-  const inv = await tx((t) => inventorySummary(t, products.map((p) => p.id)));
-  const val = (await stockValuation(prisma, products.map((p) => p.id))).byProduct;
-  const [byOwner, me, operators] = await Promise.all([tx((t) => stockByOwner(t, { productIds: products.map((p) => p.id) })), getMe(), tx((t) => listOperators(t, { includeInactive: true }))]);
+  const ids = products.map((p) => p.id);
+  const [inv, valAll, byOwner, me, operators, cats] = await Promise.all([
+    tx((t) => inventorySummary(t, ids)),
+    stockValuation(prisma, ids),
+    tx((t) => stockByOwner(t, { productIds: ids })),
+    getMe(),
+    tx((t) => listOperators(t, { includeInactive: true })),
+    prisma.category.findMany({ where: { OR: [{ batches: { some: {} } }, { products: { some: {} } }] }, orderBy: [{ active: "desc" }, { sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
+  ]);
+  const val = valAll.byProduct;
   const ownerName = (k: string) => (k === JOINT ? "合資" : k === NONE ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
   const ownersOf = (pid: string): OwnerStockOpt[] =>
     [...(byOwner.get(pid)?.entries() ?? [])]
       .filter(([, v]) => v.free > 0 || v.kept > 0)
       .map(([k, v]) => ({ key: k, label: k === me ? `${ownerName(k)}（我）` : ownerName(k), free: v.free, kept: v.kept }))
       .sort((a, b) => (a.key === me ? -1 : b.key === me ? 1 : 0));
+  const zero = { onHand: 0, reserved: 0, available: 0, incoming: 0, shipped: 0, kept: 0, activeOrdered: 0, openDemand: 0, unallocated: 0, shortage: 0 };
+  let rows = products.map((p) => {
+    const category = (cat && cat !== "none" ? cats.find((c) => c.id === cat) : null) ?? p.categories[0]?.category ?? p.purchaseItems.find((i) => i.batch.category)?.batch.category ?? null;
+    return { p, s: inv.get(p.id) ?? zero, v: val.get(p.id), category };
+  });
+  if (only !== "all") rows = rows.filter((r) => r.s.onHand || r.s.incoming || r.s.kept || r.s.reserved);
+  // 種類：只列出目前有的
+  const typeCount = new Map<string, { name: string; n: number }>();
+  for (const r of rows) {
+    const k = r.p.productType?.id ?? "-";
+    const x = typeCount.get(k) ?? { name: r.p.productType?.name ?? "其他", n: 0 };
+    x.n += r.s.available + r.s.incoming;
+    typeCount.set(k, x);
+  }
+  if (type) rows = rows.filter((r) => (r.p.productType?.id ?? "-") === type);
+  const label = (r: (typeof rows)[number]) => {
+    const ch = r.p.characters.length === 1 ? r.p.characters[0].character.name : null;
+    if (!ch) return r.p.name;
+    const spec = r.p.spec && r.p.spec !== r.category?.name ? r.p.spec : null;
+    return [ch, type ? null : r.p.productType?.name, spec].filter(Boolean).join(" ");
+  };
+  // 依活動分段（選了某個活動就只有一段）
+  const groups = new Map<string, { name: string; rows: typeof rows }>();
+  for (const r of rows) {
+    const k = r.category?.id ?? "none";
+    const g = groups.get(k) ?? { name: r.category?.name ?? "沒分活動", rows: [] };
+    g.rows.push(r);
+    groups.set(k, g);
+  }
+  const groupList = [...groups.entries()].sort(([a, x], [b, y]) => (a === "none" ? 1 : b === "none" ? -1 : x.name.localeCompare(y.name, "zh-Hant")));
+  for (const [, g] of groupList) g.rows.sort((x, y) => label(x).localeCompare(label(y), "zh-Hant"));
+  const sum = (rs: typeof rows) => ({ free: rs.reduce((a, r) => a + r.s.available, 0), incoming: rs.reduce((a, r) => a + r.s.incoming, 0), kept: rs.reduce((a, r) => a + r.s.kept, 0), cost: rs.reduce((a, r) => a + (r.v ? r.v.freeValue + r.v.keptValue + r.v.reservedValue : 0), 0) });
+  const all = sum(rows);
+  const href = (t: string) => {
+    const sp = new URLSearchParams({ tab: "stock" });
+    if (cat) sp.set("cat", cat);
+    if (q) sp.set("q", q);
+    if (t) sp.set("type", t);
+    if (only) sp.set("only", only);
+    return `/inventory?${sp.toString()}`;
+  };
+  const chip = (on: boolean) => `shrink-0 rounded-full border px-3.5 py-1.5 text-[14px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
   const buyerNames = await prisma.buyer.findMany({ where: { mergedIntoId: null }, orderBy: { updatedAt: "desc" }, take: 200, select: { name: true } });
-  let rows = products.map((p) => ({ p, s: inv.get(p.id) ?? { onHand: 0, reserved: 0, available: 0, incoming: 0, shipped: 0, kept: 0, activeOrdered: 0, openDemand: 0, unallocated: 0, shortage: 0 } }));
-  if (only === "active") rows = rows.filter((r) => r.s.onHand || r.s.incoming || r.s.openDemand || r.s.kept);
-  if (only === "short") rows = rows.filter((r) => r.s.shortage > 0);
   return (
-    <Section pad={false}>
+    <div className="space-y-3">
       <datalist id="buyer-names">{buyerNames.map((b) => <option key={b.name} value={b.name} />)}</datalist>
-      <form className="flex flex-wrap gap-2 border-b border-line-2 px-4 py-3" method="get">
-        <input type="hidden" name="tab" value="stock" />
-        <input type="search" name="q" defaultValue={q} placeholder="搜尋商品" className="min-w-[12rem] flex-1 rounded-lg border border-line px-3 py-2" />
-        <select name="only" defaultValue={only ?? "active"} className="rounded-lg border border-line px-2 py-2">
-          <option value="active">有庫存、在途或需求</option>
-          <option value="short">只看缺貨</option>
-          <option value="all">全部商品</option>
-        </select>
-        <button className="rounded-lg border border-ai bg-ai px-3 py-2 text-sm text-white">套用</button>
-      </form>
+      <StockFilters cats={cats} cat={cat} q={q ?? ""} type={type} only={only ?? ""} />
+      <nav aria-label="種類" className="-mx-3 flex gap-1.5 overflow-x-auto px-3 sm:mx-0 sm:px-0">
+        <Link href={href("")} className={chip(!type)} aria-current={!type ? "page" : undefined}>全部</Link>
+        {[...typeCount.entries()].map(([k, x]) => (
+          <Link key={k} href={href(k)} className={chip(type === k)} aria-current={type === k ? "page" : undefined}>{x.name} {x.n}</Link>
+        ))}
+      </nav>
       {rows.length === 0 ? (
-        <Empty>沒有符合條件的商品。</Empty>
+        <Section><Empty>{only === "all" ? "沒有符合的商品。" : "這裡目前沒有庫存，也沒有還沒到的貨。"}</Empty></Section>
       ) : (
-        <>
-          {/* 手機：卡片 */}
-          <ul className="divide-y divide-line-2 md:hidden">
-            {rows.map(({ p, s }) => (
-              <li key={p.id} className="px-4 py-3">
-                <div className="flex items-start justify-between gap-2">
-                  <Link href={`/products/${p.id}`} className="font-medium hover:underline">{p.name}</Link>
-                  {s.shortage > 0 && <Badge tone="bad">缺 {s.shortage}</Badge>}
-                </div>
-                <dl className={`mt-1.5 grid ${s.reserved ? "grid-cols-4" : "grid-cols-3"} gap-1 text-center`}>
-                  {([["可賣", s.available, true], ...(s.reserved ? [["已保留", s.reserved]] : []), ["自留", s.kept], ["還沒到", s.incoming]] as [string, number, boolean?][]).map(([k, v, strong]) => (
-                    <div key={k} className="rounded-lg bg-[#fafbfc] py-1">
-                      <dt className="text-[11px] text-mute">{k}</dt>
-                      <dd className={`num ${strong ? "text-[17px] font-semibold" : "text-[15px]"}`}>{v}</dd>
-                    </div>
-                  ))}
-                </dl>
-                {val.get(p.id)?.avgUnitCost != null && (
-                  <p className="mt-1 text-[13px] text-ink-2" data-testid="cost-line">
-                    成本 <span className="num font-semibold">{formatTwd(val.get(p.id)!.avgUnitCost)}</span>／件
-                    {(val.get(p.id)!.freeValue + val.get(p.id)!.keptValue) > 0 && <>・手上共 <span className="num">{formatTwd(val.get(p.id)!.freeValue + val.get(p.id)!.keptValue)}</span></>}
-                    {val.get(p.id)!.tentative ? <span className="text-mute">（含預估）</span> : ""}
-                    {p.salePriceTwd != null ? <span className="text-mute">・想賣 {formatTwd(p.salePriceTwd)}</span> : ""}
-                  </p>
-                )}
-                {ownersOf(p.id).length > 0 && (
-                  <p className="mt-1 text-[12px] text-ink-2" data-testid="owner-line">誰的：{ownersOf(p.id).map((o) => `${o.label} 可賣 ${o.free}${o.kept ? `・自留 ${o.kept}` : ""}`).join("｜")}</p>
-                )}
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <SellButton primary me={me} product={{ id: p.id, name: p.name, salePriceTwd: p.salePriceTwd, available: s.available, avgCost: val.get(p.id)?.avgUnitCost ?? null, owners: ownersOf(p.id) }} />
-                  <KeepButton productId={p.id} name={p.name} available={s.available} kept={s.kept} owners={ownersOf(p.id)} me={me} />
-                  <Link href={`/products/${p.id}`} className="rounded-lg border border-line px-3 py-1.5 text-sm text-ai">買在哪幾團</Link>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <div className="hidden md:block">
-            <TableWrap maxH="70vh">
-              <thead>
-                <tr>
-                  <th>商品</th>
-                  <th className="text-right">實際在庫</th>
-                  <th className="text-right">已保留</th>
-                  <th className="text-right">可售庫存</th>
-                  <th className="text-right">自留</th>
-                  <th className="text-right">待到貨</th>
-                  <th className="text-right">有效預購（未出貨）</th>
-                  <th className="text-right">已出貨</th>
-                  <th className="text-right">平均成本</th>
-                  <th className="text-right">缺貨</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(({ p, s }) => (
-                  <tr key={p.id}>
-                    <td><Link href={`/products/${p.id}`} className="hover:underline">{p.name}</Link><div className="text-[12px] text-mute">{p.code}</div></td>
-                    <td className="num text-right">{s.onHand}</td>
-                    <td className="num text-right">{s.reserved}</td>
-                    <td className="num text-right font-medium">{s.available}</td>
-                    <td className="num text-right">{s.kept}</td>
-                    <td className="num text-right">{s.incoming}</td>
-                    <td className="num text-right">{s.openDemand}</td>
-                    <td className="num text-right">{s.shipped}</td>
-                    <td className="num text-right">{val.get(p.id)?.avgUnitCost != null ? `${formatTwd(val.get(p.id)!.avgUnitCost)}${val.get(p.id)!.tentative ? "*" : ""}` : "—"}</td>
-                    <td className="num text-right">{s.shortage > 0 ? <Badge tone="bad">缺 {s.shortage}</Badge> : 0}</td>
-                    <td className="whitespace-nowrap">
-                      <span className="flex gap-2">
-                        <SellButton small primary me={me} product={{ id: p.id, name: p.name, salePriceTwd: p.salePriceTwd, available: s.available, avgCost: val.get(p.id)?.avgUnitCost ?? null, owners: ownersOf(p.id) }} />
-                        <KeepButton productId={p.id} name={p.name} available={s.available} kept={s.kept} small owners={ownersOf(p.id)} me={me} />
-                        <Link href={`/inventory?tab=receive&productId=${p.id}`} className="text-sm text-ai hover:underline">登記到貨</Link>
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </TableWrap>
-          </div>
-        </>
+        <div className="overflow-hidden rounded-xl border border-line bg-card">
+          <table className="w-full text-[15px]" aria-label="庫存表">
+            <thead>
+              <tr className="border-b border-line bg-[#fafbfc] text-[12px] text-mute">
+                <th className="px-3 py-2 text-left font-medium">角色</th>
+                <th className="px-2 py-2 text-right font-medium">庫存</th>
+                <th className="px-2 py-2 text-right font-medium">未到貨</th>
+                <th className="hidden px-2 py-2 text-right font-medium md:table-cell">自留</th>
+                <th className="hidden px-2 py-2 text-right font-medium md:table-cell">每件成本</th>
+                <th className="px-2 py-2"><span className="sr-only">動作</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {groupList.map(([k, g]) => {
+                const gs = sum(g.rows);
+                return (
+                  <Fragment key={k}>
+                    {(groupList.length > 1 || !cat) && (
+                      <tr className="bg-ai-soft">
+                        <td colSpan={6} className="px-3 py-1.5 text-[14px] font-semibold text-ai">
+                          {k !== "none" ? <Link href={`/categories/${k}`} className="hover:underline">{g.name}</Link> : g.name}
+                          <span className="ml-2 text-[12px] font-normal">庫存 {gs.free}・未到 {gs.incoming}{gs.cost ? `・成本 ${formatTwd(gs.cost)}` : ""}</span>
+                        </td>
+                      </tr>
+                    )}
+                    {g.rows.map((r) => {
+                      const owners = ownersOf(r.p.id);
+                      const product = { id: r.p.id, name: r.p.name, salePriceTwd: r.p.salePriceTwd, available: r.s.available, avgCost: r.v?.avgUnitCost ?? null, owners };
+                      return (
+                        <tr key={r.p.id} className="border-b border-line-2 last:border-b-0" data-testid="stock-row" data-name={r.p.name}>
+                          <td className="px-3 py-2 align-top">
+                            <Link href={`/products/${r.p.id}`} className="font-medium hover:underline" title={r.p.name}>{label(r)}</Link>
+                            <div className="text-[11.5px] leading-snug text-mute">
+                              {[r.v?.avgUnitCost != null ? `成本 ${formatTwd(r.v.avgUnitCost)}${r.v.tentative ? "*" : ""}` : null, r.s.kept ? `自留 ${r.s.kept}` : null, r.s.reserved ? `保留 ${r.s.reserved}` : null, owners.length > 1 ? owners.map((o) => `${o.label} ${o.free}`).join("／") : null].filter(Boolean).join("・")}
+                            </div>
+                          </td>
+                          <td className={`num px-2 py-2 text-right align-top ${r.s.available ? "font-semibold" : "text-mute"}`} data-k="free">{r.s.available}</td>
+                          <td className="num px-2 py-2 text-right align-top" data-k="incoming">{r.s.incoming}</td>
+                          <td className="num hidden px-2 py-2 text-right align-top md:table-cell" data-k="kept">{r.s.kept}</td>
+                          <td className="num hidden px-2 py-2 text-right align-top md:table-cell">{r.v?.avgUnitCost != null ? formatTwd(r.v.avgUnitCost) : "—"}</td>
+                          <td className="whitespace-nowrap px-2 py-1.5 text-right align-top">
+                            <SellButton small primary={r.s.available > 0} label="賣" me={me} product={product} />
+                            <KeepButton tiny productId={r.p.id} name={r.p.name} available={r.s.available} kept={r.s.kept} owners={owners} me={me} />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </Fragment>
+                );
+              })}
+              <tr className="border-t border-line bg-[#fafbfc] font-semibold">
+                <td className="px-3 py-2">合計<span className="ml-1 text-[12px] font-normal text-mute">成本 {formatTwd(all.cost)}</span></td>
+                <td className="num px-2 py-2 text-right" data-testid="stock-total-free">{all.free}</td>
+                <td className="num px-2 py-2 text-right">{all.incoming}</td>
+                <td className="num hidden px-2 py-2 text-right md:table-cell">{all.kept}</td>
+                <td className="hidden md:table-cell" />
+                <td />
+              </tr>
+            </tbody>
+          </table>
+        </div>
       )}
-      <p className="px-4 py-3 text-[12px] text-mute">成本＝每件平均成本，已含分攤的運費、代購費（* 或「含預估」表示還有團沒確認實際價格）。自留的不算在可賣裡。</p>
-    </Section>
+      <p className="text-[12px] text-mute">
+        庫存＝現在可以賣的件數（自留的不算）。成本已含攤進去的運費等，* 表示還有預估價格。點角色看買在哪幾團。{" "}
+        <Link href={only === "all" ? href(type).replace("&only=all", "") : `${href(type)}&only=all`} className="text-ai">{only === "all" ? "只看有庫存的" : "顯示全部商品"}</Link>
+      </p>
+    </div>
   );
 }
 

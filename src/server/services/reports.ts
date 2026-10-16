@@ -1,3 +1,4 @@
+import { feeTwd } from "./fees";
 // 統計與報表。所有數字都從流水與明細即時計算，口徑見 docs/計算口徑.md。
 import type { Db, Tx } from "@/server/db";
 import { divRound, mulDiv } from "@/lib/money";
@@ -256,7 +257,14 @@ export async function monthlyReport(db: Db, ym: string) {
   }
 
   const expensesAgg = await db.expense.aggregate({ where: { date: { gte: start, lt: end } }, _sum: { amountTwd: true } });
-  const expenses = expensesAgg._sum.amountTwd ?? 0;
+  // 採購團裡「不攤，單獨記」的運費等費用：以登記日期算進當月其他費用
+  const loneFees = await db.batchCost.findMany({
+    where: { method: "NONE", createdAt: { gte: start, lt: end }, batch: { status: { not: "CANCELLED" } } },
+    select: { id: true, currency: true, amount: true, kind: true, note: true, createdAt: true, batch: { select: { id: true, code: true, name: true, rateMicro: true } } },
+  });
+  const batchFeeItems = loneFees.map((c) => ({ id: c.id, date: c.createdAt, kind: c.kind, note: c.note, batch: c.batch, amountTwd: feeTwd(c, c.batch.rateMicro) }));
+  const batchFeesTwd = batchFeeItems.reduce((x, c) => x + c.amountTwd, 0);
+  const expenses = (expensesAgg._sum.amountTwd ?? 0) + batchFeesTwd;
 
   // 現金流（與營收分開）
   const [payAgg, refundAgg] = await Promise.all([
@@ -286,6 +294,7 @@ export async function monthlyReport(db: Db, ym: string) {
     cogs,
     estimatedCostUnits: estimatedUnits,
     expenses,
+    batchFeeItems,
     grossProfit: revenue - cogs,
     realizedProfit: revenue - cogs - expenses,
     bookedSales,

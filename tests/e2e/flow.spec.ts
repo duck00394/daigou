@@ -106,11 +106,19 @@ test("採購、到貨、分配、部分出貨與報表", async ({ page }) => {
   await page.getByLabel("匯率（1 日圓 = ? 台幣）").fill("0.2");
   await page.getByRole("button", { name: "建立採購團並標記訂單為已下單" }).click();
   await expect(page.getByRole("heading", { name: /10 月官網/ })).toBeVisible();
-  // 國際運費依件數分攤
-  await page.getByRole("button", { name: "新增共同費用" }).click();
-  await page.getByLabel("金額", { exact: true }).fill("100");
-  await page.getByRole("button", { name: "新增並分攤" }).click();
-  await expect(page.getByText("（與費用相符）")).toBeVisible();
+  // 國際運費：預設不攤；兩人一起付時才選「每件平均攤」
+  await page.getByRole("button", { name: "＋ 加運費" }).click();
+  const fee = page.getByRole("dialog");
+  await expect(fee.getByText("不攤進商品成本，單獨記一筆")).toBeVisible();
+  await fee.getByLabel("金額", { exact: true }).fill("100");
+  await fee.getByRole("radiogroup", { name: "誰付的" }).getByRole("radio", { name: "兩人一起付" }).click();
+  await expect(fee.getByLabel("經營者 A 付多少")).toHaveValue("50");
+  await expect(fee.getByLabel("經營者 B 付多少")).toHaveValue("50");
+  await fee.getByRole("radiogroup", { name: "要不要攤進商品成本" }).getByRole("radio", { name: "每件平均攤" }).click();
+  await fee.getByRole("button", { name: "儲存" }).click();
+  await toast(page, "已記下這筆費用");
+  await expect(page.getByTestId("fee-row")).toContainText("兩人一起付：經營者 A NT$50、經營者 B NT$50");
+  await expect(page.getByTestId("fee-row")).toContainText("攤進商品成本：每件平均攤");
 
   // 吉伊吊娃到貨 2 件（小美 1 件、阿婷 3 件，先下單的優先）
   await page.goto("/inventory?tab=receive");

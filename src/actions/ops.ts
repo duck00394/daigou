@@ -118,7 +118,7 @@ export async function updateBatchItemAction(
 export async function deleteBatchItemAction(itemId: string) {
   return run((a) => tx((t) => pur.deleteBatchItem(t, a, itemId)));
 }
-export async function addBatchCostAction(input: { batchId: string; kind: "AGENT_FEE" | "JP_DOMESTIC_SHIPPING" | "INTL_SHIPPING" | "TW_DOMESTIC_SHIPPING" | "DUTY" | "PACKAGING" | "PLATFORM_FEE" | "OTHER"; currency: "TWD" | "JPY"; amount: number; method: "BY_QTY" | "BY_WEIGHT" | "BY_VALUE" | "MANUAL"; manualSplit: Record<string, number> | null; note: string | null; requestKey?: string }) {
+export async function addBatchCostAction(input: { batchId: string; kind: "AGENT_FEE" | "JP_DOMESTIC_SHIPPING" | "INTL_SHIPPING" | "TW_DOMESTIC_SHIPPING" | "DUTY" | "PACKAGING" | "PLATFORM_FEE" | "OTHER"; currency: "TWD" | "JPY"; amount: number; method: "BY_QTY" | "BY_WEIGHT" | "BY_VALUE" | "MANUAL" | "NONE"; manualSplit: Record<string, number> | null; note: string | null; payer?: string | null; shareSplit?: Record<string, number> | null; requestKey?: string }) {
   return run((a) =>
     tx(async (t) => {
       await claimRequest(t, input.requestKey, "batch.addCost");

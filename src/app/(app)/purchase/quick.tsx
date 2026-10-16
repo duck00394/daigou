@@ -240,6 +240,7 @@ export function QuickPurchase(props: {
           <p className="text-sm text-mute">先在上面選一團，或開新的一團。</p>
         ) : (
           <BulkAddGrid
+            category={cats.find((c) => c.id === categoryId) ? { id: categoryId, name: cats.find((c) => c.id === categoryId)!.name } : null}
             batchId={pick === NEW ? created.current : pick}
             ensureBatch={ensureBatch}
             onSaved={(id, count) => {

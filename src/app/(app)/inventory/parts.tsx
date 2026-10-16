@@ -239,7 +239,7 @@ export function CreateBatchFromDemand({ demand, defaultRate }: { demand: { produ
 }
 
 /** 自留／改回出售：自留的不算可售庫存，成本來源保留 */
-export function KeepButton({ productId, name, available, kept, small, owners, me }: { productId: string; name: string; available: number; kept: number; small?: boolean; owners?: OwnerStockOpt[]; me?: string | null }) {
+export function KeepButton({ productId, name, available, kept, small, tiny, owners, me }: { productId: string; name: string; available: number; kept: number; small?: boolean; tiny?: boolean; owners?: OwnerStockOpt[]; me?: string | null }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"keep" | "sell">("keep");
   const [n, setN] = useState(1);
@@ -254,18 +254,25 @@ export function KeepButton({ productId, name, available, kept, small, owners, me
   const countOf = (m: "keep" | "sell") => (o: OwnerStockOpt) => (m === "keep" ? o.free : o.kept);
   return (
     <>
-      <Button
-        small={small}
-        onClick={() => {
+      {(() => {
+        const openIt = () => {
           const m = available > 0 ? "keep" : "sell";
           setMode(m);
           setOwner(defaultOwner(owners, me, countOf(m)));
           setN(1);
           setOpen(true);
-        }}
-      >
-        自留{kept ? ` ${kept}` : ""}
-      </Button>
+        };
+        // tiny：表格裡小小的「留」，不搶「賣」的位置
+        return tiny ? (
+          <button type="button" onClick={openIt} aria-label={`自留${kept ? ` ${kept}` : ""}`} className="px-1.5 py-1 text-[13px] text-ai underline-offset-2 hover:underline">
+            留
+          </button>
+        ) : (
+          <Button small={small} onClick={openIt}>
+            自留{kept ? ` ${kept}` : ""}
+          </Button>
+        );
+      })()}
       <Modal open={open} onClose={() => setOpen(false)} title={`自留：${name}`} footer={
         <Button variant="primary" loading={pending} disabled={n < 1 || n > max} onClick={() => run(() => keepAction({ productId, delta: mode === "keep" ? n : -n, dedupeKey: idem.key, owner }), { success: mode === "keep" ? `已自留 ${n} 件` : `已改回出售 ${n} 件`, onOk: () => { idem.renew(); setOpen(false); } })}>
           {mode === "keep" ? `自留 ${n} 件` : `改回出售 ${n} 件`}
