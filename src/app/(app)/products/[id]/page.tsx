@@ -54,7 +54,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
         }
       />
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-        <Stat label="實際在庫" value={s.onHand} />
+        <Stat label="手上有" value={s.onHand} />
         <Stat label="已保留" value={s.reserved} />
         <Stat label="可用庫存" value={s.available} />
         <Stat label="待到貨" value={s.incoming} />

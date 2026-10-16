@@ -149,9 +149,9 @@ test("採購、到貨、分配、部分出貨與報表", async ({ page }) => {
 
   await page.goto("/reports");
   // 小美出貨吉伊吊娃 1 件：營收 500；成本 = (1650 × 4 × 0.2 + 運費分攤 80) ÷ 4 = 350
-  await expect(page.getByText("已實現營收", { exact: true }).first().locator("..")).toContainText("NT$500");
-  await expect(page.getByText("銷貨成本", { exact: true }).first().locator("..")).toContainText("NT$350");
-  await expect(page.getByText("已實現利潤", { exact: true }).first().locator("..")).toContainText("NT$150");
+  await expect(page.getByText("收入（已賣出）", { exact: true }).first().locator("..")).toContainText("NT$500");
+  await expect(page.getByText("賣掉的東西成本", { exact: true }).first().locator("..")).toContainText("NT$350");
+  await expect(page.getByText("賺多少（已賣出）", { exact: true }).first().locator("..")).toContainText("NT$150");
 });
 
 test("Excel 匯入：欄位配對、預覽、錯誤列號、建立", async ({ page }) => {

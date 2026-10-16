@@ -12,10 +12,8 @@ test("手機：建團選負責人、登記付款與收貨，對帳頁不橫向�
   await page.getByRole("button", { name: "建立採購團" }).click();
   await expect(page.getByRole("heading", { name: /手機雙人團/ })).toBeVisible();
   const batchId = page.url().split("/inventory/batches/")[1].split("?")[0];
-  // 頁首的段落捷徑：點「收貨」直接跳到收貨區
-  await page.getByRole("navigation", { name: "跳到段落" }).getByRole("link", { name: /收貨/ }).click();
-  await expect(page.locator("#receiving")).toBeInViewport();
-  await page.evaluate(() => window.scrollTo(0, 0));
+  // 最上面就有常用的三顆：全部到了、付清、加商品
+  await expect(page.getByLabel("常用動作").getByRole("link", { name: "＋ 加商品" })).toBeVisible();
 
   await page.getByLabel("IP／系列").selectOption({ label: "吉伊卡哇" });
   await page.getByRole("radiogroup", { name: "種類" }).getByRole("radio", { name: "吊娃" }).click();
@@ -28,8 +26,8 @@ test("手機：建團選負責人、登記付款與收貨，對帳頁不橫向�
 
   await page.getByRole("button", { name: "＋ 登記付款" }).click();
   const pay = page.getByRole("form", { name: "登記付款" });
-  await pay.getByRole("radiogroup", { name: "實際付款人" }).getByRole("radio").nth(1).click();
-  await pay.getByLabel("付款金額").fill("840");
+  await pay.getByRole("radiogroup", { name: "誰付的" }).getByRole("radio").nth(1).click();
+  await pay.getByLabel("多少錢").fill("840");
   await pay.getByRole("button", { name: "儲存付款" }).click();
   await toast(page, "已登記付款");
 

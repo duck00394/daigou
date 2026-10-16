@@ -28,3 +28,15 @@ export async function setDefaultRate(t: Tx, actor: Actor, rate: string) {
   await audit(t, actor, "settings.rate", "AppSetting", "defaultRateMicro", { from: formatRate(before), to: formatRate(micro) });
   return micro;
 }
+
+/** 有沒有在接單（訂單、貼上加單、收款、出貨、買家、開團）。沒設定過時：有建過訂單就算有 */
+export async function getOrdersEnabled(db: Db): Promise<boolean> {
+  const s = await db.appSetting.findUnique({ where: { key: "ordersEnabled" } });
+  if (s) return s.value === "1";
+  return (await db.order.count({ where: { source: { not: "QUICK" } } })) > 0;
+}
+
+export async function setOrdersEnabled(t: Tx, actor: Actor, on: boolean) {
+  await t.appSetting.upsert({ where: { key: "ordersEnabled" }, update: { value: on ? "1" : "0" }, create: { key: "ordersEnabled", value: on ? "1" : "0" } });
+  await audit(t, actor, "settings.orders", "AppSetting", "ordersEnabled", { on });
+}

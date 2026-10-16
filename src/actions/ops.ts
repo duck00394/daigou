@@ -234,3 +234,7 @@ export async function buyerOpenOrdersAction(buyerId: string) {
     "read",
   );
 }
+export async function setOrdersEnabledAction(on: boolean) {
+  const { setOrdersEnabled } = await import("@/server/services/settings");
+  return run((a) => tx((t) => setOrdersEnabled(t, a, z.boolean().parse(on))).then(() => null));
+}

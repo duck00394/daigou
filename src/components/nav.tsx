@@ -21,7 +21,6 @@ export const NAV: { href: string; label: string; group: string; hint?: string }[
   { href: "/products", label: "商品", group: "資料與設定" },
   { href: "/series", label: "系列與角色", group: "資料與設定" },
   { href: "/suppliers", label: "供應商・代購", group: "資料與設定" },
-  { href: "/operators", label: "經營者對帳", group: "資料與設定" },
   { href: "/reports", label: "完整報表", group: "資料與設定" },
   { href: "/tags", label: "標籤", group: "資料與設定" },
   { href: "/settings", label: "匯出、備份與設定", group: "資料與設定" },
@@ -51,20 +50,26 @@ function useTab() {
   return sp.get("tab");
 }
 
-export function Sidebar() {
+const visible = (ordersOn: boolean) => NAV.filter((n) => ordersOn || n.group !== "接單");
+
+export function Sidebar({ ordersOn = true }: { ordersOn?: boolean }) {
   const path = usePathname();
   const tab = useTab();
-  const groups = [...new Set(NAV.map((n) => n.group))];
+  const nav = visible(ordersOn);
+  const groups = [...new Set(nav.map((n) => n.group))];
   return (
     <nav aria-label="主要功能" className="no-print sticky top-0 hidden h-dvh w-52 shrink-0 flex-col overflow-y-auto border-r border-line bg-white px-3 py-4 md:flex">
       <Link href="/" className="round mb-5 flex items-center gap-2 px-2 text-[17px] font-semibold">
         <span aria-hidden className="inline-block h-6 w-6 rounded-md bg-ai" />
         代購帳房
       </Link>
+      <form action="/search" method="get" role="search" className="mb-4 px-1">
+        <input type="search" name="q" placeholder="🔍 搜尋角色、商品" aria-label="搜尋" className="w-full rounded-lg border border-line px-2.5 py-1.5 text-[14px]" />
+      </form>
       {groups.map((g) => (
         <div key={g} className="mb-4">
           <div className="mb-1 px-2 text-[12px] text-mute">{g}</div>
-          {NAV.filter((n) => n.group === g).map((n) => (
+          {nav.filter((n) => n.group === g).map((n) => (
             <Link
               key={n.href}
               href={n.href}
@@ -83,9 +88,10 @@ export function Sidebar() {
   );
 }
 
-export function MobileBar() {
+export function MobileBar({ ordersOn = true }: { ordersOn?: boolean }) {
   const path = usePathname();
   const tab = useTab();
+  const nav = visible(ordersOn);
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [path]);
   const current = NAV.find((n) => active(path, n.href, tab) && n.href !== "/") ?? NAV[0];
@@ -95,9 +101,12 @@ export function MobileBar() {
         <Link href="/" className="round text-[16px] font-semibold">
           代購帳房
         </Link>
-        <button type="button" onClick={() => setOpen(true)} className="rounded-lg border border-line px-3 py-1 text-[14px]" aria-expanded={open}>
-          全部功能
-        </button>
+        <span className="flex items-center gap-2">
+          <Link href="/search" aria-label="搜尋" className="rounded-lg border border-line px-2.5 py-1 text-[14px]">🔍 搜尋</Link>
+          <button type="button" onClick={() => setOpen(true)} className="rounded-lg border border-line px-3 py-1 text-[14px]" aria-expanded={open}>
+            全部功能
+          </button>
+        </span>
       </header>
       {open && (
         <div className="fixed inset-0 z-50 bg-black/30 md:hidden" onClick={() => setOpen(false)}>
@@ -108,11 +117,11 @@ export function MobileBar() {
                 ✕
               </button>
             </div>
-            {[...new Set(NAV.map((n) => n.group))].map((g) => (
+            {[...new Set(nav.map((n) => n.group))].map((g) => (
               <div key={g} className="mb-3">
                 <div className="mb-1 text-[12px] text-mute">{g}</div>
                 <div className="grid grid-cols-2 gap-2">
-                  {NAV.filter((n) => n.group === g).map((n) => (
+                  {nav.filter((n) => n.group === g).map((n) => (
                     <Link
                       key={n.href}
                       href={n.href}

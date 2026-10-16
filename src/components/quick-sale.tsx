@@ -44,7 +44,7 @@ export function SellButton({ product, small, label = "出售", primary, autoOpen
     if (max !== undefined && qty > max) return notify(`可售庫存只有 ${max} 件`);
     const payload = { productId, qty, unitPrice: price, buyerName: f.buyer || null, soldAt: f.date || null, note: f.note || null, paid: f.paid, owner: correct ? null : owner, idemKey: idem.key };
     run(() => (correct ? correctQuickSaleAction(correct.orderId, { ...payload, reason: f.reason }) : quickSaleAction(payload)), {
-      success: (d) => (d.duplicated ? "這筆出售已經登記過，沒有重複扣庫存" : correct ? `已更正：收入 ${formatTwd(d.revenue)}、毛利 ${formatTwd(d.profit)}${d.tentative ? "（成本暫估）" : ""}` : `已出售 ${qty} 件`),
+      success: (d) => (d.duplicated ? "這筆出售已經登記過，沒有重複扣庫存" : correct ? `已更正：收入 ${formatTwd(d.revenue)}、毛利 ${formatTwd(d.profit)}${d.tentative ? "（成本價格還沒確定）" : ""}` : `已出售 ${qty} 件`),
       // 更正後舊紀錄會變成已作廢、這一列重新整理，所以直接關閉並以提示訊息顯示結果
       onOk: (d) => { idem.renew(); if (correct) setOpen(false); else setDone(d); },
     });
@@ -67,13 +67,13 @@ export function SellButton({ product, small, label = "出售", primary, autoOpen
                 <dd className={`num text-[18px] font-semibold ${k === "毛利" && v < 0 ? "text-bad" : ""}`}>{formatTwd(v)}</dd>
               </div>
             ))}
-            {done.tentative && <p className="col-span-3 text-[12px] text-warn">成本含暫估（採購實際單價或運費等費用尚未確認），之後確認了會自動更新。</p>}
+            {done.tentative && <p className="col-span-3 text-[12px] text-warn">成本有價格還沒確定（採購實際單價或運費等費用尚未確認），之後確認了會自動更新。</p>}
           </dl>
         ) : (
           <div className="space-y-3">
             {!product && !correct && <ProductPicker value={picked} onPick={(p) => { setPicked(p); if (p?.salePriceTwd != null && !f.price) setF((x) => ({ ...x, price: String(p.salePriceTwd) })); }} />}
             {!correct && <OwnerChips label="賣誰的" owners={product?.owners ?? []} value={owner} onChange={setOwner} count={freeOf} />}
-            {max !== undefined && <p className="text-[13px] text-mute">可售庫存 {max} 件（已保留給買家、自留的不會被賣掉）</p>}
+            {max !== undefined && <p className="text-[13px] text-mute">可售庫存 {max} 件（留給買家、自留的不會被賣掉）</p>}
             {product?.avgCost != null && (
               <p className="text-[13px] text-mute">
                 平均成本約 {formatTwd(product.avgCost)}／件

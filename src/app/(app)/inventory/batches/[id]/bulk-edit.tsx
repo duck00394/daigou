@@ -34,6 +34,7 @@ const toDraft = (i: EditItem): Draft => ({ qty: String(i.qty), est: String(i.est
 const num = (s: string) => (s.trim() === "" ? null : /^\d+$/.test(s.trim().replace(/,/g, "")) ? Number(s.trim().replace(/,/g, "")) : NaN);
 
 export function BulkEditTable({ batchId, items, editable }: { batchId: string; items: EditItem[]; editable: boolean }) {
+  const [more, setMore] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Record<string, Draft>>(() => Object.fromEntries(items.map((i) => [i.id, toDraft(i)])));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { run, pending } = useRun();
@@ -101,6 +102,8 @@ export function BulkEditTable({ batchId, items, editable }: { batchId: string; i
           const d = drafts[i.id] ?? toDraft(i);
           const err = allErrors[i.id];
           const dirty = JSON.stringify(d) !== JSON.stringify(toDraft(i));
+          // 手機：平常只看名稱、數量（＋／−）、單價；其他點「⋯」才出現
+          const x = more[i.id] ? "" : "hidden md:block";
           return (
             <div key={i.id} role="row" className={`grid grid-cols-2 gap-2 rounded-xl border p-3 md:grid-cols-[minmax(10rem,1.6fr)_4.5rem_5.5rem_6.5rem_6.5rem_5rem_6.5rem_7rem_7.5rem] md:items-start md:rounded-none md:border-0 md:border-b md:px-4 md:py-1.5 ${err ? "border-[#f5c9c4] bg-bad-soft/40" : dirty ? "border-[#cfd9ea] bg-info-soft/60" : "border-line md:border-line-2"}`}>
               <div role="cell" className="col-span-2 md:col-span-1 md:pt-2">
@@ -108,40 +111,45 @@ export function BulkEditTable({ batchId, items, editable }: { batchId: string; i
                 {i.specNote && <span className="ml-1 text-[12px] text-mute">{i.specNote}</span>}
                 {i.minQty > 0 && <div className="text-[12px] text-mute">最少 {i.minQty} 件（{i.promisedNote}）</div>}
                 {i.cancelledQty > 0 && <div className="text-[12px] text-bad">已砍單 {i.cancelledQty} 件{i.cancelReason ? `（${i.cancelReason}）` : ""}</div>}
+                {editable && <button type="button" className="mt-0.5 text-[13px] text-ai md:hidden" onClick={() => setMore({ ...more, [i.id]: !more[i.id] })} aria-expanded={!!more[i.id]}>{more[i.id] ? "收起" : "⋯ 改實際單價、砍單、刪除"}</button>}
               </div>
-              <div role="cell" className="flex items-center justify-between md:block md:pt-2 md:text-right">
+              <div role="cell" className={`flex items-center justify-between md:block md:pt-2 md:text-right ${more[i.id] ? "" : "hidden md:block"}`}>
                 <span className="text-[12px] text-mute md:sr-only">已到貨</span>
                 <span className="num">{i.received}</span>
               </div>
               <div role="cell">
                 <label className={lbl} htmlFor={`eq-${i.id}`}>數量</label>
-                <input id={`eq-${i.id}`} disabled={!editable} className={`${inputCls} num text-right`} inputMode="numeric" value={d.qty} onChange={(e) => set(i.id, { qty: e.target.value })} />
+                <div className="flex items-center gap-1">
+                  {editable && <button type="button" className="h-10 w-9 shrink-0 rounded-lg border border-line text-[17px] md:hidden" aria-label={`${i.name} 少一件`} onClick={() => set(i.id, { qty: String(Math.max(0, (Number(d.qty) || 0) - 1)) })}>−</button>}
+                  <input id={`eq-${i.id}`} disabled={!editable} className={`${inputCls} num text-center md:text-right`} inputMode="numeric" value={d.qty} onChange={(e) => set(i.id, { qty: e.target.value })} />
+                  {editable && <button type="button" className="h-10 w-9 shrink-0 rounded-lg border border-line text-[17px] md:hidden" aria-label={`${i.name} 多一件`} onClick={() => set(i.id, { qty: String((Number(d.qty) || 0) + 1) })}>＋</button>}
+                </div>
               </div>
               <div role="cell">
                 <label className={lbl} htmlFor={`ee-${i.id}`}>預估單價</label>
                 <input id={`ee-${i.id}`} disabled={!editable} className={`${inputCls} num text-right`} inputMode="numeric" value={d.est} onChange={(e) => set(i.id, { est: e.target.value })} />
               </div>
-              <div role="cell">
+              <div role="cell" className={x}>
                 <label className={lbl} htmlFor={`ea-${i.id}`}>實際單價</label>
                 <input id={`ea-${i.id}`} disabled={!editable} className={`${inputCls} num text-right`} inputMode="numeric" value={d.actual} onChange={(e) => set(i.id, { actual: e.target.value })} placeholder="未確認" />
               </div>
-              <div role="cell">
+              <div role="cell" className={x}>
                 <label className={lbl} htmlFor={`ec-${i.id}`}>幣別</label>
                 <select id={`ec-${i.id}`} disabled={!editable} className={inputCls} value={d.currency} onChange={(e) => set(i.id, { currency: e.target.value as Currency })}>
                   <option value="JPY">日幣</option>
                   <option value="TWD">台幣</option>
                 </select>
               </div>
-              <div role="cell">
-                <label className={lbl} htmlFor={`es-${i.id}`}>對客售價</label>
+              <div role="cell" className={x}>
+                <label className={lbl} htmlFor={`es-${i.id}`}>想賣價</label>
                 <input id={`es-${i.id}`} disabled={!editable} className={`${inputCls} num text-right`} inputMode="numeric" value={d.sale} onChange={(e) => set(i.id, { sale: e.target.value })} placeholder="選填" />
               </div>
-              <div role="cell" className="col-span-2 flex items-center justify-between md:col-span-1 md:block md:pt-2 md:text-right">
+              <div role="cell" className={`col-span-2 items-center justify-between md:col-span-1 md:block md:pt-2 md:text-right ${more[i.id] ? "flex" : "hidden md:block"}`}>
                 <span className="text-[12px] text-mute md:sr-only">成本（台幣）</span>
                 <span className="num">{formatTwd(i.goodsTwd + i.feesTwd)}</span>
                 <span className="block text-[11px] text-mute">{i.actualUnitCost == null ? "依預估單價" : "依實際單價"}{i.feesTwd ? `，含費用 ${i.feesTwd}` : ""}</span>
               </div>
-              <div role="cell" className="col-span-2 flex flex-wrap justify-end gap-1 md:col-span-1 md:pt-1">
+              <div role="cell" className={`col-span-2 flex-wrap justify-end gap-1 md:col-span-1 md:flex md:pt-1 ${more[i.id] ? "flex" : "hidden"}`}>
                 {editable && <CancelItemButton itemId={i.id} name={i.name} max={i.qty - i.received} />}
                 {editable && i.canDelete && (
                   <ConfirmButton small variant="danger" label="刪除" title={`刪除「${i.name}」`} message="這個品項沒有到貨紀錄，也沒有買家依賴這批到貨，可以安全刪除。" confirmLabel="刪除品項" onConfirm={() => run(() => deleteBatchItemAction(i.id), { success: "已刪除品項" })} />

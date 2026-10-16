@@ -107,7 +107,7 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
                   {!r.voided && (
                     <div className="text-right text-[13px]">
                       <div className="num text-[16px] font-semibold">{formatTwd(r.revenue)}</div>
-                      <div className="num text-mute">成本 {formatTwd(r.cost)}{r.tentative ? "（暫估）" : ""}</div>
+                      <div className="num text-mute">成本 {formatTwd(r.cost)}{r.tentative ? "（價格還沒確定）" : ""}</div>
                       <div className={`num ${r.profit < 0 ? "text-bad" : "text-good"}`}>毛利 {formatTwd(r.profit)}</div>
                     </div>
                   )}

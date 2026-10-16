@@ -7,7 +7,7 @@ import { Button, Modal, useIdemKey, useRun } from "@/components/client";
 import { OperatorPicker, type OperatorOption } from "@/components/operator-picker";
 import { BulkEditTable, type EditItem } from "./bulk-edit";
 import { BulkAddGrid } from "./bulk-add";
-import { payRemainingAction } from "@/actions/batches";
+import { payRemainingAction, receiveAllAction } from "@/actions/batches";
 import { formatJpy, formatTwd } from "@/lib/money";
 
 type Opt = { id: string; name: string };
@@ -108,7 +108,7 @@ export function ItemsPanel(props: {
 }
 
 /** 一鍵付清：把還要付的金額登記成一筆付款 */
-export function PayOffButton({ batchId, due, operators, defaultPayer }: { batchId: string; due: number; operators: OperatorOption[]; defaultPayer: string | null }) {
+export function PayOffButton({ batchId, due, operators, defaultPayer, big }: { batchId: string; due: number; operators: OperatorOption[]; defaultPayer: string | null; big?: boolean }) {
   const [open, setOpen] = useState(false);
   const [who, setWho] = useState<string | null>(defaultPayer);
   const idem = useIdemKey();
@@ -116,7 +116,7 @@ export function PayOffButton({ batchId, due, operators, defaultPayer }: { batchI
   if (due <= 0) return null;
   return (
     <>
-      <Button small variant="primary" onClick={() => { setWho(defaultPayer); setOpen(true); }}>付清</Button>
+      <Button small={!big} variant="primary" className={big ? "w-full" : undefined} onClick={() => { setWho(defaultPayer); setOpen(true); }}>付清</Button>
       <Modal
         open={open}
         onClose={() => setOpen(false)}
@@ -125,6 +125,28 @@ export function PayOffButton({ batchId, due, operators, defaultPayer }: { batchI
       >
         <OperatorPicker label="誰付的？" operators={operators} value={who} onChange={setWho} />
         <p className="mt-3 text-[13px] text-mute">會新增一筆台幣付款（今天）。之後要改金額、日期或付款方式，到下方「付款」修改即可。</p>
+      </Modal>
+    </>
+  );
+}
+
+/** 全部到了：還沒收到的一次入庫，收貨的人預設這團的收貨負責人或主人 */
+export function ReceiveAllButton({ batchId, outstanding, operators, defaultReceiver }: { batchId: string; outstanding: number; operators: OperatorOption[]; defaultReceiver: string | null }) {
+  const [open, setOpen] = useState(false);
+  const [who, setWho] = useState<string | null>(defaultReceiver);
+  const idem = useIdemKey();
+  const { run, pending } = useRun();
+  const go = () =>
+    run(() => receiveAllAction(batchId, who, idem.key), {
+      success: (r) => (r.received ? `${r.received} 件已進庫存` : "沒有還沒到的了"),
+      onOk: () => { idem.renew(); setOpen(false); },
+    });
+  if (outstanding <= 0) return <span className="flex items-center justify-center rounded-lg bg-good-soft px-3 py-2 text-[14px] text-good">全部到手了</span>;
+  return (
+    <>
+      <Button variant="primary" className="w-full" loading={pending && !open} onClick={() => (defaultReceiver ? go() : setOpen(true))}>全部到了</Button>
+      <Modal open={open} onClose={() => setOpen(false)} title="誰收到的？" footer={<Button variant="primary" loading={pending} disabled={!who} onClick={go}>{outstanding} 件全部入庫</Button>}>
+        <OperatorPicker label="收貨的人" operators={operators} value={who} onChange={setWho} />
       </Modal>
     </>
   );

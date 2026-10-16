@@ -51,7 +51,8 @@ test("桌面：A 下單、A 付訂金 B 付尾款、A B 分批收貨，對帳依
   const payForm = () => page.getByRole("form", { name: "登記付款" });
   await page.getByRole("button", { name: "＋ 登記付款" }).click();
   await expect(payForm().getByRole("radio", { name: "阿珍" })).toHaveAttribute("aria-checked", "true"); // 預設為主要付款負責人
-  await payForm().getByLabel("付款金額").fill("3000");
+  await payForm().getByLabel("多少錢").fill("3000");
+  if (!(await payForm().getByRole("radio", { name: "日幣" }).isVisible())) await payForm().locator("summary").click(); // 日幣收在「更多」
   await payForm().getByRole("radio", { name: "日幣" }).click();
   await payForm().getByRole("radio", { name: "訂金" }).click();
   await payForm().getByLabel("這筆實際匯率（選填）").fill("0.205");
@@ -60,7 +61,8 @@ test("桌面：A 下單、A 付訂金 B 付尾款、A B 分批收貨，對帳依
 
   await page.getByRole("button", { name: "＋ 登記付款" }).click();
   await payForm().getByRole("radio", { name: "阿強" }).click();
-  await payForm().getByLabel("付款金額").fill("4930");
+  await payForm().getByLabel("多少錢").fill("4930");
+  if (!(await payForm().getByRole("radio", { name: "日幣" }).isVisible())) await payForm().locator("summary").click(); // 日幣收在「更多」
   await payForm().getByRole("radio", { name: "日幣" }).click();
   await payForm().getByRole("radio", { name: "尾款" }).click();
   await payForm().getByRole("button", { name: "儲存付款" }).click();
@@ -71,7 +73,7 @@ test("桌面：A 下單、A 付訂金 B 付尾款、A B 分批收貨，對帳依
   // 修改一筆再看異動紀錄
   await page.locator("li", { hasText: "¥4,930" }).getByRole("button", { name: "修改" }).click();
   const dlg = page.getByRole("dialog");
-  await dlg.getByLabel("付款金額").fill("4950");
+  await dlg.getByLabel("多少錢").fill("4950");
   await dlg.getByLabel("修改原因（會記錄在異動紀錄）").fill("手續費");
   await dlg.getByRole("button", { name: "儲存修改" }).click();
   await toast(page, /已修改/);

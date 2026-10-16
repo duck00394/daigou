@@ -55,8 +55,24 @@ test("手機：卡片式表格可新增、修改、刪除列並確認儲存", as
   await chiikawa.getByLabel("數量").fill("4");
   await page.getByRole("button", { name: "儲存修改" }).click();
   await toast(page, "已儲存 1 列");
+  // 手機上改數量用 ＋／−；砍單、刪除收在「⋯」
+  await chiikawa.getByRole("button", { name: "吉伊 吊娃 多一件" }).click();
+  await expect(chiikawa.getByLabel("數量")).toHaveValue("5");
+  await chiikawa.getByRole("button", { name: "吉伊 吊娃 少一件" }).click();
+  await items.filter({ hasText: "兔兔 吊娃" }).getByRole("button", { name: /⋯/ }).click();
   await items.filter({ hasText: "兔兔 吊娃" }).getByRole("button", { name: "刪除" }).click();
   await page.getByRole("button", { name: "刪除品項" }).click();
   await toast(page, "已刪除品項");
   await page.screenshot({ path: "test-results/mobile_bulk_items.png", fullPage: true });
+  // 代購團頁上方「全部到了」：還沒到的一次入庫
+  await page.getByRole("button", { name: "完成編輯" }).click();
+  await page.getByRole("button", { name: "全部到了" }).click();
+  const who = page.getByRole("dialog");
+  if (await who.isVisible()) {
+    await who.getByRole("radio").first().click();
+    await who.getByRole("button", { name: /全部入庫/ }).click();
+  }
+  await toast(page, /件已進庫存/);
+  await expect(page.getByText("全部到手了")).toBeVisible();
+  await page.screenshot({ path: "test-results/mobile_batch_top.png", fullPage: false });
 });

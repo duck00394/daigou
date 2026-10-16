@@ -7,6 +7,7 @@ import { listQuickSales } from "@/server/services/quick-sale";
 import { Section, Stat, Twd, Empty, StatusBadge, Badge } from "@/components/ui";
 import { batchStage, batchStageLabel, batchStatus, fmtDate, fmtDay } from "@/lib/labels";
 import { batchPaySummary } from "@/server/services/batch-ops";
+import { getOrdersEnabled } from "@/server/services/settings";
 import { formatTwd } from "@/lib/money";
 
 export const metadata = { title: "首頁" };
@@ -50,7 +51,7 @@ export default async function Home() {
     .sort((a, b) => b.due - a.due);
   const dueTotal = dueList.reduce((s, b) => s + b.due, 0);
   // 有在用「接單」（訂單／買家）才顯示訂單相關數字
-  const usesOrders = (await prisma.order.count({ where: { source: { not: "QUICK" } } })) > 0;
+  const usesOrders = await getOrdersEnabled(prisma);
   const today = new Date();
   const todo = [
     { n: d.pendingConfirm, text: "張訂單待確認", href: "/orders?status=PENDING_CONFIRM" },
@@ -82,12 +83,12 @@ export default async function Home() {
         <h2 className="mb-2 text-[15px] font-semibold">錢與庫存</h2>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           <Stat label="還要付代購" value={<span data-testid="home-due" className={dueTotal ? "text-bad" : ""}>{formatTwd(dueTotal)}</span>} note={dueTotal ? `${dueList.length} 團還沒付清` : "都付清了"} href="#due" tone={dueTotal ? "bad" : undefined} />
-          <Stat label="手上庫存成本" value={<Twd v={val.total.freeValue + val.total.keptValue} />} note={`可賣 ${val.total.free} 件・自留 ${val.total.kept} 件${val.total.tentative ? "（含暫估）" : ""}`} href="/inventory?tab=stock" />
+          <Stat label="手上庫存成本" value={<Twd v={val.total.freeValue + val.total.keptValue} />} note={`可賣 ${val.total.free} 件・自留 ${val.total.kept} 件${val.total.tentative ? "（有價格還沒確定）" : ""}`} href="/inventory?tab=stock" />
           <Stat label="本月賣出賺" value={<Twd v={sales.total.profit} />} note={`賣 ${sales.total.qty} 件・收入 ${sales.total.revenue.toLocaleString()} 元`} href="/sales" tone={sales.total.profit < 0 ? "bad" : undefined} />
           <Stat label="還沒到的貨" value={`${incoming} 件`} note={`${openBatches} 團還在路上`} href="/inventory?tab=batches" />
           {(unpaidSales._sum.balanceCache ?? 0) > 0 && <Stat label="賣出還沒收到錢" value={<Twd v={unpaidSales._sum.balanceCache ?? 0} />} note={`${unpaidSales._count} 筆`} href="/sales" tone="warn" />}
           {val.total.unknownCostUnits > 0 && <Stat label="沒填成本的庫存" value={`${val.total.unknownCostUnits} 件`} note="手動入庫未填成本" href="/inventory?tab=stock" tone="warn" />}
-          {usesOrders && val.total.reserved > 0 && <Stat label="已保留給買家" value={`${val.total.reserved} 件`} note="待出貨" href="/shipping" />}
+          {usesOrders && val.total.reserved > 0 && <Stat label="留給買家" value={`${val.total.reserved} 件`} note="待出貨" href="/shipping" />}
         </div>
       </div>
 
@@ -135,8 +136,8 @@ export default async function Home() {
       <div>
         <h2 className="mb-2 text-[15px] font-semibold">本月（{d.ym}）</h2>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <Stat label="已實現營收" value={<Twd v={d.month.revenue} />} note="依出貨認列，含運費收入" href="/reports" />
-          <Stat label="已實現利潤" value={<Twd v={d.month.realizedProfit} />} note={d.month.estimatedCostUnits > 0 ? `${d.month.estimatedCostUnits} 件以預估成本計` : "營收 − 銷貨成本 − 其他費用"} href="/reports" />
+          <Stat label="收入（已賣出）" value={<Twd v={d.month.revenue} />} note="依出貨認列，含運費收入" href="/reports" />
+          <Stat label="賺多少（已賣出）" value={<Twd v={d.month.realizedProfit} />} note={d.month.estimatedCostUnits > 0 ? `${d.month.estimatedCostUnits} 件以預估成本計` : "營收 − 銷貨成本 − 其他費用"} href="/reports" />
           <Stat label="本月收款" value={<Twd v={d.month.cashIn} />} note={`退款 ${d.month.cashOut.toLocaleString()} 元`} />
           <Stat label="本月新訂單金額" value={<Twd v={d.month.bookedSales} />} note="已確認訂單的應收" />
         </div>
@@ -146,7 +147,7 @@ export default async function Home() {
         <Stat label="待收款" value={<Twd v={d.snap.balance} />} href="/payments" tone={d.snap.balance > 0 ? "warn" : undefined} />
         <Stat label="待退款" value={<Twd v={d.snap.refundDue} />} note={d.snap.refundPending > 0 ? `其中 ${d.snap.refundPending.toLocaleString()} 元處理中` : undefined} href="/payments?tab=refunds" tone={d.snap.refundDue > 0 ? "bad" : undefined} />
         <Stat label="待出貨件數" value={d.toShipQty} href="/shipping" />
-        <Stat label="預估未實現利潤" value={<Twd v={un.profit} />} note={un.unknownCostUnits > 0 ? `${un.unknownCostUnits} 件沒有預估成本` : "未出貨部分，以預估成本計"} href="/reports" />
+        <Stat label="還沒賣的預估會賺" value={<Twd v={un.profit} />} note={un.unknownCostUnits > 0 ? `${un.unknownCostUnits} 件沒有預估成本` : "未出貨部分，以預估成本計"} href="/reports" />
       </div>
 
         </>

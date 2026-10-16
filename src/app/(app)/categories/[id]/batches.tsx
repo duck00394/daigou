@@ -86,7 +86,7 @@ export async function CategoryBatches({ categoryId, view, owner = "" }: { catego
             <div className="num text-[20px] font-semibold text-good" data-testid="cat-paid">{formatTwd(o.total.paidTwd)}</div>
           </div>
         </div>
-        <p className="mt-1 text-[12px] text-mute">{o.total.batches} 團・{o.total.qty} 件・已到 {o.total.received}・還沒到 {o.total.outstanding}{o.total.estimated ? "・金額含暫估" : ""}</p>
+        <p className="mt-1 text-[12px] text-mute">{o.total.batches} 團・{o.total.qty} 件・已到 {o.total.received}・還沒到 {o.total.outstanding}{o.total.estimated ? "・金額有價格還沒確定" : ""}</p>
 
         <div className="mt-3 space-y-3">
           {groups.filter((g) => !owner || g.key === owner).map((g) => (
@@ -149,7 +149,7 @@ export async function CategoryBatches({ categoryId, view, owner = "" }: { catego
                 </div>
                 <div className="mt-1.5 grid grid-cols-3 gap-1 text-center text-[13px]">
                   <div className="rounded-lg bg-[#fafbfc] py-1"><div className="text-[11px] text-mute">到貨</div><span className="num">{b.received}／{b.qty}</span></div>
-                  <div className="rounded-lg bg-[#fafbfc] py-1"><div className="text-[11px] text-mute">這團總額{b.estimated || !b.feesRecorded ? "（暫估）" : ""}</div><span className="num">{formatTwd(b.totalTwd)}</span></div>
+                  <div className="rounded-lg bg-[#fafbfc] py-1"><div className="text-[11px] text-mute">這團總額{b.estimated || !b.feesRecorded ? "（價格還沒確定）" : ""}</div><span className="num">{formatTwd(b.totalTwd)}</span></div>
                   <div className="rounded-lg bg-[#fafbfc] py-1"><div className="text-[11px] text-mute">已付</div><span className="num">{sums(b.paid) || "—"}</span></div>
                 </div>
                 {Object.keys(b.pending).length > 0 && <div className="mt-1 text-[12px] text-warn">待付款 {sums(b.pending)}</div>}

@@ -6,7 +6,9 @@ import { PageHeader, Section, Jpy, StatusBadge, Empty, LinkButton } from "@/comp
 import { AddCost, DeleteCost, CancelBatch } from "./parts";
 import { type EditItem } from "./bulk-edit";
 import { BatchInfoCard, CopyItemsButton } from "./manage";
-import { ItemsPanel, PayOffButton } from "./items";
+import { ItemsPanel, PayOffButton, ReceiveAllButton } from "./items";
+import Link from "next/link";
+import { OwnerBadge } from "@/components/owner-badge";
 import { batchPaySummary } from "@/server/services/batch-ops";
 import { getMe } from "@/server/me";
 import { listShippingMethods } from "@/server/services/shipping-methods";
@@ -112,9 +114,9 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
   return (
     <div className="space-y-4">
       <PageHeader
-        title={`${b.code} ${b.name}`}
+        title={b.name}
         back={{ href: "/inventory?tab=batches", label: "採購團" }}
-        sub={<span className="flex flex-wrap items-center gap-2"><StatusBadge map={batchStageLabel} value={batchStage(b)} />{supplierName && <span>供應商：{supplierName}</span>}{b.category && <a href={`/categories/${b.category.id}`} className="text-ai hover:underline">{b.category.name}</a>}</span>}
+        sub={<span className="flex flex-wrap items-center gap-2"><OwnerBadge k={b.ownership === "JOINT" ? "joint" : b.orderedById} name={b.ownership === "JOINT" ? "合資" : opName(b.orderedById)} ids={ops.map((o) => o.id)} /><StatusBadge map={batchStageLabel} value={batchStage(b)} />{b.category && <a href={`/categories/${b.category.id}`} className="text-ai hover:underline">{b.category.name}</a>}{supplierName && supplierName !== b.name && <span>代購：{supplierName}</span>}<span className="text-[12px] text-mute">{b.code}</span></span>}
         actions={<><LinkButton href={`/purchase${b.categoryId ? `?categoryId=${b.categoryId}` : ""}`}>同活動再開一團</LinkButton>{open && <CancelBatch id={b.id} />}</>}
       />
       <section className="rounded-xl border border-line bg-card p-4" aria-label="這團金額">
@@ -123,19 +125,19 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
           <div><div className="text-[12px] text-mute">已付</div><div className="num text-[20px] font-semibold text-good">{formatTwd(pay.paidTwd)}</div></div>
           <div><div className="text-[12px] text-mute">還要付</div><div className={`num text-[20px] font-semibold ${pay.dueTwd ? "text-bad" : ""}`} data-testid="batch-due">{formatTwd(pay.dueTwd)}</div></div>
         </div>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[13px] text-mute">
-          <span>{totalQty} 件・已到 {received}{feeTotal > 0 ? `・含運費等 ${formatTwd(feeTotal)}` : ""}</span>
-          {open && <PayOffButton batchId={b.id} due={pay.dueTwd} operators={ops.filter((o) => o.active)} defaultPayer={b.ownership === "JOINT" ? me : (b.orderedById ?? me)} />}
-        </div>
+        <div className="mt-1 text-[13px] text-mute">{totalQty} 件・已到 {received}{feeTotal > 0 ? `・含運費等 ${formatTwd(feeTotal)}` : ""}</div>
+        {open && (
+          <div className="mt-3 grid grid-cols-3 gap-2" aria-label="常用動作">
+            <ReceiveAllButton batchId={b.id} outstanding={Math.max(0, totalQty - received)} operators={ops.filter((o) => o.active)} defaultReceiver={b.receivingResponsibleById ?? b.orderedById ?? null} />
+            {pay.dueTwd > 0 ? <PayOffButton big batchId={b.id} due={pay.dueTwd} operators={ops.filter((o) => o.active)} defaultPayer={b.ownership === "JOINT" ? me : (b.orderedById ?? me)} /> : <span className="flex items-center justify-center rounded-lg bg-good-soft px-3 py-2 text-[14px] text-good">已付清</span>}
+            <Link href={`/inventory/batches/${b.id}?bulk=1#items`} className="flex items-center justify-center rounded-lg border border-line bg-white px-3 py-2 text-[14px] hover:border-ai">＋ 加商品</Link>
+          </div>
+        )}
       </section>
 
       <ProgressBar batchId={b.id} progress={b.progress} stage={batchStage(b)} editable={b.status !== "CANCELLED"} />
 
-      <nav aria-label="跳到段落" className="no-print sticky top-[49px] z-30 -mx-3 flex gap-1.5 overflow-x-auto bg-paper/95 px-3 py-2 backdrop-blur sm:-mx-5 sm:px-5 md:top-0">
-        {([["items", `品項 ${editItems.length}`], ["receiving", `收貨 ${b.receivings.length}`], ["payments", `付款 ${payments.filter((p) => p.status !== "VOIDED").length}`], ["people", "負責人"], ["costs", `費用 ${b.costs.length}`], ["info", "基本資料"]] as const).map(([id, label]) => (
-          <a key={id} href={`#${id}`} className="shrink-0 rounded-full border border-line bg-white px-3 py-1.5 text-sm text-ink-2 hover:border-ai">{label}</a>
-        ))}
-      </nav>
+
 
 
 
@@ -156,7 +158,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Section id="payments" title={`供應商付款（${payments.filter((p) => p.status !== "VOIDED").length}）`} pad={false}>
+        <Section id="payments" title={`付款（${payments.filter((p) => p.status !== "VOIDED").length}）`} pad={false}>
           <SupplierPayments
             batchId={b.id}
             operators={ops}
@@ -183,16 +185,6 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
           />
         </Section>
       </div>
-
-      <Section title="負責人" id="people">
-        <ResponsibilityCard
-          batchId={b.id}
-          operators={ops}
-          editable={open}
-          jointShares={b.ownership === "JOINT" ? sharePercents((await tx((t) => jointWeights(t, [b.id]))).get(b.id)).map((x) => ({ name: ops.find((o) => o.id === x.key)?.name ?? "未指定", percent: x.percent })) : undefined}
-          value={{ ownership: b.ownership, orderedById: b.orderedById, paymentResponsibleById: b.paymentResponsibleById, receivingResponsibleById: b.receivingResponsibleById, responsibilityNote: b.responsibilityNote }}
-        />
-      </Section>
 
       <Section id="costs" title="運費・代購費" pad={false} actions={open && <AddCost batchId={b.id} items={b.items.filter((i) => i.qty - i.cancelledQty > 0).map((i) => ({ id: i.id, name: i.product.name }))} operators={ops.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} owner={{ id: b.ownership === "JOINT" ? null : b.orderedById, label: ownerLabel }} presets={shippingPresets} />}>
         {b.costs.length === 0 ? (
@@ -224,6 +216,22 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
           </ul>
         )}
       </Section>
+      <details className="group rounded-xl border border-line bg-card" id="more">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-[15px] font-semibold [&::-webkit-details-marker]:hidden">
+          <span><span className="mr-1 inline-block text-mute transition-transform group-open:rotate-90">▸</span>負責人・基本資料</span>
+          <span className="text-[13px] font-normal text-mute group-open:hidden">點開修改</span>
+        </summary>
+        <div className="space-y-4 border-t border-line-2 p-3">
+      <Section title="負責人" id="people">
+        <ResponsibilityCard
+          batchId={b.id}
+          operators={ops}
+          editable={open}
+          jointShares={b.ownership === "JOINT" ? sharePercents((await tx((t) => jointWeights(t, [b.id]))).get(b.id)).map((x) => ({ name: ops.find((o) => o.id === x.key)?.name ?? "未指定", percent: x.percent })) : undefined}
+          value={{ ownership: b.ownership, orderedById: b.orderedById, paymentResponsibleById: b.paymentResponsibleById, receivingResponsibleById: b.receivingResponsibleById, responsibilityNote: b.responsibilityNote }}
+        />
+      </Section>
+
       <Section id="info" title="基本資料">
         <BatchInfoCard
           batchId={b.id}
@@ -245,6 +253,8 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
           }}
         />
       </Section>
+        </div>
+      </details>
     </div>
   );
 }

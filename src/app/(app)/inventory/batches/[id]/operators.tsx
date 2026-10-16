@@ -133,38 +133,51 @@ const METHODS = ["信用卡", "銀行轉帳", "現金", "PayPay", "代購平台�
 
 function PaymentFields({ d, set, operators, edit }: { d: PayDraft; set: (p: Partial<PayDraft>) => void; operators: OperatorOption[]; edit?: boolean }) {
   const chip = (on: boolean) => `min-h-10 rounded-lg border px-3 py-1.5 text-[15px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white"}`;
+  const main: [string, string][] = [["DEPOSIT", "訂金"], ["BALANCE", "尾款"], ["FULL", "全額"]];
+  // 平常只要填三樣：多少錢、誰付的、這筆是訂金或尾款；其他收進「更多」
   return (
     <div className="space-y-3">
-      <OperatorPicker label="實際付款人" operators={operators} value={d.paidById} onChange={(v) => set({ paidById: v })} hint="真正付出這筆錢的人（可與主要付款負責人不同）" />
-      <div className="grid grid-cols-[1fr_auto] items-end gap-2">
-        <TextField label="付款金額" inputMode="numeric" value={d.amount} onChange={(e) => set({ amount: e.target.value })} placeholder="整數" />
-        <div role="radiogroup" aria-label="幣別" className="flex gap-1">
-          {(["JPY", "TWD"] as const).map((c) => (
-            <button key={c} type="button" role="radio" aria-checked={d.currency === c} className={chip(d.currency === c)} onClick={() => set({ currency: c })}>{currencyName[c]}</button>
+      <TextField label="多少錢" inputMode="numeric" value={d.amount} onChange={(e) => set({ amount: e.target.value })} placeholder={d.currency === "JPY" ? "日幣，整數" : "台幣，整數"} />
+      <OperatorPicker label="誰付的" operators={operators} value={d.paidById} onChange={(v) => set({ paidById: v })} />
+      <div>
+        <div className="mb-1 text-[13px] font-medium text-ink-2">這筆是</div>
+        <div role="radiogroup" aria-label="這筆是" className="flex flex-wrap gap-1">
+          {main.map(([k, v]) => (
+            <button key={k} type="button" role="radio" aria-checked={d.purpose === k} className={chip(d.purpose === k)} onClick={() => set({ purpose: d.purpose === k ? null : k })}>{v}</button>
           ))}
         </div>
       </div>
-      <div role="radiogroup" aria-label="用途" className="flex flex-wrap gap-1">
-        {Object.entries(paymentPurpose).map(([k, v]) => (
-          <button key={k} type="button" role="radio" aria-checked={d.purpose === k} className={chip(d.purpose === k)} onClick={() => set({ purpose: d.purpose === k ? null : k })}>{v}</button>
-        ))}
-      </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <TextField label="付款日期" type="datetime-local" value={d.paidAt} onChange={(e) => set({ paidAt: e.target.value })} />
-        <div>
-          <label className="mb-1 block text-[13px] font-medium text-ink-2" htmlFor="pay-method">付款方式</label>
-          <input id="pay-method" list="pay-methods" className={inputCls} value={d.method} onChange={(e) => set({ method: e.target.value })} placeholder="例：信用卡" />
-          <datalist id="pay-methods">{METHODS.map((m) => <option key={m} value={m} />)}</datalist>
+      <details className="rounded-lg border border-line-2 px-3 py-2" open={edit || d.currency === "JPY" || d.status === "PENDING"}>
+        <summary className="cursor-pointer select-none text-[13px] text-mute">更多（日期、付款方式、編號、日幣、還沒付、備註）</summary>
+        <div className="mt-2 space-y-3">
+          <div role="radiogroup" aria-label="幣別" className="flex gap-1">
+            {(["TWD", "JPY"] as const).map((c) => (
+              <button key={c} type="button" role="radio" aria-checked={d.currency === c} className={chip(d.currency === c)} onClick={() => set({ currency: c })}>{currencyName[c]}</button>
+            ))}
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <TextField label="付款日期" type="datetime-local" value={d.paidAt} onChange={(e) => set({ paidAt: e.target.value })} />
+            <div>
+              <label className="mb-1 block text-[13px] font-medium text-ink-2" htmlFor="pay-method">付款方式</label>
+              <input id="pay-method" list="pay-methods" className={inputCls} value={d.method} onChange={(e) => set({ method: e.target.value })} placeholder="例：信用卡" />
+              <datalist id="pay-methods">{METHODS.map((m) => <option key={m} value={m} />)}</datalist>
+            </div>
+            {d.currency === "JPY" && <TextField label="這筆實際匯率（選填）" inputMode="decimal" value={d.rate} onChange={(e) => set({ rate: e.target.value })} hint="有填才會換算台幣；不填只保留日幣金額" />}
+            <TextField label="交易參考編號（選填）" value={d.reference} onChange={(e) => set({ reference: e.target.value })} />
+          </div>
+          <div role="radiogroup" aria-label="付款狀態" className="flex gap-1">
+            {(["PAID", "PENDING"] as const).map((st) => (
+              <button key={st} type="button" role="radio" aria-checked={d.status === st} className={chip(d.status === st)} onClick={() => set({ status: st })}>{supplierPaymentStatus[st][0]}</button>
+            ))}
+          </div>
+          <div role="radiogroup" aria-label="其他用途" className="flex flex-wrap gap-1">
+            {(["FEE", "OTHER"] as const).map((k) => (
+              <button key={k} type="button" role="radio" aria-checked={d.purpose === k} className={chip(d.purpose === k)} onClick={() => set({ purpose: d.purpose === k ? null : k })}>{paymentPurpose[k]}</button>
+            ))}
+          </div>
+          <TextField label="備註" value={d.note} onChange={(e) => set({ note: e.target.value })} />
         </div>
-        {d.currency === "JPY" && <TextField label="這筆實際匯率（選填）" inputMode="decimal" value={d.rate} onChange={(e) => set({ rate: e.target.value })} hint="有填才會換算台幣；不填只保留日幣金額" />}
-        <TextField label="交易參考編號（選填）" value={d.reference} onChange={(e) => set({ reference: e.target.value })} />
-      </div>
-      <div role="radiogroup" aria-label="付款狀態" className="flex gap-1">
-        {(["PAID", "PENDING"] as const).map((s) => (
-          <button key={s} type="button" role="radio" aria-checked={d.status === s} className={chip(d.status === s)} onClick={() => set({ status: s })}>{supplierPaymentStatus[s][0]}</button>
-        ))}
-      </div>
-      <TextField label="備註" value={d.note} onChange={(e) => set({ note: e.target.value })} />
+      </details>
       {edit && <TextField label="修改原因（會記錄在異動紀錄）" value={d.reason} onChange={(e) => set({ reason: e.target.value })} />}
     </div>
   );

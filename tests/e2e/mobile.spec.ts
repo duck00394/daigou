@@ -2,7 +2,7 @@
 import { test, expect } from "@playwright/test";
 import { login } from "./helpers";
 
-const PAGES = ["/", "/purchase", "/inventory?tab=stock", "/orders", "/paste", "/import", "/buyers", "/products", "/categories", "/inventory", "/payments", "/shipping", "/reports", "/settings", "/tags", "/groupbuys", "/sales", "/inventory?tab=batches", "/suppliers", "/operators"];
+const PAGES = ["/", "/search?q=吉伊", "/purchase", "/inventory?tab=stock", "/orders", "/paste", "/import", "/buyers", "/products", "/categories", "/inventory", "/payments", "/shipping", "/reports", "/settings", "/tags", "/groupbuys", "/sales", "/inventory?tab=batches", "/suppliers", "/operators"];
 
 test("手機版主要頁面沒有整頁橫向捲動，底部導覽可用", async ({ page }) => {
   await login(page);
@@ -40,6 +40,24 @@ test("手機版主要頁面沒有整頁橫向捲動，底部導覽可用", async
   await expect(bar.getByRole("link", { name: "庫存" })).toHaveAttribute("aria-current", "page");
   await bar.getByRole("link", { name: "活動" }).click();
   await expect(page).toHaveURL(/\/categories$/);
+  // 全站搜尋
+  await page.getByRole("link", { name: "搜尋" }).first().click();
+  await page.getByLabel("搜尋商品").fill("吉伊");
+  await page.getByLabel("搜尋商品").press("Enter");
+  await expect(page.getByTestId("search-row").first()).toContainText("庫存");
+  // 設定「我有在接單」：關掉就藏起接單功能，打開就回來
+  await page.goto("/settings");
+  const sw = page.getByRole("switch", { name: "我有在接單" });
+  if ((await sw.getAttribute("aria-checked")) === "true") {
+    await sw.click();
+    await expect(sw).toHaveAttribute("aria-checked", "false");
+  }
+  await page.getByRole("button", { name: "全部功能" }).click();
+  await expect(page.getByRole("link", { name: "貼上加單" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.goto("/settings");
+  await page.getByRole("switch", { name: "我有在接單" }).click();
+  await expect(page.getByRole("switch", { name: "我有在接單" })).toHaveAttribute("aria-checked", "true");
   // 接單、設定等放在「全部功能」
   await page.getByRole("button", { name: "全部功能" }).click();
   await page.getByRole("link", { name: "貼上加單" }).click();

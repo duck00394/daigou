@@ -1,6 +1,7 @@
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
-import { getDefaultRateMicro } from "@/server/services/settings";
+import { getDefaultRateMicro, getOrdersEnabled } from "@/server/services/settings";
+import { OrdersToggle } from "./orders-toggle";
 import { businessDataCount } from "@/server/services/backup";
 import { listOperators } from "@/server/services/operators";
 import { getMe } from "@/server/me";
@@ -40,11 +41,15 @@ export default async function Settings() {
     tx((t) => listOperators(t, { includeInactive: true })),
   ]);
   const shipping = await listShippingMethods(prisma, { includeInactive: true });
+  const ordersOn = await getOrdersEnabled(prisma);
   const me = await getMe();
   return (
     <div className="space-y-4">
       <PageHeader title="匯出、備份與設定" />
       <div className="grid gap-4 lg:grid-cols-2">
+        <Section title="功能">
+          <OrdersToggle on={ordersOn} />
+        </Section>
         <Section title="常用運費方式">
           <ShippingMethods rows={shipping.map((x) => ({ id: x.id, name: x.name, kind: x.kind, currency: x.currency, amount: x.amount, active: x.active }))} />
         </Section>

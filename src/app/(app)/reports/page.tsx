@@ -36,10 +36,11 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
   return (
     <div className="space-y-4">
       <PageHeader
-        title="成本與利潤"
-        sub="營收依出貨認列；收款是現金流，與營收分開；利潤 = 已實現營收 − 銷貨成本 − 其他費用。"
+        title="完整報表"
+        sub="收入算在賣出（出貨）那天；收到的錢另外算。賺多少 ＝ 收入 − 賣掉的東西成本 − 其他費用。"
         actions={
           <form method="get" className="flex items-center gap-2">
+            <Link href="/operators" className="text-sm text-ai">經營者對帳 ›</Link>
             <select name="ym" defaultValue={ym} className="rounded-lg border border-line bg-white px-2 py-2" aria-label="月份">
               {months().map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
@@ -48,13 +49,13 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
         }
       />
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <Stat label="已實現營收" value={<Twd v={r.revenue} />} note={`其中運費收入 ${r.shippingIncome.toLocaleString()} 元`} />
-        <Stat label="銷貨成本" value={<Twd v={r.cogs} />} note={r.estimatedCostUnits > 0 ? `${r.estimatedCostUnits} 件以預估成本計` : "依採購團實際成本"} tone={r.estimatedCostUnits > 0 ? "warn" : undefined} />
+        <Stat label="收入（已賣出）" value={<Twd v={r.revenue} />} note={`其中運費收入 ${r.shippingIncome.toLocaleString()} 元`} />
+        <Stat label="賣掉的東西成本" value={<Twd v={r.cogs} />} note={r.estimatedCostUnits > 0 ? `${r.estimatedCostUnits} 件以預估成本計` : "依採購團實際成本"} tone={r.estimatedCostUnits > 0 ? "warn" : undefined} />
         <Stat label="其他費用" value={<Twd v={r.expenses} />} note="含採購團裡沒攤進商品的運費等" />
-        <Stat label="已實現利潤" value={<Twd v={r.realizedProfit} />} note={`毛利率 ${margin(r.revenue, r.cogs)}`} />
+        <Stat label="賺多少（已賣出）" value={<Twd v={r.realizedProfit} />} note={`毛利率 ${margin(r.revenue, r.cogs)}`} />
         <Stat label="本月新訂單金額" value={<Twd v={r.bookedSales} />} note="以訂單日期計的有效應收" />
         <Stat label="本月收款" value={<Twd v={r.cashIn} />} note={`本月退款 ${r.cashOut.toLocaleString()} 元`} />
-        <Stat label="預估未實現利潤" value={<Twd v={un.profit} />} note={`未出貨營收 ${un.revenue.toLocaleString()} − 預估成本 ${un.cost.toLocaleString()}${un.unknownCostUnits ? `（${un.unknownCostUnits} 件無成本）` : ""}`} />
+        <Stat label="還沒賣的預估會賺" value={<Twd v={un.profit} />} note={`未出貨營收 ${un.revenue.toLocaleString()} − 預估成本 ${un.cost.toLocaleString()}${un.unknownCostUnits ? `（${un.unknownCostUnits} 件無成本）` : ""}`} />
         <Stat label="目前待收款" value={<Twd v={snap.balance} />} note={`應退 ${snap.refundDue.toLocaleString()} 元，處理中 ${snap.refundPending.toLocaleString()} 元`} />
       </div>
 

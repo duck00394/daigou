@@ -84,7 +84,7 @@ export default async function Products({ searchParams }: { searchParams: Promise
                 <th className="text-right">日幣官方價</th>
                 <th className="text-right">代購售價</th>
                 <th className="text-right">預估成本</th>
-                <th className="text-right">實際在庫</th>
+                <th className="text-right">手上有</th>
                 <th className="text-right">可用</th>
                 <th className="text-right">待到貨</th>
                 <th className="text-right">有效訂購</th>

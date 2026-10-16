@@ -291,7 +291,7 @@ export function KeepButton({ productId, name, available, kept, small, tiny, owne
           <input aria-label="數量" inputMode="numeric" className={`${inputCls} num w-20 text-center text-lg`} value={n} onChange={(e) => setN(Number(e.target.value.replace(/\D/g, "")) || 0)} />
           <Button onClick={() => setN((x) => Math.min(max, x + 1))} aria-label="增加">＋</Button>
         </div>
-        <p className="mt-3 text-[13px] text-mute">自留的商品不會算進可售庫存，也不會被分配給買家；原本的採購成本來源會保留。已保留給買家的數量不能自留。</p>
+        <p className="mt-3 text-[13px] text-mute">自留的商品不會算進可售庫存，也不會被分配給買家；原本的採購成本來源會保留。留給買家的數量不能自留。</p>
       </Modal>
     </>
   );
