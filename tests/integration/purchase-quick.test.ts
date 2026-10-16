@@ -5,6 +5,7 @@ import { actor, resetDb, seedBasics } from "../helpers";
 import { ensureDefaultOperators } from "@/server/services/operators";
 import { addBatchItem, cancelBatch, createBatch, deleteBatchItem } from "@/server/services/purchase";
 import { keepStock } from "@/server/services/inventory";
+import { quickSale, voidQuickSale } from "@/server/services/quick-sale";
 import { createProduct } from "@/server/services/catalog";
 import { receiveAll } from "@/server/services/receiving";
 import { listShippingMethods, saveShippingMethod } from "@/server/services/shipping-methods";
@@ -80,8 +81,22 @@ describe("手誤：已經收進庫存的也能刪／取消（東西還沒動過�
     expect(r.undone).toBe(1);
     expect((await tx((t) => inventorySummary(t, [pa.id]))).get(pa.id)?.onHand ?? 0).toBe(before);
     expect(await prisma.receivingLine.count({ where: { batchItemId: wrong.id } })).toBe(0);
+    // 自留過的：刪除時自留一起拿掉
     await tx((t) => keepStock(t, actor, { productId: pb.id, delta: 1, owner: "op_a" }));
-    await expect(tx((t) => deleteBatchItem(t, actor, kept.id))).rejects.toThrow("已經賣出、自留");
+    expect(await tx((t) => deleteBatchItem(t, actor, kept.id))).toEqual({ undone: 1, kept: 1 });
+    expect((await tx((t) => inventorySummary(t, [pb.id]))).get(pb.id)?.kept ?? 0).toBe(0);
+  });
+
+  it("賣出的要先作廢才能刪；作廢後就可以刪，出售紀錄留著", async () => {
+    const pc = await tx((t) => createProduct(t, actor, { name: "手誤商品 D" }));
+    const b = await tx((t) => createBatch(t, actor, { name: "賣錯團", supplier: "常設店", orderedById: "op_a" }));
+    const it = await tx((t) => addBatchItem(t, actor, b.id, { productId: pc.id, qty: 1, unitCost: 100, currency: "TWD" }));
+    await tx((t) => receiveAll(t, actor, b.id, { receivedById: null }));
+    const sale = await tx((t) => quickSale(t, actor, { productId: pc.id, qty: 1, unitPrice: 300, idemKey: "undo-sale-1" }));
+    await expect(tx((t) => deleteBatchItem(t, actor, it.id))).rejects.toThrow("已經賣出 1 件");
+    await tx((t) => voidQuickSale(t, actor, sale.orderId, "記錯了"));
+    expect(await tx((t) => deleteBatchItem(t, actor, it.id))).toEqual({ undone: 1, kept: 0 });
+    expect((await tx((t) => inventorySummary(t, [pc.id]))).get(pc.id)?.onHand ?? 0).toBe(0);
   });
 
   it("取消已收貨的團：還沒動過的庫存一起拿掉", async () => {

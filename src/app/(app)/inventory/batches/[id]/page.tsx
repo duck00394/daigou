@@ -28,7 +28,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
     include: {
       supplierRef: true,
       category: { select: { id: true, name: true } },
-      items: { orderBy: { createdAt: "asc" }, include: { product: true, movements: { select: { kind: true, onHandDelta: true } } } },
+      items: { orderBy: { createdAt: "asc" }, include: { product: true, movements: { select: { kind: true, onHandDelta: true, reservedDelta: true } } } },
       costs: { orderBy: { createdAt: "asc" }, include: { allocations: true } },
       supplierPayments: { orderBy: [{ paidAt: "asc" }, { createdAt: "asc" }] },
       receivings: { orderBy: [{ receivedAt: "desc" }, { createdAt: "desc" }], include: { lines: { include: { batchItem: { include: { product: { select: { name: true } } } } } } } },
@@ -98,7 +98,14 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       salePriceTwd: i.salePriceTwd,
       goodsTwd: l.goodsTwd,
       feesTwd: l.feesTwd,
-      canDelete: i.movements.every((x) => x.kind === "RECEIVE") && m.dependentIfRemoved === 0,
+      ...(() => {
+        // 手誤刪除：自留的會一起拿掉；還有效的出售、留給買家的要先處理
+        const sold = -i.movements.filter((x) => x.kind === "SHIP").reduce((a, x) => a + x.onHandDelta, 0) || 0;
+        const reserved = i.movements.reduce((a, x) => a + x.reservedDelta, 0);
+        const kept = -i.movements.filter((x) => x.kind === "KEEP").reduce((a, x) => a + x.onHandDelta, 0) || 0;
+        const blocked = sold > 0 ? `已經賣出 ${sold} 件，先到「賺多少」把那筆出售作廢才能刪` : reserved > 0 ? `有 ${reserved} 件留給買家，先取消保留才能刪` : m.dependentIfRemoved > 0 ? `有 ${m.dependentIfRemoved} 件買家訂購要靠這批，不能刪` : null;
+        return { canDelete: !blocked, deleteBlocked: blocked, kept };
+      })(),
       cancelledQty: i.cancelledQty,
       cancelReason: i.cancelReason,
     });

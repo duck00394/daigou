@@ -25,6 +25,8 @@ export type EditItem = {
   goodsTwd: number;
   feesTwd: number;
   canDelete: boolean;
+  deleteBlocked?: string | null; // 不能刪的原因（白話）
+  kept?: number; // 這批裡已自留的件數（刪除時一起拿掉）
   cancelledQty: number;
   cancelReason: string | null;
 };
@@ -151,8 +153,9 @@ export function BulkEditTable({ batchId, items, editable }: { batchId: string; i
               </div>
               <div role="cell" className={`col-span-2 flex-wrap justify-end gap-1 md:col-span-1 md:flex md:pt-1 ${more[i.id] ? "flex" : "hidden"}`}>
                 {editable && <CancelItemButton itemId={i.id} name={i.name} max={i.qty - i.received} />}
+                {editable && !i.canDelete && i.deleteBlocked && <span className="w-full text-right text-[12px] text-mute">不能刪：{i.deleteBlocked}</span>}
                 {editable && i.canDelete && (
-                  <ConfirmButton small variant="danger" label="刪除" title={`刪除「${i.name}」`} message={i.received > 0 ? `已經收進庫存的 ${i.received} 件會一起從庫存拿掉（還沒賣、沒自留才可以刪）。` : "這個品項還沒到貨，刪掉就不見了。"} confirmLabel="刪除品項" onConfirm={() => run(() => deleteBatchItemAction(i.id), { success: "已刪除品項" })} />
+                  <ConfirmButton small variant="danger" label="刪除" title={`刪除「${i.name}」`} message={i.received > 0 ? `已經收進庫存的 ${i.received} 件會一起從庫存拿掉${i.kept ? `（其中自留的 ${i.kept} 件也會一起拿掉）` : ""}。` : "這個品項還沒到貨，刪掉就不見了。"} confirmLabel="刪除品項" onConfirm={() => run(() => deleteBatchItemAction(i.id), { success: "已刪除品項" })} />
                 )}
               </div>
               {err && <p role="alert" className="col-span-2 text-[13px] text-bad md:col-span-9">{err}</p>}

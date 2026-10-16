@@ -237,20 +237,30 @@ export async function updateBatchItem(
 
 /** 刪除採購品項：只有沒有到貨紀錄、也沒有買家依賴時才可以 */
 /**
- * 撤回這個品項的收貨：只有「收進來之後還沒賣、沒自留、沒保留給買家、沒調整過」才可以。
- * 刪掉入庫流水與收貨明細（收貨紀錄空了也一起刪），庫存就回到沒收過的樣子。回傳撤回的件數。
+ * 撤回這個品項的收貨（手誤時用）：
+ * - 自留、盤點調整：跟著一起拿掉
+ * - 已作廢的出售、已取消的保留（一來一回、合計為 0）：保留紀錄，只是不再算在這批
+ * - 還有效的出售、還留給買家的：不能撤回，要先作廢那筆出售或取消保留
+ * 回傳撤回的件數與一起拿掉的自留件數。
  */
 async function undoItemReceipts(t: Tx, itemId: string, name: string) {
-  const moves = await t.inventoryMovement.findMany({ where: { purchaseBatchItemId: itemId }, select: { id: true, kind: true, onHandDelta: true, receivingLineId: true } });
-  if (moves.some((m) => m.kind !== "RECEIVE")) throw new BizError(`「${name}」入庫後已經賣出、自留或留給買家，不能刪除；請先作廢那些紀錄，或改用「砍單」`);
-  if (!moves.length) return 0;
-  await t.inventoryMovement.deleteMany({ where: { id: { in: moves.map((m) => m.id) } } });
+  const moves = await t.inventoryMovement.findMany({ where: { purchaseBatchItemId: itemId }, select: { id: true, kind: true, onHandDelta: true, reservedDelta: true } });
+  if (!moves.length) return { undone: 0, kept: 0 };
+  const sold = -moves.filter((m) => m.kind === "SHIP").reduce((s, m) => s + m.onHandDelta, 0) || 0;
+  const reserved = moves.reduce((s, m) => s + m.reservedDelta, 0);
+  if (sold > 0) throw new BizError(`「${name}」已經賣出 ${sold} 件。如果是記錯，先到「賺多少」把那筆出售作廢，再回來刪`);
+  if (reserved > 0) throw new BizError(`「${name}」有 ${reserved} 件留給買家，請先到訂單取消保留，再回來刪`);
+  const kept = -moves.filter((m) => m.kind === "KEEP").reduce((s, m) => s + m.onHandDelta, 0) || 0;
+  const undone = moves.filter((m) => m.kind === "RECEIVE").reduce((s, m) => s + m.onHandDelta, 0);
+  // 自留、盤點、入庫：一起刪；已作廢的出售與已取消的保留（合計 0）：留著紀錄，只是不再掛在這批
+  await t.inventoryMovement.deleteMany({ where: { id: { in: moves.filter((m) => m.kind === "RECEIVE" || m.kind === "KEEP" || m.kind === "ADJUST").map((m) => m.id) } } });
+  await t.inventoryMovement.updateMany({ where: { id: { in: moves.filter((m) => m.kind === "SHIP" || m.kind === "RESERVE" || m.kind === "UNRESERVE").map((m) => m.id) } }, data: { purchaseBatchItemId: null } });
   const lines = await t.receivingLine.findMany({ where: { batchItemId: itemId }, select: { id: true, recordId: true } });
   await t.receivingLine.deleteMany({ where: { batchItemId: itemId } });
   for (const recordId of new Set(lines.map((l) => l.recordId))) {
     if ((await t.receivingLine.count({ where: { recordId } })) === 0) await t.receivingRecord.delete({ where: { id: recordId } });
   }
-  return moves.reduce((s, m) => s + m.onHandDelta, 0);
+  return { undone, kept };
 }
 
 export async function deleteBatchItem(t: Tx, actor: Actor, itemId: string) {
@@ -258,13 +268,13 @@ export async function deleteBatchItem(t: Tx, actor: Actor, itemId: string) {
   await lockRows(t, "PurchaseBatch", [bi.batchId]);
   const { dependentIfRemoved } = await minCommittedQty(t, itemId);
   if (dependentIfRemoved > 0) throw new BizError(`「${bi.product.name}」有 ${dependentIfRemoved} 件買家訂購需要靠這批到貨，不能刪除`);
-  const undone = await undoItemReceipts(t, itemId, bi.product.name);
+  const { undone, kept } = await undoItemReceipts(t, itemId, bi.product.name);
   await t.costAllocation.deleteMany({ where: { batchItemId: itemId } });
   await t.purchaseBatchItem.delete({ where: { id: itemId } });
   await reallocateBatch(t, bi.batchId);
   await refreshBatchStatusById(t, bi.batchId);
-  await audit(t, actor, "batch.deleteItem", "PurchaseBatch", bi.batchId, { itemId, productId: bi.productId, qty: bi.qty, estUnitCost: bi.estUnitCost, currency: bi.currency, undoneReceived: undone });
-  return { undone };
+  await audit(t, actor, "batch.deleteItem", "PurchaseBatch", bi.batchId, { itemId, productId: bi.productId, qty: bi.qty, estUnitCost: bi.estUnitCost, currency: bi.currency, undoneReceived: undone, keptRemoved: kept });
+  return { undone, kept };
 }
 
 /** 採購品項用於成本計算的單價：有實際單價用實際，否則用預估 */
@@ -394,7 +404,7 @@ export async function cancelBatch(t: Tx, actor: Actor, batchId: string) {
     const { dependentIfRemoved } = await minCommittedQty(t, i.id);
     if (dependentIfRemoved > 0) throw new BizError(`「${i.product.name}」有買家訂購需要靠這團，不能取消`);
   }
-  for (const i of b.items) undone += await undoItemReceipts(t, i.id, i.product.name);
+  for (const i of b.items) undone += (await undoItemReceipts(t, i.id, i.product.name)).undone;
   await t.purchaseBatch.update({ where: { id: batchId }, data: { status: "CANCELLED" } });
   await audit(t, actor, "batch.cancel", "PurchaseBatch", batchId, { undoneReceived: undone });
   return { undone };
