@@ -179,6 +179,7 @@ model Product {
   seriesId            String?
   seriesRef           Series?             @relation(fields: [seriesId], references: [id])
   variantKey          String?             @unique // 系列|類型|角色|規格，批次新增時用來找回同一商品
+  mergedIntoId        String? // 合併重複商品後，指向留下來的商品（之後找到這個商品就改用那個）
   spec                String? // 規格、款式、尺寸
   productTypeId       String?
   productType         ProductType?        @relation(fields: [productTypeId], references: [id])

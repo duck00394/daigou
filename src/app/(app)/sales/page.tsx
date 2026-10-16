@@ -2,6 +2,9 @@ import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { listQuickSales } from "@/server/services/quick-sale";
+import { OwnerFilter } from "@/components/owner-filter";
+import { OwnerBadge } from "@/components/owner-badge";
+import { ownerTone } from "@/lib/owner-colors";
 import { listOperators } from "@/server/services/operators";
 import { JOINT, NONE } from "@/server/services/ownership";
 import { PageHeader, Section, Stat, Twd, Empty, LinkButton } from "@/components/ui";
@@ -18,7 +21,7 @@ function monthRange(ym: string | undefined) {
   return { from: new Date(Date.UTC(y, m - 1, 1, -8)), to: new Date(Date.UTC(y, m, 1, -8)) };
 }
 
-export default async function Sales({ searchParams }: { searchParams: Promise<{ q?: string; ym?: string; voided?: string; new?: string }> }) {
+export default async function Sales({ searchParams }: { searchParams: Promise<{ q?: string; ym?: string; voided?: string; new?: string; owner?: string }> }) {
   await requireUser();
   const sp = await searchParams;
   const thisMonth = toDateInput(new Date()).slice(0, 7);
@@ -30,30 +33,36 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
     tx((t) => listOperators(t, { includeInactive: true })),
   ]);
   const who = (k: string) => (k === JOINT ? "合資（還沒登記付款）" : k === NONE ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
-  const ownerEntries = Object.entries(data.byOwner).filter(([k, v]) => v.revenue !== 0 || (k !== JOINT && v.qty !== 0));
+  const owner = sp.owner ?? "";
+  const ids = operators.map((o) => o.id);
+  const ownerEntries = Object.entries(data.byOwner).filter(([k, v]) => (!owner || k === owner) && (v.revenue !== 0 || (k !== JOINT && v.qty !== 0)));
+  const rows = owner ? data.rows.filter((r) => r.owners.some((x) => x.key === owner && x.qty > 0)) : data.rows;
+  const mine = owner ? data.byOwner[owner] : null;
+  const total = mine ? { count: rows.filter((r) => !r.voided).length, qty: mine.qty, revenue: mine.revenue, cost: mine.cost, profit: mine.revenue - mine.cost, tentative: data.total.tentative } : data.total;
   const chip = (on: boolean) => `shrink-0 rounded-full border px-3 py-1.5 text-sm ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
   const href = (o: Record<string, string | undefined>) => {
     const u = new URLSearchParams();
-    const v = { q: sp.q, ym: sp.ym, voided: sp.voided, ...o };
+    const v = { q: sp.q, ym: sp.ym, voided: sp.voided, owner: sp.owner, ...o };
     for (const [k, x] of Object.entries(v)) if (x) u.set(k, x);
     return `/sales${u.size ? `?${u}` : ""}`;
   };
   return (
     <div className="space-y-4">
       <datalist id="buyer-names">{buyers.map((b) => <option key={b.name} value={b.name} />)}</datalist>
-      <PageHeader title="出售紀錄" sub="直接從庫存賣出的現貨。收入、成本與毛利和「成本與利潤」報表同一套計算。" actions={<><LinkButton href="/api/export/sales">匯出</LinkButton><SellButton label="＋ 出售現貨" primary autoOpen={sp.new === "1"} /></>} />
+      <PageHeader title="賺多少" actions={<><LinkButton href="/api/export/sales">匯出</LinkButton><SellButton label="＋ 出售現貨" primary autoOpen={sp.new === "1"} /></>} />
+      <OwnerFilter operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} current={owner} href={(k) => href({ owner: k || undefined })} />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Stat label="出售筆數／件數" value={`${data.total.count} / ${data.total.qty}`} />
-        <Stat label="收入" value={<Twd v={data.total.revenue} />} />
-        <Stat label="商品成本" value={<Twd v={data.total.cost} />} note={data.total.tentative ? "含暫估成本" : undefined} />
-        <Stat label="毛利" value={<Twd v={data.total.profit} />} tone={data.total.profit < 0 ? "bad" : undefined} />
+        <Stat label="賣了幾筆／幾件" value={`${total.count} / ${total.qty}`} />
+        <Stat label="收入" value={<Twd v={total.revenue} />} />
+        <Stat label="賣掉的東西成本" value={<Twd v={total.cost} />} note={total.tentative ? "有價格還沒確定" : undefined} />
+        <Stat label="賺多少" value={<Twd v={total.profit} />} tone={total.profit < 0 ? "bad" : undefined} />
       </div>
       {ownerEntries.length > 0 && (
         <Section title="誰賺多少">
           <ul className="grid gap-2 sm:grid-cols-3">
             {ownerEntries.map(([k, v]) => (
-              <li key={k} className="rounded-xl border border-line-2 bg-[#fafbfc] p-3 text-sm" data-testid={`sale-owner-${k}`}>
-                <div className="font-semibold">{who(k)}</div>
+              <li key={k} className={`rounded-xl border border-line-2 bg-[#fafbfc] p-3 text-sm ${ownerTone(k, ids).stripe}`} data-testid={`sale-owner-${k}`}>
+                <div className="font-semibold"><OwnerBadge k={k} name={who(k)} ids={ids} /></div>
                 <div>收入 <span className="num font-medium">{formatTwd(v.revenue)}</span>・成本 <span className="num">{formatTwd(v.cost)}</span></div>
                 <div className={v.revenue - v.cost < 0 ? "text-bad" : "text-good"}>毛利 <span className="num font-semibold">{formatTwd(v.revenue - v.cost)}</span></div>
               </li>
@@ -74,11 +83,11 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
           <Link href={href({ ym: "all" })} className={chip(!ym)}>全部</Link>
           <Link href={href({ voided: sp.voided === "1" ? undefined : "1" })} className={chip(sp.voided === "1")}>顯示已作廢</Link>
         </div>
-        {data.rows.length === 0 ? (
+        {rows.length === 0 ? (
           <Empty action={<SellButton label="＋ 出售現貨" primary />}>{ym ? "這個月還沒有出售紀錄。" : "還沒有出售紀錄。"}</Empty>
         ) : (
           <ul className="divide-y divide-line-2">
-            {data.rows.map((r) => (
+            {rows.map((r) => (
               <li key={r.id} className={`px-4 py-3 ${r.voided ? "opacity-60" : ""}`} data-testid="sale-row">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -89,7 +98,7 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
                     </div>
                     <div className="text-[13px] text-mute">
                       {fmtDate(r.soldAt)}｜{r.buyer.name}｜每件 {formatTwd(r.unitPrice)}
-                      {!r.voided && r.owners.length > 0 ? `｜${r.owners.filter((x) => x.qty > 0).map((x) => (x.key === JOINT ? "合資" : who(x.key))).join("、")}的` : ""}
+                      {!r.voided && r.owners.filter((x) => x.qty > 0).map((x) => <span key={x.key} className="ml-1"><OwnerBadge k={x.key} name={x.key === JOINT ? "合資" : who(x.key)} ids={ids} /></span>)}
                       {!r.voided && (r.paid >= r.revenue ? "｜已收款" : `｜未收 ${formatTwd(r.revenue - r.paid)}`)}
                       {r.note ? `｜${r.note}` : ""}
                     </div>

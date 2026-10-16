@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { prisma } from "@/server/db";
+import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { categoryDetail } from "@/server/services/reports";
 import { PageHeader, Section, TableWrap, Stat, Twd, Empty, LinkButton, StatusBadge, KV, Badge } from "@/components/ui";
@@ -8,10 +8,12 @@ import { ProductImage } from "@/components/client";
 import { CategoryEditButton, CategoryActiveButton } from "../forms";
 import { CategoryBatches } from "./batches";
 import { RenameNames } from "./rename";
+import { MergeDuplicates } from "./merge";
+import { duplicateGroups } from "@/server/services/merge";
 import { renamePlan } from "@/server/services/series";
 import { categoryType, dayInput, fmtDay, productStatus } from "@/lib/labels";
 
-export default async function CategoryPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ q?: string; sort?: string; view?: string }> }) {
+export default async function CategoryPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ q?: string; sort?: string; view?: string; owner?: string }> }) {
   await requireUser();
   const { id } = await params;
   const sp = await searchParams;
@@ -24,6 +26,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
   if (sp.sort === "buyers") products = [...products].sort((a, b) => b.stats.buyers.size - a.stats.buyers.size);
   const c = d.category;
   const plan = await renamePlan(prisma, id);
+  const dups = await tx((t) => duplicateGroups(t, id));
   return (
     <div className="space-y-4">
       <PageHeader
@@ -50,7 +53,8 @@ export default async function CategoryPage({ params, searchParams }: { params: P
         </Section>
       )}
       <RenameNames categoryId={c.id} plan={plan} />
-      <CategoryBatches categoryId={c.id} view={sp.view} />
+      <MergeDuplicates groups={dups.map((g) => ({ key: g.key, name: g.name, keepId: g.keepId, products: g.products.map((p) => ({ id: p.id, code: p.code, bought: p.bought, onHand: p.onHand, incoming: p.incoming })) }))} />
+      <CategoryBatches categoryId={c.id} view={sp.view} owner={sp.owner ?? ""} />
       {(d.total.activeQty > 0 || d.total.cancelledQty > 0) && (
         <div>
           <h2 className="mb-2 text-[15px] font-semibold">買家預購統計</h2>

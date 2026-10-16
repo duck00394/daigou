@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function StockFilters({ cats, cat, q, type, only }: { cats: { id: string; name: string }[]; cat: string; q: string; type: string; only: string }) {
+export function StockFilters({ cats, cat, q, type, only, owner = "" }: { cats: { id: string; name: string }[]; cat: string; q: string; type: string; only: string; owner?: string }) {
   const router = useRouter();
   const [text, setText] = useState(q);
   const go = (p: { cat?: string; q?: string }) => {
@@ -14,6 +14,7 @@ export function StockFilters({ cats, cat, q, type, only }: { cats: { id: string;
     if (t.trim()) sp.set("q", t.trim());
     if (type && p.cat === undefined) sp.set("type", type); // 換活動時種類重選
     if (only) sp.set("only", only);
+    if (owner) sp.set("owner", owner);
     router.push(`/inventory?${sp.toString()}`);
   };
   return (

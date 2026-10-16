@@ -157,7 +157,7 @@ export function variantName(p: { category?: string | null; character: string; ty
  * 找回同一商品：先找「含活動」的新格式；找不到再沿用舊格式建立的商品
  * （舊格式沒有活動，常把活動名稱填在規格，例：規格 ANA），避免同一款被拆成兩個商品、庫存分開。
  */
-export async function findVariant(db: Db, k: { seriesId: string; productTypeId: string | null; characterId: string; spec: string | null; category: { id: string; name: string } | null }) {
+async function findVariantRaw(db: Db, k: { seriesId: string; productTypeId: string | null; characterId: string; spec: string | null; category: { id: string; name: string } | null }) {
   const own = await db.product.findUnique({ where: { variantKey: variantKey(k.seriesId, k.productTypeId, k.characterId, k.spec, k.category?.id) } });
   if (own || !k.category) return own;
   // 舊格式（沒有活動）：規格就是活動名，例如規格 ANA → 一定是這個活動的商品
@@ -173,6 +173,13 @@ export async function findVariant(db: Db, k: { seriesId: string; productTypeId: 
   if (!legacy) return null;
   const cats = new Set(legacy.purchaseItems.map((i) => i.batch.categoryId));
   return cats.size === 1 && cats.has(k.category.id) ? legacy : null;
+}
+
+/** 找到被合併掉的商品時，改用合併後留下的那個 */
+export async function findVariant(db: Db, k: Parameters<typeof findVariantRaw>[1]) {
+  const p = await findVariantRaw(db, k);
+  if (p?.mergedIntoId) return (await db.product.findUnique({ where: { id: p.mergedIntoId } })) ?? p;
+  return p;
 }
 
 // ── 批次新增前的參考帶入 ──

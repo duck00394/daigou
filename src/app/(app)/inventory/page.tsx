@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { Fragment } from "react";
 import { StockFilters } from "./stock-filters";
+import { OwnerFilter, ownerMatch } from "@/components/owner-filter";
+import { OwnerBadge } from "@/components/owner-badge";
+import { ownerTone } from "@/lib/owner-colors";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { inventorySummary } from "@/server/services/inventory";
@@ -44,9 +47,9 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
           </Link>
         ))}
       </nav>
-      {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} />}
+      {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} owner={sp.owner ?? ""} />}
       {tab === "demand" && <DemandTab />}
-      {tab === "batches" && <BatchesTab cat={sp.cat} open={sp.open} />}
+      {tab === "batches" && <BatchesTab cat={sp.cat} open={sp.open} owner={sp.owner ?? ""} />}
       {tab === "receive" && <ReceiveTab productId={sp.productId} />}
       {tab === "adjust" && (
         <Section title="盤點調整">
@@ -57,7 +60,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
   );
 }
 
-async function StockTab({ q, only, cat = "", type = "" }: { q?: string; only?: string; cat?: string; type?: string }) {
+async function StockTab({ q, only, cat = "", type = "", owner = "" }: { q?: string; only?: string; cat?: string; type?: string; owner?: string }) {
   const catWhere = !cat
     ? {}
     : cat === "none"
@@ -95,9 +98,22 @@ async function StockTab({ q, only, cat = "", type = "" }: { q?: string; only?: s
       .map(([k, v]) => ({ key: k, label: k === me ? `${ownerName(k)}（我）` : ownerName(k), free: v.free, kept: v.kept }))
       .sort((a, b) => (a.key === me ? -1 : b.key === me ? 1 : 0));
   const zero = { onHand: 0, reserved: 0, available: 0, incoming: 0, shipped: 0, kept: 0, activeOrdered: 0, openDemand: 0, unallocated: 0, shortage: 0 };
+  // 選了某個人：庫存、自留、未到貨都只算那個人的（依採購團歸屬）
+  const ownerKey = owner === "joint" ? JOINT : owner;
+  const ownerIncoming = new Map<string, number>();
+  if (owner) {
+    const items = await prisma.purchaseBatchItem.findMany({
+      where: { productId: { in: ids }, batch: { status: { not: "CANCELLED" }, ...(owner === "joint" ? { ownership: "JOINT" as const } : { ownership: "PERSONAL" as const, orderedById: owner }) } },
+      select: { productId: true, qty: true, cancelledQty: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
+    });
+    for (const i of items) ownerIncoming.set(i.productId, (ownerIncoming.get(i.productId) ?? 0) + Math.max(0, i.qty - i.cancelledQty - i.movements.reduce((a, m) => a + m.onHandDelta, 0)));
+  }
   let rows = products.map((p) => {
     const category = (cat && cat !== "none" ? cats.find((c) => c.id === cat) : null) ?? p.categories[0]?.category ?? p.purchaseItems.find((i) => i.batch.category)?.batch.category ?? null;
-    return { p, s: inv.get(p.id) ?? zero, v: val.get(p.id), category };
+    const all = inv.get(p.id) ?? zero;
+    const mine = owner ? byOwner.get(p.id)?.get(ownerKey) : null;
+    const s = owner ? { ...all, onHand: mine?.onHand ?? 0, available: mine?.free ?? 0, reserved: mine?.reserved ?? 0, kept: mine?.kept ?? 0, incoming: ownerIncoming.get(p.id) ?? 0 } : all;
+    return { p, s, v: val.get(p.id), category };
   });
   if (only !== "all") rows = rows.filter((r) => r.s.onHand || r.s.incoming || r.s.kept || r.s.reserved);
   // 種類：只列出目前有的
@@ -125,7 +141,7 @@ async function StockTab({ q, only, cat = "", type = "" }: { q?: string; only?: s
   }
   const groupList = [...groups.entries()].sort(([a, x], [b, y]) => (a === "none" ? 1 : b === "none" ? -1 : x.name.localeCompare(y.name, "zh-Hant")));
   for (const [, g] of groupList) g.rows.sort((x, y) => label(x).localeCompare(label(y), "zh-Hant"));
-  const sum = (rs: typeof rows) => ({ free: rs.reduce((a, r) => a + r.s.available, 0), incoming: rs.reduce((a, r) => a + r.s.incoming, 0), kept: rs.reduce((a, r) => a + r.s.kept, 0), cost: rs.reduce((a, r) => a + (r.v ? r.v.freeValue + r.v.keptValue + r.v.reservedValue : 0), 0) });
+  const sum = (rs: typeof rows) => ({ free: rs.reduce((a, r) => a + r.s.available, 0), incoming: rs.reduce((a, r) => a + r.s.incoming, 0), kept: rs.reduce((a, r) => a + r.s.kept, 0), cost: rs.reduce((a, r) => a + (!r.v ? 0 : owner ? (r.v.avgUnitCost ?? 0) * (r.s.onHand + r.s.kept) : r.v.freeValue + r.v.keptValue + r.v.reservedValue), 0) });
   const all = sum(rows);
   const href = (t: string) => {
     const sp = new URLSearchParams({ tab: "stock" });
@@ -133,6 +149,7 @@ async function StockTab({ q, only, cat = "", type = "" }: { q?: string; only?: s
     if (q) sp.set("q", q);
     if (t) sp.set("type", t);
     if (only) sp.set("only", only);
+    if (owner) sp.set("owner", owner);
     return `/inventory?${sp.toString()}`;
   };
   const chip = (on: boolean) => `shrink-0 rounded-full border px-3.5 py-1.5 text-[14px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
@@ -140,7 +157,8 @@ async function StockTab({ q, only, cat = "", type = "" }: { q?: string; only?: s
   return (
     <div className="space-y-3">
       <datalist id="buyer-names">{buyerNames.map((b) => <option key={b.name} value={b.name} />)}</datalist>
-      <StockFilters cats={cats} cat={cat} q={q ?? ""} type={type} only={only ?? ""} />
+      <OwnerFilter operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} current={owner} href={(k) => { const sp = new URLSearchParams({ tab: "stock" }); if (cat) sp.set("cat", cat); if (q) sp.set("q", q); if (type) sp.set("type", type); if (only) sp.set("only", only); if (k) sp.set("owner", k); return `/inventory?${sp.toString()}`; }} />
+      <StockFilters cats={cats} cat={cat} q={q ?? ""} type={type} only={only ?? ""} owner={owner} />
       <nav aria-label="種類" className="-mx-3 flex gap-1.5 overflow-x-auto px-3 sm:mx-0 sm:px-0">
         <Link href={href("")} className={chip(!type)} aria-current={!type ? "page" : undefined}>全部</Link>
         {[...typeCount.entries()].map(([k, x]) => (
@@ -268,20 +286,29 @@ async function DemandTab() {
   );
 }
 
-async function BatchesTab({ cat, open }: { cat?: string; open?: string }) {
+async function BatchesTab({ cat, open, owner }: { cat?: string; open?: string; owner: string }) {
   const onlyOpen = open !== "0";
-  const batches = await prisma.purchaseBatch.findMany({
+  const operators = await tx((t) => listOperators(t));
+  const ids = operators.map((o) => o.id);
+  const allBatches = await prisma.purchaseBatch.findMany({
     where: { ...(cat ? { categoryId: cat === "none" ? null : cat } : {}), ...(onlyOpen ? { status: { in: ["DRAFT", "ORDERED", "PARTIAL_RECEIVED"] } } : {}) },
     orderBy: { createdAt: "desc" },
     include: { supplierRef: true, orderedBy: { select: { name: true } }, category: { select: { id: true, name: true } }, items: { include: { movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } } },
   });
+  const counts: Record<string, number> = { "": allBatches.length };
+  for (const b of allBatches) {
+    const k = b.ownership === "JOINT" ? "joint" : (b.orderedById ?? "none");
+    counts[k] = (counts[k] ?? 0) + 1;
+  }
+  const batches = allBatches.filter((b) => ownerMatch(owner, b));
   const cats = await prisma.category.findMany({ where: { batches: { some: {} } }, orderBy: [{ active: "desc" }, { sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } });
   const chip = (on: boolean) => `shrink-0 rounded-full border px-3 py-1.5 text-sm ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
-  const href = (c?: string, o?: string) => `/inventory?tab=batches${c ? `&cat=${c}` : ""}${o === "0" ? "&open=0" : ""}`;
+  const href = (c?: string, o?: string, w: string = owner) => `/inventory?tab=batches${c ? `&cat=${c}` : ""}${o === "0" ? "&open=0" : ""}${w ? `&owner=${w}` : ""}`;
   const today = new Date();
   const pay = await tx((t) => batchPaySummary(t, batches.map((b) => b.id)));
   return (
     <Section title="採購團" pad={false}>
+      <div className="border-b border-line-2 px-4 pt-3 pb-1"><OwnerFilter operators={operators.map((o) => ({ id: o.id, name: o.name }))} current={owner} counts={counts} href={(k) => href(cat, open, k)} /></div>
       <div className="flex gap-1.5 overflow-x-auto border-b border-line-2 px-4 py-2.5">
         <Link href={href(cat, onlyOpen ? "0" : undefined)} className={chip(!onlyOpen)}>{onlyOpen ? "顯示已完成" : "含已完成"}</Link>
         <Link href={href(undefined, open)} className={chip(!cat)}>全部活動</Link>
@@ -298,13 +325,16 @@ async function BatchesTab({ cat, open }: { cat?: string; open?: string }) {
             const late = b.expectedAt && b.expectedAt < today && rec < ordered && b.status !== "CANCELLED";
             return (
               <li key={b.id}>
-                <Link href={`/inventory/batches/${b.id}`} className="block h-full rounded-xl border border-line bg-white p-3 hover:border-ai">
+                <Link href={`/inventory/batches/${b.id}`} className={`block h-full rounded-xl border border-line bg-white p-3 hover:border-ai ${ownerTone(b.ownership === "JOINT" ? "joint" : b.orderedById, ids).stripe}`} data-testid="batch-card">
                   <div className="flex items-start justify-between gap-2">
-                    <span className="font-semibold">{b.code} {b.name}</span>
-                    <StatusBadge map={batchStageLabel} value={batchStage(b)} />
+                    <span className="font-semibold">{b.name}</span>
+                    <span className="flex shrink-0 items-center gap-1">
+                      <OwnerBadge k={b.ownership === "JOINT" ? "joint" : b.orderedById} name={b.ownership === "JOINT" ? "合資" : (b.orderedBy?.name ?? "未指定")} ids={ids} />
+                      <StatusBadge map={batchStageLabel} value={batchStage(b)} />
+                    </span>
                   </div>
                   <div className="mt-0.5 text-[13px] text-mute">
-                    {[b.ownership === "JOINT" ? "合資" : `${b.orderedBy?.name ?? "未指定"}的`, b.supplierRef?.name ?? b.supplier, b.category?.name, `下單 ${fmtDate(b.orderedAt)}`].filter(Boolean).join("｜")}
+                    {[b.supplierRef?.name ?? b.supplier, b.category?.name, `下單 ${fmtDate(b.orderedAt)}`].filter(Boolean).join("｜")}
                   </div>
                   <div className="mt-2 flex items-center gap-2">
                     <div className="h-2 flex-1 overflow-hidden rounded-full bg-line-2" aria-hidden>

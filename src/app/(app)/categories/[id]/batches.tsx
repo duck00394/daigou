@@ -7,11 +7,14 @@ import { batchStageLabel, fmtDay, type BatchStage } from "@/lib/labels";
 import { listOperators } from "@/server/services/operators";
 import { JOINT, NONE } from "@/server/services/ownership";
 import { formatJpy, formatTwd } from "@/lib/money";
+import { OwnerFilter } from "@/components/owner-filter";
+import { OwnerBadge } from "@/components/owner-badge";
+import { ownerTone } from "@/lib/owner-colors";
 
 const money = (v: number, c: string) => (c === "JPY" ? formatJpy(v) : formatTwd(v));
 const sums = (m: Record<string, number>) => Object.entries(m).map(([c, v]) => money(v, c)).join("、");
 
-export async function CategoryBatches({ categoryId, view }: { categoryId: string; view?: string }) {
+export async function CategoryBatches({ categoryId, view, owner = "" }: { categoryId: string; view?: string; owner?: string }) {
   const [o, operators] = await Promise.all([tx((t) => categoryOverview(t, categoryId)), tx((t) => listOperators(t, { includeInactive: true }))]);
   const who = (k: string) => (k === JOINT ? "合資（還沒登記付款）" : k === NONE ? "未指定" : (operators.find((x) => x.id === k)?.name ?? "未指定"));
   // 依「這團是誰的」分組：個人、合資、未指定；每組分待付款、已付款
@@ -38,11 +41,37 @@ export async function CategoryBatches({ categoryId, view }: { categoryId: string
         <Empty>這個活動還沒有採購團。建立採購團時選擇這個活動，就能在這裡比較各團價格與進度。</Empty>
       </Section>
     );
-  const cols = o.batches.filter((b) => b.status !== "CANCELLED");
-  const fullView = view === "full";
+  const ids = operators.map((x) => x.id);
+  const inOwner = (b: { ownerKey: string }) => !owner || b.ownerKey === owner;
+  const cols = o.batches.filter((b) => b.status !== "CANCELLED" && inOwner(b));
+  const fullView = view !== "unit"; // 預設看含運費的成本
+  const q = (p: { owner?: string; view?: string }) => {
+    const sp = new URLSearchParams();
+    const ow = p.owner ?? owner;
+    const vw = p.view ?? (view === "unit" ? "unit" : "");
+    if (ow) sp.set("owner", ow);
+    if (vw) sp.set("view", vw);
+    const t = sp.toString();
+    return t ? `?${t}` : "?";
+  };
+  // 每個商品：總數量、平均成本、最低～最高，各團價格展開才看
+  const nameOf = (k: string) => (k === JOINT ? "合資" : k === NONE ? "未指定" : (operators.find((x) => x.id === k)?.name ?? "未指定"));
+  const colById = new Map(cols.map((b) => [b.id, b]));
+  const summary = o.matrix
+    .map((r) => {
+      const cells = Object.entries(r.cells).flatMap(([bid, cs]) => (colById.has(bid) ? cs.map((c) => ({ ...c, batch: colById.get(bid)! })) : []));
+      const qty = cells.reduce((a, c) => a + c.qty, 0);
+      const vals = cells.map((c) => (fullView ? c.fullUnitTwd : c.unitTwd));
+      const amount = cells.reduce((a, c) => a + (fullView ? c.fullUnitTwd : c.unitTwd) * c.qty, 0);
+      return { product: r.product, cells, qty, amount, avg: qty ? Math.round(amount / qty) : 0, min: Math.min(...vals), max: Math.max(...vals), tentative: cells.some((c) => c.estimated || (fullView && !c.feesConfirmed)) };
+    })
+    .filter((r) => r.qty > 0);
+  const allQty = summary.reduce((a, r) => a + r.qty, 0);
+  const allAmount = summary.reduce((a, r) => a + r.amount, 0);
   return (
     <>
       <Section title="總覽">
+        <div className="mb-3"><OwnerFilter operators={operators.map((x) => ({ id: x.id, name: x.name }))} current={owner} href={(k) => q({ owner: k })} /></div>
         <div className="grid grid-cols-3 gap-2">
           <div>
             <div className="text-[12px] text-mute">總額</div>
@@ -60,10 +89,10 @@ export async function CategoryBatches({ categoryId, view }: { categoryId: string
         <p className="mt-1 text-[12px] text-mute">{o.total.batches} 團・{o.total.qty} 件・已到 {o.total.received}・還沒到 {o.total.outstanding}{o.total.estimated ? "・金額含暫估" : ""}</p>
 
         <div className="mt-3 space-y-3">
-          {groups.map((g) => (
-            <div key={g.key} className="rounded-xl border border-line-2 bg-[#fafbfc] p-3" data-testid={`owner-${g.key}`}>
+          {groups.filter((g) => !owner || g.key === owner).map((g) => (
+            <div key={g.key} className={`rounded-xl border border-line-2 bg-[#fafbfc] p-3 ${ownerTone(g.key, ids).stripe}`} data-testid={`owner-${g.key}`}>
               <div className="flex items-baseline justify-between gap-2">
-                <h3 className="text-[16px] font-semibold">{g.label}</h3>
+                <h3 className="text-[16px] font-semibold"><OwnerBadge k={g.key} name={g.label} ids={ids} /></h3>
                 <span className="text-[13px] text-mute">總額 <span className="num font-medium text-ink">{formatTwd(g.total)}</span></span>
               </div>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -106,14 +135,14 @@ export async function CategoryBatches({ categoryId, view }: { categoryId: string
       </Section>
 
 
-      <Section title={`採購團（${o.batches.length}）`} pad={false} actions={add}>
+      <Section title={`採購團（${o.batches.filter(inOwner).length}）`} pad={false} actions={add}>
         <ul className="grid gap-2 p-3 md:grid-cols-2">
-          {o.batches.map((b) => (
+          {o.batches.filter(inOwner).map((b) => (
             <li key={b.id}>
-              <Link href={`/inventory/batches/${b.id}`} className={`block h-full rounded-xl border p-3 hover:border-ai ${b.issues.length ? "border-[#f0dfa8]" : "border-line"} ${b.status === "CANCELLED" ? "opacity-60" : ""}`}>
+              <Link href={`/inventory/batches/${b.id}`} className={`block h-full rounded-xl border p-3 hover:border-ai ${b.issues.length ? "border-[#f0dfa8]" : "border-line"} ${ownerTone(b.ownerKey, ids).stripe} ${b.status === "CANCELLED" ? "opacity-60" : ""}`}>
                 <div className="flex items-start justify-between gap-2">
-                  <span className="font-semibold">{b.code} {b.name}</span>
-                  <StatusBadge map={batchStageLabel} value={b.stage} />
+                  <span className="font-semibold">{b.name}</span>
+                  <span className="flex shrink-0 items-center gap-1"><OwnerBadge k={b.ownerKey} name={nameOf(b.ownerKey)} ids={ids} /><StatusBadge map={batchStageLabel} value={b.stage} /></span>
                 </div>
                 <div className="text-[13px] text-mute">
                   <span className="font-medium text-ink-2">{b.ownership === "JOINT" ? `合資${o.jointShares[b.id]?.length ? `（${o.jointShares[b.id].map((x) => `${who(x.key)} ${x.percent}%`).join("・")}）` : ""}` : `${b.orderedBy ?? "未指定"}的`}</span>｜{b.supplier ?? "未指定代購"}
@@ -132,60 +161,65 @@ export async function CategoryBatches({ categoryId, view }: { categoryId: string
         </ul>
       </Section>
 
-      {o.matrix.length > 0 && cols.length > 0 && (
+      {summary.length > 0 && (
         <Section
-          title="跨團價格比較"
+          title="商品數量與平均成本"
           pad={false}
           actions={
             <span className="flex gap-1 text-sm">
-              <Link href="?" className={`rounded-lg px-2.5 py-1 ${!fullView ? "bg-ai text-white" : "text-ai"}`}>商品單價</Link>
-              <Link href="?view=full" className={`rounded-lg px-2.5 py-1 ${fullView ? "bg-ai text-white" : "text-ai"}`}>含費用單件成本</Link>
+              <Link href={q({ view: "" })} className={`rounded-lg px-2.5 py-1 ${fullView ? "bg-ai text-white" : "text-ai"}`}>含運費成本</Link>
+              <Link href={q({ view: "unit" })} className={`rounded-lg px-2.5 py-1 ${!fullView ? "bg-ai text-white" : "text-ai"}`}>只看商品單價</Link>
             </span>
           }
         >
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-max border-separate border-spacing-0 text-[14px] [&_td]:border-b [&_td]:border-line-2 [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_th]:border-b [&_th]:border-line [&_th]:bg-[#fafbfc] [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-[13px] [&_th]:font-medium">
-              <thead>
-                <tr>
-                  <th className="sticky left-0 z-10">商品</th>
-                  {cols.map((b) => <th key={b.id}><Link href={`/inventory/batches/${b.id}`} className="hover:underline">{b.code}</Link><div className="font-normal text-mute">{b.supplier ?? b.name}</div></th>)}
-                  <th className="text-right">總數量</th>
-                  <th className="text-right">最低／最高單價</th>
-                </tr>
-              </thead>
-              <tbody>
-                {o.matrix.map((r) => (
-                  <tr key={r.product.id}>
-                    <td className="sticky left-0 z-10 bg-white"><Link href={`/products/${r.product.id}`} className="hover:underline">{r.product.name}</Link></td>
-                    {cols.map((b) => {
-                      const cells = r.cells[b.id] ?? [];
-                      if (!cells.length) return <td key={b.id} className="text-mute">—</td>;
+          <div aria-label="商品數量與平均成本" role="table" className="text-[14px]">
+            <div role="row" className="grid grid-cols-[minmax(0,1fr)_3.5rem_4.75rem_6.5rem] gap-2 border-b border-line bg-[#fafbfc] px-3 py-2 text-[12px] text-mute">
+              <span role="columnheader">商品</span>
+              <span role="columnheader" className="text-right">總數量</span>
+              <span role="columnheader" className="text-right">平均成本</span>
+              <span role="columnheader" className="text-right">最低～最高</span>
+            </div>
+            {summary.map((r) => (
+              <details key={r.product.id} className="group border-b border-line-2" data-testid="product-summary">
+                <summary role="row" className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_3.5rem_4.75rem_6.5rem] items-baseline gap-2 px-3 py-2.5 hover:bg-[#fafbfd] [&::-webkit-details-marker]:hidden">
+                  <span role="cell" className="min-w-0 font-medium"><span className="mr-1 inline-block text-mute transition-transform group-open:rotate-90">▸</span>{r.product.name}</span>
+                  <span role="cell" className="num text-right font-semibold" data-k="qty">{r.qty}</span>
+                  <span role="cell" className="num text-right font-semibold" data-k="avg">{formatTwd(r.avg)}{r.tentative ? <span className="text-warn">*</span> : null}</span>
+                  <span role="cell" className="num text-right text-[12.5px] text-mute">{r.min === r.max ? formatTwd(r.min) : `${r.min.toLocaleString()}～${r.max.toLocaleString()}`}</span>
+                </summary>
+                <ul className="space-y-1 bg-[#f6f8fc] px-4 py-2 text-[13px]">
+                  {r.cells
+                    .slice()
+                    .sort((x, y) => (fullView ? x.fullUnitTwd - y.fullUnitTwd : x.unitTwd - y.unitTwd))
+                    .map((c) => {
+                      const v = fullView ? c.fullUnitTwd : c.unitTwd;
+                      const tentative = fullView ? c.estimated || !c.feesConfirmed : c.estimated;
                       return (
-                        <td key={b.id}>
-                          {cells.map((c) => {
-                            const v = fullView ? c.fullUnitTwd : c.unitTwd;
-                            const low = !fullView && v === r.minUnitTwd && r.minUnitTwd !== r.maxUnitTwd;
-                            const tentative = fullView ? c.estimated || !c.feesConfirmed : c.estimated;
-                            return (
-                              <div key={c.itemId} className="whitespace-nowrap">
-                                <span className={`num font-medium ${low ? "text-good" : ""}`}>{formatTwd(v)}</span>
-                                <span className="text-mute"> × {c.qty}</span>
-                                {tentative && <span className="ml-1 rounded bg-warn-soft px-1 text-[11px] text-warn">暫估</span>}
-                                {c.currency === "JPY" && !fullView && <div className="text-[11px] text-mute">原價 {formatJpy(c.unitCost)}</div>}
-                              </div>
-                            );
-                          })}
-                        </td>
+                        <li key={c.itemId} className="flex items-center justify-between gap-2">
+                          <Link href={`/inventory/batches/${c.batch.id}`} className="flex min-w-0 items-center gap-1.5 hover:underline">
+                            <OwnerBadge k={c.batch.ownerKey} name={nameOf(c.batch.ownerKey)} ids={ids} />
+                            <span className="truncate">{c.batch.supplier ?? c.batch.name}</span>
+                          </Link>
+                          <span className="num shrink-0">
+                            <span className={v === r.min && r.min !== r.max ? "font-semibold text-good" : ""}>{formatTwd(v)}</span> × {c.qty}
+                            {tentative && <span className="ml-1 rounded bg-warn-soft px-1 text-[11px] text-warn">價格還沒確定</span>}
+                            {c.currency === "JPY" && !fullView && <span className="ml-1 text-[11px] text-mute">（{formatJpy(c.unitCost)}）</span>}
+                          </span>
+                        </li>
                       );
                     })}
-                    <td className="num text-right">{r.totalQty}</td>
-                    <td className="num text-right whitespace-nowrap">{formatTwd(r.minUnitTwd)}／{formatTwd(r.maxUnitTwd)}<div className="text-[11px] text-mute">含費用最低 {formatTwd(r.minFullUnitTwd)}</div></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                  <li className="pt-1 text-right"><Link href={`/products/${r.product.id}`} className="text-ai">看這個商品 ›</Link></li>
+                </ul>
+              </details>
+            ))}
+            <div role="row" className="grid grid-cols-[minmax(0,1fr)_3.5rem_4.75rem_6.5rem] gap-2 bg-[#fafbfc] px-3 py-2 font-semibold">
+              <span role="cell">合計</span>
+              <span role="cell" className="num text-right" data-testid="summary-qty">{allQty}</span>
+              <span role="cell" className="num text-right">{allQty ? formatTwd(Math.round(allAmount / allQty)) : "—"}</span>
+              <span role="cell" />
+            </div>
           </div>
-          <p className="px-4 py-2 text-[12px] text-mute">日幣依各團建立時鎖定的匯率換算台幣。「商品單價」不含運費與代購費；最低商品單價不一定是最終成本最低，請切換「含費用單件成本」比較。標「暫估」表示實際單價尚未確認，或該團還沒登記共同費用。</p>
+          <p className="px-4 py-2 text-[12px] text-mute">點商品展開看各團價格。{fullView ? "平均成本含攤進去的運費等" : "只看商品單價，不含運費"}；* 表示有價格還沒確定。</p>
         </Section>
       )}
     </>

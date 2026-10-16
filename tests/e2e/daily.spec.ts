@@ -74,14 +74,15 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
   // 活動頁：兩團與跨團比價
   await page.goto("/categories");
   await page.getByRole("link", { name: "萬聖節", exact: true }).first().click();
-  const cmp = page.locator("section").filter({ has: page.getByRole("heading", { name: "跨團價格比較" }) });
-  const chiikawa = cmp.getByRole("row").filter({ hasText: "萬聖節吉伊 吊娃" });
-  await expect(chiikawa).toContainText("NT$350");
-  await expect(chiikawa).toContainText("NT$380");
-  await expect(chiikawa).toContainText("NT$350／NT$380");
-  await expect(chiikawa.getByText("暫估").first()).toBeVisible();
-  await page.getByRole("link", { name: "含費用單件成本" }).click();
-  await expect(page).toHaveURL(/view=full/);
+  // 活動頁：每個商品先看總數量與平均成本，點開才看各團價格
+  const row = page.getByTestId("product-summary").filter({ hasText: "萬聖節吉伊 吊娃" });
+  await expect(row).toContainText("350～380");
+  await row.locator("summary").click();
+  await expect(row).toContainText("NT$350");
+  await expect(row).toContainText("NT$380");
+  await expect(row.getByText("價格還沒確定").first()).toBeVisible();
+  await page.getByRole("link", { name: "只看商品單價" }).click();
+  await expect(page).toHaveURL(/view=unit/);
 
   // A 團到貨，自留 2 件
   const before = await stockOf(page, "萬聖節吉伊 吊娃"); // 只比較本測試造成的變化
