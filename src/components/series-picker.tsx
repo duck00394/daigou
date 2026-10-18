@@ -22,6 +22,7 @@ export function SeriesPicker({
   allLabel,
   noneLabel,
   extra,
+  prefix = "",
 }: {
   series: SeriesOpt[];
   value: string; // 系列 id；"" 表示全部／不指定
@@ -31,6 +32,7 @@ export function SeriesPicker({
   allLabel?: string; // 例：「全部系列」（不選＝全部）
   noneLabel?: string; // 例：「不指定」
   extra?: React.ReactNode; // 放在「找過期的」旁邊的按鈕（例：＋ 新系列）
+  prefix?: string; // 同一頁有兩組選單時，標籤前面加字（例：「這批商品的」）
 }) {
   const current = series.find((s) => s.id === value) ?? null;
   const [kindState, setKindState] = useState(current?.kindKey ?? kindProp ?? "");
@@ -46,15 +48,15 @@ export function SeriesPicker({
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
         <label className="text-[13px] font-medium text-ink-2">
-          種類
-          <select aria-label="種類" className={`${selCls} mt-1`} value={kind} onChange={(e) => { setKind(e.target.value); if (current && current.kindKey !== e.target.value) onChange(""); }}>
+          {prefix}種類
+          <select aria-label={`${prefix}種類`} className={`${selCls} mt-1`} value={kind} onChange={(e) => { setKind(e.target.value); if (current && current.kindKey !== e.target.value) onChange(""); }}>
             <option value="">全部種類</option>
             {kinds.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
         </label>
         <label className="text-[13px] font-medium text-ink-2">
-          系列
-          <select aria-label="系列" className={`${selCls} mt-1`} value={value} onChange={(e) => { const s = series.find((x) => x.id === e.target.value); if (s && !kind) setKind(s.kindKey); onChange(e.target.value); }}>
+          {prefix}系列
+          <select aria-label={`${prefix}系列`} className={`${selCls} mt-1`} value={value} onChange={(e) => { const s = series.find((x) => x.id === e.target.value); if (s && !kind) setKind(s.kindKey); onChange(e.target.value); }}>
             {allLabel !== undefined && <option value="">{allLabel}</option>}
             {noneLabel !== undefined && <option value="">{noneLabel}</option>}
             {allLabel === undefined && noneLabel === undefined && <option value="">請選系列</option>}

@@ -38,6 +38,20 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await page.getByRole("dialog").getByRole("button", { name: "刪除", exact: true }).click();
   await toast(page, "已刪除「加錯的」");
   await expect(item.getByRole("link", { name: "加錯的" })).toHaveCount(0);
+  // 加錯的角色：按 × 刪掉
+  if (!(await item.getByLabel("角色名字").isVisible())) await item.getByRole("button", { name: "＋ 角色" }).click();
+  await item.getByLabel("角色名字").fill("加錯的");
+  await item.getByRole("button", { name: "加", exact: true }).click();
+  await toast(page, "已加「加錯的」");
+  await item.getByRole("button", { name: "刪除「加錯的」" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "刪除", exact: true }).click();
+  await toast(page, "已刪除「加錯的」");
+  await expect(item.getByRole("link", { name: "加錯的" })).toHaveCount(0);
+  // 第二個系列（之後同一團一起買）
+  await page.getByRole("button", { name: "＋ 新系列" }).click();
+  await page.getByLabel(/系列名稱/).fill(`幽靈${tag}`);
+  await page.getByRole("button", { name: "新增", exact: true }).click();
+  await toast(page, `已新增系列「幽靈${tag}」`);
   // 種類、系列改名：按 ✎ 就能改
   await page.getByRole("button", { name: "✎ 改名" }).click();
   await page.getByLabel("種類新名稱").fill(`${kind}店`);
@@ -75,6 +89,24 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await r1.getByLabel("數量").fill("2");
   await page.getByRole("button", { name: "儲存 1 項" }).click();
   await expect(page.getByTestId("saved-banner")).toContainText("已進庫存");
+  // 同一團再加另一個系列：換系列就好，運費、付款還是同一團
+  await page.getByTestId("saved-banner").getByRole("link", { name: "看這一團" }).click();
+  await page.getByRole("button", { name: "＋ 加商品" }).click();
+  await page.getByRole("button", { name: "換系列" }).click();
+  await page.getByLabel("這批商品的系列", { exact: true }).selectOption({ label: `幽靈${tag}` });
+  await expect(page.getByTestId("items-series-name")).toHaveText(`幽靈${tag}`);
+  await page.getByLabel("IP（例：吉伊卡哇）").selectOption({ label: "吉伊卡哇" });
+  await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
+  await page.getByRole("button", { name: "＋ 吉伊" }).click();
+  const r2 = page.getByRole("table", { name: "批次新增採購品項" }).getByRole("row").filter({ hasText: "第 1 列" });
+  await r2.getByLabel("單價").fill("300");
+  await r2.getByLabel("數量").fill("1");
+  await page.getByRole("button", { name: "儲存 1 項" }).click();
+  await toast(page, /已新增 1 個採購品項/);
+  const dlg = page.getByRole("dialog");
+  if (await dlg.isVisible()) await dlg.getByRole("button", { name: /知道了|關閉/ }).first().click();
+  await expect(page.getByTestId("items-series")).toHaveText([series, `幽靈${tag}`]);
+  await page.screenshot({ path: "test-results/mobile_multi_series.png", fullPage: true });
 
   // 賣給客人：吉伊 1（現貨）、小八 1（沒貨→預訂），單價帶預設 650
   await page.goto("/sell");
@@ -99,7 +131,8 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await page.getByLabel("種類", { exact: true }).selectOption({ label: kind });
   await page.getByRole("button", { name: "查看" }).click();
   await expect(page).toHaveURL(/v=1/);
-  await expect(page.getByTestId("stock-series")).toContainText(series);
+  await expect(page.getByTestId("stock-series").filter({ hasText: series })).toBeVisible();
+  await expect(page.getByTestId("stock-series").filter({ hasText: `幽靈${tag}` })).toBeVisible();
   await expect(page.getByTestId("stock-type").first()).toHaveText("吊娃");
   await page.screenshot({ path: "test-results/mobile_stock_tree.png", fullPage: true });
 

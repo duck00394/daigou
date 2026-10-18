@@ -9,6 +9,7 @@ import { BulkEditTable, type EditItem } from "./bulk-edit";
 import { BulkAddGrid } from "./bulk-add";
 import { payRemainingAction, receiveAllAction } from "@/actions/batches";
 import { formatJpy, formatTwd } from "@/lib/money";
+import type { SeriesOpt } from "@/components/series-picker";
 
 type Opt = { id: string; name: string };
 const money = (v: number, c: string) => (c === "JPY" ? formatJpy(v) : formatTwd(v));
@@ -25,6 +26,7 @@ export function ItemsPanel(props: {
   types: Opt[];
   copyButton?: React.ReactNode;
   category?: { id: string; name: string } | null;
+  seriesOptions?: SeriesOpt[];
 }) {
   const { items, editable } = props;
   const [mode, setMode] = useState<"view" | "edit" | "add">(props.initialMode);
@@ -34,6 +36,10 @@ export function ItemsPanel(props: {
     if (new URLSearchParams(window.location.search).has("bulk")) router.replace(window.location.pathname, { scroll: false });
   }, [router]);
   const live = items.filter((i) => i.qty > 0 || i.cancelledQty > 0);
+  // 一團有好幾個系列：清單照系列分段
+  const seriesName = (id: string | null | undefined) => props.seriesOptions?.find((x) => x.id === id)?.name ?? "沒分系列";
+  const groups = [...new Set(live.map((i) => i.seriesId ?? null))];
+  const multi = groups.length > 1;
   const totalQty = items.reduce((s, i) => s + i.qty, 0);
   const goods = items.reduce((s, i) => s + i.goodsTwd, 0);
   const fees = items.reduce((s, i) => s + i.feesTwd, 0);
@@ -62,7 +68,7 @@ export function ItemsPanel(props: {
 
       {mode === "add" && (
         <div className="border-b border-line-2 p-4">
-          <BulkAddGrid category={props.category ?? null} batchId={props.batchId} supplierId={props.supplierId} supplierCurrency={props.supplierCurrency} rateMicro={props.rateMicro} series={props.series} types={props.types} onClosed={(allOk) => allOk && setMode("view")} />
+          <BulkAddGrid category={props.category ?? null} seriesOptions={props.seriesOptions} batchId={props.batchId} supplierId={props.supplierId} supplierCurrency={props.supplierCurrency} rateMicro={props.rateMicro} series={props.series} types={props.types} onClosed={(allOk) => allOk && setMode("view")} />
         </div>
       )}
 
@@ -72,7 +78,9 @@ export function ItemsPanel(props: {
         mode === "view" && <p className="px-4 py-8 text-center text-sm text-mute">還沒有品項。{editable && <>按「＋ 加商品」開始加入。</>}</p>
       ) : (
         <ul className="divide-y divide-line-2" aria-label="品項清單">
-          {live.map((i) => {
+          {(multi ? groups : [undefined]).flatMap((g) => [
+            ...(multi ? [<li key={`g:${g}`} className="bg-ai-soft px-4 py-1.5 text-[13px] font-semibold text-ai" data-testid="items-series">{seriesName(g)}</li>] : []),
+            ...live.filter((i) => g === undefined || (i.seriesId ?? null) === g).map((i) => {
             const unit = i.actualUnitCost ?? i.estUnitCost;
             return (
               <li key={i.id} className={`flex items-start justify-between gap-3 px-4 py-2.5 ${i.qty === 0 ? "opacity-60" : ""}`}>
@@ -94,7 +102,8 @@ export function ItemsPanel(props: {
                 </div>
               </li>
             );
-          })}
+          }),
+          ])}
         </ul>
       )}
       {mode !== "edit" && items.length > 0 && (

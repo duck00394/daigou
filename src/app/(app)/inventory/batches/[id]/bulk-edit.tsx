@@ -29,6 +29,7 @@ export type EditItem = {
   kept?: number; // 這批裡已自留的件數（刪除時一起拿掉）
   cancelledQty: number;
   cancelReason: string | null;
+  seriesId?: string | null; // 這個品項的系列（一團可以有好幾個系列）
 };
 
 type Draft = { qty: string; est: string; actual: string; currency: Currency; sale: string };

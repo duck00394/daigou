@@ -19,7 +19,7 @@ export async function duplicateGroups(db: Tx, categoryId?: string | null): Promi
       name: true,
       createdAt: true,
       categories: { select: { categoryId: true } },
-      purchaseItems: { select: { qty: true, cancelledQty: true, batch: { select: { categoryId: true } } } },
+      purchaseItems: { select: { qty: true, cancelledQty: true, categoryId: true, batch: { select: { categoryId: true } } } },
     },
     orderBy: { createdAt: "asc" },
   });
@@ -30,7 +30,7 @@ export async function duplicateGroups(db: Tx, categoryId?: string | null): Promi
     by.set(k, [...(by.get(k) ?? []), p]);
   }
   const groups = [...by.entries()].filter(([, ps]) => ps.length > 1);
-  const related = (ps: typeof all) => !categoryId || ps.some((p) => p.categories.some((c) => c.categoryId === categoryId) || p.purchaseItems.some((i) => i.batch.categoryId === categoryId));
+  const related = (ps: typeof all) => !categoryId || ps.some((p) => p.categories.some((c) => c.categoryId === categoryId) || p.purchaseItems.some((i) => (i.categoryId ?? i.batch.categoryId) === categoryId));
   const picked = groups.filter(([, ps]) => related(ps));
   const ids = picked.flatMap(([, ps]) => ps.map((p) => p.id));
   const stock = ids.length ? await inventorySummary(db, ids) : new Map();

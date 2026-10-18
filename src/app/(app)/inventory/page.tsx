@@ -23,7 +23,7 @@ import { byText } from "@/lib/sort";
 import { formatTwd } from "@/lib/money";
 import { fmtDate, fmtDay, formatRateLabel } from "./util";
 import { batchStage, batchStageLabel, isStoreKind } from "@/lib/labels";
-import { batchPaySummary, dueByOwner } from "@/server/services/batch-ops";
+import { batchPaySummary, batchesWithSeries, dueByOwner } from "@/server/services/batch-ops";
 import { OwnerDue } from "@/components/owner-due";
 
 export const metadata = { title: "庫存與採購" };
@@ -95,7 +95,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
   const catWhere = cat === "none"
     ? { categories: { none: {} }, purchaseItems: { none: { batch: { categoryId: { not: null } } } } }
     : catIds
-      ? { OR: [{ categories: { some: { categoryId: { in: catIds } } } }, { purchaseItems: { some: { batch: { categoryId: { in: catIds } } } } }] }
+      ? { OR: [{ categories: { some: { categoryId: { in: catIds } } } }, { purchaseItems: { some: { batch: { categoryId: { in: catIds } } } } }, { purchaseItems: { some: { categoryId: { in: catIds } } } }] }
       : {};
   const products = await prisma.product.findMany({
     where: { archivedAt: null, AND: [productSearchWhere(q), catWhere, type ? { productTypeId: type === "-" ? null : type } : {}] },
@@ -109,7 +109,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
       productType: { select: { id: true, name: true, sortOrder: true } },
       characters: { select: { character: { select: { id: true, name: true } } } },
       categories: { select: { categoryId: true } },
-      purchaseItems: { select: { batch: { select: { categoryId: true } } }, take: 5 },
+      purchaseItems: { select: { categoryId: true, batch: { select: { categoryId: true } } }, take: 5 },
     },
   });
   const ids = products.map((p) => p.id);
@@ -140,7 +140,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
   }
   const seriesById = new Map(seriesOpts.map((s) => [s.id, s]));
   let rows = products.map((p) => {
-    const cands = [...p.categories.map((c) => c.categoryId), ...p.purchaseItems.map((i) => i.batch.categoryId).filter((x): x is string => !!x)];
+    const cands = [...p.categories.map((c) => c.categoryId), ...p.purchaseItems.map((i) => i.categoryId ?? i.batch.categoryId).filter((x): x is string => !!x)];
     const cid = (catIds ? cands.find((c) => catIds.includes(c)) : null) ?? cands[0] ?? null;
     const series = cid ? (seriesById.get(cid) ?? null) : null;
     const all = inv.get(p.id) ?? zero;
@@ -338,7 +338,7 @@ async function BatchesTab({ cat, open, owner }: { cat?: string; open?: string; o
   const operators = await tx((t) => listOperators(t));
   const ids = operators.map((o) => o.id);
   const allBatches = await prisma.purchaseBatch.findMany({
-    where: { ...(cat ? { categoryId: cat === "none" ? null : cat } : {}), ...(mode === "open" ? { status: { in: ["DRAFT", "ORDERED", "PARTIAL_RECEIVED"] } } : mode === "cancelled" ? { status: "CANCELLED" as const } : { status: { not: "CANCELLED" as const } }) },
+    where: { ...(cat ? (cat === "none" ? { categoryId: null } : batchesWithSeries(cat)) : {}), ...(mode === "open" ? { status: { in: ["DRAFT", "ORDERED", "PARTIAL_RECEIVED"] } } : mode === "cancelled" ? { status: "CANCELLED" as const } : { status: { not: "CANCELLED" as const } }) },
     orderBy: { createdAt: "desc" },
     include: { supplierRef: true, orderedBy: { select: { name: true } }, category: { select: { id: true, name: true } }, items: { include: { movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } } },
   });
@@ -351,7 +351,7 @@ async function BatchesTab({ cat, open, owner }: { cat?: string; open?: string; o
   const cats = await prisma.category.findMany({ where: { batches: { some: {} } }, orderBy: [{ active: "desc" }, { sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } });
   const chip = (on: boolean) => `shrink-0 rounded-full border px-3 py-1.5 text-sm ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
   const href = (c?: string, o?: string, w: string = owner) => `/inventory?tab=batches${c ? `&cat=${c}` : ""}${o === "0" || o === "cancelled" ? `&open=${o}` : ""}${w ? `&owner=${w}` : ""}`;
-  const cancelledCount = await prisma.purchaseBatch.count({ where: { status: "CANCELLED", ...(cat ? { categoryId: cat === "none" ? null : cat } : {}) } });
+  const cancelledCount = await prisma.purchaseBatch.count({ where: { status: "CANCELLED", ...(cat ? (cat === "none" ? { categoryId: null } : batchesWithSeries(cat)) : {}) } });
   const today = new Date();
   const pay = await tx((t) => batchPaySummary(t, batches.map((b) => b.id)));
   return (

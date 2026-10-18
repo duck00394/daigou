@@ -283,9 +283,9 @@ export async function deleteCatalogItem(t: Tx, actor: Actor, input: { categoryId
 }
 
 export async function deleteSeries(t: Tx, actor: Actor, categoryId: string) {
-  const cat = await t.category.findUnique({ where: { id: categoryId }, select: { id: true, name: true, _count: { select: { batches: true, orderItems: true, groupBuys: true } } } });
+  const cat = await t.category.findUnique({ where: { id: categoryId }, select: { id: true, name: true, _count: { select: { batches: true, orderItems: true, groupBuys: true, batchItems: true } } } });
   if (!cat) throw new BizError("找不到系列");
-  if (cat._count.batches) throw new BizError(`「${cat.name}」有 ${cat._count.batches} 團採購，不能刪（紀錄要留著算帳）。不想再看到的話，設成「已過期」就好；或先把那些團改到別的系列。`);
+  if (cat._count.batches || cat._count.batchItems) throw new BizError(`「${cat.name}」有採購紀錄，不能刪（紀錄要留著算帳）。不想再看到的話，設成「已過期」就好；或先把那些團改到別的系列。`);
   if (cat._count.orderItems || cat._count.groupBuys) throw new BizError(`「${cat.name}」有賣出或接單紀錄，不能刪。不想再看到的話，設成「已過期」就好。`);
   const products = await t.product.findMany({ where: { categories: { some: { categoryId } } }, select: { id: true } });
   const used = await historyOf(t, products.map((p) => p.id));

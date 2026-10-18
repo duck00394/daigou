@@ -47,7 +47,8 @@ export function QuickPurchase(props: {
   const [cats, setCats] = useState(props.categories);
   const [suppliers, setSuppliers] = useState(props.suppliers);
   const [categoryId, setCategoryId] = useState(initBatch?.categoryId ?? props.initialCategory ?? "");
-  const inCat = batches.filter((b) => (b.categoryId ?? "") === categoryId);
+  // 之前的團：同系列的排前面，再來是最近的其他團（同一個代購一起買別的系列時，可以加進同一團）
+  const inCat = [...batches.filter((b) => (b.categoryId ?? "") === categoryId), ...batches.filter((b) => (b.categoryId ?? "") !== categoryId)].slice(0, 12);
   const [pick, setPick] = useState<string>(initBatch?.id ?? NEW);
   const [showOld, setShowOld] = useState(!!initBatch);
   const [kind, setKind] = useState(cats.find((c) => c.id === categoryId)?.kindKey ?? "");
@@ -259,7 +260,7 @@ export function QuickPurchase(props: {
             inCat.map((b) => (
               <button key={b.id} type="button" role="radio" aria-checked={pick === b.id} className={`${card(pick === b.id)} ${pick === b.id ? "" : ownerTone(b.ownerKey, ids).stripe}`} onClick={() => { setPick(b.id); setSaved(null); }}>
                 <span className="block font-medium">{b.label}</span>
-                <span className={`block text-[12px] ${pick === b.id ? "text-white/80" : "text-mute"}`}>{b.owner}的・{b.stage}・{b.items} 項</span>
+                <span className={`block text-[12px] ${pick === b.id ? "text-white/80" : "text-mute"}`}>{(b.categoryId ?? "") !== categoryId && cats.find((c) => c.id === b.categoryId) ? `${cats.find((c) => c.id === b.categoryId)!.name}・` : ""}{b.owner}的・{b.stage}・{b.items} 項</span>
               </button>
             ))}
         </div>

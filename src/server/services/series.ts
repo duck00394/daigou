@@ -175,10 +175,10 @@ async function findVariantRaw(db: Db, k: { seriesId: string; productTypeId: stri
   // 舊格式、規格相同：只有以前就是在這個活動（而且只在這個活動）買的，才算同一個商品
   const legacy = await db.product.findUnique({
     where: { variantKey: variantKey(k.seriesId, k.productTypeId, k.characterId, k.spec) },
-    include: { purchaseItems: { select: { batch: { select: { categoryId: true } } } } },
+    include: { purchaseItems: { select: { categoryId: true, batch: { select: { categoryId: true } } } } },
   });
   if (!legacy) return null;
-  const cats = new Set(legacy.purchaseItems.map((i) => i.batch.categoryId));
+  const cats = new Set(legacy.purchaseItems.map((i) => i.categoryId ?? i.batch.categoryId));
   return cats.size === 1 && cats.has(k.category.id) ? legacy : null;
 }
 
@@ -322,7 +322,7 @@ export function isBlankRow(r: BulkRow) {
  */
 export async function bulkAddSeriesItems(
   actor: Actor,
-  input: { batchId: string; seriesId: string; productTypeId: string | null; submissionKey: string; rows: BulkRow[] },
+  input: { batchId: string; seriesId: string; productTypeId: string | null; submissionKey: string; rows: BulkRow[]; categoryId?: string | null },
 ): Promise<{ results: BulkRowResult[]; created: number; already: number; failed: number; skippedBlank: number }> {
   if (!input.submissionKey || input.submissionKey.length > 100) throw new BizError("缺少送出識別碼，請重新整理頁面");
   if (input.rows.length > 300) throw new BizError("一次最多 300 列");
@@ -335,7 +335,10 @@ export async function bulkAddSeriesItems(
   if (batch.status === "CANCELLED") throw new BizError("已取消的採購團不能新增品項");
   if (!series) throw new BizError("找不到系列");
   if (input.productTypeId && !type) throw new BizError("找不到商品類型");
-  const category = batch.categoryId ? await prisma.category.findUnique({ where: { id: batch.categoryId }, select: { id: true, name: true } }) : null;
+  // 這批商品的系列：有指定就用指定的（一團可以放好幾個系列），沒指定跟著這團
+  const catId = input.categoryId || batch.categoryId;
+  const category = catId ? await prisma.category.findUnique({ where: { id: catId }, select: { id: true, name: true } }) : null;
+  if (input.categoryId && !category) throw new BizError("找不到系列");
   const supplierKindOf = batch.supplierId ? (await prisma.supplier.findUnique({ where: { id: batch.supplierId }, select: { kind: true } }))?.kind : null;
   const storeBatch = supplierKindOf === "STORE" || supplierKindOf === "OFFICIAL_STORE";
 
@@ -425,6 +428,7 @@ export async function bulkAddSeriesItems(
           salePriceTwd: r.salePriceTwd ?? null,
           specNote: spec,
           dedupeKey,
+          categoryId: category?.id ?? null,
         });
         // 實體店買的：一加進來就算拿到了，直接入庫（合資團沒有主人時，留給使用者按「全部到了」）
         const receiver = storeBatch ? (batch.receivingResponsibleById ?? batch.orderedById) : null;
@@ -504,20 +508,20 @@ export async function renamePlan(db: Db, categoryId: string) {
   const cat = await db.category.findUnique({ where: { id: categoryId }, select: { id: true, name: true } });
   if (!cat) throw new BizError("找不到活動");
   const products = await db.product.findMany({
-    where: { archivedAt: null, OR: [{ purchaseItems: { some: { batch: { categoryId } } } }, { categories: { some: { categoryId } } }] },
+    where: { archivedAt: null, OR: [{ purchaseItems: { some: { batch: { categoryId } } } }, { purchaseItems: { some: { categoryId } } }, { categories: { some: { categoryId } } }] },
     select: {
       id: true,
       name: true,
       spec: true,
       productType: { select: { name: true } },
       characters: { select: { character: { select: { name: true } } } },
-      purchaseItems: { select: { batch: { select: { categoryId: true } } } },
+      purchaseItems: { select: { categoryId: true, batch: { select: { categoryId: true } } } },
     },
   });
   const out: { productId: string; from: string; to: string }[] = [];
   for (const p of products) {
     if (p.characters.length !== 1) continue;
-    const cats = new Set(p.purchaseItems.map((i) => i.batch.categoryId).filter(Boolean));
+    const cats = new Set(p.purchaseItems.map((i) => i.categoryId ?? i.batch.categoryId).filter(Boolean));
     if (cats.size > 1) continue; // 在不同活動都買過：不確定該叫什麼，不動
     const to = variantName({ category: cat.name, character: p.characters[0].character.name, type: p.productType?.name, spec: p.spec });
     if (to !== p.name) out.push({ productId: p.id, from: p.name, to });

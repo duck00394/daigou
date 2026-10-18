@@ -23,6 +23,7 @@ export interface BatchItemInput {
   weightGrams?: number | null;
   markOrderItemIds?: string[];
   dedupeKey?: string | null;
+  categoryId?: string | null; // 這個品項的系列；空白＝跟著這團
 }
 
 export async function createBatch(
@@ -138,6 +139,7 @@ export async function addBatchItem(t: Tx, actor: Actor, batchId: string, it: Bat
       specNote: emptyToNull(it.specNote ?? null),
       weightGrams: it.weightGrams ?? null,
       dedupeKey: it.dedupeKey ?? null,
+      categoryId: it.categoryId && it.categoryId !== batch.categoryId ? it.categoryId : null,
     },
   });
   // 將相關訂單明細標記為「已下單給供應商」

@@ -211,9 +211,30 @@ export interface PriceCell {
   feesConfirmed: boolean; // 該團是否已登記任何共同費用
 }
 
+/** 一團可以放好幾個系列：品項的系列＝品項自己的，沒填就跟著這團 */
+export const itemSeries = (i: { categoryId?: string | null }, b: { categoryId: string | null }) => i.categoryId ?? b.categoryId;
+/** 有這個系列商品的團（這團的系列是它，或裡面有品項是它） */
+export const batchesWithSeries = (categoryId: string) => ({ OR: [{ categoryId }, { items: { some: { categoryId } } }] });
+
+/**
+ * 這團的錢有多少算這個系列：照商品金額（含分攤的運費）比例分；
+ * 這團沒有商品金額時，整團算這團自己的系列。
+ */
+export function seriesRatio(b: { categoryId: string | null; rateMicro: number; items: Parameters<typeof itemGoodsTwd>[0][] & { categoryId?: string | null; allocations: { amountTwd: number }[] }[] }, categoryId: string | null) {
+  let all = 0;
+  let mine = 0;
+  for (const i of b.items) {
+    const v = itemGoodsTwd(i, b.rateMicro) + i.allocations.reduce((s, a) => s + a.amountTwd, 0);
+    all += v;
+    if (itemSeries(i, b) === categoryId) mine += v;
+  }
+  if (all > 0) return mine / all;
+  return b.categoryId === categoryId ? 1 : 0;
+}
+
 export async function categoryOverview(t: Tx, categoryId: string) {
   const batches = await t.purchaseBatch.findMany({
-    where: { categoryId },
+    where: batchesWithSeries(categoryId),
     orderBy: [{ orderedAt: "asc" }, { createdAt: "asc" }],
     include: {
       supplierRef: { select: { name: true, kind: true } },
@@ -235,13 +256,16 @@ export async function categoryOverview(t: Tx, categoryId: string) {
   const today = new Date();
   const rows = new Map<string, { product: { id: string; code: string; name: string }; cells: Map<string, PriceCell[]> }>();
   const summaries = batches.map((b) => {
+    const ratio = seriesRatio(b, categoryId);
+    const allItems = b.items;
+    const mineItems = allItems.filter((i) => itemSeries(i, b) === categoryId);
     let qty = 0;
     let received = 0;
     let cancelled = 0;
     let goodsTwd = 0;
     let feesTwd = 0;
     let estimated = false;
-    for (const i of b.items) {
+    for (const i of mineItems) {
       const q = i.qty - i.cancelledQty;
       const rec = i.movements.reduce((s, m) => s + m.onHandDelta, 0);
       qty += q;
@@ -273,8 +297,11 @@ export async function categoryOverview(t: Tx, categoryId: string) {
       arr.push(cell);
       row.cells.set(b.id, arr);
     }
-    const fee = summarizeFees(b.costs, b.rateMicro);
+    const fullFee = summarizeFees(b.costs, b.rateMicro);
+    // 一團有好幾個系列時，不攤的運費、指定付款人的費用也照比例分
+    const fee = { unallocTwd: Math.round(fullFee.unallocTwd * ratio), overrideTwd: Math.round(fullFee.overrideTwd * ratio), byPayer: new Map([...fullFee.byPayer].map(([k, v]) => [k, Math.round(v * ratio)])) };
     feesTwd += fee.unallocTwd; // 不攤的費用也算在這團總額
+    const otherSeries = allItems.some((i) => itemSeries(i, b) !== categoryId);
     const paid: Record<string, number> = {};
     const pending: Record<string, number> = {};
     for (const p of b.supplierPayments) {
@@ -314,13 +341,16 @@ export async function categoryOverview(t: Tx, categoryId: string) {
       estimated,
       feesRecorded: b.costs.length > 0,
       fee,
+      ratio,
+      partial: otherSeries,
       paid,
       pending,
       issues,
     };
   });
   const pay = await batchPaySummary(t, batches.map((b) => b.id));
-  const summariesWithPay = summaries.map((x) => ({ ...x, paidTwd: pay.get(x.id)?.paidTwd ?? 0, dueTwd: pay.get(x.id)?.dueTwd ?? 0 }));
+  // 已付、還要付也照這個系列占的比例
+  const summariesWithPay = summaries.map((x) => ({ ...x, paidTwd: Math.round((pay.get(x.id)?.paidTwd ?? 0) * x.ratio), dueTwd: Math.round((pay.get(x.id)?.dueTwd ?? 0) * x.ratio) }));
   const active = summariesWithPay.filter((s) => s.status !== "CANCELLED");
   const matrix = [...rows.values()]
     .map((r) => {
@@ -375,7 +405,7 @@ export async function categoryOverview(t: Tx, categoryId: string) {
     byStage.set(b.stage, v);
   }
   // 這個活動進來的庫存，依歸屬分
-  const itemIds = batches.flatMap((b) => b.items.map((i) => i.id));
+  const itemIds = batches.flatMap((b) => b.items.filter((i) => itemSeries(i, b) === categoryId).map((i) => i.id));
   const stockPer = await stockByOwner(t, { batchItemIds: itemIds });
   const stock = new Map<string, { onHand: number; free: number; reserved: number; kept: number }>();
   for (const per of stockPer.values())
@@ -388,7 +418,7 @@ export async function categoryOverview(t: Tx, categoryId: string) {
       stock.set(k, x);
     }
   return {
-    batches: summariesWithPay.map(({ fee: f, ...x }) => ({ ...x, unallocFeesTwd: f.unallocTwd })),
+    batches: summariesWithPay.map(({ fee: f, ratio: _r, ...x }) => ({ ...x, unallocFeesTwd: f.unallocTwd })),
     matrix,
     byOwner: Object.fromEntries(byOwner),
     byStage: Object.fromEntries(byStage),
@@ -410,37 +440,41 @@ export async function categoryOverview(t: Tx, categoryId: string) {
 /** 活動總表：每個活動的採購團數、總額、依人分的金額、待到貨件數（不含已取消的團） */
 export async function categoriesSummary(t: Tx) {
   const batches = await t.purchaseBatch.findMany({
-    where: { categoryId: { not: null }, status: { not: "CANCELLED" } },
+    where: { OR: [{ categoryId: { not: null } }, { items: { some: { categoryId: { not: null } } } }], status: { not: "CANCELLED" } },
     select: {
       id: true,
       categoryId: true,
       ownership: true,
       orderedById: true,
       rateMicro: true,
-      items: { select: { qty: true, cancelledQty: true, currency: true, estUnitCost: true, actualUnitCost: true, allocations: { select: { amountTwd: true } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } },
+      items: { select: { categoryId: true, qty: true, cancelledQty: true, currency: true, estUnitCost: true, actualUnitCost: true, allocations: { select: { amountTwd: true } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } },
       costs: { select: { currency: true, amount: true, method: true, payer: true, shareSplit: true } },
     },
   });
   const weights = await jointWeights(t, batches.filter((b) => b.ownership === "JOINT").map((b) => b.id));
   const out = new Map<string, { batches: number; totalTwd: number; outstanding: number; byOwner: Record<string, number> }>();
   for (const b of batches) {
-    const v = out.get(b.categoryId!) ?? { batches: 0, totalTwd: 0, outstanding: 0, byOwner: {} };
-    let total = 0;
-    for (const i of b.items) {
-      total += itemGoodsTwd(i, b.rateMicro) + i.allocations.reduce((s, a) => s + a.amountTwd, 0);
-      v.outstanding += Math.max(0, i.qty - i.cancelledQty - i.movements.reduce((s, m) => s + m.onHandDelta, 0));
+    // 一團有好幾個系列：每個系列照商品金額比例分這團的錢
+    const fullFee = summarizeFees(b.costs, b.rateMicro);
+    let full = fullFee.unallocTwd;
+    for (const i of b.items) full += itemGoodsTwd(i, b.rateMicro) + i.allocations.reduce((s, a) => s + a.amountTwd, 0);
+    const seriesIds = new Set(b.items.map((i) => itemSeries(i, b)).filter((x): x is string => !!x));
+    if (!b.items.length && b.categoryId) seriesIds.add(b.categoryId);
+    for (const cid of seriesIds) {
+      const r = seriesRatio(b, cid);
+      const v = out.get(cid) ?? { batches: 0, totalTwd: 0, outstanding: 0, byOwner: {} };
+      for (const i of b.items) if (itemSeries(i, b) === cid) v.outstanding += Math.max(0, i.qty - i.cancelledQty - i.movements.reduce((s, m) => s + m.onHandDelta, 0));
+      const total = Math.round(full * r);
+      v.batches += 1;
+      v.totalTwd += total;
+      for (const [k, x] of fullFee.byPayer) v.byOwner[k] = (v.byOwner[k] ?? 0) + Math.round(x * r);
+      const base = total - Math.round(fullFee.overrideTwd * r);
+      const key = batchOwnerKey(b);
+      const split = key === JOINT ? splitByWeights(base, weights.get(b.id)) : null;
+      if (split) for (const [k, x] of split) v.byOwner[k] = (v.byOwner[k] ?? 0) + x;
+      else v.byOwner[key] = (v.byOwner[key] ?? 0) + base;
+      out.set(cid, v);
     }
-    const fee = summarizeFees(b.costs, b.rateMicro);
-    total += fee.unallocTwd;
-    v.batches += 1;
-    v.totalTwd += total;
-    for (const [k, x] of fee.byPayer) v.byOwner[k] = (v.byOwner[k] ?? 0) + x;
-    const base = total - fee.overrideTwd;
-    const key = batchOwnerKey(b);
-    const split = key === JOINT ? splitByWeights(base, weights.get(b.id)) : null;
-    if (split) for (const [k, x] of split) v.byOwner[k] = (v.byOwner[k] ?? 0) + x;
-    else v.byOwner[key] = (v.byOwner[key] ?? 0) + base;
-    out.set(b.categoryId!, v);
   }
   return out;
 }
@@ -487,14 +521,16 @@ export async function payRemaining(t: Tx, actor: Actor, batchId: string, input: 
 
 /** 每個人還要付多少（現金流）：個人團算主人、合資團另外列、沒指定的列在未指定。不含已取消的團 */
 export async function dueByOwner(t: Tx, where: { categoryId?: string | null } = {}) {
+  const cid = where.categoryId;
   const batches = await t.purchaseBatch.findMany({
-    where: { status: { not: "CANCELLED" }, ...(where.categoryId !== undefined ? { categoryId: where.categoryId } : {}) },
-    select: { id: true, ownership: true, orderedById: true },
+    where: { status: { not: "CANCELLED" }, ...(cid ? batchesWithSeries(cid) : cid === null ? { categoryId: null } : {}) },
+    select: { id: true, ownership: true, orderedById: true, categoryId: true, rateMicro: true, items: { select: { categoryId: true, qty: true, cancelledQty: true, currency: true, estUnitCost: true, actualUnitCost: true, allocations: { select: { amountTwd: true } } } } },
   });
   const pay = await batchPaySummary(t, batches.map((b) => b.id));
   const out = new Map<string, { due: number; batches: number }>();
   for (const b of batches) {
-    const due = pay.get(b.id)?.dueTwd ?? 0;
+    // 看某個系列時，一團有好幾個系列就只算這個系列的比例
+    const due = Math.round((pay.get(b.id)?.dueTwd ?? 0) * (cid ? seriesRatio(b, cid) : 1));
     if (due <= 0) continue;
     const k = b.ownership === "JOINT" ? "joint" : (b.orderedById ?? "none");
     const v = out.get(k) ?? { due: 0, batches: 0 };

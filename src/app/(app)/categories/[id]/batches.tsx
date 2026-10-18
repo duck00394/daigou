@@ -152,9 +152,10 @@ export async function CategoryBatches({ categoryId, view, owner = "" }: { catego
                 </div>
                 <div className="mt-1.5 grid grid-cols-3 gap-1 text-center text-[13px]">
                   <div className="rounded-lg bg-[#fafbfc] py-1"><div className="text-[11px] text-mute">到貨</div><span className="num">{b.received}／{b.qty}</span></div>
-                  <div className="rounded-lg bg-[#fafbfc] py-1"><div className="text-[11px] text-mute">這團總額{b.estimated || !b.feesRecorded ? "（價格還沒確定）" : ""}</div><span className="num">{formatTwd(b.totalTwd)}</span></div>
-                  <div className="rounded-lg bg-[#fafbfc] py-1"><div className="text-[11px] text-mute">已付</div><span className="num">{sums(b.paid) || "—"}</span></div>
+                  <div className="rounded-lg bg-[#fafbfc] py-1"><div className="text-[11px] text-mute">{b.partial ? "這個系列" : "這團總額"}{b.estimated || !b.feesRecorded ? "（價格還沒確定）" : ""}</div><span className="num">{formatTwd(b.totalTwd)}</span></div>
+                  <div className="rounded-lg bg-[#fafbfc] py-1"><div className="text-[11px] text-mute">已付</div><span className="num">{b.partial ? (b.paidTwd ? formatTwd(b.paidTwd) : "—") : sums(b.paid) || "—"}</span></div>
                 </div>
+                {b.partial && <div className="mt-1 text-[12px] text-info" data-testid="partial-note">這團也有別的系列，這裡只算這個系列的部分（運費照金額比例分）</div>}
                 {Object.keys(b.pending).length > 0 && <div className="mt-1 text-[12px] text-warn">待付款 {sums(b.pending)}</div>}
                 {b.expectedAt && <div className="mt-1 text-[12px] text-mute">預計到貨 {fmtDay(b.expectedAt)}</div>}
                 {b.issues.filter((x) => !(b.store && x === "尚未登記付款")).length > 0 && <div className="mt-1 text-[12px] text-warn">⚠ {b.issues.filter((x) => !(b.store && x === "尚未登記付款")).join("、")}</div>}

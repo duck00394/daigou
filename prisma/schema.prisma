@@ -271,6 +271,7 @@ model Category {
   groupBuys  GroupBuy[]
   batches    PurchaseBatch[]
   typePrices CategoryTypePrice[]
+  batchItems PurchaseBatchItem[]
 }
 
 model ProductCategory {
@@ -806,6 +807,9 @@ model PurchaseBatchItem {
   batch          PurchaseBatch       @relation(fields: [batchId], references: [id])
   productId      String
   product        Product             @relation(fields: [productId], references: [id])
+  // 這個品項屬於哪個系列；空白＝跟著這團的系列（一團可以放好幾個系列）
+  categoryId     String?
+  category       Category?           @relation(fields: [categoryId], references: [id])
   qty            Int
   currency       String              @default("JPY") // JPY 或 TWD；JPY 以本批匯率換算
   estUnitCost    Int // 採購預估單價（依幣別）
@@ -825,6 +829,7 @@ model PurchaseBatchItem {
 
   @@index([batchId])
   @@index([productId])
+  @@index([categoryId])
 }
 
 enum BatchCostKind {

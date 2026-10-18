@@ -109,8 +109,11 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       })(),
       cancelledQty: i.cancelledQty,
       cancelReason: i.cancelReason,
+      seriesId: i.categoryId ?? b.categoryId,
     });
   }
+  // 這團有哪些系列（團本身的＋品項各自指定的）
+  const batchSeries = [...new Set([b.categoryId, ...b.items.map((i) => i.categoryId)].filter((x): x is string => !!x))].map((cid) => ({ id: cid, name: categoriesList.find((c) => c.id === cid)?.name ?? "" })).filter((x) => x.name);
   const open = b.status !== "CANCELLED";
   const totalLanded = [...landed.values()].reduce((s, l) => s + l.totalTwd, 0);
   const totalQty = editItems.reduce((s, i) => s + i.qty, 0);
@@ -124,7 +127,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       <PageHeader
         title={b.name}
         back={{ href: "/inventory?tab=batches", label: "採購團" }}
-        sub={<span className="flex flex-wrap items-center gap-2"><OwnerBadge k={b.ownership === "JOINT" ? "joint" : b.orderedById} name={b.ownership === "JOINT" ? "合資" : opName(b.orderedById)} ids={ops.map((o) => o.id)} />{isStoreKind(b.supplierRef?.kind) ? <Badge tone="info">實體店購買</Badge> : <StatusBadge map={batchStageLabel} value={batchStage(b)} />}{b.category && <a href={`/categories/${b.category.id}`} className="text-ai hover:underline">{b.category.name}</a>}{supplierName && supplierName !== b.name && <span>{isStoreKind(b.supplierRef?.kind) ? "店家" : "代購"}：{supplierName}</span>}<span className="text-[12px] text-mute">{b.code}</span></span>}
+        sub={<span className="flex flex-wrap items-center gap-2"><OwnerBadge k={b.ownership === "JOINT" ? "joint" : b.orderedById} name={b.ownership === "JOINT" ? "合資" : opName(b.orderedById)} ids={ops.map((o) => o.id)} />{isStoreKind(b.supplierRef?.kind) ? <Badge tone="info">實體店購買</Badge> : <StatusBadge map={batchStageLabel} value={batchStage(b)} />}{batchSeries.map((x) => <a key={x.id} href={`/categories/${x.id}`} className="text-ai hover:underline">{x.name}</a>)}{supplierName && supplierName !== b.name && <span>{isStoreKind(b.supplierRef?.kind) ? "店家" : "代購"}：{supplierName}</span>}<span className="text-[12px] text-mute">{b.code}</span></span>}
         actions={<><LinkButton href={`/purchase${b.categoryId ? `?categoryId=${b.categoryId}` : ""}`}>同活動再開一團</LinkButton>{open && <CancelBatch id={b.id} />}</>}
       />
       {!open && (
@@ -166,6 +169,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
           series={series}
           types={types}
           category={b.category ? { id: b.category.id, name: b.category.name } : null}
+          seriesOptions={categoriesList}
           copyButton={<CopyItemsButton toBatchId={b.id} batches={otherBatches.map((x) => ({ id: x.id, label: `${x.code} ${x.name}${x.supplierRef ? `（${x.supplierRef.name}）` : ""}` }))} />}
         />
       </section>

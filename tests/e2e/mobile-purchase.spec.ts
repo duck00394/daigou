@@ -71,8 +71,8 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   // 預設開新的一團；之前的團收起來，點了才出現
   await expect(page.getByRole("radio", { name: /新的一團/ })).toHaveAttribute("aria-checked", "true");
   await expect(page.getByRole("radiogroup", { name: "哪一團" }).getByRole("radio")).toHaveCount(1);
-  await page.getByRole("button", { name: /或加到之前的團（3 團）/ }).click();
-  await expect(page.getByRole("radiogroup", { name: "哪一團" }).getByRole("radio")).toHaveCount(4); // 三團＋新的一團
+  await page.getByRole("button", { name: /或加到之前的團/ }).click();
+  for (const n of [`YUANS ${tag}`, `QQ Shop ${tag}`, `頑皮貓 ${tag}`]) await expect(page.getByRole("radiogroup", { name: "哪一團" }).getByRole("radio", { name: new RegExp(n) })).toBeVisible();
 
   // 活動總表：總額與誰買的
   await page.goto("/categories");

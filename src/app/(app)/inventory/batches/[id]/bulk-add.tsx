@@ -1,4 +1,5 @@
 "use client";
+import { SeriesPicker, type SeriesOpt } from "@/components/series-picker";
 import type { RowDefault } from "@/server/services/series";
 // 批次新增系列商品：同一張表格填寫多個角色的單價與數量，一次建立。
 // 桌面：可鍵盤移動、貼上多格（從 Excel 複製）；手機：每列顯示為一張卡片。
@@ -78,6 +79,7 @@ export function BulkAddGrid({
   onSaved,
   onClosed,
   category = null,
+  seriesOptions,
   initialSeriesId = null,
   initialTypeId = null,
 }: {
@@ -86,6 +88,8 @@ export function BulkAddGrid({
   initialTypeId?: string | null;
   /** 這團的活動：商品名稱＝活動＋角色＋種類，不同活動是不同商品 */
   category?: { id: string; name: string } | null;
+  /** 給了就可以換這批商品的系列（一團可以放好幾個系列） */
+  seriesOptions?: SeriesOpt[];
   batchId: string | null; // 還沒建立採購團時為 null，送出時由 ensureBatch 建立
   ensureBatch?: () => Promise<string | null>;
   onSaved?: (batchId: string, created: number) => void;
@@ -97,6 +101,10 @@ export function BulkAddGrid({
   series: Opt[];
   types: Opt[];
 }) {
+  // 這批商品的系列：預設跟著這團（或上面選的系列），可以換
+  const [cat, setCat] = useState(category);
+  const [changingCat, setChangingCat] = useState(false);
+  useEffect(() => setCat(category), [category?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [seriesList, setSeriesList] = useState(seriesInit);
   const [types, setTypes] = useState(typesInit);
   const [seriesId, setSeriesId] = useState((initialSeriesId && seriesInit.some((x) => x.id === initialSeriesId) ? initialSeriesId : null) ?? seriesInit[0]?.id ?? "");
@@ -173,7 +181,7 @@ export function BulkAddGrid({
     });
     let defaults: RowDefault[] = [];
     try {
-      const d = await rowDefaultsAction({ seriesId, productTypeId: tid, supplierId, categoryId: category?.id ?? null, characterIds: items.map((i) => i.characterId), specs });
+      const d = await rowDefaultsAction({ seriesId, productTypeId: tid, supplierId, categoryId: cat?.id ?? null, characterIds: items.map((i) => i.characterId), specs });
       if (d.ok) defaults = d.data;
     } catch {
       /* 讀不到參考價也要讓使用者可以輸入 */
@@ -323,7 +331,7 @@ export function BulkAddGrid({
         }));
       const targetId = batchId ?? (ensureBatch ? await ensureBatch() : null);
       if (!targetId) return;
-      const res = await bulkAddAction({ batchId: targetId, seriesId, productTypeId: typeId || null, submissionKey: idem.key, rows: payload });
+      const res = await bulkAddAction({ batchId: targetId, seriesId, productTypeId: typeId || null, submissionKey: idem.key, rows: payload, categoryId: cat?.id ?? null });
       if (!res.ok) {
         notify(res.error);
         return;
@@ -359,6 +367,22 @@ export function BulkAddGrid({
 
   return (
     <div className="space-y-4">
+      {seriesOptions && (
+        <div className="rounded-lg bg-ai-soft px-3 py-2 text-[14px]" data-testid="items-series-picker">
+          {changingCat ? (
+            <div className="space-y-2">
+              <SeriesPicker series={seriesOptions} value={cat?.id ?? ""} prefix="這批商品的" noneLabel="不指定" onChange={(id) => { const x = seriesOptions.find((o) => o.id === id); setCat(x ? { id: x.id, name: x.name } : null); if (x) setChangingCat(false); }} />
+              <button type="button" className="text-ai" onClick={() => setChangingCat(false)}>完成</button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2">
+              <span>這批商品的系列：<b data-testid="items-series-name">{cat?.name ?? "不指定"}</b></span>
+              <button type="button" className="min-h-9 shrink-0 rounded-lg border border-line bg-white px-3 text-ai" onClick={() => setChangingCat(true)}>換系列</button>
+            </div>
+          )}
+          <p className="mt-1 text-[12px] text-mute">同一個代購一起買了別的系列？換系列再加就好，運費、付款還是同一團。</p>
+        </div>
+      )}
       {/* 1～3：系列、類型（供應商與採購團由這一團帶入） */}
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
@@ -492,8 +516,8 @@ export function BulkAddGrid({
           const extra = r.more || r.spec.trim() || r.salePrice.trim() || r.currency !== supplierCurrency ? "" : "hidden md:block";
           const charName = r.characterId === "__new__" ? r.newName.trim() : nameOf(r.characterId);
           const typeName = types.find((x) => x.id === typeId)?.name ?? "";
-          const spec = r.spec.trim() && r.spec.trim() !== category?.name ? r.spec.trim() : "";
-          const preview = charName ? [`${category?.name ?? ""}${charName}`, typeName, spec].filter(Boolean).join(" ") : "";
+          const spec = r.spec.trim() && r.spec.trim() !== cat?.name ? r.spec.trim() : "";
+          const preview = charName ? [`${cat?.name ?? ""}${charName}`, typeName, spec].filter(Boolean).join(" ") : "";
           return (
             <div
               key={r.key}
@@ -513,7 +537,7 @@ export function BulkAddGrid({
                     update(r.key, { characterId: v, newName: v === "__new__" ? r.newName : "" });
                     if (v && v !== "__new__" && !r.unitCost && seriesId) {
                       update(r.key, { characterId: v, newName: "", loading: true });
-                      const d = await rowDefaultsAction({ seriesId, productTypeId: typeId || null, supplierId, categoryId: category?.id ?? null, characterIds: [v], specs: { [v]: r.spec || null } });
+                      const d = await rowDefaultsAction({ seriesId, productTypeId: typeId || null, supplierId, categoryId: cat?.id ?? null, characterIds: [v], specs: { [v]: r.spec || null } });
                       const df = d.ok ? d.data[0] : null;
                       setRows((rs) => rs.map((x) => (x.key === r.key ? { ...x, loading: false } : x)));
                       // 參考價回來時，只補在使用者還沒動過、也還沒填的欄位
