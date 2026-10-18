@@ -2,8 +2,8 @@
 // 系列目錄：上面選種類（下拉），下面是這個種類的系列；每個系列列出品項（預設售價）和角色
 import { useState } from "react";
 import Link from "next/link";
-import { Button, inputCls, notify, useRun } from "@/components/client";
-import { addCatalogCharacterAction, addCatalogItemAction, moveSeriesKindAction, renameKindAction, setCatalogPriceAction } from "@/actions/catalog-tree";
+import { Button, Modal, inputCls, notify, useRun } from "@/components/client";
+import { addCatalogCharacterAction, addCatalogItemAction, deleteCatalogCharacterAction, deleteCatalogItemAction, deleteSeriesAction, moveSeriesKindAction, renameKindAction, setCatalogPriceAction } from "@/actions/catalog-tree";
 import { renameCategoryAction, saveCategoryAction, setCategoryActiveAction } from "@/actions/catalog";
 import type { TreeKind, TreeSeries, TreeItem } from "@/server/services/catalog-tree";
 
@@ -190,7 +190,17 @@ function SeriesCard({ s, types, kinds, open, onToggle }: { s: TreeSeries; types:
             )}
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line-2 px-3 py-2 text-[14px]">
-            <Link className="text-ai" href={`/categories/${s.id}`}>看花多少、庫存</Link>
+            <span className="flex items-center gap-3">
+              <Link className="text-ai" href={`/categories/${s.id}`}>看花多少、庫存</Link>
+              <DeleteButton
+                label="🗑 刪除系列"
+                aria={`刪除系列「${s.name}」`}
+                className="text-bad"
+                title={`刪除「${s.name}」`}
+                message={<>會把這個系列和底下的品項、角色一起刪掉。<br />只有「還沒買過、賣過」才能刪；有紀錄的請改成「已過期」。</>}
+                onConfirm={async () => { let ok = false; await run(() => deleteSeriesAction(s.id), { success: `已刪除「${s.name}」`, onOk: () => { ok = true; } }); return ok; }}
+              />
+            </span>
             <label className="flex items-center gap-2">
               已過期
               <input
@@ -241,10 +251,30 @@ function ItemRow({ categoryId, item }: { categoryId: string; item: TreeItem }) {
         ) : (
           <span className="text-[12px] text-mute">沒分品項的商品</span>
         )}
+        {item.typeId && (
+          <DeleteButton
+            label="🗑"
+            aria={`刪除品項「${item.typeName}」`}
+            className="min-h-10 min-w-9 shrink-0 text-[16px]"
+            title={`刪除品項「${item.typeName}」`}
+            message={<>會把這個系列的「{item.typeName}」和底下 {item.chars.length} 個角色一起刪掉。<br />只有「還沒買過、賣過」才能刪。</>}
+            onConfirm={async () => { let ok = false; await run(() => deleteCatalogItemAction(categoryId, item.typeId), { success: `已刪除「${item.typeName}」`, onOk: () => { ok = true; } }); return ok; }}
+          />
+        )}
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {item.chars.map((c) => (
-          <Link key={c.productId} href={`/products/${c.productId}`} className="rounded-full border border-line px-3 py-1 text-[14px] text-ink-2">{c.name}</Link>
+          <span key={c.productId} className="inline-flex items-center rounded-full border border-line text-[14px] text-ink-2">
+            <Link href={`/products/${c.productId}`} className="py-1 pl-3 pr-1">{c.name}</Link>
+            <DeleteButton
+              label="×"
+              aria={`刪除「${c.name}」`}
+              className="px-2 py-1 text-mute"
+              title={`刪除「${c.name}」`}
+              message={<>從「{item.typeName}」拿掉「{c.name}」。<br />只有「還沒買過、賣過」才能刪。</>}
+              onConfirm={async () => { let ok = false; await run(() => deleteCatalogCharacterAction(categoryId, c.productId), { success: `已刪除「${c.name}」`, onOk: () => { ok = true; } }); return ok; }}
+            />
+          </span>
         ))}
         {item.typeId && adding === null && <button type="button" className="rounded-full border border-dashed border-line px-3 py-1 text-[14px] text-mute" onClick={() => setAdding("")}>＋ 角色</button>}
       </div>
@@ -256,5 +286,29 @@ function ItemRow({ categoryId, item }: { categoryId: string; item: TreeItem }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** 刪除按鈕：先跳確認，說清楚會刪什麼 */
+function DeleteButton({ label, aria, title, message, onConfirm, className }: { label: React.ReactNode; aria: string; title: string; message: React.ReactNode; onConfirm: () => Promise<boolean>; className: string }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  return (
+    <>
+      <button type="button" aria-label={aria} className={className} onClick={() => setOpen(true)}>{label}</button>
+      <Modal
+        open={open}
+        onClose={() => !busy && setOpen(false)}
+        title={title}
+        footer={
+          <>
+            <Button onClick={() => setOpen(false)} disabled={busy}>返回</Button>
+            <Button variant="danger" loading={busy} onClick={async () => { setBusy(true); const ok = await onConfirm(); setBusy(false); if (ok) setOpen(false); }}>刪除</Button>
+          </>
+        }
+      >
+        <div className="text-sm leading-6">{message}</div>
+      </Modal>
+    </>
   );
 }

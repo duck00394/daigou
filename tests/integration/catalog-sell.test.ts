@@ -81,3 +81,27 @@ describe("種類改名、系列換種類", () => {
     expect((await prisma.category.findUniqueOrThrow({ where: { id: a.id } })).customType).toBe("聯名");
   });
 });
+
+describe("系列目錄刪除", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+  it("沒買過賣過的角色、品項、系列可以刪；有紀錄的擋下來", async () => {
+    const { deleteCatalogCharacter, deleteCatalogItem, deleteSeries } = await import("@/server/services/catalog-tree");
+    const s = await setup();
+    await tx((t) => deleteCatalogCharacter(t, actor, { categoryId: s.nikuman.id, productId: s.hachi.productId }));
+    expect(await prisma.product.findUnique({ where: { id: s.hachi.productId } })).toBeNull();
+    // 吉伊收過貨：品項、系列都不能刪
+    await tx((t) => receiveStock(t, actor, { productId: s.chii.productId, qty: 1, unitCostTwd: 400 }));
+    await expect(tx((t) => deleteCatalogItem(t, actor, { categoryId: s.nikuman.id, typeId: s.typeId }))).rejects.toThrow("不能刪");
+    await expect(tx((t) => deleteSeries(t, actor, s.nikuman.id))).rejects.toThrow("不能刪");
+    // 新的空系列可以刪
+    const empty = await tx((t) => saveCategory(t, actor, null, { name: "打錯的系列", type: "CUSTOM", customType: "常設店" }));
+    const it2 = await tx((t) => addCatalogItem(t, actor, { categoryId: empty.id, typeName: "徽章", price: 180 }));
+    await tx((t) => addCatalogCharacter(t, actor, { categoryId: empty.id, typeId: it2.typeId, characterName: "兔兔" }));
+    await tx((t) => deleteSeries(t, actor, empty.id));
+    expect(await prisma.category.findUnique({ where: { id: empty.id } })).toBeNull();
+    expect(await prisma.product.count({ where: { name: { contains: "打錯的系列" } } })).toBe(0);
+    expect(await checkIntegrity(prisma)).toEqual([]);
+  });
+});

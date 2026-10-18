@@ -35,3 +35,12 @@ export async function renameKindAction(kindKey: string, name: string) {
 export async function moveSeriesKindAction(categoryId: string, input: { kindKey?: string | null; newKind?: string | null }) {
   return run((a) => tx((t) => ct.moveSeriesKind(t, a, z.string().parse(categoryId), z.object({ kindKey: z.string().max(80).nullish(), newKind: z.string().max(50).nullish() }).parse(input))));
 }
+export async function deleteCatalogCharacterAction(categoryId: string, productId: string) {
+  return run((a) => tx((t) => ct.deleteCatalogCharacter(t, a, { categoryId: z.string().parse(categoryId), productId: z.string().parse(productId) })));
+}
+export async function deleteCatalogItemAction(categoryId: string, typeId: string) {
+  return run((a) => tx((t) => ct.deleteCatalogItem(t, a, { categoryId: z.string().parse(categoryId), typeId: z.string().parse(typeId) })));
+}
+export async function deleteSeriesAction(categoryId: string) {
+  return run((a) => tx((t) => ct.deleteSeries(t, a, z.string().parse(categoryId))));
+}

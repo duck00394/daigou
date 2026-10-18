@@ -29,6 +29,15 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
     await toast(page, `已加「${ch}」`);
   }
   await expect(item.getByRole("link", { name: "吉伊" })).toBeVisible();
+  // 加錯的角色：按 × 刪掉
+  if (!(await item.getByLabel("角色名字").isVisible())) await item.getByRole("button", { name: "＋ 角色" }).click();
+  await item.getByLabel("角色名字").fill("加錯的");
+  await item.getByRole("button", { name: "加", exact: true }).click();
+  await toast(page, "已加「加錯的」");
+  await item.getByRole("button", { name: "刪除「加錯的」" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "刪除", exact: true }).click();
+  await toast(page, "已刪除「加錯的」");
+  await expect(item.getByRole("link", { name: "加錯的" })).toHaveCount(0);
   // 種類、系列改名：按 ✎ 就能改
   await page.getByRole("button", { name: "✎ 改名" }).click();
   await page.getByLabel("種類新名稱").fill(`${kind}店`);

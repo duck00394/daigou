@@ -232,3 +232,67 @@ export async function moveSeriesKind(t: Tx, actor: Actor, categoryId: string, in
   await t.category.update({ where: { id: categoryId }, data });
   await audit(t, actor, "catalog.moveSeries", "Category", categoryId, data);
 }
+
+// ── 刪除：只能刪「沒有買過、賣過」的；有紀錄的請設成已過期（資料要留著算帳） ──
+
+async function historyOf(t: Tx, productIds: string[]) {
+  if (!productIds.length) return new Set<string>();
+  const [a, b, c] = await Promise.all([
+    t.purchaseBatchItem.findMany({ where: { productId: { in: productIds } }, select: { productId: true } }),
+    t.orderItem.findMany({ where: { productId: { in: productIds } }, select: { productId: true } }),
+    t.inventoryMovement.findMany({ where: { productId: { in: productIds } }, select: { productId: true } }),
+  ]);
+  return new Set([...a, ...b, ...c].map((x) => x.productId));
+}
+
+/** 從系列拿掉商品：沒有紀錄、也不在別的系列的商品直接刪掉 */
+async function dropProducts(t: Tx, categoryId: string, productIds: string[]) {
+  for (const id of productIds) {
+    await t.productCategory.deleteMany({ where: { productId: id, categoryId } });
+    const others = await t.productCategory.count({ where: { productId: id } });
+    if (others > 0) continue;
+    try {
+      await t.$executeRawUnsafe('SAVEPOINT drop_product');
+      await t.product.delete({ where: { id } });
+      await t.$executeRawUnsafe('RELEASE SAVEPOINT drop_product');
+    } catch {
+      // 還有別的資料指到它（例：匯入紀錄）：改成封存
+      await t.$executeRawUnsafe('ROLLBACK TO SAVEPOINT drop_product');
+      await t.product.update({ where: { id }, data: { archivedAt: new Date(), variantKey: null } });
+    }
+  }
+}
+
+const blocked = (what: string, n: number) => new BizError(`${what}已經有 ${n} 個商品買過或賣過，不能刪（紀錄要留著算帳）。不想再看到的話，把系列設成「已過期」就好。`);
+
+export async function deleteCatalogCharacter(t: Tx, actor: Actor, input: { categoryId: string; productId: string }) {
+  const p = await t.product.findUnique({ where: { id: input.productId }, select: { id: true, name: true } });
+  if (!p) throw new BizError("找不到這個角色");
+  if ((await historyOf(t, [p.id])).size) throw new BizError(`「${p.name}」已經買過或賣過，不能刪（紀錄要留著算帳）。`);
+  await dropProducts(t, input.categoryId, [p.id]);
+  await audit(t, actor, "catalog.deleteCharacter", "Category", input.categoryId, { productId: p.id, name: p.name });
+}
+
+export async function deleteCatalogItem(t: Tx, actor: Actor, input: { categoryId: string; typeId: string }) {
+  const products = await t.product.findMany({ where: { productTypeId: input.typeId, categories: { some: { categoryId: input.categoryId } } }, select: { id: true } });
+  const used = await historyOf(t, products.map((p) => p.id));
+  if (used.size) throw blocked("這個品項", used.size);
+  await dropProducts(t, input.categoryId, products.map((p) => p.id));
+  await t.categoryTypePrice.deleteMany({ where: { categoryId: input.categoryId, productTypeId: input.typeId } });
+  await audit(t, actor, "catalog.deleteItem", "Category", input.categoryId, { typeId: input.typeId, products: products.length });
+}
+
+export async function deleteSeries(t: Tx, actor: Actor, categoryId: string) {
+  const cat = await t.category.findUnique({ where: { id: categoryId }, select: { id: true, name: true, _count: { select: { batches: true, orderItems: true, groupBuys: true } } } });
+  if (!cat) throw new BizError("找不到系列");
+  if (cat._count.batches) throw new BizError(`「${cat.name}」有 ${cat._count.batches} 團採購，不能刪（紀錄要留著算帳）。不想再看到的話，設成「已過期」就好；或先把那些團改到別的系列。`);
+  if (cat._count.orderItems || cat._count.groupBuys) throw new BizError(`「${cat.name}」有賣出或接單紀錄，不能刪。不想再看到的話，設成「已過期」就好。`);
+  const products = await t.product.findMany({ where: { categories: { some: { categoryId } } }, select: { id: true } });
+  const used = await historyOf(t, products.map((p) => p.id));
+  if (used.size) throw blocked(`「${cat.name}」`, used.size);
+  await dropProducts(t, categoryId, products.map((p) => p.id));
+  await t.categoryTypePrice.deleteMany({ where: { categoryId } });
+  await t.category.delete({ where: { id: categoryId } });
+  await audit(t, actor, "catalog.deleteSeries", "Category", categoryId, { name: cat.name, products: products.length });
+  return { name: cat.name };
+}
