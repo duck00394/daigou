@@ -146,6 +146,7 @@ model Supplier {
   orderUrl        String? // 訂購連結
   notes           String?
   active          Boolean         @default(true)
+  favorite        Boolean         @default(false) // 常用：採購時直接出現在最上面
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   batches         PurchaseBatch[]
@@ -159,6 +160,21 @@ model ProductType {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   products  Product[]
+  catPrices CategoryTypePrice[]
+}
+
+// 系列（活動）底下出的品項（例：肉包 的 吊娃），以及預設售價（同一系列同一品項所有角色同價）
+model CategoryTypePrice {
+  categoryId    String
+  productTypeId String
+  salePriceTwd  Int?
+  sortOrder     Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  category      Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  productType   ProductType @relation(fields: [productTypeId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, productTypeId])
 }
 
 enum ProductStatus {
@@ -254,6 +270,7 @@ model Category {
   orderItems OrderItem[]
   groupBuys  GroupBuy[]
   batches    PurchaseBatch[]
+  typePrices CategoryTypePrice[]
 }
 
 model ProductCategory {

@@ -7,6 +7,7 @@ test("手機：建團選負責人、登記付款與收貨，對帳頁不橫向�
   await login(page);
   await page.goto("/inventory/batches/new");
   await page.getByLabel("採購團名稱").fill("手機雙人團");
+  await page.getByLabel("供應商", { exact: true }).selectOption({ label: "不指定" }); // 不受其他測試建立的實體店影響
   await page.getByRole("radiogroup", { name: /這團是誰的/ }).getByRole("radio").first().click();
   await page.getByRole("radiogroup", { name: /收貨負責人/ }).getByRole("radio").nth(1).click();
   await page.getByRole("button", { name: "建立採購團" }).click();
@@ -15,8 +16,8 @@ test("手機：建團選負責人、登記付款與收貨，對帳頁不橫向�
   // 最上面就有常用的三顆：全部到了、付清、加商品
   await expect(page.getByLabel("常用動作").getByRole("link", { name: "＋ 加商品" })).toBeVisible();
 
-  await page.getByLabel("IP／系列").selectOption({ label: "吉伊卡哇" });
-  await page.getByRole("radiogroup", { name: "種類" }).getByRole("radio", { name: "吊娃" }).click();
+  await page.getByLabel("IP（例：吉伊卡哇）").selectOption({ label: "吉伊卡哇" });
+  await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
   await page.getByRole("button", { name: "＋ 兔兔" }).click();
   const r1 = page.getByRole("table", { name: "批次新增採購品項" }).getByRole("row").filter({ hasText: "第 1 列" });
   await r1.getByLabel("單價").fill("420");

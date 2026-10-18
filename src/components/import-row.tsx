@@ -201,9 +201,10 @@ export function RowEditor({ batchId, row, lookup, locked }: { batchId: string; r
             disabled={disabled}
             value={qty}
             onChange={(e) => setQty(e.target.value)}
-            onBlur={() => {
-              const n = Number(qty);
-              if (qty !== String(r.qty ?? "")) save({ qty: Number.isInteger(n) ? n : null });
+            onBlur={(e) => {
+              const v = e.currentTarget.value;
+              const n = Number(v);
+              if (v !== String(r.qty ?? "")) save({ qty: Number.isInteger(n) ? n : null });
             }}
           />
         </label>
@@ -216,8 +217,9 @@ export function RowEditor({ batchId, row, lookup, locked }: { batchId: string; r
             value={price}
             placeholder={product?.salePriceTwd != null ? `預設 ${product.salePriceTwd}` : "必填"}
             onChange={(e) => setPrice(e.target.value)}
-            onBlur={() => {
-              const v = price.trim() === "" ? null : Number(price);
+            onBlur={(e) => {
+              const raw = e.currentTarget.value;
+              const v = raw.trim() === "" ? null : Number(raw);
               if (v !== (r.unitPrice ?? null)) save({ unitPrice: v === null || Number.isNaN(v) ? null : v });
             }}
           />

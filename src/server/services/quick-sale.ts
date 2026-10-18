@@ -44,7 +44,7 @@ async function walkInBuyer(t: Tx, actor: Actor) {
 }
 
 /** 依名稱或別名找買家；找不到就建立一位（只有名稱，不需要其他資料） */
-async function resolveBuyer(t: Tx, actor: Actor, name: string | null | undefined) {
+export async function resolveBuyer(t: Tx, actor: Actor, name: string | null | undefined) {
   const n = emptyToNull(name);
   if (!n) return walkInBuyer(t, actor);
   const byName = await t.buyer.findFirst({ where: { name: n, mergedIntoId: null }, orderBy: { createdAt: "asc" } });

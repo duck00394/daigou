@@ -6,10 +6,11 @@ test("手機：卡片式表格可新增、修改、刪除列並確認儲存", as
   await login(page);
   await page.goto("/inventory/batches/new");
   await page.getByLabel("採購團名稱").fill("手機團");
+  await page.getByLabel("供應商", { exact: true }).selectOption({ label: "不指定" }); // 不受其他測試建立的實體店影響
   await page.getByRole("button", { name: "建立採購團" }).click();
   await expect(page.getByRole("heading", { name: /手機團/ })).toBeVisible();
-  await page.getByLabel("IP／系列").selectOption({ label: "吉伊卡哇" });
-  await page.getByRole("radiogroup", { name: "種類" }).getByRole("radio", { name: "吊娃" }).click();
+  await page.getByLabel("IP（例：吉伊卡哇）").selectOption({ label: "吉伊卡哇" });
+  await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
   await page.getByRole("button", { name: "＋ 吉伊" }).click();
   await page.getByRole("button", { name: "＋ 兔兔" }).click();
   // 桌面表頭在手機隱藏，每列以卡片顯示，欄位有可見標籤

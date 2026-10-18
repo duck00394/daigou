@@ -18,6 +18,8 @@ import { JOINT, NONE, stockByOwner } from "@/server/services/ownership";
 import type { OwnerStockOpt } from "@/components/owner-chips";
 import { stockValuation } from "@/server/services/reports";
 import { productSearchWhere } from "@/server/services/catalog";
+import { characterOrder, seriesOptions } from "@/server/services/catalog-tree";
+import { byText } from "@/lib/sort";
 import { formatTwd } from "@/lib/money";
 import { fmtDate, fmtDay, formatRateLabel } from "./util";
 import { batchStage, batchStageLabel, isStoreKind } from "@/lib/labels";
@@ -48,7 +50,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
           </Link>
         ))}
       </nav>
-      {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} owner={sp.owner ?? ""} />}
+      {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} owner={sp.owner ?? ""} kind={sp.kind} v={sp.v} />}
       {tab === "demand" && <DemandTab />}
       {tab === "batches" && <BatchesTab cat={sp.cat} open={sp.open} owner={sp.owner ?? ""} />}
       {tab === "receive" && <ReceiveTab productId={sp.productId} />}
@@ -61,14 +63,42 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
   );
 }
 
-async function StockTab({ q, only, cat = "", type = "", owner = "" }: { q?: string; only?: string; cat?: string; type?: string; owner?: string }) {
-  const catWhere = !cat
-    ? {}
-    : cat === "none"
-      ? { categories: { none: {} }, purchaseItems: { none: { batch: { categoryId: { not: null } } } } }
-      : { OR: [{ categories: { some: { categoryId: cat } } }, { purchaseItems: { some: { batch: { categoryId: cat } } } }] };
+async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v }: { q?: string; only?: string; cat?: string; type?: string; owner?: string; kind?: string; v?: string }) {
+  const [seriesOpts, types, operators] = await Promise.all([
+    seriesOptions(prisma),
+    prisma.productType.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
+    tx((t) => listOperators(t, { includeInactive: true })),
+  ]);
+  const applied = !!(v || cat || type || q || kind);
+  const ownerHref = (k: string) => {
+    const sp = new URLSearchParams({ tab: "stock" });
+    for (const [key, val] of Object.entries({ kind, cat, type, q, only, v: applied ? "1" : "" })) if (val) sp.set(key, val);
+    if (k) sp.set("owner", k);
+    return `/inventory?${sp.toString()}`;
+  };
+  const head = (
+    <>
+      <OwnerFilter operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} current={owner} href={ownerHref} />
+      <StockFilters series={seriesOpts} types={types} kind={kind} cat={cat} q={q ?? ""} type={type} only={only ?? ""} owner={owner} />
+    </>
+  );
+  if (!applied) {
+    return (
+      <div className="space-y-3">
+        {head}
+        <p className="rounded-xl border border-dashed border-line bg-white p-6 text-center text-[14px] text-mute">選好種類、系列、品項（或直接搜尋），按「查看」才列出來。</p>
+      </div>
+    );
+  }
+  const kindCats = kind ? seriesOpts.filter((s) => s.kindKey === kind).map((s) => s.id) : null;
+  const catIds = cat && cat !== "none" ? [cat] : kindCats;
+  const catWhere = cat === "none"
+    ? { categories: { none: {} }, purchaseItems: { none: { batch: { categoryId: { not: null } } } } }
+    : catIds
+      ? { OR: [{ categories: { some: { categoryId: { in: catIds } } } }, { purchaseItems: { some: { batch: { categoryId: { in: catIds } } } } }] }
+      : {};
   const products = await prisma.product.findMany({
-    where: { archivedAt: null, AND: [productSearchWhere(q), catWhere] },
+    where: { archivedAt: null, AND: [productSearchWhere(q), catWhere, type ? { productTypeId: type === "-" ? null : type } : {}] },
     orderBy: { name: "asc" },
     select: {
       id: true,
@@ -76,27 +106,26 @@ async function StockTab({ q, only, cat = "", type = "", owner = "" }: { q?: stri
       name: true,
       spec: true,
       salePriceTwd: true,
-      productType: { select: { id: true, name: true } },
-      characters: { select: { character: { select: { name: true } } } },
-      categories: { select: { category: { select: { id: true, name: true } } } },
-      purchaseItems: { select: { batch: { select: { category: { select: { id: true, name: true } } } } }, take: 5 },
+      productType: { select: { id: true, name: true, sortOrder: true } },
+      characters: { select: { character: { select: { id: true, name: true } } } },
+      categories: { select: { categoryId: true } },
+      purchaseItems: { select: { batch: { select: { categoryId: true } } }, take: 5 },
     },
   });
   const ids = products.map((p) => p.id);
-  const [inv, valAll, byOwner, me, operators, cats] = await Promise.all([
+  const [inv, valAll, byOwner, me, charOrder] = await Promise.all([
     tx((t) => inventorySummary(t, ids)),
     stockValuation(prisma, ids),
     tx((t) => stockByOwner(t, { productIds: ids })),
     getMe(),
-    tx((t) => listOperators(t, { includeInactive: true })),
-    prisma.category.findMany({ where: { OR: [{ batches: { some: {} } }, { products: { some: {} } }] }, orderBy: [{ active: "desc" }, { sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
+    characterOrder(prisma),
   ]);
   const val = valAll.byProduct;
   const ownerName = (k: string) => (k === JOINT ? "合資" : k === NONE ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
   const ownersOf = (pid: string): OwnerStockOpt[] =>
     [...(byOwner.get(pid)?.entries() ?? [])]
-      .filter(([, v]) => v.free > 0 || v.kept > 0)
-      .map(([k, v]) => ({ key: k, label: k === me ? `${ownerName(k)}（我）` : ownerName(k), free: v.free, kept: v.kept }))
+      .filter(([, x]) => x.free > 0 || x.kept > 0)
+      .map(([k, x]) => ({ key: k, label: k === me ? `${ownerName(k)}（我）` : ownerName(k), free: x.free, kept: x.kept }))
       .sort((a, b) => (a.key === me ? -1 : b.key === me ? 1 : 0));
   const zero = { onHand: 0, reserved: 0, available: 0, incoming: 0, shipped: 0, kept: 0, activeOrdered: 0, openDemand: 0, unallocated: 0, shortage: 0 };
   // 選了某個人：庫存、自留、未到貨都只算那個人的（依採購團歸屬）
@@ -109,63 +138,63 @@ async function StockTab({ q, only, cat = "", type = "", owner = "" }: { q?: stri
     });
     for (const i of items) ownerIncoming.set(i.productId, (ownerIncoming.get(i.productId) ?? 0) + Math.max(0, i.qty - i.cancelledQty - i.movements.reduce((a, m) => a + m.onHandDelta, 0)));
   }
+  const seriesById = new Map(seriesOpts.map((s) => [s.id, s]));
   let rows = products.map((p) => {
-    const category = (cat && cat !== "none" ? cats.find((c) => c.id === cat) : null) ?? p.categories[0]?.category ?? p.purchaseItems.find((i) => i.batch.category)?.batch.category ?? null;
+    const cands = [...p.categories.map((c) => c.categoryId), ...p.purchaseItems.map((i) => i.batch.categoryId).filter((x): x is string => !!x)];
+    const cid = (catIds ? cands.find((c) => catIds.includes(c)) : null) ?? cands[0] ?? null;
+    const series = cid ? (seriesById.get(cid) ?? null) : null;
     const all = inv.get(p.id) ?? zero;
     const mine = owner ? byOwner.get(p.id)?.get(ownerKey) : null;
     const s = owner ? { ...all, onHand: mine?.onHand ?? 0, available: mine?.free ?? 0, reserved: mine?.reserved ?? 0, kept: mine?.kept ?? 0, incoming: ownerIncoming.get(p.id) ?? 0 } : all;
-    return { p, s, v: val.get(p.id), category };
+    const ch = p.characters.length === 1 ? p.characters[0].character : null;
+    return { p, s, v: val.get(p.id), series, ch };
   });
   if (only !== "all") rows = rows.filter((r) => r.s.onHand || r.s.incoming || r.s.kept || r.s.reserved);
-  // 種類：只列出目前有的
-  const typeCount = new Map<string, { name: string; n: number }>();
-  for (const r of rows) {
-    const k = r.p.productType?.id ?? "-";
-    const x = typeCount.get(k) ?? { name: r.p.productType?.name ?? "其他", n: 0 };
-    x.n += r.s.available + r.s.incoming;
-    typeCount.set(k, x);
-  }
-  if (type) rows = rows.filter((r) => (r.p.productType?.id ?? "-") === type);
   const label = (r: (typeof rows)[number]) => {
-    const ch = r.p.characters.length === 1 ? r.p.characters[0].character.name : null;
-    if (!ch) return r.p.name;
-    const spec = r.p.spec && r.p.spec !== r.category?.name ? r.p.spec : null;
-    return [ch, type ? null : r.p.productType?.name, spec].filter(Boolean).join(" ");
+    if (!r.ch) return r.p.name;
+    const spec = r.p.spec && r.p.spec !== r.series?.name ? r.p.spec : null;
+    return [r.ch.name, spec].filter(Boolean).join(" ");
   };
-  // 依活動分段（選了某個活動就只有一段）
-  const groups = new Map<string, { name: string; rows: typeof rows }>();
+  // 階層：種類 › 系列 › 品項 › 角色
+  type R = (typeof rows)[number];
+  type TypeG = { key: string; name: string; sort: number; rows: R[] };
+  type SerG = { key: string; name: string; active: boolean; types: Map<string, TypeG> };
+  type KindG = { key: string; label: string; series: Map<string, SerG> };
+  const kinds = new Map<string, KindG>();
   for (const r of rows) {
-    const k = r.category?.id ?? "none";
-    const g = groups.get(k) ?? { name: r.category?.name ?? "沒分活動", rows: [] };
-    g.rows.push(r);
-    groups.set(k, g);
+    const kk = r.series?.kindKey ?? "~";
+    const kg = kinds.get(kk) ?? { key: kk, label: r.series?.kindLabel ?? "沒分系列", series: new Map() };
+    const sk = r.series?.id ?? "none";
+    const sg = kg.series.get(sk) ?? { key: sk, name: r.series?.name ?? "沒分系列", active: r.series?.active ?? true, types: new Map() };
+    const tk = r.p.productType?.id ?? "-";
+    const tg = sg.types.get(tk) ?? { key: tk, name: r.p.productType?.name ?? "其他", sort: r.p.productType?.sortOrder ?? 9999, rows: [] };
+    tg.rows.push(r);
+    sg.types.set(tk, tg);
+    kg.series.set(sk, sg);
+    kinds.set(kk, kg);
   }
-  const groupList = [...groups.entries()].sort(([a, x], [b, y]) => (a === "none" ? 1 : b === "none" ? -1 : x.name.localeCompare(y.name, "zh-Hant")));
-  for (const [, g] of groupList) g.rows.sort((x, y) => label(x).localeCompare(label(y), "zh-Hant"));
-  const sum = (rs: typeof rows) => ({ free: rs.reduce((a, r) => a + r.s.available, 0), incoming: rs.reduce((a, r) => a + r.s.incoming, 0), kept: rs.reduce((a, r) => a + r.s.kept, 0), cost: rs.reduce((a, r) => a + (!r.v ? 0 : owner ? (r.v.avgUnitCost ?? 0) * (r.s.onHand + r.s.kept) : r.v.freeValue + r.v.keptValue + r.v.reservedValue), 0) });
+  const ord = (r: R) => (r.ch ? (charOrder.get(r.ch.id) ?? 1e9) : 1e9);
+  const kindList = [...kinds.values()].sort((a, b) => (a.key === "~" ? 1 : b.key === "~" ? -1 : byText(a.label, b.label)));
+  const tree = kindList.map((k) => ({
+    ...k,
+    series: [...k.series.values()]
+      .sort((a, b) => (a.key === "none" ? 1 : b.key === "none" ? -1 : Number(b.active) - Number(a.active) || byText(a.name, b.name)))
+      .map((s) => ({ ...s, types: [...s.types.values()].sort((a, b) => a.sort - b.sort || byText(a.name, b.name)).map((t) => ({ ...t, rows: t.rows.sort((x, y) => ord(x) - ord(y) || byText(label(x), label(y))) })) })),
+  }));
+  const sum = (rs: R[]) => ({ free: rs.reduce((a, r) => a + r.s.available, 0), incoming: rs.reduce((a, r) => a + r.s.incoming, 0), kept: rs.reduce((a, r) => a + r.s.kept, 0), cost: rs.reduce((a, r) => a + (!r.v ? 0 : owner ? (r.v.avgUnitCost ?? 0) * (r.s.onHand + r.s.kept) : r.v.freeValue + r.v.keptValue + r.v.reservedValue), 0) });
   const all = sum(rows);
-  const href = (t: string) => {
-    const sp = new URLSearchParams({ tab: "stock" });
-    if (cat) sp.set("cat", cat);
-    if (q) sp.set("q", q);
-    if (t) sp.set("type", t);
-    if (only) sp.set("only", only);
-    if (owner) sp.set("owner", owner);
+  const allHref = (() => {
+    const sp = new URLSearchParams({ tab: "stock", v: "1" });
+    for (const [key, val] of Object.entries({ kind, cat, type, q, owner })) if (val) sp.set(key, val);
+    if (only !== "all") sp.set("only", "all");
     return `/inventory?${sp.toString()}`;
-  };
-  const chip = (on: boolean) => `shrink-0 rounded-full border px-3.5 py-1.5 text-[14px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
+  })();
   const buyerNames = await prisma.buyer.findMany({ where: { mergedIntoId: null }, orderBy: { updatedAt: "desc" }, take: 200, select: { name: true } });
+  const showKind = tree.length > 1 || !kind;
   return (
     <div className="space-y-3">
       <datalist id="buyer-names">{buyerNames.map((b) => <option key={b.name} value={b.name} />)}</datalist>
-      <OwnerFilter operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} current={owner} href={(k) => { const sp = new URLSearchParams({ tab: "stock" }); if (cat) sp.set("cat", cat); if (q) sp.set("q", q); if (type) sp.set("type", type); if (only) sp.set("only", only); if (k) sp.set("owner", k); return `/inventory?${sp.toString()}`; }} />
-      <StockFilters cats={cats} cat={cat} q={q ?? ""} type={type} only={only ?? ""} owner={owner} />
-      <nav aria-label="種類" className="-mx-3 flex gap-1.5 overflow-x-auto px-3 sm:mx-0 sm:px-0">
-        <Link href={href("")} className={chip(!type)} aria-current={!type ? "page" : undefined}>全部</Link>
-        {[...typeCount.entries()].map(([k, x]) => (
-          <Link key={k} href={href(k)} className={chip(type === k)} aria-current={type === k ? "page" : undefined}>{x.name} {x.n}</Link>
-        ))}
-      </nav>
+      {head}
       {rows.length === 0 ? (
         <Section><Empty>{only === "all" ? "沒有符合的商品。" : "這裡目前沒有庫存，也沒有還沒到的貨。"}</Empty></Section>
       ) : (
@@ -182,43 +211,59 @@ async function StockTab({ q, only, cat = "", type = "", owner = "" }: { q?: stri
               </tr>
             </thead>
             <tbody>
-              {groupList.map(([k, g]) => {
-                const gs = sum(g.rows);
-                return (
-                  <Fragment key={k}>
-                    {(groupList.length > 1 || !cat) && (
-                      <tr className="bg-ai-soft">
-                        <td colSpan={6} className="px-3 py-1.5 text-[14px] font-semibold text-ai">
-                          {k !== "none" ? <Link href={`/categories/${k}`} className="hover:underline">{g.name}</Link> : g.name}
-                          <span className="ml-2 text-[12px] font-normal">庫存 {gs.free}・未到 {gs.incoming}{gs.cost ? `・成本 ${formatTwd(gs.cost)}` : ""}</span>
-                        </td>
-                      </tr>
-                    )}
-                    {g.rows.map((r) => {
-                      const owners = ownersOf(r.p.id);
-                      const product = { id: r.p.id, name: r.p.name, salePriceTwd: r.p.salePriceTwd, available: r.s.available, avgCost: r.v?.avgUnitCost ?? null, owners };
-                      return (
-                        <tr key={r.p.id} className="border-b border-line-2 last:border-b-0" data-testid="stock-row" data-name={r.p.name}>
-                          <td className="px-3 py-2 align-top">
-                            <Link href={`/products/${r.p.id}`} className="font-medium hover:underline" title={r.p.name}>{label(r)}</Link>
-                            <div className="text-[11.5px] leading-snug text-mute">
-                              {[r.v?.avgUnitCost != null ? `成本 ${formatTwd(r.v.avgUnitCost)}${r.v.tentative ? "*" : ""}` : null, r.s.kept ? `自留 ${r.s.kept}` : null, r.s.reserved ? `保留 ${r.s.reserved}` : null, owners.length > 1 ? owners.map((o) => `${o.label} ${o.free}`).join("／") : null].filter(Boolean).join("・")}
-                            </div>
-                          </td>
-                          <td className={`num px-2 py-2 text-right align-top ${r.s.available ? "font-semibold" : "text-mute"}`} data-k="free">{r.s.available}</td>
-                          <td className="num px-2 py-2 text-right align-top" data-k="incoming">{r.s.incoming}</td>
-                          <td className="num hidden px-2 py-2 text-right align-top md:table-cell" data-k="kept">{r.s.kept}</td>
-                          <td className="num hidden px-2 py-2 text-right align-top md:table-cell">{r.v?.avgUnitCost != null ? formatTwd(r.v.avgUnitCost) : "—"}</td>
-                          <td className="whitespace-nowrap px-2 py-1.5 text-right align-top">
-                            <SellButton small primary={r.s.available > 0} label="賣" me={me} product={product} />
-                            <KeepButton tiny productId={r.p.id} name={r.p.name} available={r.s.available} kept={r.s.kept} owners={owners} me={me} />
+              {tree.map((k) => (
+                <Fragment key={k.key}>
+                  {showKind && (
+                    <tr className="bg-ink text-white">
+                      <td colSpan={6} className="px-3 py-1.5 text-[14px] font-semibold" data-testid="stock-kind">{k.label}</td>
+                    </tr>
+                  )}
+                  {k.series.map((sg) => {
+                    const srows = sg.types.flatMap((t) => t.rows);
+                    const gs = sum(srows);
+                    return (
+                      <Fragment key={sg.key}>
+                        <tr className="bg-ai-soft">
+                          <td colSpan={6} className="px-3 py-1.5 text-[14px] font-semibold text-ai" data-testid="stock-series">
+                            {sg.key !== "none" ? <Link href={`/categories/${sg.key}`} className="hover:underline">{sg.name}</Link> : sg.name}
+                            {!sg.active && <span className="ml-1 text-[12px] font-normal text-mute">已過期</span>}
+                            <span className="ml-2 text-[12px] font-normal">庫存 {gs.free}・未到 {gs.incoming}{gs.cost ? `・成本 ${formatTwd(gs.cost)}` : ""}</span>
                           </td>
                         </tr>
-                      );
-                    })}
-                  </Fragment>
-                );
-              })}
+                        {sg.types.map((tg) => (
+                          <Fragment key={tg.key}>
+                            <tr className="border-t border-line-2 bg-[#f7f8fa]">
+                              <td colSpan={6} className="py-1 pr-3 pl-5 text-[13px] font-semibold text-ink-2" data-testid="stock-type">{tg.name}</td>
+                            </tr>
+                            {tg.rows.map((r) => {
+                              const owners = ownersOf(r.p.id);
+                              const product = { id: r.p.id, name: r.p.name, salePriceTwd: r.p.salePriceTwd, available: r.s.available, avgCost: r.v?.avgUnitCost ?? null, owners };
+                              return (
+                                <tr key={r.p.id} className="border-b border-line-2 last:border-b-0" data-testid="stock-row" data-name={r.p.name}>
+                                  <td className="py-2 pr-3 pl-7 align-top">
+                                    <Link href={`/products/${r.p.id}`} className="font-medium hover:underline" title={r.p.name}>{label(r)}</Link>
+                                    <div className="text-[11.5px] leading-snug text-mute">
+                                      {[r.v?.avgUnitCost != null ? `成本 ${formatTwd(r.v.avgUnitCost)}${r.v.tentative ? "*" : ""}` : null, r.s.kept ? `自留 ${r.s.kept}` : null, r.s.reserved ? `保留 ${r.s.reserved}` : null, owners.length > 1 ? owners.map((o) => `${o.label} ${o.free}`).join("／") : null].filter(Boolean).join("・")}
+                                    </div>
+                                  </td>
+                                  <td className={`num px-2 py-2 text-right align-top ${r.s.available ? "font-semibold" : "text-mute"}`} data-k="free">{r.s.available}</td>
+                                  <td className="num px-2 py-2 text-right align-top" data-k="incoming">{r.s.incoming}</td>
+                                  <td className="num hidden px-2 py-2 text-right align-top md:table-cell" data-k="kept">{r.s.kept}</td>
+                                  <td className="num hidden px-2 py-2 text-right align-top md:table-cell">{r.v?.avgUnitCost != null ? formatTwd(r.v.avgUnitCost) : "—"}</td>
+                                  <td className="whitespace-nowrap px-2 py-1.5 text-right align-top">
+                                    <SellButton small primary={r.s.available > 0} label="賣" me={me} product={product} />
+                                    <KeepButton tiny productId={r.p.id} name={r.p.name} available={r.s.available} kept={r.s.kept} owners={owners} me={me} />
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </Fragment>
+                        ))}
+                      </Fragment>
+                    );
+                  })}
+                </Fragment>
+              ))}
               <tr className="border-t border-line bg-[#fafbfc] font-semibold">
                 <td className="px-3 py-2">合計<span className="ml-1 text-[12px] font-normal text-mute">成本 {formatTwd(all.cost)}</span></td>
                 <td className="num px-2 py-2 text-right" data-testid="stock-total-free">{all.free}</td>
@@ -232,8 +277,8 @@ async function StockTab({ q, only, cat = "", type = "", owner = "" }: { q?: stri
         </div>
       )}
       <p className="text-[12px] text-mute">
-        庫存＝現在可以賣的件數（自留的不算）。成本已含攤進去的運費等，* 表示還有預估價格。點角色看買在哪幾團。{" "}
-        <Link href={only === "all" ? href(type).replace("&only=all", "") : `${href(type)}&only=all`} className="text-ai">{only === "all" ? "只看有庫存的" : "顯示全部商品"}</Link>
+        庫存＝現在可以賣的件數（自留的不算）。成本已含攤進去的運費等，* 表示還有預估價格。{" "}
+        <Link href={allHref} className="text-ai">{only === "all" ? "只看有庫存的" : "也顯示沒庫存的商品"}</Link>
       </p>
     </div>
   );

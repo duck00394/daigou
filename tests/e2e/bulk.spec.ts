@@ -28,8 +28,8 @@ test("桌面：批次新增 4 個角色（含新角色與貼上），再批次�
   await login(page);
   const before = await stockOf(page, "吉伊 吊娃");
   await newBatch(page, "E2E 批次團");
-  await page.getByLabel("IP／系列").selectOption({ label: "吉伊卡哇" });
-  await page.getByRole("radiogroup", { name: "種類" }).getByRole("radio", { name: "吊娃" }).click();
+  await page.getByLabel("IP（例：吉伊卡哇）").selectOption({ label: "吉伊卡哇" });
+  await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
   for (const n of ["吉伊", "小八", "兔兔"]) await page.getByRole("button", { name: `＋ ${n}` }).click();
   await expect(page.locator('[data-row="2"][data-col="0"]').first()).toHaveValue(/.+/);
 
@@ -105,7 +105,7 @@ test("桌面：批次新增 4 個角色（含新角色與貼上），再批次�
 test("桌面：第二團套用上次使用的角色，價格帶入上次設定且可獨立修改", async ({ page }) => {
   await login(page);
   await newBatch(page, "E2E 第二團");
-  await page.getByLabel("IP／系列").selectOption({ label: "吉伊卡哇" });
+  await page.getByLabel("IP（例：吉伊卡哇）").selectOption({ label: "吉伊卡哇" });
   await page.getByRole("button", { name: "套用上次使用的角色" }).click();
   await expect(cell(page, 2, 0)).not.toHaveValue("");
   // 小八帶入上次（已修改後）的 360，兔兔 420

@@ -1,12 +1,13 @@
 "use client";
 // 新增採購（一個畫面完成）：活動 → 哪一團（或開新的一團：代購、誰的、進度、運費、訂金）→ 選種類、點角色、填單價數量。
-// 活動、IP／系列記得上次用的；代購依常用排序；預設台幣；選「已經拿到了（現貨）」存好就直接入庫。
+// 系列用下拉選（已過期的用搜尋）；新的一團放最上面（之前的團收起來）；代購列常用的、其他用搜尋；預設台幣。
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { Button, TextField, inputCls, notify, useIdemKey } from "@/components/client";
 import { BulkAddGrid } from "../inventory/batches/[id]/bulk-add";
 import { createBatchAction } from "@/actions/ops";
-import { saveSupplierAction } from "@/actions/series";
+import { saveSupplierAction, setSupplierFavoriteAction } from "@/actions/series";
+import { SeriesPicker, type SeriesOpt } from "@/components/series-picker";
 import { renameCategoryAction, saveCategoryAction } from "@/actions/catalog";
 import { setMeAction } from "@/actions/operators";
 import { payRemainingAction, receiveAllAction } from "@/actions/batches";
@@ -16,11 +17,10 @@ import { ownerTone } from "@/lib/owner-colors";
 
 type Op = { id: string; name: string; code: string };
 type BatchOpt = { id: string; label: string; code: string; categoryId: string | null; owner: string; ownerKey: string; stage: string; supplierId: string | null; supplierName: string | null; currency: "JPY" | "TWD"; rateMicro: number; items: number };
-type Supplier = { id: string; name: string; currency: "JPY" | "TWD"; store: boolean };
+type Supplier = { id: string; name: string; currency: "JPY" | "TWD"; store: boolean; favorite: boolean };
 type Ship = { id: string; name: string; kind: string; currency: "TWD" | "JPY"; amount: number };
 const NEW = "__new__";
 const JOINT = "JOINT";
-const TOP = 6;
 
 const card = (on: boolean) => `min-h-11 rounded-xl border px-3 py-2 text-left text-[15px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink hover:border-ai"}`;
 const pill = (on: boolean) => `min-h-10 rounded-full border px-3.5 text-[15px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
@@ -28,7 +28,7 @@ const pill = (on: boolean) => `min-h-10 rounded-full border px-3.5 text-[15px] $
 export function QuickPurchase(props: {
   me: string | null;
   operators: Op[];
-  categories: { id: string; name: string }[]; // 最近用的排前面
+  categories: SeriesOpt[]; // 所有系列（含已過期，下拉選單只列沒過期的）
   suppliers: Supplier[]; // 最常用的排前面
   batches: BatchOpt[];
   series: { id: string; name: string }[];
@@ -48,7 +48,10 @@ export function QuickPurchase(props: {
   const [suppliers, setSuppliers] = useState(props.suppliers);
   const [categoryId, setCategoryId] = useState(initBatch?.categoryId ?? props.initialCategory ?? "");
   const inCat = batches.filter((b) => (b.categoryId ?? "") === categoryId);
-  const [pick, setPick] = useState<string>(initBatch?.id ?? (inCat.length ? "" : NEW));
+  const [pick, setPick] = useState<string>(initBatch?.id ?? NEW);
+  const [showOld, setShowOld] = useState(!!initBatch);
+  const [kind, setKind] = useState(cats.find((c) => c.id === categoryId)?.kindKey ?? "");
+  const [supQ, setSupQ] = useState("");
   const [newCat, setNewCat] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [newSup, setNewSup] = useState<string | null>(null);
@@ -81,18 +84,19 @@ export function QuickPurchase(props: {
     ...operators.filter((o) => o.id !== me).map((o) => [o.id, o.name] as [string, string]),
     [JOINT, "合資"],
   ];
-  const topCats = cats.slice(0, TOP);
-  const moreCats = cats.slice(TOP);
   const store = via === "STORE";
   const shown = suppliers.filter((x) => x.store === store);
-  const topSups = shown.slice(0, 5);
-  const moreSups = shown.slice(5);
+  // 常用的（設定裡打星號的）直接列出來；沒設過就先列最常用的 3 個；其他用搜尋
+  const favs = shown.some((x) => x.favorite) ? shown.filter((x) => x.favorite) : shown.slice(0, 3);
+  const pickedSup = shown.find((x) => x.id === f.supplierId);
+  const chips = pickedSup && !favs.includes(pickedSup) ? [...favs, pickedSup] : favs;
+  const supHits = supQ.trim() ? shown.filter((x) => x.name.toLowerCase().includes(supQ.trim().toLowerCase())).slice(0, 6) : [];
   const catName = cats.find((c) => c.id === categoryId)?.name ?? null;
 
   const chooseCategory = (id: string) => {
     setCategoryId(id);
-    const has = batches.some((b) => (b.categoryId ?? "") === id);
-    setPick(has ? "" : NEW);
+    setPick(NEW);
+    setShowOld(false);
     created.current = null;
     setSaved(null);
     setRenaming(null);
@@ -174,27 +178,24 @@ export function QuickPurchase(props: {
       )}
 
       <section className="space-y-2 rounded-xl border border-line bg-card p-4">
-        <h2 className="text-[15px] font-semibold">1. 哪個活動？</h2>
+        <h2 className="text-[15px] font-semibold">1. 哪個系列？</h2>
         {newCat === null ? (
           <>
-            <div role="radiogroup" aria-label="哪個活動" className="flex flex-wrap gap-1.5">
-              {topCats.map((c) => (
-                <button key={c.id} type="button" role="radio" aria-checked={categoryId === c.id} className={pill(categoryId === c.id)} onClick={() => chooseCategory(c.id)}>{c.name}</button>
-              ))}
-              <button type="button" role="radio" aria-checked={categoryId === ""} className={pill(categoryId === "")} onClick={() => chooseCategory("")}>不指定</button>
-              {moreCats.length > 0 && (
-                <select aria-label="更多活動" className="min-h-10 rounded-full border border-line bg-white px-3 text-[15px]" value={moreCats.some((c) => c.id === categoryId) ? categoryId : ""} onChange={(e) => e.target.value && chooseCategory(e.target.value)}>
-                  <option value="">更多…</option>
-                  {moreCats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              )}
-            </div>
-            {renaming === null ? (
-              <div className="flex gap-4 text-[14px]">
-                <button type="button" className="text-ai" onClick={() => setNewCat("")}>＋ 新活動</button>
-                {categoryId && <button type="button" className="text-ai" onClick={() => setRenaming(catName ?? "")}>✎ 改「{catName}」名稱</button>}
-              </div>
-            ) : (
+            <SeriesPicker
+              series={cats}
+              value={categoryId}
+              onChange={chooseCategory}
+              kind={kind}
+              onKind={setKind}
+              noneLabel="不指定"
+              extra={
+                <>
+                  <button type="button" className="min-h-10 rounded-lg border border-line bg-white px-3 text-[14px] text-ai" onClick={() => setNewCat("")}>＋ 新系列</button>
+                  {categoryId && renaming === null && <button type="button" className="min-h-10 rounded-lg border border-line bg-white px-3 text-[14px] text-ai" onClick={() => setRenaming(catName ?? "")}>✎ 改名</button>}
+                </>
+              }
+            />
+            {renaming !== null && (
               <div className="flex items-end gap-2">
                 <label className="flex-1 text-[13px] font-medium text-ink-2">
                   新名稱
@@ -218,16 +219,18 @@ export function QuickPurchase(props: {
         ) : (
           <div className="flex items-end gap-2">
             <label className="flex-1 text-[13px] font-medium text-ink-2">
-              新活動名稱
-              <input autoFocus className={`${inputCls} mt-1`} value={newCat} onChange={(e) => setNewCat(e.target.value)} placeholder="例：ANA、聖誕節、便當" />
+              新系列名稱{kind && <>（放在「{cats.find((c) => c.kindKey === kind)?.kindLabel}」）</>}
+              <input autoFocus className={`${inputCls} mt-1`} value={newCat} onChange={(e) => setNewCat(e.target.value)} placeholder="例：肉包、ANA、聖誕節" />
             </label>
             <Button
               variant="primary"
               onClick={async () => {
-                if (!newCat.trim()) return notify("請填寫活動名稱");
-                const r = await saveCategoryAction(null, { name: newCat.trim(), type: "FESTIVAL", active: true });
+                if (!newCat.trim()) return notify("請填寫系列名稱");
+                const k = cats.find((c) => c.kindKey === kind);
+                const t = kind.startsWith("c:") ? { type: "CUSTOM" as const, customType: kind.slice(2) } : { type: (kind || "GENERAL") as "GENERAL", customType: null };
+                const r = await saveCategoryAction(null, { name: newCat.trim(), ...t, active: true });
                 if (!r.ok) return notify(r.error);
-                setCats((l) => [{ id: r.data.id, name: newCat.trim() }, ...l]);
+                setCats((l) => [{ id: r.data.id, name: newCat.trim(), kindKey: k?.kindKey ?? (kind || "GENERAL"), kindLabel: k?.kindLabel ?? "一般分類", active: true }, ...l]);
                 setCategoryId(r.data.id);
                 setPick(NEW);
                 setNewCat(null);
@@ -243,16 +246,22 @@ export function QuickPurchase(props: {
       <section className="space-y-3 rounded-xl border border-line bg-card p-4">
         <h2 className="text-[15px] font-semibold">2. 哪一團？</h2>
         <div role="radiogroup" aria-label="哪一團" className="grid gap-2 sm:grid-cols-2">
-          {inCat.map((b) => (
-            <button key={b.id} type="button" role="radio" aria-checked={pick === b.id} className={`${card(pick === b.id)} ${pick === b.id ? "" : ownerTone(b.ownerKey, ids).stripe}`} onClick={() => { setPick(b.id); setSaved(null); }}>
-              <span className="block font-medium">{b.label}</span>
-              <span className={`block text-[12px] ${pick === b.id ? "text-white/80" : "text-mute"}`}>{b.owner}的・{b.stage}・{b.items} 項</span>
-            </button>
-          ))}
           <button type="button" role="radio" aria-checked={pick === NEW} className={card(pick === NEW)} onClick={() => { setPick(NEW); created.current = null; setSaved(null); }}>
             <span className="block font-medium">＋ 新的一團</span>
             <span className={`block text-[12px] ${pick === NEW ? "text-white/80" : "text-mute"}`}>這次買的一批（代購或實體店）</span>
           </button>
+          {inCat.length > 0 && !showOld && (
+            <button type="button" className="min-h-11 rounded-xl border border-line bg-white px-3 py-2 text-left text-[15px] text-ink-2" aria-expanded={false} onClick={() => setShowOld(true)}>
+              或加到之前的團（{inCat.length} 團）▸
+            </button>
+          )}
+          {showOld &&
+            inCat.map((b) => (
+              <button key={b.id} type="button" role="radio" aria-checked={pick === b.id} className={`${card(pick === b.id)} ${pick === b.id ? "" : ownerTone(b.ownerKey, ids).stripe}`} onClick={() => { setPick(b.id); setSaved(null); }}>
+                <span className="block font-medium">{b.label}</span>
+                <span className={`block text-[12px] ${pick === b.id ? "text-white/80" : "text-mute"}`}>{b.owner}的・{b.stage}・{b.items} 項</span>
+              </button>
+            ))}
         </div>
 
         {pick === NEW && !created.current && (
@@ -269,17 +278,43 @@ export function QuickPurchase(props: {
               </div>
               <div className="mb-1 text-[13px] font-medium text-ink-2">{store ? "哪家店" : "向哪個代購買"}</div>
               {newSup === null ? (
-                <div role="radiogroup" aria-label={store ? "哪家店" : "向哪個代購買"} className="flex flex-wrap gap-1.5">
-                  {topSups.map((s) => (
-                    <button key={s.id} type="button" role="radio" aria-checked={f.supplierId === s.id} className={pill(f.supplierId === s.id)} onClick={() => setF({ ...f, supplierId: s.id })}>{s.name}</button>
-                  ))}
-                  {moreSups.length > 0 && (
-                    <select aria-label={store ? "其他店家" : "其他代購"} className="min-h-10 rounded-full border border-line bg-white px-3 text-[15px]" value={moreSups.some((s) => s.id === f.supplierId) ? f.supplierId : ""} onChange={(e) => setF({ ...f, supplierId: e.target.value })}>
-                      <option value="">其他…</option>
-                      {moreSups.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
+                <div className="space-y-2">
+                  {chips.length > 0 && (
+                    <div role="radiogroup" aria-label={store ? "哪家店" : "向哪個代購買"} className="flex flex-wrap gap-1.5">
+                      {chips.map((x) => (
+                        <button key={x.id} type="button" role="radio" aria-checked={f.supplierId === x.id} className={pill(f.supplierId === x.id)} onClick={() => setF({ ...f, supplierId: x.id })}>{x.name}</button>
+                      ))}
+                    </div>
                   )}
-                  <button type="button" className="min-h-10 rounded-full border border-dashed border-line px-3.5 text-[15px] text-mute" onClick={() => setNewSup("")}>{store ? "＋ 新店家" : "＋ 新代購"}</button>
+                  <div className="flex gap-2">
+                    <input type="search" aria-label={store ? "搜尋其他店家" : "搜尋其他代購"} placeholder={store ? "🔍 搜尋其他店家" : "🔍 搜尋其他代購"} className={`${inputCls} flex-1`} value={supQ} onChange={(e) => setSupQ(e.target.value)} />
+                    <button type="button" className="min-h-10 shrink-0 rounded-lg border border-line bg-white px-3 text-[14px] text-ai" onClick={() => { setNewSup(supQ.trim()); setSupQ(""); }}>{store ? "＋ 新店家" : "＋ 新代購"}</button>
+                  </div>
+                  {supQ.trim() && (
+                    <ul className="divide-y divide-line-2 rounded-lg border border-line bg-white" aria-label="搜尋結果">
+                      {supHits.map((x) => (
+                        <li key={x.id}>
+                          <button type="button" className="block w-full px-3 py-2 text-left text-[15px]" onClick={() => { setF({ ...f, supplierId: x.id }); setSupQ(""); }}>{x.name}</button>
+                        </li>
+                      ))}
+                      <li>
+                        <button type="button" className="block w-full px-3 py-2 text-left text-[15px] text-ai" onClick={() => { setNewSup(supQ.trim()); setSupQ(""); }}>＋ 新增「{supQ.trim()}」</button>
+                      </li>
+                    </ul>
+                  )}
+                  {pickedSup && !pickedSup.favorite && (
+                    <button
+                      type="button"
+                      className="text-[13px] text-ai"
+                      onClick={async () => {
+                        const r = await setSupplierFavoriteAction(pickedSup.id, true);
+                        if (!r.ok) return notify(r.error);
+                        setSuppliers((l) => l.map((x) => (x.id === pickedSup.id ? { ...x, favorite: true } : x)));
+                      }}
+                    >
+                      ☆ 把「{pickedSup.name}」設成常用
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="flex items-end gap-2">
@@ -293,7 +328,7 @@ export function QuickPurchase(props: {
                       if (!newSup.trim()) return notify(store ? "請填寫店名" : "請填寫代購名稱");
                       const r = await saveSupplierAction(null, { name: newSup.trim(), defaultCurrency: "TWD", kind: store ? "STORE" : "AGENT" });
                       if (!r.ok) return notify(r.error);
-                      setSuppliers((l) => [{ id: r.data.id, name: r.data.name, currency: "TWD", store }, ...l]);
+                      setSuppliers((l) => [{ id: r.data.id, name: r.data.name, currency: "TWD", store, favorite: false }, ...l]);
                       setF((x) => ({ ...x, supplierId: r.data.id }));
                       setNewSup(null);
                     }}
@@ -434,7 +469,7 @@ export function QuickPurchase(props: {
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-good-soft px-3 py-2 text-sm text-good" data-testid="saved-banner">
             <span>已存到「{saved.name}」，共 {saved.count} 項{saved.stocked ? "，已進庫存" : ""}{saved.paid ? "，已記成付清" : ""}。</span>
             <span className="flex gap-2">
-              {saved.stocked && <Link className="underline" href="/inventory?tab=stock">看庫存</Link>}
+              {saved.stocked && <Link className="underline" href="/inventory?tab=stock&v=1">看庫存</Link>}
               <Link className="underline" href={`/inventory/batches/${saved.id}`}>看這一團</Link>
               <button type="button" className="underline" onClick={() => { setPick(NEW); created.current = null; setSaved(null); setFees({}); setCustomFee(null); setF((x) => ({ ...x, name: "", supplierId: "", deposit: "" })); }}>再開新的一團</button>
             </span>

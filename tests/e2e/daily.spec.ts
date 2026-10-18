@@ -25,8 +25,8 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
   const tag = Date.now().toString(36).slice(-4); // 每次不同，重複執行也不會撞名
   await login(page);
   await newBatch(page, `E2E 萬聖 A 團 ${tag}`);
-  await page.getByLabel("IP／系列").selectOption({ label: "吉伊卡哇" });
-  await page.getByRole("radiogroup", { name: "種類" }).getByRole("radio", { name: "吊娃" }).click();
+  await page.getByLabel("IP（例：吉伊卡哇）").selectOption({ label: "吉伊卡哇" });
+  await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
   await page.getByRole("button", { name: "＋ 吉伊" }).click();
   await page.getByRole("button", { name: "＋ 小八" }).click();
   await cell(page, 0, 2).fill("350");

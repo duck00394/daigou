@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Button, Modal, TextField, TextArea, SelectField, useRun } from "@/components/client";
-import { saveSupplierAction } from "@/actions/series";
+import { saveSupplierAction, setSupplierFavoriteAction } from "@/actions/series";
 import { supplierKind } from "@/lib/labels";
 
 type S = { id: string; name: string; defaultCurrency: string; kind: string | null; contact: string | null; paymentMethod: string | null; orderUrl: string | null; notes: string | null; active: boolean };
@@ -32,5 +32,22 @@ export function SupplierEditButton({ supplier }: { supplier?: S }) {
         </div>
       </Modal>
     </>
+  );
+}
+
+/** 常用：打星號的代購在新增採購時直接列在最上面，其他用搜尋 */
+export function FavoriteStar({ id, name, on }: { id: string; name: string; on: boolean }) {
+  const { run, pending } = useRun();
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      aria-label={on ? `取消常用「${name}」` : `設「${name}」為常用`}
+      disabled={pending}
+      className={`min-h-10 min-w-10 text-[22px] leading-none ${on ? "text-[#f59e0b]" : "text-[#cfd4dc]"}`}
+      onClick={() => run(() => setSupplierFavoriteAction(id, !on), { success: on ? `「${name}」不是常用了` : `「${name}」設成常用` })}
+    >
+      {on ? "★" : "☆"}
+    </button>
   );
 }

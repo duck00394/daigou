@@ -78,7 +78,7 @@ export default async function Categories() {
                     <Link href={`/categories/${c.id}`} className="font-medium text-ai hover:underline">
                       {c.name}
                     </Link>
-                    {!c.active && <Badge tone="muted">停用</Badge>}
+                    {!c.active && <Badge tone="muted">已過期</Badge>}
                     <span className="ml-2">{edit(c)}</span>
                   </td>
                   <td>{c.type === "CUSTOM" ? (c.customType ?? "自訂") : categoryType[c.type]}</td>

@@ -112,7 +112,7 @@ export async function saveSupplier(
   t: Tx,
   actor: Actor,
   id: string | null,
-  input: { name: string; defaultCurrency?: Currency; kind?: string | null; contact?: string | null; paymentMethod?: string | null; orderUrl?: string | null; notes?: string | null; active?: boolean },
+  input: { name: string; defaultCurrency?: Currency; kind?: string | null; contact?: string | null; paymentMethod?: string | null; orderUrl?: string | null; notes?: string | null; active?: boolean; favorite?: boolean },
 ) {
   const name = input.name?.trim();
   if (!name) throw new BizError("請填寫供應商名稱");
@@ -127,6 +127,7 @@ export async function saveSupplier(
     ...(input.kind !== undefined ? { kind: emptyToNull(input.kind) } : {}),
     ...(input.paymentMethod !== undefined ? { paymentMethod: emptyToNull(input.paymentMethod) } : {}),
     ...(input.orderUrl !== undefined ? { orderUrl: emptyToNull(input.orderUrl) } : {}),
+    ...(input.favorite !== undefined ? { favorite: input.favorite } : {}),
   };
   try {
     const row = id ? await t.supplier.update({ where: { id }, data }) : await t.supplier.create({ data });
@@ -137,6 +138,12 @@ export async function saveSupplier(
     if (isUniqueViolation(e)) throw new BizError(`供應商「${name}」已存在`);
     throw e;
   }
+}
+
+/** 常用代購：採購時直接出現在最上面，其他用搜尋 */
+export async function setSupplierFavorite(t: Tx, actor: Actor, id: string, favorite: boolean) {
+  await t.supplier.update({ where: { id }, data: { favorite } });
+  await audit(t, actor, "supplier.favorite", "Supplier", id, { favorite });
 }
 
 // ── 商品變體 ──
@@ -397,7 +404,8 @@ export async function bulkAddSeriesItems(
               status: "PREORDER",
               // 新商品才帶入參考價；既有商品的主檔價格不會被改寫
               officialPriceJpy: r.currency === "JPY" ? r.unitCost : null,
-              salePriceTwd: r.salePriceTwd ?? null,
+              // 售價：沒填就用系列目錄設的「系列＋品項」預設售價
+              salePriceTwd: r.salePriceTwd ?? (category && input.productTypeId ? ((await t.categoryTypePrice.findUnique({ where: { categoryId_productTypeId: { categoryId: category.id, productTypeId: input.productTypeId } } }))?.salePriceTwd ?? null) : null),
               characters: { create: [{ characterId }] },
             },
           });

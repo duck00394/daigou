@@ -36,8 +36,8 @@ test("桌面：A 下單、A 付訂金 B 付尾款、A B 分批收貨，對帳依
   const batchId = page.url().split("/inventory/batches/")[1].split("?")[0];
 
   // 3. 加入兩個品項
-  await page.getByLabel("IP／系列").selectOption({ label: "吉伊卡哇" });
-  await page.getByRole("radiogroup", { name: "種類" }).getByRole("radio", { name: "吊娃" }).click();
+  await page.getByLabel("IP（例：吉伊卡哇）").selectOption({ label: "吉伊卡哇" });
+  await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
   await page.getByRole("button", { name: "＋ 吉伊" }).click();
   await page.getByRole("button", { name: "＋ 小八" }).click();
   await cell(page, 0, 2).fill("1650");

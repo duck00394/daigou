@@ -362,11 +362,11 @@ export function BulkAddGrid({
       {/* 1～3：系列、類型（供應商與採購團由這一團帶入） */}
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-[13px] font-medium text-ink-2" htmlFor="bulk-series">IP／系列</label>
+          <label className="mb-1 block text-[13px] font-medium text-ink-2" htmlFor="bulk-series">IP（例：吉伊卡哇）</label>
           {newSeries === null ? (
             <div className="flex gap-2">
               <select id="bulk-series" className={inputCls} value={seriesId} onChange={(e) => setSeriesId(e.target.value)}>
-                <option value="">請選擇系列</option>
+                <option value="">請選擇 IP</option>
                 {seriesList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
               <Button onClick={() => setNewSeries("")}>新增</Button>
@@ -380,23 +380,20 @@ export function BulkAddGrid({
               setSeriesId(r.data.id);
               setNewSeries(null);
             }}>
-              <input autoFocus className={inputCls} value={newSeries} onChange={(e) => setNewSeries(e.target.value)} placeholder="新系列名稱，例：排球少年" aria-label="新系列名稱" />
+              <input autoFocus className={inputCls} value={newSeries} onChange={(e) => setNewSeries(e.target.value)} placeholder="新 IP 名稱，例：排球少年" aria-label="新 IP 名稱" />
               <Button type="submit" variant="primary">建立</Button>
               <Button onClick={() => setNewSeries(null)}>取消</Button>
             </form>
           )}
         </div>
         <div>
-          <div className="mb-1 text-[13px] font-medium text-ink-2" id="bulk-type-label">種類</div>
+          <label className="mb-1 block text-[13px] font-medium text-ink-2" htmlFor="bulk-type">品項</label>
           {newType === null ? (
-            <div role="radiogroup" aria-label="種類" className="flex flex-wrap gap-1.5">
-              {types.map((x) => (
-                <button key={x.id} type="button" role="radio" aria-checked={typeId === x.id} onClick={() => setTypeId(x.id)} className={`rounded-full border px-3.5 py-1.5 text-[15px] ${typeId === x.id ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`}>
-                  {x.name}
-                </button>
-              ))}
-              <button type="button" className="rounded-full border border-dashed border-line px-3 py-1.5 text-[14px] text-mute" onClick={() => setNewType("")}>＋ 新種類</button>
-            </div>
+            <select id="bulk-type" aria-label="品項" className={inputCls} value={typeId} onChange={(e) => (e.target.value === "__new__" ? setNewType("") : setTypeId(e.target.value))}>
+              <option value="">請選品項</option>
+              {types.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              <option value="__new__">＋ 新品項…</option>
+            </select>
           ) : (
             <form className="flex gap-2" onSubmit={async (e) => {
               e.preventDefault();
@@ -406,7 +403,7 @@ export function BulkAddGrid({
               setTypeId(r.data.id);
               setNewType(null);
             }}>
-              <input autoFocus className={inputCls} value={newType} onChange={(e) => setNewType(e.target.value)} placeholder="例：吊娃、壓克力立牌" aria-label="新商品類型" />
+              <input autoFocus className={inputCls} value={newType} onChange={(e) => setNewType(e.target.value)} placeholder="例：吊娃、壓克力立牌" aria-label="新品項名稱" />
               <Button type="submit" variant="primary">建立</Button>
               <Button onClick={() => setNewType(null)}>取消</Button>
             </form>

@@ -37,7 +37,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
         sub={
           <span className="flex flex-wrap items-center gap-2">
             {c.type === "CUSTOM" ? (c.customType ?? "自訂") : categoryType[c.type]}
-            {!c.active && <Badge tone="muted">停用</Badge>}
+            {!c.active && <Badge tone="muted">已過期</Badge>}
           </span>
         }
         actions={

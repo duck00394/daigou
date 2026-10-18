@@ -8,6 +8,7 @@ import { QuickPurchase } from "./quick";
 import { listShippingMethods } from "@/server/services/shipping-methods";
 import { batchStage, batchStageLabel, isStoreKind } from "@/lib/labels";
 import { formatRate } from "@/lib/money";
+import { seriesOptions } from "@/server/services/catalog-tree";
 
 export const metadata = { title: "新增採購" };
 
@@ -17,8 +18,8 @@ export default async function PurchasePage({ searchParams }: { searchParams: Pro
   const [me, operators, categories, suppliers, batches, series, types, rate] = await Promise.all([
     getMe(),
     tx((t) => listOperators(t)),
-    prisma.category.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
-    prisma.supplier.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, defaultCurrency: true, kind: true } }),
+    seriesOptions(prisma),
+    prisma.supplier.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, defaultCurrency: true, kind: true, favorite: true } }),
     prisma.purchaseBatch.findMany({
       where: { status: { not: "CANCELLED" } },
       orderBy: { createdAt: "desc" },
@@ -30,31 +31,26 @@ export default async function PurchasePage({ searchParams }: { searchParams: Pro
     getDefaultRateMicro(prisma),
   ]);
   const opName = (id: string | null) => operators.find((o) => o.id === id)?.name ?? "未指定";
-  // 活動：最近用過的排前面；代購：用最多次的排前面；IP／系列與種類：帶上次用的
-  const lastUse = new Map<string, number>();
+  // 代購：用最多次的排前面；IP 與品項：帶上次用的
   const supUse = new Map<string, number>();
-  for (const b of batches) {
-    if (b.categoryId && !lastUse.has(b.categoryId)) lastUse.set(b.categoryId, lastUse.size);
-    if (b.supplierId) supUse.set(b.supplierId, (supUse.get(b.supplierId) ?? 0) + 1);
-  }
-  const sortedCats = [...categories].sort((a, b) => (lastUse.get(a.id) ?? 1e9) - (lastUse.get(b.id) ?? 1e9) || a.name.localeCompare(b.name, "zh-Hant"));
+  for (const b of batches) if (b.supplierId) supUse.set(b.supplierId, (supUse.get(b.supplierId) ?? 0) + 1);
   const sortedSups = [...suppliers].sort((a, b) => (supUse.get(b.id) ?? 0) - (supUse.get(a.id) ?? 0) || a.name.localeCompare(b.name, "zh-Hant"));
   const [lastItem, shipping] = await Promise.all([
     prisma.purchaseBatchItem.findFirst({ orderBy: { createdAt: "desc" }, select: { product: { select: { seriesId: true, productTypeId: true } } } }),
     listShippingMethods(prisma),
   ]);
-  const lastCategory = batches.find((b) => b.categoryId && categories.some((c) => c.id === b.categoryId))?.categoryId ?? null;
+  const lastCategory = batches.find((b) => b.categoryId && categories.some((c) => c.id === b.categoryId && c.active))?.categoryId ?? null;
   return (
     <div className="space-y-4">
       <PageHeader title="新增採購" />
       <QuickPurchase
         me={me}
         operators={operators.map((o) => ({ id: o.id, name: o.name, code: o.code }))}
-        categories={sortedCats}
+        categories={categories}
         shipping={shipping.map((x) => ({ id: x.id, name: x.name, kind: x.kind, currency: x.currency === "JPY" ? "JPY" : "TWD", amount: x.amount }))}
         lastSeriesId={lastItem?.product.seriesId ?? null}
         lastTypeId={lastItem?.product.productTypeId ?? null}
-        suppliers={sortedSups.map((s) => ({ id: s.id, name: s.name, currency: (s.defaultCurrency as "JPY" | "TWD") ?? "TWD", store: isStoreKind(s.kind) }))}
+        suppliers={sortedSups.map((s) => ({ id: s.id, name: s.name, currency: (s.defaultCurrency as "JPY" | "TWD") ?? "TWD", store: isStoreKind(s.kind), favorite: s.favorite }))}
         batches={batches.map((b) => ({
           id: b.id,
           label: `${b.name}`,

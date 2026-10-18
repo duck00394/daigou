@@ -17,9 +17,9 @@ export const metadata = { title: "首頁" };
 // 首頁快捷：最常做的四件事，第一次用也看得懂
 const QUICK = [
   { href: "/purchase", label: "＋ 新增採購", hint: "買了什麼、哪一團", main: true },
-  { href: "/sales?new=1", label: "出售現貨", hint: "賣掉手上的東西", main: true },
+  { href: "/sell", label: "賣給客人", hint: "選系列、填數量", main: true },
+  { href: "/catalog", label: "＋ 新增系列", hint: "品項、角色、售價" },
   { href: "/inventory?tab=batches", label: "收到貨了", hint: "到哪一團登記" },
-  { href: "/inventory?tab=stock", label: "庫存・自留", hint: "手上有什麼、成本" },
 ];
 
 export default async function Home() {
@@ -41,6 +41,9 @@ export default async function Home() {
     prisma.purchaseBatch.count({ where: { status: { in: ["ORDERED", "PARTIAL_RECEIVED"] } } }),
   ]);
   const incoming = [...inv.values()].reduce((s, v) => s + v.incoming, 0);
+  // 客人預訂還沒給（賣給客人時沒現貨的部分）
+  const preItems = await prisma.orderItem.findMany({ where: { order: { source: { not: "QUICK" }, confirmation: "CONFIRMED" } }, select: { qty: true, cancelledQtyCache: true, shippedQtyCache: true } });
+  const waiting = preItems.reduce((s, i) => s + Math.max(0, i.qty - i.cancelledQtyCache - i.shippedQtyCache), 0);
   // 還要付代購：所有沒取消的團，總額 − 已付
   const live = await prisma.purchaseBatch.findMany({
     where: { status: { not: "CANCELLED" } },
@@ -88,11 +91,12 @@ export default async function Home() {
         <h2 className="mb-2 text-[15px] font-semibold">錢與庫存</h2>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           <Stat label="還要付代購" value={<span data-testid="home-due" className={dueTotal ? "text-bad" : ""}>{formatTwd(dueTotal)}</span>} note={dueTotal ? `${dueList.length} 團還沒付清` : "都付清了"} href="#due" tone={dueTotal ? "bad" : undefined} />
-          <Stat label="手上庫存成本" value={<Twd v={val.total.freeValue + val.total.keptValue} />} note={`可賣 ${val.total.free} 件・自留 ${val.total.kept} 件${val.total.tentative ? "（有價格還沒確定）" : ""}`} href="/inventory?tab=stock" />
+          <Stat label="手上庫存成本" value={<Twd v={val.total.freeValue + val.total.keptValue} />} note={`可賣 ${val.total.free} 件・自留 ${val.total.kept} 件${val.total.tentative ? "（有價格還沒確定）" : ""}`} href="/inventory?tab=stock&v=1" />
           <Stat label="本月賣出賺" value={<Twd v={sales.total.profit} />} note={`賣 ${sales.total.qty} 件・收入 ${sales.total.revenue.toLocaleString()} 元`} href="/sales" tone={sales.total.profit < 0 ? "bad" : undefined} />
           <Stat label="還沒到的貨" value={`${incoming} 件`} note={`${openBatches} 團還在路上`} href="/inventory?tab=batches" />
+          {waiting > 0 && <Stat label="客人預訂還沒給" value={`${waiting} 件`} note="到貨了到「出貨」交給客人" href="/shipping" tone="warn" />}
           {(unpaidSales._sum.balanceCache ?? 0) > 0 && <Stat label="賣出還沒收到錢" value={<Twd v={unpaidSales._sum.balanceCache ?? 0} />} note={`${unpaidSales._count} 筆`} href="/sales" tone="warn" />}
-          {val.total.unknownCostUnits > 0 && <Stat label="沒填成本的庫存" value={`${val.total.unknownCostUnits} 件`} note="手動入庫未填成本" href="/inventory?tab=stock" tone="warn" />}
+          {val.total.unknownCostUnits > 0 && <Stat label="沒填成本的庫存" value={`${val.total.unknownCostUnits} 件`} note="手動入庫未填成本" href="/inventory?tab=stock&v=1" tone="warn" />}
           {usesOrders && val.total.reserved > 0 && <Stat label="留給買家" value={`${val.total.reserved} 件`} note="待出貨" href="/shipping" />}
         </div>
       </div>

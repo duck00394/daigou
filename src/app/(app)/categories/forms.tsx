@@ -73,10 +73,10 @@ export function CategoryEditButton({ cat, label = "編輯", customTypes = [], sm
 export function CategoryActiveButton({ id, active }: { id: string; active: boolean }) {
   const { run } = useRun();
   return active ? (
-    <ConfirmButton small label="停用" title="停用分類" message="停用後新商品不會預設選到這個分類；既有商品、訂單歸屬與統計都會保留，可隨時重新啟用。" confirmLabel="停用" onConfirm={() => run(() => setCategoryActiveAction(id, false), { success: "已停用分類" })} />
+    <ConfirmButton small label="設成已過期" title="設成已過期" message="已過期的系列不會出現在採購、賣給客人的選單裡（要用時可以搜尋）；庫存、紀錄和統計都會保留，可隨時恢復。" confirmLabel="設成已過期" onConfirm={() => run(() => setCategoryActiveAction(id, false), { success: "已設成已過期" })} />
   ) : (
-    <Button small onClick={() => run(() => setCategoryActiveAction(id, true), { success: "已重新啟用分類" })}>
-      重新啟用
+    <Button small onClick={() => run(() => setCategoryActiveAction(id, true), { success: "已恢復使用" })}>
+      恢復使用
     </Button>
   );
 }

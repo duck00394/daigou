@@ -2,7 +2,7 @@
 import { test, expect } from "@playwright/test";
 import { login } from "./helpers";
 
-const PAGES = ["/", "/search?q=吉伊", "/purchase", "/inventory?tab=stock", "/orders", "/paste", "/import", "/buyers", "/products", "/categories", "/inventory", "/payments", "/shipping", "/reports", "/settings", "/tags", "/groupbuys", "/sales", "/inventory?tab=batches", "/suppliers", "/operators"];
+const PAGES = ["/", "/sell", "/catalog", "/search?q=吉伊", "/purchase", "/inventory?tab=stock", "/orders", "/paste", "/import", "/buyers", "/products", "/categories", "/inventory", "/payments", "/shipping", "/reports", "/settings", "/tags", "/groupbuys", "/sales", "/inventory?tab=batches", "/suppliers", "/operators"];
 
 test("手機版主要頁面沒有整頁橫向捲動，底部導覽可用", async ({ page }) => {
   await login(page);
@@ -21,11 +21,13 @@ test("手機版主要頁面沒有整頁橫向捲動，底部導覽可用", async
   const ov = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(ov, "活動頁出現整頁橫向捲動").toBeLessThanOrEqual(1);
   await page.screenshot({ path: "test-results/mobile_category.png", fullPage: true });
-  // 首頁快捷：出售現貨直接打開出售視窗
+  // 首頁快捷：賣給客人、新增系列
   await page.goto("/");
-  await page.getByRole("link", { name: "出售現貨" }).click();
-  await expect(page.getByRole("dialog")).toContainText("出售現貨");
-  await page.keyboard.press("Escape");
+  await page.getByRole("link", { name: /賣給客人/ }).first().click();
+  await expect(page).toHaveURL(/\/sell/);
+  await page.goto("/");
+  await page.getByRole("link", { name: /新增系列/ }).first().click();
+  await expect(page).toHaveURL(/\/catalog/);
   await page.screenshot({ path: "test-results/mobile_home_quick.png", fullPage: false });
   await page.goto("/");
   // 首頁看得到錢：還要付代購、手上庫存成本、本月賺多少

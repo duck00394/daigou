@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { PageHeader, Section, TableWrap, Empty, Badge } from "@/components/ui";
-import { SupplierEditButton } from "./forms";
+import { FavoriteStar, SupplierEditButton } from "./forms";
 import { fmtDate, supplierKind } from "@/lib/labels";
 
 export const metadata = { title: "供應商" };
@@ -10,21 +10,22 @@ export const metadata = { title: "供應商" };
 export default async function Suppliers() {
   await requireUser();
   const list = await prisma.supplier.findMany({
-    orderBy: [{ active: "desc" }, { name: "asc" }],
+    orderBy: [{ active: "desc" }, { favorite: "desc" }, { name: "asc" }],
     include: { batches: { orderBy: { createdAt: "desc" }, take: 1 }, _count: { select: { batches: true } } },
   });
   return (
     <div>
-      <PageHeader title="供應商" sub="每個採購團可以指定供應商；批次新增時會優先帶入同供應商上次的單價。" actions={<SupplierEditButton />} />
+      <PageHeader title="供應商" sub="點 ☆ 設成常用：新增採購時直接列在最上面，其他用搜尋找。" actions={<SupplierEditButton />} />
       <Section pad={false}>
         {list.length === 0 ? (
           <Empty action={<SupplierEditButton />}>還沒有供應商。</Empty>
         ) : (
           <TableWrap>
-            <thead><tr><th>供應商</th><th>類型</th><th>預設幣別</th><th className="text-right">採購團</th><th>最近一團</th><th>聯絡方式</th><th></th></tr></thead>
+            <thead><tr><th className="w-10">常用</th><th>供應商</th><th>類型</th><th>預設幣別</th><th className="text-right">採購團</th><th>最近一團</th><th>聯絡方式</th><th></th></tr></thead>
             <tbody>
               {list.map((s) => (
                 <tr key={s.id} className={s.active ? "" : "opacity-60"}>
+                  <td className="text-center">{s.active && <FavoriteStar id={s.id} name={s.name} on={s.favorite} />}</td>
                   <td className="font-medium">{s.name}{!s.active && <span className="ml-1"><Badge tone="muted">已封存</Badge></span>}</td>
                   <td>{s.kind ? supplierKind[s.kind] : "—"}</td>
                   <td>{s.defaultCurrency}</td>

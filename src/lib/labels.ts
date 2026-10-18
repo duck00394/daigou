@@ -70,6 +70,13 @@ export const categoryType: Record<string, string> = {
   CUSTOM: "自訂",
 };
 
+/** 種類（例：常設店）：活動的類型；自訂的用自己打的名字 */
+export function categoryKind(c: { type: string; customType: string | null }) {
+  if (c.type === "CUSTOM" && c.customType?.trim()) return { key: `c:${c.customType.trim()}`, label: c.customType.trim() };
+  const type = c.type === "CUSTOM" ? "GENERAL" : c.type;
+  return { key: type, label: categoryType[type] ?? "一般分類" };
+}
+
 export const groupBuyStatus: Record<string, [string, Tone]> = {
   DRAFT: ["籌備中", "neutral"],
   OPEN: ["收單中", "good"],

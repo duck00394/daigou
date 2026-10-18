@@ -92,3 +92,6 @@ export async function applyRenameAction(categoryId: string, productIds: string[]
   const ids = z.array(z.string().max(64)).max(1000).parse(productIds);
   return run((a) => tx((t) => sr.applyRename(t, a, z.string().max(64).parse(categoryId), ids)));
 }
+export async function setSupplierFavoriteAction(id: string, favorite: boolean) {
+  return run((a) => tx((t) => sr.setSupplierFavorite(t, a, z.string().parse(id), !!favorite)));
+}
