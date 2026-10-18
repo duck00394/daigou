@@ -15,7 +15,7 @@ async function stockOf(page: Page, name: string) {
 async function newBatch(page: Page, name: string) {
   await page.goto("/inventory/batches/new");
   await page.getByLabel("採購團名稱").fill(name);
-  await page.getByLabel("所屬活動／系列").selectOption({ label: "萬聖節" });
+  await page.getByLabel("系列", { exact: true }).selectOption({ label: "萬聖節" });
   await page.getByLabel("供應商").selectOption({ label: "日本官網" });
   await page.getByRole("button", { name: "建立採購團" }).click();
   await expect(page.getByRole("heading", { name: new RegExp(name) })).toBeVisible();

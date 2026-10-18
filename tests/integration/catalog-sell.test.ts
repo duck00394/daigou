@@ -60,3 +60,24 @@ describe("系列目錄、賣給客人", () => {
     expect(await checkIntegrity(prisma)).toEqual([]);
   });
 });
+
+describe("種類改名、系列換種類", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+  it("改種類名稱：底下所有系列一起改；系列可以換到別的種類", async () => {
+    const { renameKind, moveSeriesKind } = await import("@/server/services/catalog-tree");
+    const a = await tx((t) => saveCategory(t, actor, null, { name: "肉包", type: "CUSTOM", customType: "常設店" }));
+    const b = await tx((t) => saveCategory(t, actor, null, { name: "便當", type: "CUSTOM", customType: "常設店" }));
+    const c = await tx((t) => saveCategory(t, actor, null, { name: "萬聖節", type: "FESTIVAL" }));
+    await tx((t) => renameKind(t, actor, "c:常設店", "常設商品"));
+    let tree = await catalogTree(prisma);
+    expect(tree.map((k) => [k.label, k.series.map((s) => s.name).sort()])).toEqual([["常設商品", ["便當", "肉包"].sort()], ["節慶", ["萬聖節"]]]);
+    await tx((t) => renameKind(t, actor, "FESTIVAL", "萬聖節限定"));
+    await tx((t) => moveSeriesKind(t, actor, b.id, { kindKey: "c:萬聖節限定" }));
+    tree = await catalogTree(prisma);
+    expect(tree.find((k) => k.label === "萬聖節限定")!.series.map((s) => s.id).sort()).toEqual([b.id, c.id].sort());
+    await tx((t) => moveSeriesKind(t, actor, a.id, { newKind: "聯名" }));
+    expect((await prisma.category.findUniqueOrThrow({ where: { id: a.id } })).customType).toBe("聯名");
+  });
+});

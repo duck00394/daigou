@@ -29,6 +29,16 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
     await toast(page, `已加「${ch}」`);
   }
   await expect(item.getByRole("link", { name: "吉伊" })).toBeVisible();
+  // 種類、系列改名：按 ✎ 就能改
+  await page.getByRole("button", { name: "✎ 改名" }).click();
+  await page.getByLabel("種類新名稱").fill(`${kind}店`);
+  await page.getByRole("button", { name: "存", exact: true }).click();
+  await toast(page, `種類改成「${kind}店」`);
+  await expect(page.getByLabel("種類", { exact: true }).locator("option:checked")).toHaveText(`${kind}店`);
+  await page.getByRole("button", { name: "✎ 改名" }).click();
+  await page.getByLabel("種類新名稱").fill(kind);
+  await page.getByRole("button", { name: "存", exact: true }).click();
+  await toast(page, `種類改成「${kind}」`);
   // 金額欄：一點就清空，沒打就恢復原本的
   const price = item.getByLabel("吊娃 預設售價");
   await price.focus();
@@ -88,7 +98,7 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await page.goto("/catalog");
   await page.getByLabel("種類", { exact: true }).selectOption({ label: kind });
   const c2 = page.getByTestId("catalog-series").filter({ hasText: series });
-  if (!(await c2.getByLabel("已過期").isVisible())) await c2.getByRole("button", { name: new RegExp(series) }).click();
+  if (!(await c2.getByLabel("已過期").isVisible())) await c2.getByRole("button", { name: new RegExp(`^${series}`) }).click();
   await c2.getByLabel("已過期").check();
   await toast(page, "設成已過期");
   await page.goto("/sell");

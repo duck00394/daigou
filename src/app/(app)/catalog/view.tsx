@@ -3,10 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Button, inputCls, notify, useRun } from "@/components/client";
-import { addCatalogCharacterAction, addCatalogItemAction, setCatalogPriceAction } from "@/actions/catalog-tree";
+import { addCatalogCharacterAction, addCatalogItemAction, moveSeriesKindAction, renameKindAction, setCatalogPriceAction } from "@/actions/catalog-tree";
 import { renameCategoryAction, saveCategoryAction, setCategoryActiveAction } from "@/actions/catalog";
 import type { TreeKind, TreeSeries, TreeItem } from "@/server/services/catalog-tree";
-import { categoryType } from "@/lib/labels";
 
 type Opt = { id: string; name: string };
 const NEW_KIND = "__new__";
@@ -18,17 +17,16 @@ function kindToType(key: string, custom: string) {
   return { type: (key || "GENERAL") as "GENERAL", customType: null };
 }
 
-export function CatalogView({ tree, types, customTypes, initialKind, initialOpen }: { tree: TreeKind[]; types: Opt[]; customTypes: string[]; initialKind: string | null; initialOpen: string | null }) {
+export function CatalogView({ tree, types, initialKind, initialOpen }: { tree: TreeKind[]; types: Opt[]; initialKind: string | null; initialOpen: string | null }) {
   const openKind = initialOpen ? tree.find((k) => k.series.some((s) => s.id === initialOpen))?.key : null;
   const [kind, setKind] = useState(openKind ?? (initialKind && tree.some((k) => k.key === initialKind) ? initialKind : (tree[0]?.key ?? NEW_KIND)));
   const [open, setOpen] = useState<Set<string>>(() => new Set(initialOpen ? [initialOpen] : []));
   const [adding, setAdding] = useState<{ name: string; kindText: string } | null>(tree.length ? null : { name: "", kindText: "" });
   const { run, pending } = useRun();
   const current = tree.find((k) => k.key === kind);
-  // 種類選項：已有的種類＋內建類型＋自訂過的
+  // 種類選項：只列有系列的種類（要新的種類按「＋ 新種類…」）
   const kindOpts = new Map<string, string>(tree.map((k) => [k.key, k.label]));
-  for (const c of customTypes) if (!kindOpts.has(`c:${c}`)) kindOpts.set(`c:${c}`, c);
-  for (const [k, v] of Object.entries(categoryType)) if (k !== "CUSTOM" && !kindOpts.has(k)) kindOpts.set(k, v);
+  const [renamingKind, setRenamingKind] = useState<string | null>(null);
   const toggle = (id: string) => setOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const createSeries = () => {
@@ -47,15 +45,37 @@ export function CatalogView({ tree, types, customTypes, initialKind, initialOpen
 
   return (
     <div className="space-y-3">
-      <label className="block text-[13px] font-medium text-ink-2">
-        種類
-        <select aria-label="種類" className={`${selCls} mt-1`} value={kind} onChange={(e) => { setKind(e.target.value); if (e.target.value === NEW_KIND) setAdding({ name: "", kindText: "" }); }}>
-          {[...kindOpts.entries()].map(([k, l]) => <option key={k} value={k}>{l}{tree.some((x) => x.key === k) ? "" : "（還沒有系列）"}</option>)}
-          <option value={NEW_KIND}>＋ 新種類…</option>
-        </select>
-      </label>
+      <div>
+        <label className="block text-[13px] font-medium text-ink-2" htmlFor="catalog-kind">種類</label>
+        {renamingKind === null ? (
+          <div className="mt-1 flex gap-2">
+            <select id="catalog-kind" aria-label="種類" className={selCls} value={kind} onChange={(e) => { setKind(e.target.value); if (e.target.value === NEW_KIND) setAdding({ name: "", kindText: "" }); }}>
+              {[...kindOpts.entries()].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              <option value={NEW_KIND}>＋ 新種類…</option>
+            </select>
+            {current && <button type="button" className="min-h-11 shrink-0 rounded-lg border border-line bg-white px-3 text-[14px] text-ai" onClick={() => setRenamingKind(current.label)}>✎ 改名</button>}
+          </div>
+        ) : (
+          <div className="mt-1 flex gap-2">
+            <input autoFocus aria-label="種類新名稱" className={`${inputCls} flex-1`} value={renamingKind} onChange={(e) => setRenamingKind(e.target.value)} />
+            <Button
+              variant="primary"
+              loading={pending}
+              onClick={() =>
+                run(() => renameKindAction(kind, renamingKind), {
+                  success: `種類改成「${renamingKind.trim()}」`,
+                  onOk: (d) => { setKind(d.key); setRenamingKind(null); },
+                })
+              }
+            >
+              存
+            </Button>
+            <Button onClick={() => setRenamingKind(null)}>取消</Button>
+          </div>
+        )}
+      </div>
 
-      {current?.series.map((s) => <SeriesCard key={s.id} s={s} types={types} open={open.has(s.id)} onToggle={() => toggle(s.id)} />)}
+      {current?.series.map((s) => <SeriesCard key={s.id} s={s} types={types} kinds={[...kindOpts.entries()]} open={open.has(s.id)} onToggle={() => toggle(s.id)} />)}
       {!current && kind !== NEW_KIND && <p className="rounded-xl border border-dashed border-line bg-white p-4 text-center text-[14px] text-mute">這個種類還沒有系列。</p>}
 
       {adding ? (
@@ -84,19 +104,31 @@ export function CatalogView({ tree, types, customTypes, initialKind, initialOpen
   );
 }
 
-function SeriesCard({ s, types, open, onToggle }: { s: TreeSeries; types: Opt[]; open: boolean; onToggle: () => void }) {
+function SeriesCard({ s, types, kinds, open, onToggle }: { s: TreeSeries; types: Opt[]; kinds: [string, string][]; open: boolean; onToggle: () => void }) {
   const { run, pending } = useRun();
   const [renaming, setRenaming] = useState<string | null>(null);
   const [expired, setExpired] = useState(!s.active);
+  const [newKind, setNewKind] = useState<string | null>(null);
   const [newItem, setNewItem] = useState<{ typeId: string; typeName: string; price: string } | null>(null);
   const chars = s.items.reduce((a, i) => a + i.chars.length, 0);
   const unused = types.filter((t) => !s.items.some((i) => i.typeId === t.id));
   return (
     <section className={`overflow-hidden rounded-xl border border-line bg-white ${s.active ? "" : "opacity-60"}`} data-testid="catalog-series" data-name={s.name}>
-      <button type="button" className="flex w-full items-center justify-between bg-ai-soft px-3 py-2.5 text-left" aria-expanded={open} onClick={onToggle}>
-        <span className="font-semibold text-ai">{s.name}{!s.active && <span className="ml-1 text-[12px] font-normal text-mute">已過期</span>}</span>
-        <span className="text-[12px] text-ai">{s.items.length} 品項・{chars} 角色 {open ? "▾" : "▸"}</span>
-      </button>
+      {renaming === null ? (
+        <div className="flex items-stretch bg-ai-soft">
+          <button type="button" className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2.5 text-left" aria-expanded={open} onClick={onToggle}>
+            <span className="truncate font-semibold text-ai">{s.name}{!s.active && <span className="ml-1 text-[12px] font-normal text-mute">已過期</span>}</span>
+            <span className="shrink-0 text-[12px] text-ai">{s.items.length} 品項・{chars} 角色 {open ? "▾" : "▸"}</span>
+          </button>
+          <button type="button" aria-label={`改「${s.name}」名稱`} className="shrink-0 border-l border-white px-3 text-[14px] text-ai" onClick={() => setRenaming(s.name)}>✎</button>
+        </div>
+      ) : (
+        <div className="flex gap-2 bg-ai-soft p-2">
+          <input autoFocus aria-label="系列新名稱" className={`${inputCls} flex-1`} value={renaming} onChange={(e) => setRenaming(e.target.value)} />
+          <Button small variant="primary" onClick={() => run(() => renameCategoryAction(s.id, renaming), { success: "已改名", onOk: () => setRenaming(null) })}>存</Button>
+          <Button small onClick={() => setRenaming(null)}>取消</Button>
+        </div>
+      )}
       {open && (
         <div>
           {s.items.map((i) => <ItemRow key={i.typeId || "none"} categoryId={s.id} item={i} />)}
@@ -134,19 +166,31 @@ function SeriesCard({ s, types, open, onToggle }: { s: TreeSeries; types: Opt[];
           ) : (
             <button type="button" className="block w-full border-t border-line-2 px-3 py-2.5 text-left text-[15px] text-ai" onClick={() => setNewItem({ typeId: unused[0]?.id ?? "", typeName: "", price: "" })}>＋ 加品項（吊娃、S娃、徽章…）</button>
           )}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line-2 px-3 py-2 text-[14px]">
-            {renaming === null ? (
-              <span className="flex gap-3">
-                <button type="button" className="text-ai" onClick={() => setRenaming(s.name)}>改名</button>
-                <Link className="text-ai" href={`/categories/${s.id}`}>看花多少、庫存</Link>
-              </span>
+          <div className="flex items-center gap-2 border-t border-line-2 px-3 py-2 text-[14px]">
+            <span className="shrink-0 text-ink-2">放在種類</span>
+            {newKind === null ? (
+              <select
+                aria-label="放在種類"
+                className={selCls}
+                value={s.kindKey}
+                onChange={(e) => {
+                  if (e.target.value === "__new__") return setNewKind("");
+                  run(() => moveSeriesKindAction(s.id, { kindKey: e.target.value }), { success: `「${s.name}」移到「${kinds.find(([k]) => k === e.target.value)?.[1]}」` });
+                }}
+              >
+                {kinds.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                <option value="__new__">＋ 新種類…</option>
+              </select>
             ) : (
               <span className="flex flex-1 gap-2">
-                <input autoFocus aria-label="系列新名稱" className={`${inputCls} flex-1`} value={renaming} onChange={(e) => setRenaming(e.target.value)} />
-                <Button small variant="primary" onClick={() => run(() => renameCategoryAction(s.id, renaming), { success: "已改名", onOk: () => setRenaming(null) })}>存</Button>
-                <Button small onClick={() => setRenaming(null)}>取消</Button>
+                <input autoFocus aria-label="新種類名稱" className={`${inputCls} flex-1`} placeholder="例：常設店" value={newKind} onChange={(e) => setNewKind(e.target.value)} />
+                <Button small variant="primary" onClick={() => run(() => moveSeriesKindAction(s.id, { newKind }), { success: `「${s.name}」移到「${newKind.trim()}」`, onOk: () => setNewKind(null) })}>存</Button>
+                <Button small onClick={() => setNewKind(null)}>取消</Button>
               </span>
             )}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line-2 px-3 py-2 text-[14px]">
+            <Link className="text-ai" href={`/categories/${s.id}`}>看花多少、庫存</Link>
             <label className="flex items-center gap-2">
               已過期
               <input

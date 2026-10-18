@@ -29,3 +29,9 @@ const sellSchema = z.object({
 export async function sellToCustomerAction(input: z.infer<typeof sellSchema>) {
   return run((a) => tx((t) => sellToCustomer(t, a, sellSchema.parse(input)), { timeout: 30000 }));
 }
+export async function renameKindAction(kindKey: string, name: string) {
+  return run((a) => tx((t) => ct.renameKind(t, a, z.string().max(80).parse(kindKey), z.string().max(50).parse(name))));
+}
+export async function moveSeriesKindAction(categoryId: string, input: { kindKey?: string | null; newKind?: string | null }) {
+  return run((a) => tx((t) => ct.moveSeriesKind(t, a, z.string().parse(categoryId), z.object({ kindKey: z.string().max(80).nullish(), newKind: z.string().max(50).nullish() }).parse(input))));
+}

@@ -1,4 +1,5 @@
 "use client";
+import { SeriesPicker, type SeriesOpt } from "@/components/series-picker";
 // 採購團詳情：基本資料（可修改）、從其他團複製品項、砍單
 import { useState } from "react";
 import Link from "next/link";
@@ -23,13 +24,13 @@ export type BatchInfoView = {
   notes: string | null;
 };
 
-export function BatchInfoCard({ batchId, info, suppliers, categories, editable }: { batchId: string; info: BatchInfoView; suppliers: { id: string; name: string }[]; categories: { id: string; name: string }[]; editable: boolean }) {
+export function BatchInfoCard({ batchId, info, suppliers, categories, editable }: { batchId: string; info: BatchInfoView; suppliers: { id: string; name: string }[]; categories: SeriesOpt[]; editable: boolean }) {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState(info);
   const { run, pending } = useRun();
   const rows: [string, React.ReactNode][] = [
     ["供應商", info.supplierName ?? "—"],
-    ["活動／系列", info.categoryId ? <Link className="text-ai hover:underline" href={`/categories/${info.categoryId}`}>{info.categoryName}</Link> : "未指定"],
+    ["系列", info.categoryId ? <Link className="text-ai hover:underline" href={`/categories/${info.categoryId}`}>{info.categoryName}</Link> : "未指定"],
     ["供應商訂單編號", info.supplierOrderNo ?? "—"],
     ["訂購連結", info.orderUrl ? <a className="break-all text-ai hover:underline" href={info.orderUrl} target="_blank" rel="noopener noreferrer">{info.orderUrl}</a> : "—"],
     ["下單日", info.orderedAt],
@@ -74,7 +75,9 @@ export function BatchInfoCard({ batchId, info, suppliers, categories, editable }
         <div className="grid gap-3 sm:grid-cols-2">
           <TextField label="採購團名稱" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className="sm:col-span-2" />
           <SelectField label="供應商" value={f.supplierId ?? ""} onChange={(e) => setF({ ...f, supplierId: e.target.value || null })} options={[["", "不指定"], ...suppliers.map((s) => [s.id, s.name] as [string, string])]} />
-          <SelectField label="活動／系列" value={f.categoryId ?? ""} onChange={(e) => setF({ ...f, categoryId: e.target.value || null })} options={[["", "未指定"], ...categories.map((c) => [c.id, c.name] as [string, string])]} />
+          <div className="sm:col-span-2">
+            <SeriesPicker series={categories} value={f.categoryId ?? ""} onChange={(id) => setF({ ...f, categoryId: id || null })} noneLabel="不指定" />
+          </div>
           <TextField label="供應商訂單編號" value={f.supplierOrderNo ?? ""} onChange={(e) => setF({ ...f, supplierOrderNo: e.target.value })} />
           <TextField label="預計到貨日" type="date" value={f.expectedAt} onChange={(e) => setF({ ...f, expectedAt: e.target.value })} />
           <TextField label="訂購連結" value={f.orderUrl ?? ""} onChange={(e) => setF({ ...f, orderUrl: e.target.value })} placeholder="https://" className="sm:col-span-2" />

@@ -208,3 +208,27 @@ export async function seriesOptions(db: Db) {
     })
     .sort((a, b) => byText(a.name, b.name));
 }
+
+function kindWhere(kindKey: string) {
+  if (kindKey.startsWith("c:")) return { type: "CUSTOM" as const, customType: kindKey.slice(2) };
+  if (kindKey === "GENERAL") return { OR: [{ type: "GENERAL" as const }, { type: "CUSTOM" as const, OR: [{ customType: null }, { customType: "" }] }] };
+  return { type: kindKey as "FESTIVAL" };
+}
+
+/** 改種類名稱：這個種類底下的所有系列一起改 */
+export async function renameKind(t: Tx, actor: Actor, kindKey: string, name: string) {
+  const n = name?.trim();
+  if (!n) throw new BizError("請填種類名稱");
+  if (n.length > 50) throw new BizError("種類名稱太長");
+  const r = await t.category.updateMany({ where: kindWhere(kindKey), data: { type: "CUSTOM", customType: n } });
+  await audit(t, actor, "catalog.renameKind", "Category", null, { kindKey, name: n, count: r.count });
+  return { key: `c:${n}`, count: r.count };
+}
+
+/** 系列換到別的種類（kindKey＝已有的種類；或給 newKind＝新的種類名稱） */
+export async function moveSeriesKind(t: Tx, actor: Actor, categoryId: string, input: { kindKey?: string | null; newKind?: string | null }) {
+  const n = input.newKind?.trim();
+  const data = n ? { type: "CUSTOM" as const, customType: n } : input.kindKey?.startsWith("c:") ? { type: "CUSTOM" as const, customType: input.kindKey.slice(2) } : { type: (input.kindKey || "GENERAL") as "GENERAL", customType: null };
+  await t.category.update({ where: { id: categoryId }, data });
+  await audit(t, actor, "catalog.moveSeries", "Category", categoryId, data);
+}

@@ -1,3 +1,4 @@
+import { seriesOptions } from "@/server/services/catalog-tree";
 import { notFound } from "next/navigation";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
@@ -71,7 +72,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
   }));
   const [suppliersList, categoriesList, otherBatches] = await Promise.all([
     prisma.supplier.findMany({ where: { OR: [{ active: true }, { id: b.supplierId ?? "" }] }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.category.findMany({ where: { OR: [{ active: true }, { id: b.categoryId ?? "" }] }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
+    seriesOptions(prisma),
     prisma.purchaseBatch.findMany({ where: { id: { not: b.id }, items: { some: {} } }, orderBy: { createdAt: "desc" }, take: 50, select: { id: true, code: true, name: true, supplierRef: { select: { name: true } } } }),
   ]);
   const [landed, series, types] = await Promise.all([
