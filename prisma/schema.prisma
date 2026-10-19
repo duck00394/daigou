@@ -1044,3 +1044,65 @@ model ShippingMethod {
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 }
+
+// ── 搶購提醒 ──
+
+enum RushStatus {
+  UPCOMING // 還沒開始
+  BOUGHT // 已搶購
+  MISSED // 未搶到
+  CANCELLED // 取消搶購
+}
+
+// 搶購記事：哪個代購、什麼時候開始、搶什麼；開始前幾分鐘推播到手機
+model RushEvent {
+  id            String     @id @default(cuid())
+  supplierId    String? // 選了既有代購才有；也可以只打名字
+  supplierName  String
+  categoryId    String?
+  seriesName    String
+  startAt       DateTime // 開始時間（存 UTC；畫面一律用台灣時間）
+  url           String?
+  notes         String?
+  notify        Boolean    @default(true)
+  leadMinutes   Int        @default(5)
+  status        RushStatus @default(UPCOMING)
+  // 排程：每次改時間、開關通知都 +1；舊排程帶舊版本號，觸發時對不上就不發
+  version       Int        @default(1)
+  notifyAt      DateTime?
+  scheduleState String     @default("NONE") // NONE 不通知、SCHEDULED 已排程、SENT 已送出、FAILED 失敗、TOO_LATE 來不及、NOT_CONFIGURED 還沒設定推播服務
+  scheduleError String?
+  messageId     String? // 排程服務的訊息編號（改時間、取消時拿來刪掉舊的）
+  sentAt        DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deliveries    RushDelivery[]
+
+  @@index([startAt])
+  @@index([status])
+}
+
+// 每一場每一版只送一次（避免排程重試時重複通知）
+model RushDelivery {
+  id        String    @id @default(cuid())
+  eventId   String
+  event     RushEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  version   Int
+  sentOk    Int       @default(0)
+  failed    Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  @@unique([eventId, version])
+}
+
+// 手機的推播訂閱（只在伺服器使用，不會顯示在頁面上）
+model PushSubscription {
+  id         String    @id @default(cuid())
+  endpoint   String    @unique
+  p256dh     String
+  auth       String
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+  lastOkAt   DateTime?
+  failCount  Int       @default(0)
+}

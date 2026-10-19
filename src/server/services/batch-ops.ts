@@ -418,7 +418,7 @@ export async function categoryOverview(t: Tx, categoryId: string) {
       stock.set(k, x);
     }
   return {
-    batches: summariesWithPay.map(({ fee: f, ratio: _r, ...x }) => ({ ...x, unallocFeesTwd: f.unallocTwd })),
+    batches: summariesWithPay.map(({ fee: f, ...x }) => { const { ratio, ...rest } = x; void ratio; return { ...rest, unallocFeesTwd: f.unallocTwd }; }),
     matrix,
     byOwner: Object.fromEntries(byOwner),
     byStage: Object.fromEntries(byStage),

@@ -11,6 +11,11 @@ import { OwnerDue } from "@/components/owner-due";
 import { listOperators } from "@/server/services/operators";
 import { getOrdersEnabled } from "@/server/services/settings";
 import { formatTwd } from "@/lib/money";
+import { PushStatusChip } from "@/components/push-setup";
+import { vapidPublicKey } from "@/server/push";
+import { Countdown } from "./rush/[id]/parts";
+import { relativeDay, taipeiParts } from "@/lib/taipei";
+import { scheduleBadge, toneCls } from "@/lib/rush-labels";
 
 export const metadata = { title: "首頁" };
 
@@ -59,6 +64,8 @@ export default async function Home() {
   const usesOrders = await getOrdersEnabled(prisma);
   const [ops, due] = await Promise.all([tx((t) => listOperators(t)), tx((t) => dueByOwner(t))]);
   const today = new Date();
+  // 搶購提醒：接下來幾場
+  const rush = await prisma.rushEvent.findMany({ where: { status: "UPCOMING", startAt: { gte: new Date(today.getTime() - 30 * 60000) } }, orderBy: { startAt: "asc" }, take: 4 });
   const todo = [
     { n: d.pendingConfirm, text: "張訂單待確認", href: "/orders?status=PENDING_CONFIRM" },
     { n: d.unpaidOrders, text: "張訂單尚有待收款", href: "/payments" },
@@ -84,6 +91,35 @@ export default async function Home() {
           </Link>
         ))}
       </nav>
+
+      <section className="rounded-xl border border-line bg-white p-3" aria-label="搶購提醒" data-testid="home-rush">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Link href="/rush" className="font-semibold">⏰ {rush.length ? "下一場搶購" : "搶購提醒"}</Link>
+          <PushStatusChip vapidKey={vapidPublicKey()} />
+        </div>
+        {rush.length ? (
+          <>
+            <Link href={`/rush/${rush[0].id}`} className="mt-1 block">
+              <div className="text-[15px]">{relativeDay(rush[0].startAt)} {taipeiParts(rush[0].startAt).time}｜{rush[0].supplierName}</div>
+              <div className="text-[14px] text-ink-2">{rush[0].seriesName}</div>
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <Countdown at={rush[0].startAt.toISOString()} />
+                {(() => {
+                  const b = scheduleBadge(rush[0]);
+                  return <span className={`rounded-full px-2 py-0.5 text-[12px] ${toneCls[b.tone]}`}>{b.text}</span>;
+                })()}
+              </div>
+            </Link>
+            {rush.length > 1 && (
+              <div className="mt-2 border-t border-line-2 pt-1.5 text-[13px] text-mute">
+                之後：{rush.slice(1).map((r) => `${relativeDay(r.startAt).split(" ")[0]} ${taipeiParts(r.startAt).time} ${r.supplierName}`).join("／")}　<Link href="/rush" className="text-ai">看全部 ›</Link>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="mt-1 text-[13px] text-mute">接下來沒有搶購。<Link href="/rush/new" className="text-ai">＋ 新增搶購提醒</Link></p>
+        )}
+      </section>
 
       <OwnerDue due={due} operators={ops.map((o) => ({ id: o.id, name: o.name }))} hrefFor={(k) => `/inventory?tab=batches&open=0${k === "none" ? "" : `&owner=${k}`}`} />
 

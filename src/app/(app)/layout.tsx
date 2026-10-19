@@ -5,6 +5,7 @@ import { getOrdersEnabled } from "@/server/services/settings";
 import { ToastProvider } from "@/components/client";
 import { MobileBar, Sidebar } from "@/components/nav";
 import { NumberFocusClear } from "@/components/number-focus";
+import { SwRegister } from "@/components/sw-register";
 
 export const dynamic = "force-dynamic";
 // 大量匯入、還原等操作可能較久（Vercel 免費方案上限 60 秒）
@@ -16,6 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <ToastProvider>
       <NumberFocusClear />
+      <SwRegister />
       <div className="flex min-h-dvh">
         <Suspense><Sidebar ordersOn={ordersOn} /></Suspense>
         <div className="min-w-0 flex-1">

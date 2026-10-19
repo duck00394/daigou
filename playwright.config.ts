@@ -1,10 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
+import webpush from "web-push";
 
 // 端對端測試使用獨立的測試資料庫，不會動到開發或正式資料
 const TEST_DB = process.env.TEST_DATABASE_URL ?? "postgresql://daigou:daigou_dev@localhost:5432/daigou_test";
 const PORT = 3100;
 // 測試用密碼：e2e-password-123（只用在測試資料庫）
 const HASH = "$2b$04$55EEZKTMxiofC5WqMPdUIumsZSHpfuHWOe6MkyIAb0UkuY4kUDq7e";
+// 測試用推播金鑰：每次執行臨時產生，只給測試伺服器用（沒有排程服務金鑰，所以不會真的送通知）
+const VAPID = webpush.generateVAPIDKeys();
 const launchOptions = process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH, args: ["--no-sandbox"] } : {};
 
 export default defineConfig({
@@ -27,6 +30,6 @@ export default defineConfig({
     port: PORT,
     reuseExistingServer: false,
     timeout: 600_000,
-    env: { DATABASE_URL: TEST_DB, DIRECT_URL: TEST_DB, ADMIN_PASSWORD_HASH: HASH.replace(/\$/g, "\\$"), NEXT_TELEMETRY_DISABLED: "1", INSECURE_COOKIE: "1" },
+    env: { DATABASE_URL: TEST_DB, DIRECT_URL: TEST_DB, ADMIN_PASSWORD_HASH: HASH.replace(/\$/g, "\\$"), NEXT_TELEMETRY_DISABLED: "1", INSECURE_COOKIE: "1", VAPID_PUBLIC_KEY: VAPID.publicKey, VAPID_PRIVATE_KEY: VAPID.privateKey },
   },
 });

@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   description: "日本角色周邊代購管理",
   robots: { index: false, follow: false },
   appleWebApp: { capable: true, title: "代購帳房", statusBarStyle: "default" },
+  icons: { apple: "/icons/apple-touch-icon.png" },
 };
 
 export const viewport: Viewport = {

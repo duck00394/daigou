@@ -9,6 +9,7 @@ export const NAV: { href: string; label: string; group: string; hint?: string }[
   { href: "/purchase", label: "＋ 新增採購", group: "常用", hint: "買了什麼、哪一團" },
   { href: "/sell", label: "賣給客人", group: "常用", hint: "選系列、填數量，沒貨記預訂" },
   { href: "/catalog", label: "系列目錄", group: "常用", hint: "種類、系列、品項、角色、售價" },
+  { href: "/rush", label: "搶購提醒", group: "常用", hint: "什麼時候開搶，開始前通知手機" },
   { href: "/categories", label: "活動總表", group: "常用", hint: "每個活動花多少、誰還沒付" },
   { href: "/inventory?tab=batches", label: "採購團・收貨", group: "常用", hint: "東西到了沒、登記收到" },
   { href: "/inventory?tab=stock", label: "庫存・賣出・自留", group: "常用", hint: "手上有什麼、成本多少" },

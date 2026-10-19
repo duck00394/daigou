@@ -2,7 +2,7 @@
 // 這裡不驗證 Cookie 內容；所有頁面、Server Action 與 API 仍會在伺服器端完整驗證。
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC = ["/login"];
+const PUBLIC = ["/login", "/manifest.webmanifest", "/sw.js", "/api/rush/fire"];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -16,5 +16,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|robots.txt).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|icons/|robots.txt).*)"],
 };

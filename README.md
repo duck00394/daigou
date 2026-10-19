@@ -32,8 +32,21 @@
 | `ADMIN_PASSWORD_HASH` | 是 | 管理者密碼的 bcrypt 雜湊值（不是密碼本身） |
 | `INSECURE_COOKIE` | 否 | 只在本機 http 測試正式模式時設為 `1` |
 | `TEST_DATABASE_URL` | 否 | 測試用資料庫，名稱必須含 `test`；預設 `daigou_test` |
+| `VAPID_PUBLIC_KEY` | 搶購通知 | Web Push 公開金鑰（`npx web-push generate-vapid-keys` 產生） |
+| `VAPID_PRIVATE_KEY` | 搶購通知 | Web Push 私密金鑰，只放伺服器環境變數 |
+| `QSTASH_TOKEN` | 搶購通知 | Upstash QStash 的 token（免費方案即可） |
+| `QSTASH_CURRENT_SIGNING_KEY`／`QSTASH_NEXT_SIGNING_KEY` | 搶購通知 | 驗證排程呼叫真的來自 QStash |
+| `QSTASH_URL` | 否 | QStash 帳號在非預設區域時才需要（Upstash 主控台會顯示） |
+| `APP_URL` | 否 | 正式網址；沒填時用 Vercel 提供的正式網域 |
 
 更換密碼：重新產生雜湊並更新環境變數後重新啟動；可在設定頁「登出所有裝置」。
+
+## 搶購提醒的通知
+
+- 手機通知用 Web Push；iPhone 要 iOS 16.4 以上，且要從 Safari「加入主畫面」後，從主畫面圖示打開才能允許通知。
+- 準時觸發用 Upstash QStash（Vercel 免費方案的排程一天只能一次、誤差可達一小時，不夠準）：存提醒時預約 QStash 在「開始前 N 分鐘」呼叫 `/api/rush/fire`（驗簽章），伺服器再推播。QStash 單次最多預約 7 天，更久的會分段接力。
+- 改時間、取消、刪除、標記結束都會讓舊排程失效（版本號＋觸發時再檢查）；同一場同一版只送一次；全部手機都失敗才讓 QStash 重試。
+- 沒設定上面的環境變數時，畫面會顯示「推播服務還沒設定」，不會假裝排好。
 
 ## 測試
 
