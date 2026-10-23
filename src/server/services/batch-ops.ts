@@ -545,6 +545,7 @@ export async function batchPaySummary(t: Tx, batchIds: string[]) {
     select: {
       id: true,
       rateMicro: true,
+      refundedTwd: true,
       items: { select: { qty: true, cancelledQty: true, currency: true, estUnitCost: true, actualUnitCost: true, allocations: { select: { amountTwd: true } } } },
       supplierPayments: { where: { status: "PAID" }, select: { amount: true, currency: true, rateMicro: true } },
       costs: { select: { currency: true, amount: true, method: true, payer: true, shareSplit: true } },
@@ -552,7 +553,8 @@ export async function batchPaySummary(t: Tx, batchIds: string[]) {
   });
   for (const b of batches) {
     const total = b.items.reduce((s, i) => s + itemGoodsTwd(i, b.rateMicro) + i.allocations.reduce((a, x) => a + x.amountTwd, 0), 0) + summarizeFees(b.costs, b.rateMicro).unallocTwd;
-    const paid = b.supplierPayments.reduce((s, p) => s + (p.currency === "TWD" ? p.amount : jpyToTwd(p.amount, p.rateMicro ?? b.rateMicro)), 0);
+    // 已付＝付出去的 − 代購退回來的
+    const paid = b.supplierPayments.reduce((s, p) => s + (p.currency === "TWD" ? p.amount : jpyToTwd(p.amount, p.rateMicro ?? b.rateMicro)), 0) - b.refundedTwd;
     out.set(b.id, { totalTwd: total, paidTwd: paid, dueTwd: Math.max(0, total - paid) });
   }
   return out;
@@ -601,4 +603,36 @@ export async function dueByOwner(t: Tx, where: { categoryId?: string | null } = 
 export function pendingQty(i: { qty: number; cancelledQty: number; confirmedQty: number; batch: { status: string; supplierRef?: { kind: string | null } | null } }, received: number) {
   if (i.batch.status === "CANCELLED" || isStoreKind(i.batch.supplierRef?.kind)) return 0;
   return Math.max(0, i.qty - i.cancelledQty - Math.max(i.confirmedQty, received));
+}
+
+/**
+ * 已砍單，未退款：先付了錢，但被砍單（或整團取消），代購應該退錢還沒退的
+ * 取消的團：已付的全部要退；有砍單的團：付的比現在的總額多出來的要退
+ */
+export async function refundsOwed(t: Tx, batchIds?: string[]) {
+  const bs = await t.purchaseBatch.findMany({
+    where: { ...(batchIds ? { id: { in: batchIds } } : {}), OR: [{ status: "CANCELLED" }, { items: { some: { cancelledQty: { gt: 0 } } } }], supplierPayments: { some: { status: "PAID" } } },
+    select: { id: true, name: true, status: true, supplier: true, ownership: true, orderedById: true, supplierOrderNo: true, refundedTwd: true, supplierRef: { select: { name: true } }, items: { select: { cancelledQty: true } } },
+  });
+  const pay = await batchPaySummary(t, bs.map((b) => b.id));
+  return bs
+    .map((b) => {
+      const p = pay.get(b.id)!;
+      const owed = b.status === "CANCELLED" ? p.paidTwd : p.paidTwd - p.totalTwd;
+      return { id: b.id, name: b.name, cancelled: b.status === "CANCELLED", supplierName: b.supplierRef?.name ?? b.supplier ?? "", ownership: b.ownership, orderedById: b.orderedById, orderNo: b.supplierOrderNo, cut: b.items.reduce((a, i) => a + i.cancelledQty, 0), paidTwd: p.paidTwd, totalTwd: p.totalTwd, refundedTwd: b.refundedTwd, owed };
+    })
+    .filter((x) => x.owed > 0);
+}
+
+/** 記一筆代購退款（台幣） */
+export async function recordRefund(t: Tx, actor: Actor, batchId: string, amount: number) {
+  if (!Number.isInteger(amount) || amount <= 0) throw new BizError("退款金額請填正整數");
+  await lockRows(t, "PurchaseBatch", [batchId]);
+  const b = await t.purchaseBatch.findUnique({ where: { id: batchId }, select: { refundedTwd: true } });
+  if (!b) throw new BizError("找不到採購團");
+  const p = (await batchPaySummary(t, [batchId])).get(batchId)!;
+  if (amount > p.paidTwd) throw new BizError(`這團目前已付 NT$${p.paidTwd.toLocaleString()}，退款不能比這個多`);
+  await t.purchaseBatch.update({ where: { id: batchId }, data: { refundedTwd: b.refundedTwd + amount } });
+  await audit(t, actor, "batch.refund", "PurchaseBatch", batchId, { amount });
+  return { refundedTwd: b.refundedTwd + amount };
 }

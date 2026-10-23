@@ -1,6 +1,6 @@
 // 手機：系列目錄（種類 › 系列 › 品項 › 角色、預設售價）→ 實體店買進 → 賣給客人（現貨＋預訂）→ 庫存選了才看
 import { test, expect } from "@playwright/test";
-import { login, toast } from "./helpers";
+import { login, toast, pickIp, newSupplierPick, openSeries, openMore } from "./helpers";
 
 test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => {
   const tag = Date.now().toString(36).slice(-4);
@@ -74,14 +74,14 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await page.goto("/purchase");
   const meBtn = page.getByRole("button", { name: /^我是/ }).first();
   if (await meBtn.isVisible()) await meBtn.click();
+  await openSeries(page);
   await page.getByLabel("種類", { exact: true }).selectOption({ label: kind });
   await page.getByLabel("系列", { exact: true }).selectOption({ label: series });
   await expect(page.getByRole("radio", { name: /新的一團/ })).toHaveAttribute("aria-checked", "true");
+  await openMore(page);
   await page.getByRole("radiogroup", { name: "在哪裡買的" }).getByRole("radio", { name: /實體店買/ }).click();
-  await page.getByRole("button", { name: "＋ 新店家" }).click();
-  await page.getByLabel("店名", { exact: true }).fill(`常設店 ${tag}`);
-  await page.getByRole("button", { name: "建立", exact: true }).click();
-  await page.getByLabel("IP（例：吉伊卡哇）").selectOption({ label: "吉伊卡哇" });
+  await newSupplierPick(page, `常設店 ${tag}`, true);
+  await pickIp(page);
   await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
   await page.getByRole("button", { name: "＋ 吉伊" }).click();
   const r1 = page.getByRole("table", { name: "批次新增採購品項" }).getByRole("row").filter({ hasText: "第 1 列" });
@@ -95,7 +95,7 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await page.getByRole("button", { name: "換系列" }).click();
   await page.getByLabel("這批商品的系列", { exact: true }).selectOption({ label: `幽靈${tag}` });
   await expect(page.getByTestId("items-series-name")).toHaveText(`幽靈${tag}`);
-  await page.getByLabel("IP（例：吉伊卡哇）").selectOption({ label: "吉伊卡哇" });
+  await pickIp(page);
   await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
   await page.getByRole("button", { name: "＋ 吉伊" }).click();
   const r2 = page.getByRole("table", { name: "批次新增採購品項" }).getByRole("row").filter({ hasText: "第 1 列" });
@@ -121,7 +121,9 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await expect(hachi).toContainText("預訂 1");
   // 同一位客人再加一個系列（幽靈）
   await page.getByLabel("系列", { exact: true }).selectOption({ label: `幽靈${tag}` });
-  await expect(page.getByTestId("sell-sheet")).toHaveCount(2);
+  // 上次用過的系列可能會先帶出來；只看這個測試建的兩個系列
+  await expect(page.locator(`[data-testid="sell-sheet"][data-name="${series}"]`)).toHaveCount(1);
+  await expect(page.locator(`[data-testid="sell-sheet"][data-name="幽靈${tag}"]`)).toHaveCount(1);
   const ghost = page.locator(`[data-testid="sell-row"][data-name="幽靈${tag}:吊娃:吉伊"]`);
   await ghost.getByLabel("吉伊 數量").fill("1");
   await ghost.getByLabel("吉伊 單價").fill("300");

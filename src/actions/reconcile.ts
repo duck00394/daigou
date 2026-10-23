@@ -22,3 +22,8 @@ export async function resetReconcileAction(batchIds: string[]) {
   const { resetReconcile } = await import("@/server/services/reconcile");
   return run((a) => tx((t) => resetReconcile(t, a, ids)));
 }
+
+export async function recordRefundAction(batchId: string, amount: number) {
+  const { recordRefund } = await import("@/server/services/batch-ops");
+  return run((a) => tx((t) => recordRefund(t, a, z.string().max(64).parse(batchId), z.number().int().parse(amount))));
+}

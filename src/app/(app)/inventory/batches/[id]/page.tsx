@@ -1,3 +1,5 @@
+import { CopyButton } from "@/components/copy-button";
+import { RefundButton } from "../../../reconcile/reset";
 import { seriesOptions } from "@/server/services/catalog-tree";
 import { notFound } from "next/navigation";
 import { prisma, tx } from "@/server/db";
@@ -122,6 +124,8 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
   const supplierName = b.supplierRef?.name ?? b.supplier;
   const pay = (await tx((t) => batchPaySummary(t, [b.id]))).get(b.id) ?? { totalTwd: totalLanded, paidTwd: 0, dueTwd: totalLanded };
   const me = await getMe();
+  const anyCut = b.items.some((i) => i.cancelledQty > 0);
+  const refundOwed = !open ? pay.paidTwd : anyCut ? pay.paidTwd - pay.totalTwd : 0;
   return (
     <div className="space-y-4">
       <PageHeader
@@ -130,9 +134,21 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         sub={<span className="flex flex-wrap items-center gap-2"><OwnerBadge k={b.ownership === "JOINT" ? "joint" : b.orderedById} name={b.ownership === "JOINT" ? "合資" : opName(b.orderedById)} ids={ops.map((o) => o.id)} />{isStoreKind(b.supplierRef?.kind) ? <Badge tone="info">實體店購買</Badge> : <StatusBadge map={batchStageLabel} value={batchStage(b)} />}{batchSeries.map((x) => <a key={x.id} href={`/categories/${x.id}`} className="text-ai hover:underline">{x.name}</a>)}{supplierName && supplierName !== b.name && <span>{isStoreKind(b.supplierRef?.kind) ? "店家" : "代購"}：{supplierName}</span>}<span className="text-[12px] text-mute">{b.code}</span></span>}
         actions={<>{open && <LinkButton href={`/reconcile/${b.id}`}>對單</LinkButton>}<LinkButton href={`/purchase${b.categoryId ? `?categoryId=${b.categoryId}` : ""}`}>同活動再開一團</LinkButton>{open && <CancelBatch id={b.id} />}</>}
       />
+      {(b.supplierOrderNo || b.notes) && (
+        <div className="space-y-1 rounded-xl border border-line bg-card px-4 py-2.5 text-[14px]" data-testid="batch-where">
+          {b.supplierOrderNo && <div className="flex items-center gap-2"><span className="text-mute">訂單編號</span><span className="num font-semibold break-all" data-testid="batch-order-no">{b.supplierOrderNo}</span><CopyButton text={b.supplierOrderNo} /></div>}
+          {b.notes && <div className="flex gap-2"><span className="shrink-0 text-mute">在哪訂的</span><span className="break-all whitespace-pre-wrap">{b.notes}</span></div>}
+        </div>
+      )}
+      {refundOwed > 0 && (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-[#f1b5b5] bg-bad-soft px-4 py-2.5 text-[14px] text-bad" data-testid="batch-refund-owed">
+          <span>已砍單，未退款：代購要退 <b className="num">{formatTwd(refundOwed)}</b>{b.refundedTwd ? `（已退 ${formatTwd(b.refundedTwd)}）` : ""}</span>
+          <RefundButton batchId={b.id} name={b.name} owed={refundOwed} />
+        </div>
+      )}
       {!open && (
         <div className="rounded-xl border border-line bg-line-2 px-4 py-3 text-[14px] text-ink-2" role="status">
-          這團已取消，不會算進總額、還要付和庫存。{pay.paidTwd > 0 ? `之前登記的付款 ${formatTwd(pay.paidTwd)} 還留著，要退回的話記得跟代購確認。` : ""}
+          這團已取消，不會算進總額、還要付和庫存。{pay.paidTwd > 0 ? "之前付的錢要請代購退回，退了在上面按「記退款」。" : ""}
         </div>
       )}
       <section className="rounded-xl border border-line bg-card p-4" aria-label="這團金額">

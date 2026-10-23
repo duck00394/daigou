@@ -1,6 +1,6 @@
 // 批次新增系列商品（手機版）：逐列卡片輸入、確認、修改與刪除
 import { test, expect } from "@playwright/test";
-import { login, toast } from "./helpers";
+import { login, toast, pickIp } from "./helpers";
 
 test("手機：卡片式表格可新增、修改、刪除列並確認儲存", async ({ page }) => {
   await login(page);
@@ -9,7 +9,7 @@ test("手機：卡片式表格可新增、修改、刪除列並確認儲存", as
   await page.getByLabel("供應商", { exact: true }).selectOption({ label: "不指定" }); // 不受其他測試建立的實體店影響
   await page.getByRole("button", { name: "建立採購團" }).click();
   await expect(page.getByRole("heading", { name: /手機團/ })).toBeVisible();
-  await page.getByLabel("IP（例：吉伊卡哇）").selectOption({ label: "吉伊卡哇" });
+  await pickIp(page);
   await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
   await page.getByRole("button", { name: "＋ 吉伊" }).click();
   await page.getByRole("button", { name: "＋ 兔兔" }).click();

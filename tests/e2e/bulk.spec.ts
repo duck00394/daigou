@@ -1,6 +1,6 @@
 // 批次新增系列商品（桌面版）：建立採購團 → 點選角色 → 表格填價格數量 → 貼上多格 → 確認新增 → 批次修改 → 刪除
 import { test, expect, type Page } from "@playwright/test";
-import { login, toast } from "./helpers";
+import { login, toast, pickIp } from "./helpers";
 
 // 本檔的測試依序共用資料（後一個測試使用前一個建立的商品、訂單），明確宣告為依序執行
 test.describe.configure({ mode: "serial" });
@@ -28,7 +28,7 @@ test("桌面：批次新增 4 個角色（含新角色與貼上），再批次�
   await login(page);
   const before = await stockOf(page, "吉伊 吊娃");
   await newBatch(page, "E2E 批次團");
-  await page.getByLabel("IP（例：吉伊卡哇）").selectOption({ label: "吉伊卡哇" });
+  await pickIp(page);
   await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
   for (const n of ["吉伊", "小八", "兔兔"]) await page.getByRole("button", { name: `＋ ${n}` }).click();
   await expect(page.locator('[data-row="2"][data-col="0"]').first()).toHaveValue(/.+/);
@@ -105,7 +105,7 @@ test("桌面：批次新增 4 個角色（含新角色與貼上），再批次�
 test("桌面：第二團套用上次使用的角色，價格帶入上次設定且可獨立修改", async ({ page }) => {
   await login(page);
   await newBatch(page, "E2E 第二團");
-  await page.getByLabel("IP（例：吉伊卡哇）").selectOption({ label: "吉伊卡哇" });
+  await pickIp(page);
   await page.getByRole("button", { name: "套用上次使用的角色" }).click();
   await expect(cell(page, 2, 0)).not.toHaveValue("");
   // 小八帶入上次（已修改後）的 360，兔兔 420

@@ -1,3 +1,4 @@
+import { CopyButton } from "@/components/copy-button";
 import { getView } from "@/server/view";
 import { notFound } from "next/navigation";
 import { tx } from "@/server/db";
@@ -29,6 +30,12 @@ export default async function ReconcileBatch({ params, searchParams }: { params:
         sub={[sheet.supplierName, idx >= 0 ? `第 ${idx + 1}／${list.todo.length} 團` : "已對完"].filter(Boolean).join("｜")}
         back={{ href: `/reconcile${qs}`, label: "對單" }}
       />
+      {(sheet.orderNo || sheet.notes) && (
+        <div className="space-y-1 rounded-xl border border-line bg-card px-3 py-2 text-[14px]">
+          {sheet.orderNo && <div className="flex items-center gap-2"><span className="text-mute">訂單編號</span><span className="num font-semibold break-all">{sheet.orderNo}</span><CopyButton text={sheet.orderNo} /></div>}
+          {sheet.notes && <div className="flex gap-2"><span className="shrink-0 text-mute">在哪訂的</span><span className="break-all">{sheet.notes}</span></div>}
+        </div>
+      )}
       {sheet.needsCheck && idx < 0 && sheet.items.some((i) => i.active > i.received) && (
         <div className="flex items-center justify-between gap-2 rounded-xl border border-line bg-card px-3 py-2 text-[14px]">
           <span className="text-mute">這團已對完</span>

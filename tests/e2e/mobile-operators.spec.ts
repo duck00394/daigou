@@ -1,6 +1,6 @@
 // 手機：負責人、付款人與收貨確認人都是一排大按鈕，不必進多層選單
 import { test, expect } from "@playwright/test";
-import { login, toast } from "./helpers";
+import { login, toast, pickIp } from "./helpers";
 import { seedStock } from "./seed";
 
 test("手機：建團選負責人、登記付款與收貨，對帳頁不橫向捲動", async ({ page }) => {
@@ -16,7 +16,7 @@ test("手機：建團選負責人、登記付款與收貨，對帳頁不橫向�
   // 最上面就有常用的三顆：全部到了、付清、加商品
   await expect(page.getByLabel("常用動作").getByRole("link", { name: "＋ 加商品" })).toBeVisible();
 
-  await page.getByLabel("IP（例：吉伊卡哇）").selectOption({ label: "吉伊卡哇" });
+  await pickIp(page);
   await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
   await page.getByRole("button", { name: "＋ 兔兔" }).click();
   const r1 = page.getByRole("table", { name: "批次新增採購品項" }).getByRole("row").filter({ hasText: "第 1 列" });

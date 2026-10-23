@@ -1,7 +1,7 @@
 // 採購團列表：外面直接按「已確認／未確認」、只看未確認、已付 %、總計買了什麼；庫存看「不一定有貨」；新增時填商品總額
 import { test, expect } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import { login, toast } from "./helpers";
+import { login, toast, pickIp } from "./helpers";
 
 const url = process.env.TEST_DATABASE_URL ?? "postgresql://daigou:daigou_dev@localhost:5432/daigou_test";
 
@@ -45,6 +45,9 @@ test("對單：買到幾件、砍掉剩下的；庫存分一定／不一定有�
   // 對單：買到 2、剩下 2 砍掉
   await page.getByTestId("go-reconcile").click();
   await expect(page).toHaveURL(/\/reconcile$/);
+  // 各區預設收起來，點開才看到
+  await expect(page.getByTestId("reconcile-row").first()).toBeHidden();
+  await page.getByTestId("todo-section").locator("summary").click();
   await page.getByTestId("reconcile-row").filter({ hasText: `確認測試團 ${tag}` }).click();
   await expect(page).toHaveURL(new RegExp(`/reconcile/${batch.id}`));
   const it = page.locator(`[data-testid="reconcile-item"][data-name="${product.name}"]`);
@@ -98,7 +101,7 @@ test("新增品項時只知道總額：填商品總額，每件自動平均", as
   await page.getByLabel("系列", { exact: true }).selectOption({ label: cat.name });
   await page.getByLabel("供應商").selectOption({ label: "日本官網" });
   await page.getByRole("button", { name: "建立採購團" }).click();
-  await page.getByLabel("IP（例：吉伊卡哇）").selectOption({ label: "吉伊卡哇" });
+  await pickIp(page);
   await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
   await page.getByRole("button", { name: "＋ 吉伊" }).click();
   await page.getByRole("button", { name: "＋ 小八" }).click();
@@ -125,7 +128,40 @@ test("對單：已對完的團可以整團改回待確認", async ({ page }) => 
   await page.getByRole("dialog").getByRole("button", { name: /改回待確認（1 團）/ }).click();
   await toast(page, "已把 1 團改回待確認");
   await page.goto("/reconcile");
+  await page.getByTestId("todo-section").locator("summary").click();
   await expect(page.getByTestId("reconcile-row").filter({ hasText: `確認測試團 ${tag}` })).toContainText("待確認 4");
+});
+
+test("已砍單，未退款：先付了錢又被砍，列出來；記退款後拿掉", async ({ page }) => {
+  const tag = Date.now().toString(36).slice(-5) + "f";
+  const { batch } = await seedUnconfirmed(tag);
+  await login(page);
+  // 先付了 400（4 件×100），之後被砍 2 件 → 代購要退 200
+  await page.goto(`/reconcile/${batch.id}`);
+  await page.getByLabel("總共付了多少").fill("400");
+  await page.getByRole("button", { name: /^儲存/ }).click();
+  await toast(page, /記了付款 NT\$400/);
+  await page.goto(`/reconcile/${batch.id}`);
+  const it = page.getByTestId("reconcile-item").first();
+  await it.getByRole("button", { name: /多一件/ }).click();
+  await it.getByRole("button", { name: /多一件/ }).click();
+  await it.getByRole("button", { name: /砍$/ }).click();
+  await page.getByRole("button", { name: /^儲存/ }).click();
+  await toast(page, /砍 2/);
+  await page.goto("/reconcile");
+  const sec = page.getByTestId("refund-section");
+  await expect(sec.locator("summary")).toContainText("已砍單，未退款");
+  const row = sec.getByTestId("refund-row").filter({ hasText: `確認測試團 ${tag}` });
+  await expect(row).toBeHidden();
+  await sec.locator("summary").click();
+  await expect(row).toContainText("要退 NT$200");
+  await row.getByRole("button", { name: "記退款" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "記退款 NT$200" }).click();
+  await toast(page, "已記退款 NT$200");
+  await expect(row).toHaveCount(0);
+  await page.goto(`/inventory/batches/${batch.id}`);
+  await expect(page.getByTestId("batch-due")).toHaveText("NT$0");
+  await expect(page.getByTestId("batch-refund-owed")).toHaveCount(0);
 });
 
 test("系列：打關鍵字直接找；系列目錄調整順序後，下拉選單照順序", async ({ page }) => {

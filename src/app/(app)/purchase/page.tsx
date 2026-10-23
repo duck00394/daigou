@@ -35,6 +35,10 @@ export default async function PurchasePage({ searchParams }: { searchParams: Pro
   const supUse = new Map<string, number>();
   for (const b of batches) if (b.supplierId) supUse.set(b.supplierId, (supUse.get(b.supplierId) ?? 0) + 1);
   const sortedSups = [...suppliers].sort((a, b) => (supUse.get(b.id) ?? 0) - (supUse.get(a.id) ?? 0) || a.name.localeCompare(b.name, "zh-Hant"));
+  // 每個代購上次寫的「在哪訂的」（Threads、IG、LINE 團名），新開一團時可以一鍵帶入
+  const noted = await prisma.purchaseBatch.findMany({ where: { notes: { not: null }, supplierId: { not: null } }, orderBy: { createdAt: "desc" }, take: 300, select: { supplierId: true, notes: true } });
+  const lastNote = new Map<string, string>();
+  for (const n of noted) if (n.supplierId && n.notes?.trim() && !lastNote.has(n.supplierId)) lastNote.set(n.supplierId, n.notes.trim());
   const [lastItem, shipping] = await Promise.all([
     prisma.purchaseBatchItem.findFirst({ orderBy: { createdAt: "desc" }, select: { product: { select: { seriesId: true, productTypeId: true } } } }),
     listShippingMethods(prisma),
@@ -50,7 +54,7 @@ export default async function PurchasePage({ searchParams }: { searchParams: Pro
         shipping={shipping.map((x) => ({ id: x.id, name: x.name, kind: x.kind, currency: x.currency === "JPY" ? "JPY" : "TWD", amount: x.amount }))}
         lastSeriesId={lastItem?.product.seriesId ?? null}
         lastTypeId={lastItem?.product.productTypeId ?? null}
-        suppliers={sortedSups.map((s) => ({ id: s.id, name: s.name, currency: (s.defaultCurrency as "JPY" | "TWD") ?? "TWD", store: isStoreKind(s.kind), favorite: s.favorite }))}
+        suppliers={sortedSups.map((s) => ({ id: s.id, name: s.name, currency: (s.defaultCurrency as "JPY" | "TWD") ?? "TWD", store: isStoreKind(s.kind), favorite: s.favorite, lastNote: lastNote.get(s.id) ?? null }))}
         batches={batches.map((b) => ({
           id: b.id,
           label: `${b.name}`,

@@ -1,9 +1,9 @@
 // 手機：一個畫面新增採購（活動 → 哪一團 → 買了什麼），三團分別是我的、對方的、合資；活動總表看總額、各團與誰買的
 import { test, expect, type Page } from "@playwright/test";
-import { login, toast } from "./helpers";
+import { login, toast, pickIp, newSupplierPick, openSeries, openMore } from "./helpers";
 
 async function addRow(page: Page, character: string, price: string, qty: string) {
-  await page.getByLabel("IP（例：吉伊卡哇）").selectOption({ label: "吉伊卡哇" });
+  await pickIp(page);
   await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
   await page.getByRole("button", { name: `＋ ${character}` }).click();
   const r1 = page.getByRole("table", { name: "批次新增採購品項" }).getByRole("row").filter({ hasText: "第 1 列" });
@@ -14,10 +14,7 @@ async function addRow(page: Page, character: string, price: string, qty: string)
 }
 
 async function newSupplier(page: Page, name: string) {
-  await page.getByRole("button", { name: "＋ 新代購" }).click();
-  await page.getByLabel("代購名稱", { exact: true }).fill(name);
-  await page.getByRole("button", { name: "建立", exact: true }).click();
-  await expect(page.getByRole("radiogroup", { name: "向哪個代購買" }).getByRole("radio", { name })).toHaveAttribute("aria-checked", "true");
+  await newSupplierPick(page, name);
 }
 
 /** 全部功能 → 現在看誰的 */
@@ -42,10 +39,11 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   if (await meBtn.isVisible()) await meBtn.click();
 
   // 1. 新增活動
+  await openSeries(page);
   await page.getByRole("button", { name: "＋ 新系列" }).click();
   await page.getByLabel(/新系列名稱/).fill(cat);
   await page.getByRole("button", { name: "建立", exact: true }).click();
-  await expect(page.getByLabel("系列", { exact: true }).locator("option:checked")).toHaveText(cat);
+  await expect(page.getByTestId("chosen-series")).toContainText(cat);
 
   // 2. 第一團：我的（預設），預設台幣
   await expect(page.getByRole("radio", { name: /新的一團/ })).toHaveAttribute("aria-checked", "true");
@@ -69,6 +67,7 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   await page.getByRole("button", { name: "再開新的一團" }).click();
   await newSupplier(page, `頑皮貓 ${tag}`);
   await page.getByRole("radiogroup", { name: "這團是誰的" }).getByRole("radio", { name: "合資" }).click();
+  await openMore(page);
   await page.getByRole("radiogroup", { name: "進度" }).getByRole("radio", { name: "代購收到了，等寄出" }).click();
   await addRow(page, "吉伊", "610", "4");
   await expect(page.getByText(/已存到「頑皮貓/)).toBeVisible();
@@ -76,7 +75,7 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   // 已有的團會列出來，可以直接加進去
   // 再進來時，活動預設是上次用的
   await page.goto("/purchase");
-  await expect(page.getByLabel("系列", { exact: true }).locator("option:checked")).toHaveText(cat);
+  await expect(page.getByTestId("chosen-series")).toContainText(cat);
   // 預設開新的一團；之前的團收起來，點了才出現
   await expect(page.getByRole("radio", { name: /新的一團/ })).toHaveAttribute("aria-checked", "true");
   await expect(page.getByRole("radiogroup", { name: "哪一團" }).getByRole("radio")).toHaveCount(1);
@@ -161,16 +160,22 @@ test("手機：開團時一起記運費（常用運費方式）和訂金；實�
   await page.goto("/purchase");
   const meBtn = page.getByRole("button", { name: /^我是/ }).first();
   if (await meBtn.isVisible()) await meBtn.click();
+  await openSeries(page);
   await page.getByRole("button", { name: "＋ 新系列" }).click();
   await page.getByLabel(/新系列名稱/).fill(`E2E 現貨 ${tag}`);
   await page.getByRole("button", { name: "建立", exact: true }).click();
   // 改活動名稱
+  await openSeries(page);
   await page.getByRole("button", { name: /✎ 改/ }).click();
   await page.getByLabel("新名稱").fill(`E2E 現貨展 ${tag}`);
   await page.getByRole("button", { name: "儲存", exact: true }).click();
   await expect(page.getByLabel("系列", { exact: true }).locator("option:checked")).toHaveText(`E2E 現貨展 ${tag}`);
 
   await newSupplier(page, `砂糖 ${tag}`);
+  // 訂單編號、在哪訂的
+  await page.getByLabel("訂單編號").fill(`MHB${tag}`);
+  await page.getByLabel("在哪訂的").fill(`IP @sugar${tag}`);
+  await openMore(page);
   await page.getByRole("button", { name: new RegExp(ship) }).click();
   await expect(page.getByLabel(`${ship} 運費`)).toHaveValue("38");
   await page.getByLabel("已付訂金").fill("500");
@@ -180,14 +185,23 @@ test("手機：開團時一起記運費（常用運費方式）和訂金；實�
   await expect(page.getByTestId("batch-total")).toHaveText("NT$1,238"); // 600×2 ＋ 運費 38
   await expect(page.getByTestId("batch-due")).toHaveText("NT$738"); // 扣掉訂金 500
   await expect(page.getByTestId("fee-row")).toContainText(ship);
+  await expect(page.getByTestId("batch-order-no")).toHaveText(`MHB${tag}`);
+  await expect(page.getByTestId("batch-where")).toContainText(`@sugar${tag}`);
+  // 用訂單編號搜尋找到這一團
+  await page.goto(`/search?q=MHB${tag}`);
+  await expect(page.getByTestId("search-batches")).toContainText(`砂糖 ${tag}`);
+  // 同一個代購再開一團：可以帶入上次的「在哪訂的」
+  await page.goto("/purchase");
+  await page.getByLabel("向哪個代購買", { exact: true }).selectOption({ label: `砂糖 ${tag}` });
+  await page.getByRole("button", { name: `用上次的：IP @sugar${tag}` }).click();
+  await expect(page.getByLabel("在哪訂的")).toHaveValue(`IP @sugar${tag}`);
 
   // 實體店買：不是跟代購買，存好就進庫存、記成付清；畫面顯示「實體店購買」
   await page.goto("/purchase");
   await page.getByRole("radio", { name: /新的一團/ }).click();
+  await openMore(page);
   await page.getByRole("radiogroup", { name: "在哪裡買的" }).getByRole("radio", { name: /實體店買/ }).click();
-  await page.getByRole("button", { name: "＋ 新店家" }).click();
-  await page.getByLabel("店名", { exact: true }).fill(`常設店 ${tag}`);
-  await page.getByRole("button", { name: "建立", exact: true }).click();
+  await newSupplierPick(page, `常設店 ${tag}`, true);
   await expect(page.getByRole("radiogroup", { name: "進度" })).toHaveCount(0);
   await expect(page.getByLabel(/在店裡已經付清/)).toBeChecked();
   await page.screenshot({ path: "test-results/mobile_purchase_store.png", fullPage: true });

@@ -101,6 +101,7 @@ export async function createBatchAction(input: {
 }) {
   return run(async (a) => {
     const items = z.array(batchItem).max(300).parse(input.items);
+    z.string().max(2000).nullish().parse(input.notes);
     const opId = z.string().max(64).nullish();
     const resp = z.object({ orderedById: opId, paymentResponsibleById: opId, receivingResponsibleById: opId, responsibilityNote: z.string().max(500).nullish() }).parse(input);
     const extra = z

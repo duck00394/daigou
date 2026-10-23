@@ -425,7 +425,7 @@ async function BatchesTab({ cat, open, owner, confirm, view }: { cat?: string; o
                     {isStoreKind(b.supplierRef?.kind) ? <Badge tone="info">實體店購買</Badge> : <StatusBadge map={batchStageLabel} value={batchStage(b)} />}
                   </div>
                   <div className="mt-0.5 text-[13px] text-mute">
-                    {[b.supplierRef?.name ?? b.supplier, b.category?.name, `下單 ${fmtDate(b.orderedAt)}`].filter(Boolean).join("｜")}
+                    {[b.supplierRef?.name ?? b.supplier, b.category?.name, b.supplierOrderNo ? `訂單 ${b.supplierOrderNo}` : null, `下單 ${fmtDate(b.orderedAt)}`].filter(Boolean).join("｜")}
                   </div>
                   {(() => {
                     const p = pay.get(b.id);
@@ -444,7 +444,7 @@ async function BatchesTab({ cat, open, owner, confirm, view }: { cat?: string; o
                         {p && p.totalTwd > 0 && (
                           <div className="mt-1 flex items-baseline justify-between text-[13px]" data-testid="batch-card-money">
                             <span className="text-ink-2">總額 <span className="num font-semibold">{formatTwd(p.totalTwd)}</span></span>
-                            {b.status === "CANCELLED" ? <span className="text-mute">已取消{p.paidTwd ? `・已付 ${formatTwd(p.paidTwd)}` : ""}</span> : p.dueTwd > 0 ? <span className="num font-semibold text-bad">還要付 {formatTwd(p.dueTwd)}</span> : <span className="text-good">✓ 已付清</span>}
+                            {b.status === "CANCELLED" ? <span className={p.paidTwd > 0 ? "font-semibold text-bad" : "text-mute"}>已取消{p.paidTwd > 0 ? `・代購要退 ${formatTwd(p.paidTwd)}` : ""}</span> : p.paidTwd > p.totalTwd ? <span className="num font-semibold text-bad" data-testid="batch-refund">代購要退 {formatTwd(p.paidTwd - p.totalTwd)}</span> : p.dueTwd > 0 ? <span className="num font-semibold text-bad">還要付 {formatTwd(p.dueTwd)}</span> : <span className="text-good">✓ 已付清</span>}
                           </div>
                         )}
                         <div className="mt-0.5 text-[12px] text-mute">

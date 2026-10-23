@@ -1,6 +1,6 @@
 // 雙人經營責任紀錄（桌面）：改名 → 建團選負責人 → A 付訂金、B 付尾款 → A、B 分批收貨 → 經營者對帳
 import { test, expect, type Page } from "@playwright/test";
-import { login, toast } from "./helpers";
+import { login, toast, pickIp } from "./helpers";
 
 /** 改經營者名稱；名稱沒變（例如重複執行時）就不需要儲存 */
 async function rename(page: Page, code: string, name: string) {
@@ -36,7 +36,7 @@ test("桌面：A 下單、A 付訂金 B 付尾款、A B 分批收貨，對帳依
   const batchId = page.url().split("/inventory/batches/")[1].split("?")[0];
 
   // 3. 加入兩個品項
-  await page.getByLabel("IP（例：吉伊卡哇）").selectOption({ label: "吉伊卡哇" });
+  await pickIp(page);
   await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
   await page.getByRole("button", { name: "＋ 吉伊" }).click();
   await page.getByRole("button", { name: "＋ 小八" }).click();

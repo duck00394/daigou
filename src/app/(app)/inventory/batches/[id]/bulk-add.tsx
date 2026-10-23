@@ -123,6 +123,7 @@ export function BulkAddGrid({
   const [showErrors, setShowErrors] = useState(false);
   const [tplName, setTplName] = useState("");
   const [newSeries, setNewSeries] = useState<string | null>(null);
+  const [showIp, setShowIp] = useState(false);
   const [newType, setNewType] = useState<string | null>(null);
   const idem = useIdemKey();
   const toast = useToast();
@@ -401,8 +402,12 @@ export function BulkAddGrid({
         </div>
       )}
       {/* 1～3：系列、類型（供應商與採購團由這一團帶入） */}
+      {/* 只有一個 IP（吉伊卡哇）時不用選，要換再按 */}
+      {seriesList.length === 1 && !!seriesId && !showIp && newSeries === null && (
+        <p className="-mb-1 text-right text-[12px] text-mute">IP：{seriesList[0].name}　<button type="button" className="text-ai" onClick={() => setShowIp(true)}>換／新增</button></p>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
-        <div>
+        <div className={seriesList.length === 1 && !!seriesId && !showIp && newSeries === null ? "hidden" : ""}>
           <label className="mb-1 block text-[13px] font-medium text-ink-2" htmlFor="bulk-series">IP（例：吉伊卡哇）</label>
           {newSeries === null ? (
             <div className="flex gap-2">

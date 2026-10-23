@@ -48,7 +48,7 @@ export async function reconcileList(t: Tx, filter: { supplier?: string; cat?: st
     where: { status: { not: "CANCELLED" } },
     orderBy: [{ orderedAt: "asc" }, { createdAt: "asc" }],
     select: {
-      id: true, name: true, status: true, orderedAt: true, supplier: true, categoryId: true, ownership: true, orderedById: true,
+      id: true, name: true, status: true, orderedAt: true, supplier: true, categoryId: true, ownership: true, orderedById: true, supplierOrderNo: true,
       supplierRef: { select: { id: true, name: true, kind: true } },
       category: { select: { id: true, name: true } },
       items: { select: { qty: true, cancelledQty: true, confirmedQty: true, categoryId: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } },
@@ -56,7 +56,7 @@ export async function reconcileList(t: Tx, filter: { supplier?: string; cat?: st
   });
   const v = filter.view ?? "all";
   const rows = batches.filter((b) => needsCheck(b) && (v === "all" || b.ownership === "JOINT" || !b.orderedById || b.orderedById === v)).map((b) => ({
-    id: b.id, name: b.name, orderedAt: b.orderedAt, status: b.status,
+    id: b.id, name: b.name, orderedAt: b.orderedAt, status: b.status, orderNo: b.supplierOrderNo,
     supplierKey: b.supplierRef?.id ?? `n:${b.supplier ?? ""}`,
     supplierName: b.supplierRef?.name ?? b.supplier ?? "未指定代購",
     seriesIds: [...new Set([b.categoryId, ...b.items.map((i) => i.categoryId)].filter((x): x is string => !!x))],
@@ -75,7 +75,7 @@ export async function reconcileList(t: Tx, filter: { supplier?: string; cat?: st
 export async function reconcileSheet(t: Tx, batchId: string) {
   const b = await t.purchaseBatch.findUnique({
     where: { id: batchId },
-    select: { id: true, name: true, status: true, supplier: true, categoryId: true, rateMicro: true, supplierRef: { select: { name: true, kind: true } }, category: { select: { name: true } }, items: { select: itemSelect, orderBy: { createdAt: "asc" } } },
+    select: { id: true, name: true, status: true, supplier: true, categoryId: true, rateMicro: true, supplierOrderNo: true, notes: true, supplierRef: { select: { name: true, kind: true } }, category: { select: { name: true } }, items: { select: itemSelect, orderBy: { createdAt: "asc" } } },
   });
   if (!b) throw new BizError("找不到這一團");
   const cats = await t.category.findMany({ where: { id: { in: [...new Set(b.items.map((i) => i.categoryId).filter((x): x is string => !!x))] } }, select: { id: true, name: true } });
@@ -97,7 +97,7 @@ export async function reconcileSheet(t: Tx, batchId: string) {
   }).filter((i) => i.active > 0 || i.cut > 0)
     .sort((a, c) => a.group.localeCompare(c.group, "zh-Hant") || a.sort[0] - c.sort[0] || a.sort[1] - c.sort[1]);
   const pay = (await batchPaySummary(t, [b.id])).get(b.id) ?? { totalTwd: 0, paidTwd: 0, dueTwd: 0 };
-  return { id: b.id, name: b.name, supplierName: b.supplierRef?.name ?? b.supplier ?? "", needsCheck: needsCheck(b), items, pay };
+  return { id: b.id, name: b.name, supplierName: b.supplierRef?.name ?? b.supplier ?? "", needsCheck: needsCheck(b), items, pay, orderNo: b.supplierOrderNo, notes: b.notes };
 }
 
 export interface ReconcileRow {

@@ -23,6 +23,16 @@ export default async function Search({ searchParams }: { searchParams: Promise<{
         select: { id: true, name: true, purchaseItems: { where: { batch: { status: { not: "CANCELLED" } } }, select: { batch: { select: { id: true, ownership: true, orderedById: true } } } } },
       })
     : [];
+  // 採購團：團名、訂單編號、在哪訂的（備註）、代購名稱
+  const words = q.split(/\s+/).filter(Boolean);
+  const batches = q
+    ? await prisma.purchaseBatch.findMany({
+        where: { AND: words.map((w) => ({ OR: [{ name: { contains: w, mode: "insensitive" as const } }, { supplierOrderNo: { contains: w, mode: "insensitive" as const } }, { notes: { contains: w, mode: "insensitive" as const } }, { supplier: { contains: w, mode: "insensitive" as const } }, { supplierRef: { name: { contains: w, mode: "insensitive" as const } } }] })) },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: { id: true, name: true, status: true, supplier: true, supplierOrderNo: true, notes: true, supplierRef: { select: { name: true } } },
+      })
+    : [];
   const ids = products.map((p) => p.id);
   const [inv, val, operators] = await Promise.all([ids.length ? tx((t) => inventorySummary(t, ids)) : new Map(), ids.length ? stockValuation(prisma, ids) : null, tx((t) => listOperators(t, { includeInactive: true }))]);
   const opIds = operators.map((o) => o.id);
@@ -31,13 +41,30 @@ export default async function Search({ searchParams }: { searchParams: Promise<{
     <div className="space-y-3">
       <PageHeader title="搜尋" />
       <form method="get" role="search">
-        <input type="search" name="q" defaultValue={q} autoFocus placeholder="🔍 打角色或商品名稱，例：兔兔" aria-label="搜尋商品" className="w-full rounded-xl border border-line bg-white px-4 py-3 text-[16px]" />
+        <input type="search" name="q" defaultValue={q} autoFocus placeholder="🔍 角色、商品、訂單編號、團名" aria-label="搜尋商品" className="w-full rounded-xl border border-line bg-white px-4 py-3 text-[16px]" />
       </form>
       {!q ? (
         <p className="text-sm text-mute">可以打多個字，用空白分開，例：「ANA 兔兔」。</p>
-      ) : products.length === 0 ? (
+      ) : products.length === 0 && batches.length === 0 ? (
         <Empty>找不到「{q}」。</Empty>
       ) : (
+        <>
+        {batches.length > 0 && (
+          <section aria-label="採購團" data-testid="search-batches">
+            <h2 className="mb-1 text-[13px] font-semibold text-mute">採購團（{batches.length}）</h2>
+            <ul className="divide-y divide-line-2 overflow-hidden rounded-xl border border-line bg-card">
+              {batches.map((b) => (
+                <li key={b.id}>
+                  <Link href={`/inventory/batches/${b.id}`} className="block px-4 py-2.5 hover:bg-[#fafbfc]">
+                    <div className="font-semibold">{b.name}{b.status === "CANCELLED" && <span className="ml-1 text-[12px] font-normal text-mute">已取消</span>}</div>
+                    <div className="text-[12px] text-mute">{[b.supplierRef?.name ?? b.supplier, b.supplierOrderNo ? `訂單 ${b.supplierOrderNo}` : null, b.notes].filter(Boolean).join("｜")}</div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {products.length > 0 && (
         <ul className="divide-y divide-line-2 overflow-hidden rounded-xl border border-line bg-card" aria-label="搜尋結果">
           {products.map((p) => {
             const s = inv.get(p.id);
@@ -64,6 +91,8 @@ export default async function Search({ searchParams }: { searchParams: Promise<{
             );
           })}
         </ul>
+        )}
+        </>
       )}
     </div>
   );

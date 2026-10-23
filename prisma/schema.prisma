@@ -681,6 +681,7 @@ model PurchaseBatch {
   supplierRef              Supplier?           @relation(fields: [supplierId], references: [id])
   status                   PurchaseBatchStatus @default(ORDERED)
   // 代購有沒有確認這團買得到（未確認＝預購不一定有貨）
+  refundedTwd              Int                 @default(0) // 代購退回的錢（砍單、取消後退款）
   confirmed                Boolean             @default(false)
   orderedAt                DateTime?
   rateMicro                Int // 本批次適用匯率快照（1 JPY = x TWD，×1,000,000）

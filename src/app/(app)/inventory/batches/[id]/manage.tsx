@@ -31,12 +31,12 @@ export function BatchInfoCard({ batchId, info, suppliers, categories, editable }
   const rows: [string, React.ReactNode][] = [
     ["供應商", info.supplierName ?? "—"],
     ["系列", info.categoryId ? <Link className="text-ai hover:underline" href={`/categories/${info.categoryId}`}>{info.categoryName}</Link> : "未指定"],
-    ["供應商訂單編號", info.supplierOrderNo ?? "—"],
+    ["訂單編號", info.supplierOrderNo ?? "—"],
     ["訂購連結", info.orderUrl ? <a className="break-all text-ai hover:underline" href={info.orderUrl} target="_blank" rel="noopener noreferrer">{info.orderUrl}</a> : "—"],
     ["下單日", info.orderedAt],
     ["預計到貨", info.expectedAt ? info.expectedAt.replace(/-/g, "/") : "—"],
     ["本團匯率", `1 日圓 = ${info.rate} 台幣（建立時鎖定）`],
-    ["備註", info.notes ?? "—"],
+    ["在哪訂的・備註", info.notes ?? "—"],
   ];
   return (
     <div>
@@ -78,10 +78,10 @@ export function BatchInfoCard({ batchId, info, suppliers, categories, editable }
           <div className="sm:col-span-2">
             <SeriesPicker series={categories} value={f.categoryId ?? ""} onChange={(id) => setF({ ...f, categoryId: id || null })} noneLabel="不指定" />
           </div>
-          <TextField label="供應商訂單編號" value={f.supplierOrderNo ?? ""} onChange={(e) => setF({ ...f, supplierOrderNo: e.target.value })} />
+          <TextField label="訂單編號（賣貨便等平台的）" value={f.supplierOrderNo ?? ""} onChange={(e) => setF({ ...f, supplierOrderNo: e.target.value })} placeholder="例：20261023A1B2C3" />
           <TextField label="預計到貨日" type="date" value={f.expectedAt} onChange={(e) => setF({ ...f, expectedAt: e.target.value })} />
           <TextField label="訂購連結" value={f.orderUrl ?? ""} onChange={(e) => setF({ ...f, orderUrl: e.target.value })} placeholder="https://" className="sm:col-span-2" />
-          <TextArea label="備註" rows={2} value={f.notes ?? ""} onChange={(e) => setF({ ...f, notes: e.target.value })} className="sm:col-span-2" />
+          <TextArea label="在哪訂的・備註（Threads、IG、LINE 團名）" rows={2} value={f.notes ?? ""} onChange={(e) => setF({ ...f, notes: e.target.value })} className="sm:col-span-2" placeholder="例：Threads @xxx、IG xxx、LINE 群「吉伊代購團」" />
         </div>
         <p className="mt-2 text-[12px] text-mute">匯率在建立時鎖定，不能在這裡修改；改供應商不會改動已輸入的單價。</p>
       </Modal>
