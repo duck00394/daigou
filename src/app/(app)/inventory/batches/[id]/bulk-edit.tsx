@@ -42,7 +42,7 @@ export function BulkEditTable({ batchId, items, editable }: { batchId: string; i
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { run, pending } = useRun();
   const toast = useToast();
-  const key = items.map((i) => `${i.id}:${i.qty}:${i.estUnitCost}:${i.actualUnitCost}:${i.currency}:${i.salePriceTwd}`).join("|");
+  const key = items.map((i) => `${i.id}:${i.qty}:${i.estUnitCost}:${i.actualUnitCost}:${i.currency}:${i.salePriceTwd}:${i.cancelledQty}`).join("|");
   const [lastKey, setLastKey] = useState(key);
   if (key !== lastKey) {
     setLastKey(key);

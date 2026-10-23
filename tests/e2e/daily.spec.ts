@@ -54,7 +54,7 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
   await rowOf("萬聖節小八 吊娃").getByRole("button", { name: "砍錯了，恢復" }).click();
   await page.getByRole("button", { name: "儲存修改" }).click();
   await toast(page, "已儲存 1 列");
-  await expect(rowOf("萬聖節小八 吊娃")).not.toContainText("已砍單");
+  await expect(rowOf("萬聖節小八 吊娃")).not.toContainText(/已砍單|會恢復/); // 等畫面更新完再繼續
   await rowOf("萬聖節小八 吊娃").getByLabel("萬聖節小八 吊娃 砍幾件").fill("1");
   await page.getByRole("button", { name: "儲存修改" }).click();
   await toast(page, "已儲存 1 列");

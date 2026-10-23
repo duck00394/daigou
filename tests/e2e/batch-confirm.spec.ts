@@ -55,10 +55,13 @@ test("採購團：外面直接切換已確認；總計買了什麼；庫存分�
 
 test("新增品項時只知道總額：填商品總額，每件自動平均", async ({ page }) => {
   const tag = Date.now().toString(36).slice(-4);
+  // 用自己的系列，不影響其他測試的「萬聖節」資料
+  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  const cat = await prisma.category.create({ data: { name: `總額系列${tag}`, type: "CUSTOM", customType: "E2E" } }).finally(() => prisma.$disconnect());
   await login(page);
   await page.goto("/inventory/batches/new");
   await page.getByLabel("採購團名稱").fill(`總額團 ${tag}`);
-  await page.getByLabel("系列", { exact: true }).selectOption({ label: "萬聖節" });
+  await page.getByLabel("系列", { exact: true }).selectOption({ label: cat.name });
   await page.getByLabel("供應商").selectOption({ label: "日本官網" });
   await page.getByRole("button", { name: "建立採購團" }).click();
   await page.getByLabel("IP（例：吉伊卡哇）").selectOption({ label: "吉伊卡哇" });

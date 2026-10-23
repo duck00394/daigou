@@ -263,8 +263,8 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                                     </div>
                                   </td>
                                   <td className={`num px-2 py-2 text-right align-top ${r.s.available ? "font-semibold" : "text-mute"}`} data-k="free">{r.s.available}</td>
-                                  <td className="num px-2 py-2 text-right align-top" data-k="incoming">
-                                    {r.s.incoming}
+                                  <td className="num px-2 py-2 text-right align-top">
+                                    <span data-k="incoming">{r.s.incoming}</span>
                                     {unsureOf(r) > 0 && <span className="block text-[11px] whitespace-nowrap text-warn" data-k="unsure">不一定 {unsureOf(r)}</span>}
                                   </td>
                                   <td className="num hidden px-2 py-2 text-right align-top md:table-cell" data-k="kept">{r.s.kept}</td>
