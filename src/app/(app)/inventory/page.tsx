@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Fragment } from "react";
 import { StockFilters } from "./stock-filters";
+import { NavSelect } from "@/components/nav-select";
 import { OwnerFilter, ownerMatch } from "@/components/owner-filter";
 import { OwnerBadge } from "@/components/owner-badge";
 import { ownerTone } from "@/lib/owner-colors";
@@ -44,13 +45,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
   return (
     <div className="space-y-4">
       <PageHeader title={tab === "batches" ? "採購團・收貨" : "庫存"} actions={<><LinkButton href="/purchase" primary small>＋ 新增採購</LinkButton><LinkButton href="/api/export/inventory" small>匯出</LinkButton></>} />
-      <nav aria-label="庫存分頁" className="-mx-3 flex gap-1 overflow-x-auto px-3 sm:mx-0 sm:px-0">
-        {TABS.map(([k, l]) => (
-          <Link key={k} href={`/inventory?tab=${k}`} aria-current={tab === k ? "page" : undefined} className={`shrink-0 rounded-lg px-3 py-1.5 text-sm ${tab === k ? "bg-ink text-white" : "bg-white text-ink-2 hover:bg-line-2"}`}>
-            {l}
-          </Link>
-        ))}
-      </nav>
+      <NavSelect label="頁面" hideLabel options={TABS.map(([k, l]) => ({ label: l, href: `/inventory?tab=${k}` }))} current={`/inventory?tab=${tab}`} />
       {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} owner={sp.owner ?? ""} kind={sp.kind} v={sp.v} />}
       {tab === "demand" && <DemandTab />}
       {tab === "batches" && <BatchesTab cat={sp.cat} open={sp.open} owner={sp.owner ?? ""} confirm={sp.confirm} view={sp.view} />}
@@ -195,7 +190,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
       .sort((a, b) => (a.key === "none" ? 1 : b.key === "none" ? -1 : Number(b.active) - Number(a.active) || byText(a.name, b.name)))
       .map((s) => ({ ...s, types: [...s.types.values()].sort((a, b) => a.sort - b.sort || byText(a.name, b.name)).map((t) => ({ ...t, rows: t.rows.sort((x, y) => ord(x) - ord(y) || byText(label(x), label(y))) })) })),
   }));
-  const sum = (rs: R[]) => ({ free: rs.reduce((a, r) => a + r.s.available, 0), incoming: rs.reduce((a, r) => a + r.s.incoming, 0), kept: rs.reduce((a, r) => a + r.s.kept, 0), cost: rs.reduce((a, r) => a + (!r.v ? 0 : owner ? (r.v.avgUnitCost ?? 0) * (r.s.onHand + r.s.kept) : r.v.freeValue + r.v.keptValue + r.v.reservedValue), 0) });
+  const sum = (rs: R[]) => ({ free: rs.reduce((a, r) => a + r.s.available, 0), incoming: rs.reduce((a, r) => a + r.s.incoming, 0), unsure: rs.reduce((a, r) => a + unsureOf(r), 0), kept: rs.reduce((a, r) => a + r.s.kept, 0), cost: rs.reduce((a, r) => a + (!r.v ? 0 : owner ? (r.v.avgUnitCost ?? 0) * (r.s.onHand + r.s.kept) : r.v.freeValue + r.v.keptValue + r.v.reservedValue), 0) });
   const all = sum(rows);
   const allHref = (() => {
     const sp = new URLSearchParams({ tab: "stock", v: "1" });
@@ -218,7 +213,8 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
               <tr className="border-b border-line bg-[#fafbfc] text-[12px] text-mute">
                 <th className="px-3 py-2 text-left font-medium">角色</th>
                 <th className="px-2 py-2 text-right font-medium">庫存</th>
-                <th className="px-2 py-2 text-right font-medium">預購</th>
+                <th className="px-2 py-2 text-right font-medium text-good">一定有貨</th>
+                <th className="px-2 py-2 text-right font-medium text-warn">不一定</th>
                 <th className="hidden px-2 py-2 text-right font-medium md:table-cell">自留</th>
                 <th className="hidden px-2 py-2 text-right font-medium md:table-cell">每件成本</th>
                 <th className="px-2 py-2"><span className="sr-only">動作</span></th>
@@ -229,7 +225,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                 <Fragment key={k.key}>
                   {showKind && (
                     <tr className="bg-ink text-white">
-                      <td colSpan={6} className="px-3 py-1.5 text-[14px] font-semibold" data-testid="stock-kind">{k.label}</td>
+                      <td colSpan={7} className="px-3 py-1.5 text-[14px] font-semibold" data-testid="stock-kind">{k.label}</td>
                     </tr>
                   )}
                   {k.series.map((sg) => {
@@ -238,23 +234,23 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                     return (
                       <Fragment key={sg.key}>
                         <tr className="bg-ai-soft">
-                          <td colSpan={6} className="px-3 py-1.5 text-[14px] font-semibold text-ai" data-testid="stock-series">
+                          <td colSpan={7} className="px-3 py-1.5 text-[14px] font-semibold text-ai" data-testid="stock-series">
                             {sg.key !== "none" ? <Link href={`/categories/${sg.key}`} className="hover:underline">{sg.name}</Link> : sg.name}
                             {!sg.active && <span className="ml-1 text-[12px] font-normal text-mute">已過期</span>}
-                            <span className="ml-2 text-[12px] font-normal">庫存 {gs.free}・預購 {gs.incoming}{gs.cost ? `・成本 ${formatTwd(gs.cost)}` : ""}</span>
+                            <span className="ml-2 text-[12px] font-normal">庫存 {gs.free}・一定 {gs.incoming - gs.unsure}・不一定 {gs.unsure}{gs.cost ? `・成本 ${formatTwd(gs.cost)}` : ""}</span>
                           </td>
                         </tr>
                         {sg.types.map((tg) => (
                           <Fragment key={tg.key}>
                             <tr className="border-t border-line-2 bg-[#f7f8fa]">
-                              <td colSpan={6} className="py-1 pr-3 pl-5 text-[13px] font-semibold text-ink-2" data-testid="stock-type">{tg.name}</td>
+                              <td colSpan={7} className="py-1 pr-3 pl-5 text-[13px] font-semibold text-ink-2" data-testid="stock-type">{tg.name}</td>
                             </tr>
                             {tg.rows.map((r) => {
                               const dup = tg.rows.filter((x) => label(x) === label(r)).length > 1;
                               const owners = ownersOf(r.p.id);
                               const product = { id: r.p.id, name: r.p.name, salePriceTwd: r.p.salePriceTwd, available: r.s.available, avgCost: r.v?.avgUnitCost ?? null, owners };
                               return (
-                                <tr key={r.p.id} className="border-b border-line-2 last:border-b-0" data-testid="stock-row" data-name={r.p.name}>
+                                <tr key={r.p.id} className="border-b border-line-2 last:border-b-0" data-testid="stock-row" data-name={r.p.name} data-incoming={r.s.incoming}>
                                   <td className="py-2 pr-3 pl-7 align-top">
                                     <Link href={`/products/${r.p.id}`} className="font-medium hover:underline" title={r.p.name}>{label(r)}</Link>
                                     {dup && sg.key !== "none" && <Link href={`/categories/${sg.key}#merge`} className="ml-1.5 rounded-full bg-warn-soft px-2 py-0.5 text-[11px] text-warn" data-testid="dup-badge">⚠ 重複了，按這裡合併</Link>}
@@ -263,10 +259,8 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                                     </div>
                                   </td>
                                   <td className={`num px-2 py-2 text-right align-top ${r.s.available ? "font-semibold" : "text-mute"}`} data-k="free">{r.s.available}</td>
-                                  <td className="num px-2 py-2 text-right align-top">
-                                    <span data-k="incoming">{r.s.incoming}</span>
-                                    {unsureOf(r) > 0 && <span className="block text-[11px] whitespace-nowrap text-warn" data-k="unsure">不一定 {unsureOf(r)}</span>}
-                                  </td>
+                                  <td className={`num px-2 py-2 text-right align-top ${r.s.incoming - unsureOf(r) ? "font-semibold text-good" : "text-mute"}`} data-k="sure">{r.s.incoming - unsureOf(r) || "–"}</td>
+                                  <td className={`num px-2 py-2 text-right align-top ${unsureOf(r) ? "font-semibold text-warn" : "text-mute"}`} data-k="unsure">{unsureOf(r) || "–"}</td>
                                   <td className="num hidden px-2 py-2 text-right align-top md:table-cell" data-k="kept">{r.s.kept}</td>
                                   <td className="num hidden px-2 py-2 text-right align-top md:table-cell">{r.v?.avgUnitCost != null ? formatTwd(r.v.avgUnitCost) : "—"}</td>
                                   <td className="whitespace-nowrap px-2 py-1.5 text-right align-top">
@@ -286,7 +280,8 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
               <tr className="border-t border-line bg-[#fafbfc] font-semibold">
                 <td className="px-3 py-2">合計<span className="ml-1 text-[12px] font-normal text-mute">成本 {formatTwd(all.cost)}</span></td>
                 <td className="num px-2 py-2 text-right" data-testid="stock-total-free">{all.free}</td>
-                <td className="num px-2 py-2 text-right">{all.incoming}</td>
+                <td className="num px-2 py-2 text-right text-good">{all.incoming - all.unsure}</td>
+                <td className="num px-2 py-2 text-right text-warn">{all.unsure}</td>
                 <td className="num hidden px-2 py-2 text-right md:table-cell">{all.kept}</td>
                 <td className="hidden md:table-cell" />
                 <td />
@@ -367,10 +362,12 @@ async function BatchesTab({ cat, open, owner, confirm, view }: { cat?: string; o
     counts[k] = (counts[k] ?? 0) + 1;
   }
   const ownerBatches = allBatches.filter((b) => ownerMatch(owner, b));
-  const unconfirmed = ownerBatches.filter((b) => !b.confirmed && b.status !== "CANCELLED").length;
-  const batches = confirm === "no" ? ownerBatches.filter((b) => !b.confirmed) : ownerBatches;
+  // 未確認＝還要等代購確認的（實體店買的、已取消的不用確認）
+  const pendingConfirm = (b: (typeof ownerBatches)[number]) => !b.confirmed && b.status !== "CANCELLED" && !isStoreKind(b.supplierRef?.kind);
+  const unconfirmed = ownerBatches.filter(pendingConfirm).length;
+  const batches = confirm === "no" ? ownerBatches.filter(pendingConfirm) : confirm === "yes" ? ownerBatches.filter((b) => !pendingConfirm(b)) : [...ownerBatches.filter(pendingConfirm), ...ownerBatches.filter((b) => !pendingConfirm(b))];
+  const splitAt = !confirm && unconfirmed > 0 && unconfirmed < batches.length ? unconfirmed : -1;
   const cats = await prisma.category.findMany({ where: { batches: { some: {} } }, orderBy: [{ active: "desc" }, { sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } });
-  const chip = (on: boolean) => `shrink-0 rounded-full border px-3 py-1.5 text-sm ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
   const href = (c?: string, o?: string, w: string = owner, x: { confirm?: string; view?: string } = { confirm, view }) =>
     `/inventory?tab=batches${c ? `&cat=${c}` : ""}${o === "0" || o === "cancelled" ? `&open=${o}` : ""}${w ? `&owner=${w}` : ""}${x.confirm ? `&confirm=${x.confirm}` : ""}${x.view ? `&view=${x.view}` : ""}`;
   const cancelledCount = await prisma.purchaseBatch.count({ where: { status: "CANCELLED", ...(cat ? (cat === "none" ? { categoryId: null } : batchesWithSeries(cat)) : {}) } });
@@ -379,33 +376,43 @@ async function BatchesTab({ cat, open, owner, confirm, view }: { cat?: string; o
   return (
     <Section title="採購團" pad={false}>
       <div className="border-b border-line-2 px-4 py-2.5"><OwnerDue compact title="每個人還要付（現金流）" due={await tx((t) => dueByOwner(t, cat ? { categoryId: cat === "none" ? null : cat } : {}))} operators={operators.map((o) => ({ id: o.id, name: o.name }))} hrefFor={(k) => href(cat, "0", k === "none" ? "" : k)} /></div>
-      <div className="border-b border-line-2 px-4 pt-3 pb-1"><OwnerFilter operators={operators.map((o) => ({ id: o.id, name: o.name }))} current={owner} counts={counts} href={(k) => href(cat, open, k)} /></div>
-      <div className="flex gap-1.5 overflow-x-auto border-b border-line-2 px-4 py-2.5">
-        <Link href={href(cat, undefined, owner, { view })} className={chip(mode === "open" && confirm !== "no")}>進行中</Link>
-        <Link href={href(cat, "0", owner, { view })} className={chip(mode === "all" && confirm !== "no")}>含已完成</Link>
-        {(unconfirmed > 0 || confirm === "no") && <Link href={href(cat, open, owner, { confirm: confirm === "no" ? undefined : "no", view })} className={chip(confirm === "no")} data-testid="filter-unconfirmed">未確認 {unconfirmed}</Link>}
-        {cancelledCount > 0 && <Link href={href(cat, "cancelled")} className={chip(mode === "cancelled")}>已取消 {cancelledCount}</Link>}
-        <span aria-hidden className="mx-1 w-px shrink-0 bg-line" />
-        <Link href={href(undefined, open)} className={chip(!cat)}>全部活動</Link>
-        {cats.map((c) => <Link key={c.id} href={href(c.id, open)} className={chip(cat === c.id)}>{c.name}</Link>)}
-        <Link href={href("none", open)} className={chip(cat === "none")}>未指定活動</Link>
+      <div className="grid grid-cols-2 gap-2 border-b border-line-2 px-4 py-3">
+        <NavSelect label="確認" current={href(cat, open, owner, { confirm, view })} options={[
+          { label: `全部（未確認在上）`, href: href(cat, open, owner, { view }) },
+          { label: `只看未確認（${unconfirmed}）`, href: href(cat, open, owner, { confirm: "no", view }) },
+          { label: "只看已確認", href: href(cat, open, owner, { confirm: "yes", view }) },
+        ]} />
+        <NavSelect label="進度" current={href(cat, mode === "cancelled" ? "cancelled" : open, owner, { confirm, view })} options={[
+          { label: "進行中", href: href(cat, undefined, owner, { confirm, view }) },
+          { label: "含已完成", href: href(cat, "0", owner, { confirm, view }) },
+          ...(cancelledCount > 0 || mode === "cancelled" ? [{ label: `已取消（${cancelledCount}）`, href: href(cat, "cancelled", owner, { confirm, view }) }] : []),
+        ]} />
+        <NavSelect label="系列" current={href(cat, open, owner, { confirm, view })} options={[
+          { label: "全部系列", href: href(undefined, open, owner, { confirm, view }) },
+          ...cats.map((c) => ({ label: c.name, href: href(c.id, open, owner, { confirm, view }) })),
+          { label: "未指定系列", href: href("none", open, owner, { confirm, view }) },
+        ]} />
+        <OwnerFilter operators={operators.map((o) => ({ id: o.id, name: o.name }))} current={owner} counts={counts} href={(k) => href(cat, open, k)} />
+        <NavSelect className="col-span-2" label="怎麼看" current={href(cat, open, owner, { confirm, view })} options={[
+          { label: "一團一團看", href: href(cat, open, owner, { confirm }) },
+          { label: "總計買了什麼", href: href(cat, open, owner, { confirm, view: "items" }) },
+        ]} />
       </div>
-      <nav aria-label="怎麼看" className="flex gap-1 border-b border-line-2 px-4 py-2">
-        <Link href={href(cat, open, owner, { confirm })} className={`flex-1 rounded-lg py-1.5 text-center text-[14px] ${view !== "items" ? "bg-ink text-white" : "bg-line-2 text-ink-2"}`}>一團一團看</Link>
-        <Link href={href(cat, open, owner, { confirm, view: "items" })} className={`flex-1 rounded-lg py-1.5 text-center text-[14px] ${view === "items" ? "bg-ink text-white" : "bg-line-2 text-ink-2"}`}>總計買了什麼</Link>
-      </nav>
       {view === "items" ? (
         <PurchasedSummary batchIds={batches.map((b) => b.id)} />
       ) : batches.length === 0 ? (
         <Empty action={<LinkButton href="/purchase" primary>新增採購</LinkButton>}>{mode === "open" ? "沒有進行中的採購團。" : mode === "cancelled" ? "沒有取消的團。" : "還沒有採購團。"}</Empty>
       ) : (
         <ul className="grid gap-2 p-3 md:grid-cols-2 xl:grid-cols-3">
-          {batches.map((b) => {
+          {batches.map((b, bi) => {
             const ordered = b.items.reduce((s, i) => s + i.qty - i.cancelledQty, 0);
             const rec = b.items.reduce((s, i) => s + i.movements.reduce((a, m) => a + m.onHandDelta, 0), 0);
             const late = b.expectedAt && b.expectedAt < today && rec < ordered && b.status !== "CANCELLED";
             return (
-              <li key={b.id}>
+              <Fragment key={b.id}>
+              {!confirm && unconfirmed > 0 && bi === 0 && <li className="text-[13px] font-semibold text-warn md:col-span-2 xl:col-span-3" data-testid="group-unconfirmed">未確認（{unconfirmed}）</li>}
+              {bi === splitAt && <li className="mt-2 text-[13px] font-semibold text-good md:col-span-2 xl:col-span-3" data-testid="group-confirmed">已確認（{batches.length - unconfirmed}）</li>}
+              <li>
                 <Link href={`/inventory/batches/${b.id}`} className={`block h-full rounded-xl border border-line bg-white p-3 hover:border-ai ${ownerTone(b.ownership === "JOINT" ? "joint" : b.orderedById, ids).stripe}`} data-testid="batch-card">
                   <div className="flex items-start justify-between gap-2">
                     <span className="font-semibold">{b.name}</span>
@@ -448,6 +455,7 @@ async function BatchesTab({ cat, open, owner, confirm, view }: { cat?: string; o
                   {b.expectedAt && <div className={`mt-1 text-[12px] ${late ? "text-bad" : "text-mute"}`}>預計到貨 {fmtDay(b.expectedAt)}{late ? "（已超過）" : ""}</div>}
                 </Link>
               </li>
+              </Fragment>
             );
           })}
         </ul>
@@ -486,27 +494,28 @@ async function PurchasedSummary({ batchIds }: { batchIds: string[] }) {
     groups.set(sk, g);
   }
   const ord = (r: (typeof rows)[number]) => (r.charId ? (charOrder.get(r.charId) ?? 1e9) : 1e9);
-  const total = rows.reduce((a, r) => ({ ordered: a.ordered + r.ordered, received: a.received + r.received, cancelled: a.cancelled + r.cancelled }), { ordered: 0, received: 0, cancelled: 0 });
+  const total = rows.reduce((a, r) => ({ ordered: a.ordered + r.ordered, received: a.received + r.received, cancelled: a.cancelled + r.cancelled, unsure: a.unsure + r.unsure }), { ordered: 0, received: 0, cancelled: 0, unsure: 0 });
   return (
     <div data-testid="purchased-summary">
-      <p className="px-4 pt-3 text-[13px] text-mute">上面選的這 {batchIds.length} 團加起來（已扣掉砍單）。「不一定有貨」＝還沒確認的團裡還沒到的。</p>
+      <p className="px-4 pt-3 text-[13px] text-mute">上面選的這 {batchIds.length} 團加起來（已扣掉砍單）。「一定」＝已確認的團還沒到的；「不一定」＝還沒確認的團。</p>
       <table className="mt-2 w-full text-[14px]">
         <thead>
           <tr className="border-b border-line bg-[#fafbfc] text-[12px] text-mute">
             <th className="px-3 py-2 text-left font-medium">角色</th>
             <th className="px-2 py-2 text-right font-medium">買了</th>
             <th className="px-2 py-2 text-right font-medium">到了</th>
-            <th className="px-2 py-2 text-right font-medium">還沒到</th>
+            <th className="px-2 py-2 text-right font-medium text-good">還沒到・一定</th>
+            <th className="px-2 py-2 text-right font-medium text-warn">不一定</th>
             <th className="px-2 py-2 text-right font-medium">砍單</th>
           </tr>
         </thead>
         <tbody>
           {[...groups.entries()].sort(([a], [b]) => byText(sName(a === "-" ? null : a), sName(b === "-" ? null : b))).map(([sk, types]) => (
             <Fragment key={sk}>
-              <tr className="bg-ai-soft"><td colSpan={5} className="px-3 py-1.5 font-semibold text-ai">{sName(sk === "-" ? null : sk)}</td></tr>
+              <tr className="bg-ai-soft"><td colSpan={6} className="px-3 py-1.5 font-semibold text-ai">{sName(sk === "-" ? null : sk)}</td></tr>
               {[...types.entries()].sort(([, a], [, b]) => a[0].typeSort - b[0].typeSort).map(([tn, list]) => (
                 <Fragment key={tn}>
-                  <tr className="bg-[#f7f8fa]"><td colSpan={5} className="py-1 pl-5 text-[13px] font-semibold text-ink-2">{tn}</td></tr>
+                  <tr className="bg-[#f7f8fa]"><td colSpan={6} className="py-1 pl-5 text-[13px] font-semibold text-ink-2">{tn}</td></tr>
                   {list.sort((a, b) => ord(a) - ord(b) || byText(a.name, b.name)).map((r) => {
                     const out = Math.max(0, r.ordered - r.received);
                     return (
@@ -514,7 +523,8 @@ async function PurchasedSummary({ batchIds }: { batchIds: string[] }) {
                         <td className="py-1.5 pr-3 pl-7">{r.name}{r.batches > 1 && <span className="ml-1 text-[11px] text-mute">（{r.batches} 團）</span>}</td>
                         <td className="num px-2 text-right font-semibold">{r.ordered}</td>
                         <td className="num px-2 text-right">{r.received}</td>
-                        <td className="num px-2 text-right">{out}{r.unsure > 0 && <span className="block text-[11px] text-warn">不一定有貨 {r.unsure}</span>}</td>
+                        <td className={`num px-2 text-right ${out - r.unsure > 0 ? "text-good" : "text-mute"}`}>{Math.max(0, out - r.unsure) || "–"}</td>
+                        <td className={`num px-2 text-right ${r.unsure ? "font-semibold text-warn" : "text-mute"}`} data-k="unsure">{r.unsure || "–"}</td>
                         <td className={`num px-2 text-right ${r.cancelled ? "text-bad" : "text-mute"}`}>{r.cancelled}</td>
                       </tr>
                     );
@@ -527,7 +537,8 @@ async function PurchasedSummary({ batchIds }: { batchIds: string[] }) {
             <td className="px-3 py-2">合計</td>
             <td className="num px-2 text-right" data-testid="summary-total">{total.ordered}</td>
             <td className="num px-2 text-right">{total.received}</td>
-            <td className="num px-2 text-right">{Math.max(0, total.ordered - total.received)}</td>
+            <td className="num px-2 text-right text-good">{Math.max(0, total.ordered - total.received) - total.unsure}</td>
+            <td className="num px-2 text-right text-warn">{total.unsure}</td>
             <td className="num px-2 text-right">{total.cancelled}</td>
           </tr>
         </tbody>

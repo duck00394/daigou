@@ -97,10 +97,13 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   await page.screenshot({ path: "test-results/mobile_home_due.png", fullPage: false });
   // 選經營者：只看合資的團，顏色標籤一眼看出是誰的
   await page.goto("/inventory?tab=batches");
-  await page.getByRole("navigation", { name: "誰的" }).getByRole("link", { name: /合資/ }).click();
+  const who = page.getByLabel("誰的", { exact: true });
+  await who.selectOption((await who.locator("option", { hasText: "合資" }).getAttribute("value"))!);
+  await expect(page).toHaveURL(/owner=joint/);
   await expect(page.getByTestId("batch-card").filter({ hasText: `頑皮貓 ${tag}` })).toBeVisible();
   await expect(page.getByTestId("batch-card").filter({ hasText: `YUANS ${tag}` })).toHaveCount(0);
-  await page.getByRole("navigation", { name: "誰的" }).getByRole("link", { name: /全部/ }).click();
+  await who.selectOption({ index: 0 });
+  await expect(page).not.toHaveURL(/owner=/);
   await page.screenshot({ path: "test-results/mobile_batches_owner.png", fullPage: false });
   await page.goto("/categories");
   await page.getByTestId(`cat-card-${cat}`).click();

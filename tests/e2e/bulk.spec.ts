@@ -21,7 +21,7 @@ async function stockOf(page: Page, name: string) {
   const row = page.locator(`[data-testid="stock-row"][data-name="${name}"]`);
   if ((await row.count()) === 0) return { onHand: 0, incoming: 0 };
   const n = async (k: string) => Number((await row.locator(`[data-k="${k}"]`).textContent())?.trim() ?? 0);
-  return { onHand: await n("free"), incoming: await n("incoming") };
+  return { onHand: await n("free"), incoming: Number(await row.getAttribute("data-incoming")) };
 }
 
 test("桌面：批次新增 4 個角色（含新角色與貼上），再批次修改與刪除", async ({ page }) => {

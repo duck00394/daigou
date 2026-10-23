@@ -27,14 +27,25 @@ test("採購團：外面直接切換已確認；總計買了什麼；庫存分�
   await expect(card.getByText("到貨 0／4")).toBeVisible();
 
   // 總計買了什麼：還沒確認的團 → 不一定有貨
-  await page.getByRole("link", { name: "總計買了什麼" }).click();
+  await page.getByLabel("怎麼看").selectOption({ label: "總計買了什麼" });
+  await expect(page).toHaveURL(/view=items/);
   const sr = page.locator(`[data-testid="summary-row"][data-name="${product.name}"]`);
-  await expect(sr).toContainText("不一定有貨 4");
+  await expect(sr.locator('[data-k="unsure"]')).toHaveText("4");
 
   // 庫存：只看「預購・不一定有貨」
   await page.goto(`/inventory?tab=stock&only=unsure&q=${encodeURIComponent(product.name)}`);
   const row = page.locator(`[data-testid="stock-row"][data-name="${product.name}"]`);
-  await expect(row.locator('[data-k="unsure"]')).toContainText("不一定 4");
+  await expect(row.locator('[data-k="unsure"]')).toHaveText("4");
+  await expect(row.locator('[data-k="sure"]')).toHaveText("–");
+
+  // 「全部」時未確認的排在最上面
+  await page.goto("/inventory?tab=batches&open=0");
+  await expect(page.getByTestId("group-unconfirmed")).toBeVisible();
+  await expect(page.getByTestId("batch-card").first().getByTestId("confirm-toggle")).toHaveText("未確認");
+  // 下拉選「只看未確認」
+  await page.getByLabel("確認", { exact: true }).selectOption({ index: 1 });
+  await expect(page).toHaveURL(/confirm=no/);
+  await expect(page.getByTestId("confirm-toggle").filter({ hasText: "已確認" })).toHaveCount(0);
 
   // 在列表直接按一下就變已確認，不用點進去
   await page.goto("/inventory?tab=batches");
@@ -50,7 +61,7 @@ test("採購團：外面直接切換已確認；總計買了什麼；庫存分�
   await page.goto(`/inventory?tab=stock&only=unsure&q=${encodeURIComponent(product.name)}`);
   await expect(row).toHaveCount(0);
   await page.goto(`/inventory?tab=stock&only=sure&q=${encodeURIComponent(product.name)}`);
-  await expect(row).toBeVisible();
+  await expect(row.locator('[data-k="sure"]')).toHaveText("4");
 });
 
 test("新增品項時只知道總額：填商品總額，每件自動平均", async ({ page }) => {
