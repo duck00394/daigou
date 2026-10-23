@@ -1,4 +1,5 @@
 "use client";
+import { Choice } from "@/components/choice";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Modal, TextField, SelectField, useRun, useIdemKey, inputCls, notify } from "@/components/client";
@@ -278,11 +279,13 @@ export function KeepButton({ productId, name, available, kept, small, tiny, owne
           {mode === "keep" ? `自留 ${n} 件` : `改回出售 ${n} 件`}
         </Button>
       }>
-        <div role="radiogroup" aria-label="操作" className="mb-4 grid grid-cols-2 gap-2">
-          {([["keep", `留給自己（可售 ${Math.max(0, avail)}）`], ["sell", `改回出售（自留 ${keptN}）`]] as const).map(([k, l]) => (
-            <button key={k} type="button" role="radio" aria-checked={mode === k} disabled={k === "keep" ? available <= 0 : kept <= 0} onClick={() => { setMode(k); setOwner(defaultOwner(owners, me, countOf(k))); setN(1); }} className={`min-h-11 rounded-lg border px-2 text-sm disabled:opacity-40 ${mode === k ? "border-ai bg-ai text-white" : "border-line bg-white"}`}>{l}</button>
-          ))}
-        </div>
+        <Choice
+          label="操作"
+          className="mb-4"
+          value={mode}
+          options={[{ value: "keep", label: `留給自己（可售 ${Math.max(0, avail)}）`, disabled: available <= 0 }, { value: "sell", label: `改回出售（自留 ${keptN}）`, disabled: kept <= 0 }]}
+          onChange={(k) => { const m = k as "keep" | "sell"; setMode(m); setOwner(defaultOwner(owners, me, countOf(m))); setN(1); }}
+        />
         <div className="mb-4">
           <OwnerChips label="留誰的" owners={owners ?? []} value={owner} onChange={(k) => { setOwner(k); setN(1); }} count={countOf(mode)} />
         </div>

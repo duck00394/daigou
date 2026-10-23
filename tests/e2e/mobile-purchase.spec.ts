@@ -1,6 +1,6 @@
 // 手機：一個畫面新增採購（活動 → 哪一團 → 買了什麼），三團分別是我的、對方的、合資；活動總表看總額、各團與誰買的
 import { test, expect, type Page } from "@playwright/test";
-import { login, toast, pickIp, newSupplierPick, openSeries, openMore, pickSupplier, openSeriesPage } from "./helpers";
+import { login, toast, pickIp, newSupplierPick, openSeries, openMore, pickSupplier, openSeriesPage, choose, chosen } from "./helpers";
 
 async function addRow(page: Page, character: string, price: string, qty: string) {
   await pickIp(page);
@@ -21,10 +21,8 @@ async function newSupplier(page: Page, name: string) {
 /** 全部功能 → 現在看誰的 */
 async function switchView(page: Page, which: RegExp | number) {
   await page.getByRole("button", { name: "全部功能" }).click();
-  const g = page.getByRole("radiogroup", { name: "現在看誰的" });
-  const r = typeof which === "number" ? g.getByRole("radio").nth(which) : g.getByRole("radio", { name: which });
-  await r.click();
-  await expect(page.getByRole("radiogroup", { name: "現在看誰的" })).toHaveCount(0);
+  await choose(page, "現在看誰的", which);
+  await expect(page.getByRole("button", { name: "關閉" })).toHaveCount(0); // 選完選單自己關起來
 }
 
 test("手機：同一活動開三團（我的、對方的、合資），總表分人顯示", async ({ page }) => {
@@ -47,10 +45,9 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   await expect(page.getByTestId("chosen-series")).toContainText(cat);
 
   // 2. 第一團：我的（預設），預設台幣
-  await expect(page.getByRole("radio", { name: /新的一團/ })).toHaveAttribute("aria-checked", "true");
+  await expect(chosen(page, "哪一團")).toHaveText("開新的一團");
   await newSupplier(page, `YUANS ${tag}`);
-  await expect(page.getByRole("radiogroup", { name: "這團是誰的" }).getByRole("radio").first()).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByRole("radiogroup", { name: "這團是誰的" }).getByRole("radio").first()).toContainText("（我）");
+  await expect(chosen(page, "這團是誰的")).toContainText("（我）");
   await addRow(page, "兔兔", "647", "3");
   await expect(page.getByText(/已存到「YUANS/)).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -60,16 +57,16 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   // 第二團：對方的
   await page.getByRole("button", { name: "再開新的一團" }).click();
   await newSupplier(page, `QQ Shop ${tag}`);
-  await page.getByRole("radiogroup", { name: "這團是誰的" }).getByRole("radio").nth(1).click();
+  await choose(page, "這團是誰的", 1);
   await addRow(page, "小八", "660", "2");
   await expect(page.getByText(/已存到「QQ Shop/)).toBeVisible();
 
   // 第三團：合資，進度選「代購收到了，等寄出」
   await page.getByRole("button", { name: "再開新的一團" }).click();
   await newSupplier(page, `頑皮貓 ${tag}`);
-  await page.getByRole("radiogroup", { name: "這團是誰的" }).getByRole("radio", { name: "合資" }).click();
+  await choose(page, "這團是誰的", "合資");
   await openMore(page);
-  await page.getByRole("radiogroup", { name: "進度" }).getByRole("radio", { name: "代購收到了，等寄出" }).click();
+  await choose(page, "進度", "代購收到了，等寄出");
   await addRow(page, "吉伊", "610", "4");
   await expect(page.getByText(/已存到「頑皮貓/)).toBeVisible();
 
@@ -78,10 +75,8 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   await page.goto("/purchase");
   await expect(page.getByTestId("chosen-series")).toContainText(cat);
   // 預設開新的一團；之前的團收起來，點了才出現
-  await expect(page.getByRole("radio", { name: /新的一團/ })).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByRole("radiogroup", { name: "哪一團" }).getByRole("radio")).toHaveCount(1);
-  await page.getByRole("button", { name: /或加到之前的團/ }).click();
-  for (const n of [`YUANS ${tag}`, `QQ Shop ${tag}`, `頑皮貓 ${tag}`]) await expect(page.getByRole("radiogroup", { name: "哪一團" }).getByRole("radio", { name: new RegExp(n) })).toBeVisible();
+  await expect(chosen(page, "哪一團")).toHaveText("開新的一團");
+  for (const n of [`YUANS ${tag}`, `QQ Shop ${tag}`, `頑皮貓 ${tag}`]) await expect(page.getByLabel("哪一團", { exact: true }).locator("option", { hasText: n })).toHaveCount(1);
 
   // 活動總表：總額與誰買的（切到「全部」看兩個人加起來）
   await switchView(page, /全部/);
@@ -130,7 +125,7 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
 
   // 點進第一團改進度
   await page.getByRole("link", { name: new RegExp(`YUANS ${tag}`) }).first().click();
-  await page.getByRole("radiogroup", { name: "現在到哪了" }).getByRole("radio", { name: "寄出了，在路上" }).click();
+  await choose(page, "現在到哪了", "寄出了，在路上");
   await toast(page, "進度：寄出了，在路上");
 
   // 一打開就看到品項與這團金額；按「付清」一鍵登記
@@ -204,11 +199,11 @@ test("手機：開團時一起記運費（常用運費方式）和訂金；實�
 
   // 實體店買：不是跟代購買，存好就進庫存、記成付清；畫面顯示「實體店購買」
   await page.goto("/purchase");
-  await page.getByRole("radio", { name: /新的一團/ }).click();
+  await choose(page, "哪一團", "開新的一團");
   await openMore(page);
-  await page.getByRole("radiogroup", { name: "在哪裡買的" }).getByRole("radio", { name: /實體店買/ }).click();
+  await choose(page, "在哪裡買的", "實體店買");
   await newSupplierPick(page, `常設店 ${tag}`, true);
-  await expect(page.getByRole("radiogroup", { name: "進度" })).toHaveCount(0);
+  await expect(page.getByLabel("進度", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel(/在店裡已經付清/)).toBeChecked();
   await page.screenshot({ path: "test-results/mobile_purchase_store.png", fullPage: true });
   await addRow(page, "吉伊", "520", "1");
@@ -216,7 +211,7 @@ test("手機：開團時一起記運費（常用運費方式）和訂金；實�
   await page.getByTestId("saved-banner").getByRole("link", { name: "看這一團" }).click();
   await expect(page.getByText("實體店購買").first()).toBeVisible();
   await expect(page.getByTestId("batch-due")).toHaveText("NT$0");
-  await expect(page.getByRole("radiogroup", { name: "現在到哪了" })).toHaveCount(0);
+  await expect(page.getByLabel("現在到哪了", { exact: true })).toHaveCount(0);
   // 買錯了：已入庫但還沒動過，可以直接刪
   await page.getByRole("button", { name: "編輯", exact: true }).click();
   const row = page.getByRole("table", { name: "採購品項", exact: true }).getByRole("row").filter({ hasText: "吉伊 吊娃" });

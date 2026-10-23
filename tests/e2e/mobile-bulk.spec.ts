@@ -1,6 +1,6 @@
 // 批次新增系列商品（手機版）：逐列卡片輸入、確認、修改與刪除
 import { test, expect } from "@playwright/test";
-import { login, toast, pickIp } from "./helpers";
+import { login, toast, pickIp, choose } from "./helpers";
 
 test("手機：卡片式表格可新增、修改、刪除列並確認儲存", async ({ page }) => {
   await login(page);
@@ -69,7 +69,7 @@ test("手機：卡片式表格可新增、修改、刪除列並確認儲存", as
   await page.getByRole("button", { name: "全部到了" }).click();
   const who = page.getByRole("dialog");
   if (await who.isVisible()) {
-    await who.getByRole("radio").first().click();
+    await choose(who, "收貨的人", 0);
     await who.getByRole("button", { name: /全部入庫/ }).click();
   }
   await toast(page, /件已進庫存/);

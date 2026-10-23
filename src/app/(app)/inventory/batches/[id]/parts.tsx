@@ -1,23 +1,13 @@
 "use client";
 import { useState } from "react";
 import { Button, ConfirmButton, Modal, TextField, SelectField, useRun, useIdemKey, inputCls, notify } from "@/components/client";
+import { Choice } from "@/components/choice";
 import { addBatchCostAction, deleteBatchCostAction, cancelBatchAction } from "@/actions/ops";
 
 const FEE_KINDS: [string, string][] = [["INTL_SHIPPING", "國際運費"], ["TW_DOMESTIC_SHIPPING", "國內運費"], ["AGENT_FEE", "代購費"], ["DUTY", "關稅"], ["JP_DOMESTIC_SHIPPING", "日本運費"], ["OTHER", "其他"]];
 
 function Chips({ label, value, options, onChange }: { label: string; value: string; options: [string, string][]; onChange: (v: string) => void }) {
-  return (
-    <div>
-      <div className="mb-1 text-[13px] text-ink-2">{label}</div>
-      <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1.5">
-        {options.map(([k, l]) => (
-          <button key={k} type="button" role="radio" aria-checked={value === k} onClick={() => onChange(k)} className={`rounded-full border px-3 py-1.5 text-[14px] ${value === k ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`}>
-            {l}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
+  return <Choice label={label} value={value} options={options.map(([k, l]) => ({ value: k, label: l }))} onChange={onChange} />;
 }
 
 /**

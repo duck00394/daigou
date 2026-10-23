@@ -56,3 +56,26 @@ export async function openSeriesPage(page: Page, name: string) {
   await page.getByTestId("series-search-hits").getByTestId(`cat-card-${name}`).click();
   await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
 }
+
+/** 下拉式選單：在 scope 裡找 label 的選單，選文字符合的那一項（字串＝完全相同或開頭相同；也可以給正規表示式） */
+export async function choose(scope: Page | import("@playwright/test").Locator, label: string | RegExp, option: string | RegExp | number) {
+  // 同一個標籤可能有兩個（例如電腦版側邊欄和手機選單），挑看得到的那個
+  const all = scope.getByLabel(label, typeof label === "string" ? { exact: true } : undefined);
+  await all.first().waitFor({ state: "attached" });
+  let sel = all.first();
+  for (let i = 0; i < (await all.count()); i++) if (await all.nth(i).isVisible()) { sel = all.nth(i); break; }
+  if (typeof option === "number") {
+    const v = await sel.locator("option:not([disabled])").nth(option).getAttribute("value");
+    await sel.selectOption(v!);
+    return;
+  }
+  const opts = await sel.locator("option").evaluateAll((os) => os.map((o) => ({ v: (o as HTMLOptionElement).value, t: (o.textContent ?? "").trim() })));
+  const hit = opts.find((o) => (typeof option === "string" ? o.t === option || o.t.startsWith(option) : option.test(o.t)));
+  if (!hit) throw new Error(`選單「${label}」裡找不到「${option}」：${opts.map((o) => o.t).join("、")}`);
+  await sel.selectOption(hit.v);
+}
+
+/** 下拉式選單目前選的文字 */
+export function chosen(scope: Page | import("@playwright/test").Locator, label: string | RegExp) {
+  return scope.getByLabel(label, typeof label === "string" ? { exact: true } : undefined).first().locator("option:checked");
+}

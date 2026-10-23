@@ -2,6 +2,7 @@
 import { SeriesPicker, type SeriesOpt } from "@/components/series-picker";
 // 採購團詳情：基本資料（可修改）、從其他團複製品項、砍單
 import { useState } from "react";
+import { Choice } from "@/components/choice";
 import Link from "next/link";
 import { Button, Modal, TextField, SelectField, TextArea, useIdemKey, useRun, inputCls, notify } from "@/components/client";
 import { batchItemsForCopyAction, cancelBatchItemAction, copyBatchItemsAction, updateBatchInfoAction } from "@/actions/batches";
@@ -143,11 +144,13 @@ export function CopyItemsButton({ toBatchId, batches }: { toBatchId: string; bat
         footer={<Button variant="primary" loading={pending} disabled={!items.length || (withPrice && !confirmed)} onClick={submit}>新增到本團</Button>}
       >
         <SelectField label="來源採購團" value={from} onChange={(e) => load(e.target.value)} options={[["", "請選擇"], ...batches.map((b) => [b.id, b.label] as [string, string])]} />
-        <div role="radiogroup" aria-label="價格" className="mt-3 grid grid-cols-2 gap-2">
-          {([[true, "帶入舊價格當參考"], [false, "只帶商品清單"]] as const).map(([v, l]) => (
-            <button key={l} type="button" role="radio" aria-checked={withPrice === v} onClick={() => { setWithPrice(v); setConfirmed(false); fill(items, v); }} className={`min-h-10 rounded-lg border px-2 text-sm ${withPrice === v ? "border-ai bg-ai text-white" : "border-line bg-white"}`}>{l}</button>
-          ))}
-        </div>
+        <Choice
+          label="價格"
+          className="mt-3"
+          value={withPrice ? "1" : "0"}
+          options={[{ value: "1", label: "帶入舊價格當參考" }, { value: "0", label: "只帶商品清單" }]}
+          onChange={(x) => { const v = x === "1"; setWithPrice(v); setConfirmed(false); fill(items, v); }}
+        />
         {loading && <p className="mt-3 text-sm text-mute">讀取中…</p>}
         {items.length > 0 && (
           <div className="mt-3 space-y-2">
@@ -237,12 +240,7 @@ export function CancelItemButton({ itemId, name, max }: { itemId: string; name: 
         ) : (
           <div className="space-y-4">
             <div>
-              <div className="mb-1 text-[13px] font-medium text-ink-2">原因</div>
-              <div role="radiogroup" aria-label="砍單原因" className="flex flex-wrap gap-1.5">
-                {REASONS.map(([k, l]) => (
-                  <button key={k} type="button" role="radio" aria-checked={reason === k} onClick={() => setReason(k)} className={`min-h-10 rounded-lg border px-3 text-[15px] ${reason === k ? "border-ai bg-ai text-white" : "border-line bg-white"}`}>{l}</button>
-                ))}
-              </div>
+              <Choice label="砍單原因" value={reason ?? ""} placeholder={reason ? undefined : "請選原因"} options={REASONS.map(([k, l]) => ({ value: k, label: l }))} onChange={setReason} />
               {reason === "OTHER" && <input aria-label="其他原因" autoFocus className={`${inputCls} mt-2`} value={note} onChange={(e) => setNote(e.target.value)} placeholder="請補充原因" />}
             </div>
             <div>

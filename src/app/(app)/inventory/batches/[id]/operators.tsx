@@ -1,4 +1,5 @@
 "use client";
+import { Choice } from "@/components/choice";
 // 採購團詳情：三種負責人、供應商付款紀錄、收貨清點紀錄
 import { UndoReceivingButton } from "./undo";
 import { useState } from "react";
@@ -91,21 +92,16 @@ export function ProgressBar({ batchId, progress, stage, editable }: { batchId: s
   const order = ["ASKED", "AGENT_HAS", "SHIPPED"];
   const reached = stage === "DONE" || stage === "PARTIAL" ? 3 : order.indexOf(progress);
   return (
-    <div role="radiogroup" aria-label="現在到哪了" className="flex flex-wrap items-center gap-1.5">
-      {steps.map(([v, l], i) => (
-        <button
-          key={v}
-          type="button"
-          role="radio"
-          aria-checked={progress === v && reached < 3}
-          disabled={!editable || pending || stage === "DONE"}
-          onClick={() => run(() => updateBatchProgressAction(batchId, v as "ASKED"), { success: `進度：${l}` })}
-          className={`min-h-10 rounded-full border px-3 text-[14px] disabled:cursor-default ${i <= reached ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"} ${progress === v && reached < 3 ? "ring-2 ring-ai/30" : ""}`}
-        >
-          {l}
-        </button>
-      ))}
-      <a href="#receiving" className={`flex min-h-10 items-center rounded-full border px-3 text-[14px] ${stage === "DONE" ? "border-good bg-good text-white" : stage === "PARTIAL" ? "border-warn bg-warn-soft text-warn" : "border-dashed border-line text-mute"}`}>{doneLabel}</a>
+    <div className="flex items-end gap-2">
+      <Choice
+        label="現在到哪了"
+        className="flex-1"
+        value={reached >= 3 ? "DONE" : progress}
+        disabled={!editable || pending || stage === "DONE"}
+        options={[...steps.map(([v, l]) => ({ value: v, label: l })), { value: "DONE", label: doneLabel, disabled: true }]}
+        onChange={(v) => { const l = steps.find((x) => x[0] === v)?.[1]; if (l) run(() => updateBatchProgressAction(batchId, v as "ASKED"), { success: `進度：${l}` }); }}
+      />
+      {reached < 3 && <a href="#receiving" className="flex min-h-11 shrink-0 items-center rounded-lg border border-dashed border-line px-3 text-[13px] text-mute">到了去收貨</a>}
     </div>
   );
 }
@@ -133,29 +129,17 @@ type PayDraft = { paidById: string | null; paidAt: string; amount: string; curre
 const METHODS = ["信用卡", "銀行轉帳", "現金", "PayPay", "代購平台扣款"];
 
 function PaymentFields({ d, set, operators, edit }: { d: PayDraft; set: (p: Partial<PayDraft>) => void; operators: OperatorOption[]; edit?: boolean }) {
-  const chip = (on: boolean) => `min-h-10 rounded-lg border px-3 py-1.5 text-[15px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white"}`;
   const main: [string, string][] = [["DEPOSIT", "訂金"], ["BALANCE", "尾款"], ["FULL", "全額"]];
   // 平常只要填三樣：多少錢、誰付的、這筆是訂金或尾款；其他收進「更多」
   return (
     <div className="space-y-3">
       <TextField label="多少錢" inputMode="numeric" value={d.amount} onChange={(e) => set({ amount: e.target.value })} placeholder={d.currency === "JPY" ? "日幣，整數" : "台幣，整數"} />
       <OperatorPicker label="誰付的" operators={operators} value={d.paidById} onChange={(v) => set({ paidById: v })} />
-      <div>
-        <div className="mb-1 text-[13px] font-medium text-ink-2">這筆是</div>
-        <div role="radiogroup" aria-label="這筆是" className="flex flex-wrap gap-1">
-          {main.map(([k, v]) => (
-            <button key={k} type="button" role="radio" aria-checked={d.purpose === k} className={chip(d.purpose === k)} onClick={() => set({ purpose: d.purpose === k ? null : k })}>{v}</button>
-          ))}
-        </div>
-      </div>
+      <Choice label="這筆是" value={d.purpose ?? ""} placeholder="不指定" options={[...main, ["FEE", paymentPurpose.FEE], ["OTHER", paymentPurpose.OTHER]].map(([k, v]) => ({ value: k, label: v }))} onChange={(v) => set({ purpose: v || null })} />
       <details className="rounded-lg border border-line-2 px-3 py-2" open={edit || d.currency === "JPY" || d.status === "PENDING"}>
         <summary className="cursor-pointer select-none text-[13px] text-mute">更多（日期、付款方式、編號、日幣、還沒付、備註）</summary>
         <div className="mt-2 space-y-3">
-          <div role="radiogroup" aria-label="幣別" className="flex gap-1">
-            {(["TWD", "JPY"] as const).map((c) => (
-              <button key={c} type="button" role="radio" aria-checked={d.currency === c} className={chip(d.currency === c)} onClick={() => set({ currency: c })}>{currencyName[c]}</button>
-            ))}
-          </div>
+          <Choice label="幣別" value={d.currency} options={(["TWD", "JPY"] as const).map((c) => ({ value: c, label: currencyName[c] }))} onChange={(c) => set({ currency: c as "TWD" | "JPY" })} />
           <div className="grid gap-2 sm:grid-cols-2">
             <TextField label="付款日期" type="datetime-local" value={d.paidAt} onChange={(e) => set({ paidAt: e.target.value })} />
             <div>
@@ -166,16 +150,7 @@ function PaymentFields({ d, set, operators, edit }: { d: PayDraft; set: (p: Part
             {d.currency === "JPY" && <TextField label="這筆實際匯率（選填）" inputMode="decimal" value={d.rate} onChange={(e) => set({ rate: e.target.value })} hint="有填才會換算台幣；不填只保留日幣金額" />}
             <TextField label="交易參考編號（選填）" value={d.reference} onChange={(e) => set({ reference: e.target.value })} />
           </div>
-          <div role="radiogroup" aria-label="付款狀態" className="flex gap-1">
-            {(["PAID", "PENDING"] as const).map((st) => (
-              <button key={st} type="button" role="radio" aria-checked={d.status === st} className={chip(d.status === st)} onClick={() => set({ status: st })}>{supplierPaymentStatus[st][0]}</button>
-            ))}
-          </div>
-          <div role="radiogroup" aria-label="其他用途" className="flex flex-wrap gap-1">
-            {(["FEE", "OTHER"] as const).map((k) => (
-              <button key={k} type="button" role="radio" aria-checked={d.purpose === k} className={chip(d.purpose === k)} onClick={() => set({ purpose: d.purpose === k ? null : k })}>{paymentPurpose[k]}</button>
-            ))}
-          </div>
+          <Choice label="付款狀態" value={d.status} options={(["PAID", "PENDING"] as const).map((st) => ({ value: st, label: supplierPaymentStatus[st][0] }))} onChange={(st) => set({ status: st as "PAID" | "PENDING" })} />
           <TextField label="備註" value={d.note} onChange={(e) => set({ note: e.target.value })} />
         </div>
       </details>

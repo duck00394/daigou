@@ -1,4 +1,5 @@
 "use client";
+import { Choice } from "@/components/choice";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Modal, TextField, SelectField, TextArea, useRun, ConfirmButton } from "@/components/client";
@@ -22,8 +23,6 @@ export function CategoryEditButton({ cat, label = "編輯", customTypes = [], sm
   const { run, pending } = useRun();
   const router = useRouter();
   const customs = [...new Set([...customTypes, ...(cat?.type === "CUSTOM" && cat.customType ? [cat.customType] : [])])];
-  const isOn = (k: string, custom?: string) => !typing && (custom ? f.type === "CUSTOM" && f.customType === custom : f.type === k);
-  const chip = (on: boolean) => `min-h-10 rounded-lg border px-3 text-[15px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white"}`;
   const openIt = () => {
     setF(cat ?? EMPTY);
     setTyping(false);
@@ -48,18 +47,18 @@ export function CategoryEditButton({ cat, label = "編輯", customTypes = [], sm
         <div className="grid gap-3 sm:grid-cols-2">
           <TextField label="名稱" placeholder="例：ANA、手遊、萬聖節" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className="sm:col-span-2" />
           <div className="sm:col-span-2">
-            <div className="mb-1 text-[13px] font-medium text-ink-2">類型</div>
-            <div role="radiogroup" aria-label="類型" className="flex flex-wrap gap-1.5">
-              {BUILTIN.map(([k, v]) => (
-                <button key={k} type="button" role="radio" aria-checked={isOn(k)} className={chip(isOn(k))} onClick={() => { setTyping(false); setF({ ...f, type: k, customType: null }); }}>{v}</button>
-              ))}
-              {customs.map((c) => (
-                <button key={`c:${c}`} type="button" role="radio" aria-checked={isOn("CUSTOM", c)} className={chip(isOn("CUSTOM", c))} onClick={() => { setTyping(false); setF({ ...f, type: "CUSTOM", customType: c }); }}>{c}</button>
-              ))}
-              <button type="button" role="radio" aria-checked={typing} className={chip(typing)} onClick={() => { setTyping(true); setF({ ...f, type: "CUSTOM", customType: "" }); }}>＋ 自訂</button>
-            </div>
+            <Choice
+              label="類型"
+              value={typing ? "__typing__" : f.type === "CUSTOM" ? `c:${f.customType ?? ""}` : f.type}
+              options={[...BUILTIN.map(([k, v]) => ({ value: k, label: v })), ...customs.map((c) => ({ value: `c:${c}`, label: c })), { value: "__typing__", label: "＋ 自訂…" }]}
+              onChange={(v) => {
+                if (v === "__typing__") { setTyping(true); setF({ ...f, type: "CUSTOM", customType: "" }); }
+                else if (v.startsWith("c:")) { setTyping(false); setF({ ...f, type: "CUSTOM", customType: v.slice(2) }); }
+                else { setTyping(false); setF({ ...f, type: v as Cat["type"], customType: null }); }
+              }}
+            />
             {typing && <TextField label="自訂類型叫什麼" placeholder="例：快閃店" autoFocus value={f.customType ?? ""} onChange={(e) => setF({ ...f, type: "CUSTOM", customType: e.target.value })} className="mt-2" />}
-            {typing && <p className="mt-1 text-[12px] text-mute">存好後，下次新增會直接出現在上面可以點。</p>}
+            {typing && <p className="mt-1 text-[12px] text-mute">存好後，下次新增會直接出現在選單裡。</p>}
           </div>
           <TextField label="開始日期（可不填）" type="date" value={f.startDate ?? ""} onChange={(e) => setF({ ...f, startDate: e.target.value || null })} />
           <TextField label="結束日期（可不填）" type="date" value={f.endDate ?? ""} onChange={(e) => setF({ ...f, endDate: e.target.value || null })} />

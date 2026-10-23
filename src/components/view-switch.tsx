@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { setMeAction, setViewAction } from "@/actions/operators";
 import { ownerTone } from "@/lib/owner-colors";
+import { Choice } from "./choice";
 
 export type ViewInfo = { key: string; me: string | null; name: string; isMe: boolean; ops: { id: string; name: string }[] };
 
@@ -21,42 +22,24 @@ function useSwitch() {
 
 export function ViewSwitch({ v, onDone }: { v: ViewInfo; onDone?: () => void }) {
   const { go, pending } = useSwitch();
-  const ids = v.ops.map((o) => o.id);
   if (!v.me) {
     return (
       <div className="mb-3 rounded-xl border border-[#f3d39b] bg-[#fff7e6] p-3" data-testid="view-switch">
-        <div className="mb-1.5 text-[13px] font-semibold text-[#7a4b00]">這台裝置是誰在用？選了之後每頁預設只看他的</div>
-        <div className="grid grid-cols-2 gap-2">
-          {v.ops.map((o) => (
-            <button key={o.id} type="button" disabled={pending} className="min-h-11 rounded-lg border border-line bg-white text-[15px]" onClick={() => go(() => setMeAction(o.id).then(() => setViewAction("me")), onDone)}>{o.name}</button>
-          ))}
-        </div>
+        <Choice
+          label="這台裝置是誰在用？選了之後每頁預設只看他的"
+          value=""
+          placeholder="請選擇"
+          disabled={pending}
+          options={v.ops.map((o) => ({ value: o.id, label: o.name }))}
+          onChange={(id) => id && go(() => setMeAction(id).then(() => setViewAction("me")), onDone)}
+        />
       </div>
     );
   }
-  const opts = [...v.ops.map((o) => ({ key: o.id, label: o.id === v.me ? `${o.name}（我）` : o.name, dot: ownerTone(o.id, ids).dot })), { key: "all", label: "全部（加起來）", dot: "#8b5cf6" }];
+  const opts = [...v.ops.map((o) => ({ value: o.id, label: o.id === v.me ? `${o.name}（我）` : o.name })), { value: "all", label: "全部（加起來）" }];
   return (
     <div className="mb-3" data-testid="view-switch">
-      <div className="mb-1 text-[12px] text-mute">現在看誰的</div>
-      <div role="radiogroup" aria-label="現在看誰的" className="grid gap-1.5">
-        {opts.map((o) => {
-          const on = v.key === o.key;
-          return (
-            <button
-              key={o.key}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              disabled={pending}
-              className={`flex min-h-11 items-center gap-2.5 rounded-lg border px-3 text-left text-[15px] ${on ? "border-ai bg-ai-soft font-semibold" : "border-line bg-white"}`}
-              onClick={() => go(() => setViewAction(o.key === v.me ? "me" : o.key), onDone)}
-            >
-              <span aria-hidden className="h-3 w-3 shrink-0 rounded-full" style={{ background: o.dot }} />
-              {o.label}
-            </button>
-          );
-        })}
-      </div>
+      <Choice label="現在看誰的" value={v.key} options={opts} disabled={pending} onChange={(k) => go(() => setViewAction(k === v.me ? "me" : k), onDone)} />
     </div>
   );
 }

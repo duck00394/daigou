@@ -1,6 +1,6 @@
 // 手機：系列目錄（種類 › 系列 › 品項 › 角色、預設售價）→ 實體店買進 → 賣給客人（現貨＋預訂）→ 庫存選了才看
 import { test, expect } from "@playwright/test";
-import { login, toast, pickIp, newSupplierPick, openSeries, openMore } from "./helpers";
+import { login, toast, pickIp, newSupplierPick, openSeries, openMore, choose, chosen } from "./helpers";
 
 test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => {
   const tag = Date.now().toString(36).slice(-4);
@@ -77,9 +77,9 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await openSeries(page);
   await page.getByLabel("種類", { exact: true }).selectOption({ label: kind });
   await page.getByLabel("系列", { exact: true }).selectOption({ label: series });
-  await expect(page.getByRole("radio", { name: /新的一團/ })).toHaveAttribute("aria-checked", "true");
+  await expect(chosen(page, "哪一團")).toHaveText("開新的一團");
   await openMore(page);
-  await page.getByRole("radiogroup", { name: "在哪裡買的" }).getByRole("radio", { name: /實體店買/ }).click();
+  await choose(page, "在哪裡買的", "實體店買");
   await newSupplierPick(page, `常設店 ${tag}`, true);
   await pickIp(page);
   await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
@@ -141,6 +141,11 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await expect(page).toHaveURL(/v=1/);
   await expect(page.getByTestId("stock-series").filter({ hasText: series })).toBeVisible();
   await expect(page.getByTestId("stock-type").first()).toHaveText("吊娃");
+  // 現有、客人訂、剩下：小八沒貨但客人預訂 1 → 缺 1
+  const hachiRow = page.locator(`[data-testid="stock-row"][data-name="${series}小八 吊娃"]`);
+  await expect(hachiRow.locator('[data-k="onhand"]')).toHaveText("0");
+  await expect(hachiRow.locator('[data-k="ordered"]')).toHaveText("1");
+  await expect(hachiRow.locator('[data-k="free"]')).toHaveText("缺 1");
   await page.screenshot({ path: "test-results/mobile_stock_tree.png", fullPage: true });
 
   // 已過期：不在下拉選單，用搜尋找得到

@@ -1,7 +1,7 @@
 // 完整流程：LINE 貼上 → 訂單 → 付款 → 採購 → 到貨 → 部分出貨 → 報表
 import { test, expect } from "@playwright/test";
 import * as XLSX from "@e965/xlsx";
-import { login, toast } from "./helpers";
+import { login, toast, choose, chosen } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 
@@ -111,10 +111,10 @@ test("採購、到貨、分配、部分出貨與報表", async ({ page }) => {
   const fee = page.getByRole("dialog");
   await expect(fee.getByText("不攤進商品成本，單獨記一筆")).toBeVisible();
   await fee.getByLabel("金額", { exact: true }).fill("100");
-  await fee.getByRole("radiogroup", { name: "誰付的" }).getByRole("radio", { name: "兩人一起付" }).click();
+  await choose(fee, "誰付的", "兩人一起付");
   await expect(fee.getByLabel("經營者 A 付多少")).toHaveValue("50");
   await expect(fee.getByLabel("經營者 B 付多少")).toHaveValue("50");
-  await fee.getByRole("radiogroup", { name: "要不要攤進商品成本" }).getByRole("radio", { name: "每件平均攤" }).click();
+  await choose(fee, "要不要攤進商品成本", "每件平均攤");
   await fee.getByRole("button", { name: "儲存" }).click();
   await toast(page, "已記下這筆費用");
   await expect(page.getByTestId("fee-row")).toContainText("兩人一起付：經營者 A NT$50、經營者 B NT$50");
@@ -130,7 +130,7 @@ test("採購、到貨、分配、部分出貨與報表", async ({ page }) => {
   // 採購團到貨必須選收貨確認人
   await page.getByRole("button", { name: "登記到貨" }).click();
   await expect(page.getByRole("alert").filter({ hasText: "請選擇收貨確認人" })).toBeVisible();
-  await page.getByRole("radiogroup", { name: /收貨確認人/ }).getByRole("radio", { name: "經營者 A" }).click();
+  await choose(page, "收貨確認人", "經營者 A");
   await page.getByRole("button", { name: "登記到貨" }).click();
   await expect(page.getByRole("heading", { name: "分配給待出貨的訂單" })).toBeVisible();
   await page.getByRole("button", { name: "確認保留" }).click();

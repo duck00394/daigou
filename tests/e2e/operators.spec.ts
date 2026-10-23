@@ -1,6 +1,6 @@
 // 雙人經營責任紀錄（桌面）：改名 → 建團選負責人 → A 付訂金、B 付尾款 → A、B 分批收貨 → 經營者對帳
 import { test, expect, type Page } from "@playwright/test";
-import { login, toast, pickIp } from "./helpers";
+import { login, toast, pickIp, choose, chosen } from "./helpers";
 
 /** 改經營者名稱；名稱沒變（例如重複執行時）就不需要儲存 */
 async function rename(page: Page, code: string, name: string) {
@@ -26,9 +26,9 @@ test("桌面：A 下單、A 付訂金 B 付尾款、A B 分批收貨，對帳依
   await page.goto("/inventory/batches/new");
   await page.getByLabel("採購團名稱").fill("E2E 雙人團");
   await page.getByLabel("供應商").selectOption({ label: "日本官網" });
-  await page.getByRole("radiogroup", { name: /這團是誰的/ }).getByRole("radio", { name: "阿珍" }).click();
-  await page.getByRole("radiogroup", { name: /主要付款負責人/ }).getByRole("radio", { name: "阿珍" }).click();
-  await page.getByRole("radiogroup", { name: /收貨負責人/ }).getByRole("radio", { name: "阿強" }).click();
+  await choose(page, "這團是誰的", "阿珍");
+  await choose(page, /主要付款負責人/, "阿珍");
+  await choose(page, /收貨負責人/, "阿強");
   await page.getByRole("button", { name: "建立採購團" }).click();
   await expect(page.getByRole("heading", { name: /E2E 雙人團/ })).toBeVisible();
   await expect(page.getByTestId("resp-orderedById")).toHaveText("阿珍");
@@ -50,21 +50,21 @@ test("桌面：A 下單、A 付訂金 B 付尾款、A B 分批收貨，對帳依
   // 4. A 付訂金（日幣、填實際匯率），B 付尾款（日幣、未填匯率）
   const payForm = () => page.getByRole("form", { name: "登記付款" });
   await page.getByRole("button", { name: "＋ 登記付款" }).click();
-  await expect(payForm().getByRole("radio", { name: "阿珍" })).toHaveAttribute("aria-checked", "true"); // 預設為主要付款負責人
+  await expect(chosen(payForm(), "誰付的")).toHaveText("阿珍"); // 預設為主要付款負責人
   await payForm().getByLabel("多少錢").fill("3000");
-  if (!(await payForm().getByRole("radio", { name: "日幣" }).isVisible())) await payForm().locator("summary").click(); // 日幣收在「更多」
-  await payForm().getByRole("radio", { name: "日幣" }).click();
-  await payForm().getByRole("radio", { name: "訂金" }).click();
+  if (!(await payForm().getByLabel("幣別", { exact: true }).isVisible())) await payForm().locator("summary").click(); // 日幣收在「更多」
+  await choose(payForm(), "幣別", "日幣");
+  await choose(payForm(), "這筆是", "訂金");
   await payForm().getByLabel("這筆實際匯率（選填）").fill("0.205");
   await payForm().getByRole("button", { name: "儲存付款" }).click();
   await toast(page, "已登記付款");
 
   await page.getByRole("button", { name: "＋ 登記付款" }).click();
-  await payForm().getByRole("radio", { name: "阿強" }).click();
+  await choose(payForm(), "誰付的", "阿強");
   await payForm().getByLabel("多少錢").fill("4930");
-  if (!(await payForm().getByRole("radio", { name: "日幣" }).isVisible())) await payForm().locator("summary").click(); // 日幣收在「更多」
-  await payForm().getByRole("radio", { name: "日幣" }).click();
-  await payForm().getByRole("radio", { name: "尾款" }).click();
+  if (!(await payForm().getByLabel("幣別", { exact: true }).isVisible())) await payForm().locator("summary").click(); // 日幣收在「更多」
+  await choose(payForm(), "幣別", "日幣");
+  await choose(payForm(), "這筆是", "尾款");
   await payForm().getByRole("button", { name: "儲存付款" }).click();
   await toast(page, "已登記付款");
   await expect(page.getByLabel("本團實際付款小計")).toContainText("阿珍 已付 ¥3,000");
@@ -83,8 +83,8 @@ test("桌面：A 下單、A 付訂金 B 付尾款、A B 分批收貨，對帳依
   // 5. A 先收吉伊 2 件（1 件瑕疵），B 再收剩下全部
   const rcvForm = () => page.getByRole("form", { name: "登記收貨" });
   await page.getByRole("button", { name: "＋ 登記這次收貨" }).click();
-  await expect(rcvForm().getByRole("radio", { name: "阿強" })).toHaveAttribute("aria-checked", "true");
-  await rcvForm().getByRole("radio", { name: "阿珍" }).click();
+  await expect(chosen(rcvForm(), "收貨確認人")).toHaveText("阿強");
+  await choose(rcvForm(), "收貨確認人", "阿珍");
   await rcvForm().getByLabel("吉伊 吊娃 實收").fill("2");
   await rcvForm().getByLabel("吉伊 吊娃 瑕疵").fill("1");
   await rcvForm().getByLabel("吉伊 吊娃 備註").fill("耳朵脫線");
@@ -92,7 +92,7 @@ test("桌面：A 下單、A 付訂金 B 付尾款、A B 分批收貨，對帳依
   await toast(page, "良品 1 件已入庫");
 
   await page.getByRole("button", { name: "＋ 登記這次收貨" }).click();
-  await rcvForm().getByRole("radio", { name: "阿強" }).click();
+  await choose(rcvForm(), "收貨確認人", "阿強");
   await rcvForm().getByRole("button", { name: "全部到齊" }).click();
   await expect(rcvForm().getByLabel("吉伊 吊娃 實收")).toHaveValue("2");
   await rcvForm().getByRole("button", { name: "儲存收貨" }).click();

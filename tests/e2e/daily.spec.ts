@@ -1,6 +1,6 @@
 // 日常操作（桌面）：活動下建兩團 → 砍單 → 跨團複製 → 活動頁跨團比價 → 收貨 → 自留
 import { test, expect, type Page } from "@playwright/test";
-import { login, toast, pickIp, openSeriesPage } from "./helpers";
+import { login, toast, pickIp, openSeriesPage, choose, chosen } from "./helpers";
 
 const cell = (page: Page, row: number, col: number) => page.locator(`[data-row="${row}"][data-col="${col}"]`).first();
 
@@ -96,7 +96,7 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
   await page.getByRole("link", { name: new RegExp(`E2E 萬聖 A 團 ${tag}`) }).click();
   await page.getByRole("button", { name: "＋ 登記這次收貨" }).click();
   const rcv = page.getByRole("form", { name: "登記收貨" });
-  await rcv.getByRole("radio").first().click();
+  await choose(rcv, "收貨確認人", 0);
   await rcv.getByRole("button", { name: "全部到齊" }).click();
   await rcv.getByRole("button", { name: "儲存收貨" }).click();
   await toast(page, "良品 4 件已入庫");

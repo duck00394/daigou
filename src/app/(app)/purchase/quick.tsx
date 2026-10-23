@@ -13,7 +13,7 @@ import { setMeAction } from "@/actions/operators";
 import { payRemainingAction, receiveAllAction } from "@/actions/batches";
 import { batchProgress } from "@/lib/labels";
 import { formatJpy, formatTwd, parseRate } from "@/lib/money";
-import { ownerTone } from "@/lib/owner-colors";
+import { Choice } from "@/components/choice";
 
 type Op = { id: string; name: string; code: string };
 type BatchOpt = { id: string; label: string; code: string; categoryId: string | null; owner: string; ownerKey: string; stage: string; supplierId: string | null; supplierName: string | null; currency: "JPY" | "TWD"; rateMicro: number; items: number };
@@ -22,7 +22,6 @@ type Ship = { id: string; name: string; kind: string; currency: "TWD" | "JPY"; a
 const NEW = "__new__";
 const JOINT = "JOINT";
 
-const card = (on: boolean) => `min-h-11 rounded-xl border px-3 py-2 text-left text-[15px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink hover:border-ai"}`;
 const pill = (on: boolean) => `min-h-10 rounded-full border px-3.5 text-[15px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
 
 export function QuickPurchase(props: {
@@ -41,7 +40,6 @@ export function QuickPurchase(props: {
   lastTypeId: string | null;
 }) {
   const { operators, batches, series, types, defaultRate } = props;
-  const ids = operators.map((o) => o.id);
   const initBatch = batches.find((b) => b.id === props.initialBatch);
   const [me, setMe] = useState(props.me);
   const [cats, setCats] = useState(props.categories);
@@ -50,7 +48,6 @@ export function QuickPurchase(props: {
   // 之前的團：同系列的排前面，再來是最近的其他團（同一個代購一起買別的系列時，可以加進同一團）
   const inCat = [...batches.filter((b) => (b.categoryId ?? "") === categoryId), ...batches.filter((b) => (b.categoryId ?? "") !== categoryId)].slice(0, 12);
   const [pick, setPick] = useState<string>(initBatch?.id ?? NEW);
-  const [showOld, setShowOld] = useState(!!initBatch);
   const [kind, setKind] = useState(cats.find((c) => c.id === categoryId)?.kindKey ?? "");
   const [newCat, setNewCat] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -99,7 +96,6 @@ export function QuickPurchase(props: {
     setCategoryId(id);
     setChangingCat(false);
     setPick(NEW);
-    setShowOld(false);
     created.current = null;
     setSaved(null);
     setRenaming(null);
@@ -254,20 +250,12 @@ export function QuickPurchase(props: {
 
       <section className="space-y-3 rounded-xl border border-line bg-card p-4">
         <h2 className="text-[15px] font-semibold">2. 這一團</h2>
-        <div role="radiogroup" aria-label="哪一團" className="grid grid-cols-2 gap-1 rounded-xl bg-line-2 p-1">
-          <button type="button" role="radio" aria-checked={pick === NEW} className={`min-h-10 rounded-lg text-[15px] ${pick === NEW ? "bg-white font-semibold shadow-sm" : "text-ink-2"}`} onClick={() => { setPick(NEW); setShowOld(false); created.current = null; setSaved(null); }}>開新的一團</button>
-          <button type="button" aria-expanded={showOld} className={`min-h-10 rounded-lg text-[15px] ${pick !== NEW || showOld ? "bg-white font-semibold shadow-sm" : "text-ink-2"}`} disabled={!inCat.length} onClick={() => setShowOld(true)}>或加到之前的團（{inCat.length}）</button>
-          {showOld && (
-            <div className="col-span-2 mt-1 grid gap-1.5 sm:grid-cols-2">
-              {inCat.map((b) => (
-                <button key={b.id} type="button" role="radio" aria-checked={pick === b.id} className={`${card(pick === b.id)} ${pick === b.id ? "" : ownerTone(b.ownerKey, ids).stripe}`} onClick={() => { setPick(b.id); setSaved(null); }}>
-                  <span className="block font-medium">{b.label}</span>
-                  <span className={`block text-[12px] ${pick === b.id ? "text-white/80" : "text-mute"}`}>{(b.categoryId ?? "") !== categoryId && cats.find((c) => c.id === b.categoryId) ? `${cats.find((c) => c.id === b.categoryId)!.name}・` : ""}{b.owner}的・{b.stage}・{b.items} 項</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <Choice
+          label="哪一團"
+          value={pick}
+          options={[{ value: NEW, label: "開新的一團" }, ...inCat.map((b) => ({ value: b.id, label: `加到：${b.label}（${(b.categoryId ?? "") !== categoryId && cats.find((c) => c.id === b.categoryId) ? `${cats.find((c) => c.id === b.categoryId)!.name}・` : ""}${b.owner}的・${b.stage}・${b.items} 項）` }))]}
+          onChange={(v) => { setPick(v); setSaved(null); if (v === NEW) created.current = null; }}
+        />
 
         {pick === NEW && !created.current && (
           <div className="space-y-3">
@@ -378,12 +366,7 @@ export function QuickPurchase(props: {
               )}
             </div>
             <div>
-              <div className="mb-1 text-[13px] font-medium text-ink-2">這團是誰的</div>
-              <div role="radiogroup" aria-label="這團是誰的" className="grid gap-1 rounded-xl bg-line-2 p-1" style={{ gridTemplateColumns: `repeat(${owners.length}, minmax(0, 1fr))` }}>
-                {owners.map(([v, l]) => (
-                  <button key={v} type="button" role="radio" aria-checked={f.owner === v} className={`min-h-10 rounded-lg px-1 py-1 text-[14px] leading-tight ${f.owner === v ? "bg-white font-semibold shadow-sm" : "text-ink-2"}`} style={f.owner === v ? { color: ownerTone(v, ids).dot } : undefined} onClick={() => setF({ ...f, owner: v })}>{l}</button>
-                ))}
-              </div>
+              <Choice label="這團是誰的" value={f.owner} options={owners.map(([v, l]) => ({ value: v, label: l }))} onChange={(v) => setF({ ...f, owner: v })} />
               {f.owner === JOINT && <p className="mt-1 text-[12px] text-mute">合資：賣掉的錢依各自實際付給代購的金額比例分（誰付錢誰拿錢）。</p>}
             </div>
             {store && (
@@ -396,27 +379,15 @@ export function QuickPurchase(props: {
             <details className="rounded-xl border border-line-2 bg-[#fafbfc] px-3 py-2 text-[14px]" open={store || undefined}>
               <summary className="cursor-pointer select-none py-1 text-ai">更多：實體店買的、到哪了、運費、訂金、團名、預計到貨</summary>
               <div className="mt-2 space-y-3">
-                <div>
-                  <div className="mb-1 text-[13px] font-medium text-ink-2">在哪裡買的</div>
-                  <div role="radiogroup" aria-label="在哪裡買的" className="grid grid-cols-2 gap-1.5">
-                    {([["AGENT", "跟代購買", "要等代購寄來"], ["STORE", "實體店買", "自己去店裡，買了就拿到"]] as const).map(([v, l, h]) => (
-                      <button key={v} type="button" role="radio" aria-checked={via === v} className={card(via === v)} onClick={() => { setVia(v); setF((x) => ({ ...x, supplierId: "" })); setNewSup(null); }}>
-                        <span className="block font-medium">{l}</span>
-                        <span className={`block text-[12px] ${via === v ? "text-white/80" : "text-mute"}`}>{h}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <Choice
+                  label="在哪裡買的"
+                  value={via}
+                  options={[{ value: "AGENT", label: "跟代購買（要等代購寄來）" }, { value: "STORE", label: "實體店買（買了就拿到）" }]}
+                  onChange={(v) => { setVia(v as "AGENT" | "STORE"); setF((x) => ({ ...x, supplierId: "" })); setNewSup(null); }}
+                />
                 {!store && (
                   <>
-                    <div>
-                      <div className="mb-1 text-[13px] font-medium text-ink-2">現在到哪了</div>
-                      <div role="radiogroup" aria-label="進度" className="flex flex-wrap gap-1.5">
-                        {Object.entries(batchProgress).map(([v, l]) => (
-                          <button key={v} type="button" role="radio" aria-checked={f.progress === v} className={pill(f.progress === v)} onClick={() => setF({ ...f, progress: v })}>{l}</button>
-                        ))}
-                      </div>
-                    </div>
+                    <Choice label="進度" value={f.progress} options={Object.entries(batchProgress).map(([v, l]) => ({ value: v, label: l }))} onChange={(v) => setF({ ...f, progress: v })} />
                     <div className="space-y-2">
                       <div className="text-[13px] font-medium text-ink-2">運費（點常用的就帶入，可以再改）</div>
                       <div className="flex flex-wrap gap-1.5" aria-label="常用運費">

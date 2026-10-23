@@ -1,4 +1,5 @@
 "use client";
+import { Choice } from "@/components/choice";
 import { useState } from "react";
 import { Button, ConfirmButton, TextField, SelectField, useRun, useToast, useIdemKey, inputCls, notify as notifyError } from "@/components/client";
 import { setRateAction, addExpenseAction, deleteExpenseAction } from "@/actions/ops";
@@ -234,14 +235,13 @@ export function MeSelect({ operators, me }: { operators: { id: string; name: str
   const { run } = useRun();
   return (
     <div className="mt-3 rounded-lg border border-line-2 p-3">
-      <div className="mb-1.5 text-[13px] font-medium text-ink-2">這支手機是誰在用？</div>
-      <div role="radiogroup" aria-label="這支手機是誰在用" className="flex flex-wrap gap-1.5">
-        {operators.map((o) => (
-          <button key={o.id} type="button" role="radio" aria-checked={v === o.id} className={`min-h-10 rounded-lg border px-3 text-[15px] ${v === o.id ? "border-ai bg-ai text-white" : "border-line bg-white"}`} onClick={() => run(() => setMeAction(o.id), { success: `這支手機設為 ${o.name}`, onOk: () => setV(o.id) })}>
-            {o.name}
-          </button>
-        ))}
-      </div>
+      <Choice
+        label="這支手機是誰在用"
+        value={v ?? ""}
+        placeholder={v ? undefined : "請選擇"}
+        options={operators.map((o) => ({ value: o.id, label: o.name }))}
+        onChange={(id) => { const o = operators.find((x) => x.id === id); if (o) run(() => setMeAction(o.id), { success: `這支手機設為 ${o.name}`, onOk: () => setV(o.id) }); }}
+      />
       <p className="mt-1 text-[12px] text-mute">新增採購、出售、自留時會預設是這個人的，只記在這支手機上。</p>
     </div>
   );
