@@ -3,11 +3,11 @@ import { summarizeFees } from "./fees";
 import { BizError, lockRows, type Tx } from "@/server/db";
 import { jpyToTwd } from "@/lib/money";
 import { audit, emptyToNull, type Actor } from "./common";
-import { addBatchItem, effectiveUnitCost, itemGoodsTwd, minCommittedQty, reallocateBatch, type Currency } from "./purchase";
+import { addBatchItem, clampConfirmed, effectiveUnitCost, itemGoodsTwd, minCommittedQty, reallocateBatch, type Currency } from "./purchase";
 import { recomputeOrder } from "./recompute";
 import { refreshBatchStatus } from "./inventory";
 import { batchOwnerKey, JOINT, jointWeights, sharePercents, splitByWeights, stockByOwner } from "./ownership";
-import { batchStage } from "@/lib/labels";
+import { batchStage, isStoreKind } from "@/lib/labels";
 
 // ── 基本資料 ──
 export function checkUrl(u: string | null | undefined) {
@@ -94,6 +94,7 @@ export async function cancelBatchItem(t: Tx, actor: Actor, itemId: string, input
   if (input.qty > max) throw new BizError(max <= 0 ? "這個品項已全部到貨或已取消，沒有可以砍的數量" : `最多只能砍 ${max} 件（已到貨 ${received} 件不能砍）`);
   const reasonText = note ? `${label}：${note}` : label;
   await t.purchaseBatchItem.update({ where: { id: itemId }, data: { cancelledQty: bi.cancelledQty + input.qty, cancelReason: reasonText } });
+  await clampConfirmed(t, itemId);
   await reallocateBatch(t, bi.batchId);
   await refreshBatchStatus(t, itemId);
 
@@ -127,17 +128,13 @@ export async function restoreCancelled(t: Tx, actor: Actor, itemId: string, qty?
   if (!Number.isInteger(n) || n <= 0 || n > bi.cancelledQty) throw new BizError(`最多只能恢復 ${bi.cancelledQty} 件`);
   await lockRows(t, "PurchaseBatch", [bi.batchId]);
   const left = bi.cancelledQty - n;
-  await t.purchaseBatchItem.update({ where: { id: itemId }, data: { cancelledQty: left, ...(left === 0 ? { cancelReason: null } : {}) } });
+  // 砍錯了＝其實有買到：加回來的算「買到」
+  await t.purchaseBatchItem.update({ where: { id: itemId }, data: { cancelledQty: left, confirmedQty: bi.confirmedQty + n, ...(left === 0 ? { cancelReason: null } : {}) } });
   await reallocateBatch(t, bi.batchId);
   await refreshBatchStatus(t, itemId);
   await audit(t, actor, "batch.restoreCancel", "PurchaseBatch", bi.batchId, { itemId, qty: n });
 }
 
-/** 已確認／未確認（代購確認買得到了沒） */
-export async function setBatchConfirmed(t: Tx, actor: Actor, batchId: string, confirmed: boolean) {
-  await t.purchaseBatch.update({ where: { id: batchId }, data: { confirmed } });
-  await audit(t, actor, "batch.confirm", "PurchaseBatch", batchId, { confirmed });
-}
 
 /** 總計買了什麼：把好幾團的品項加起來（依系列 › 品項 › 角色） */
 export async function purchasedSummary(t: Tx, batchIds: string[]) {
@@ -149,7 +146,8 @@ export async function purchasedSummary(t: Tx, batchIds: string[]) {
       cancelledQty: true,
       categoryId: true,
       batchId: true,
-      batch: { select: { categoryId: true, confirmed: true } },
+      confirmedQty: true,
+      batch: { select: { categoryId: true, status: true, supplierRef: { select: { kind: true } } } },
       movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } },
       product: { select: { name: true, spec: true, productType: { select: { id: true, name: true, sortOrder: true } }, characters: { select: { character: { select: { id: true, name: true } } } } } },
     },
@@ -166,7 +164,7 @@ export async function purchasedSummary(t: Tx, batchIds: string[]) {
     v.row.ordered += active;
     v.row.received += rec;
     v.row.cancelled += i.cancelledQty;
-    if (!i.batch.confirmed) v.row.unsure += Math.max(0, active - rec);
+    v.row.unsure += pendingQty(i, rec);
     v.row.batches.add(i.batchId);
     map.set(key, v);
   }
@@ -594,4 +592,13 @@ export async function dueByOwner(t: Tx, where: { categoryId?: string | null } = 
     out.set(k, v);
   }
   return out;
+}
+
+/**
+ * 對單：還在「待確認」的件數（代購還沒回買不買得到）
+ * 已取消的團、實體店買的不用確認；已到貨的一定算買到
+ */
+export function pendingQty(i: { qty: number; cancelledQty: number; confirmedQty: number; batch: { status: string; supplierRef?: { kind: string | null } | null } }, received: number) {
+  if (i.batch.status === "CANCELLED" || isStoreKind(i.batch.supplierRef?.kind)) return 0;
+  return Math.max(0, i.qty - i.cancelledQty - Math.max(i.confirmedQty, received));
 }

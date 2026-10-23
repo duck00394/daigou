@@ -24,8 +24,8 @@ import { byText } from "@/lib/sort";
 import { formatTwd } from "@/lib/money";
 import { fmtDate, fmtDay, formatRateLabel } from "./util";
 import { batchStage, batchStageLabel, isStoreKind } from "@/lib/labels";
-import { batchPaySummary, batchesWithSeries, dueByOwner, purchasedSummary } from "@/server/services/batch-ops";
-import { ConfirmToggle } from "./confirm-toggle";
+import { batchPaySummary, batchesWithSeries, dueByOwner, pendingQty, purchasedSummary } from "@/server/services/batch-ops";
+import { batchReconcile } from "@/server/services/reconcile";
 import { OwnerDue } from "@/components/owner-due";
 
 export const metadata = { title: "庫存與採購" };
@@ -145,14 +145,14 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
     const ch = p.characters.length === 1 ? p.characters[0].character : null;
     return { p, s, v: val.get(p.id), series, ch };
   });
-  // 預購（還沒到的）分「一定有貨」（代購已確認的團）和「不一定有貨」（還沒確認的團）
+  // 預購（還沒到的）分「一定有貨」（對單買到的）和「不一定有貨」（對單還在待確認的）
   const unsureMap = new Map<string, number>();
   {
     const items = await prisma.purchaseBatchItem.findMany({
-      where: { productId: { in: ids }, batch: { status: { not: "CANCELLED" }, confirmed: false, ...(owner ? (owner === "joint" ? { ownership: "JOINT" as const } : { ownership: "PERSONAL" as const, orderedById: owner }) : {}) } },
-      select: { productId: true, qty: true, cancelledQty: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
+      where: { productId: { in: ids }, batch: { status: { not: "CANCELLED" }, ...(owner ? (owner === "joint" ? { ownership: "JOINT" as const } : { ownership: "PERSONAL" as const, orderedById: owner }) : {}) } },
+      select: { productId: true, qty: true, cancelledQty: true, confirmedQty: true, batch: { select: { status: true, supplierRef: { select: { kind: true } } } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
     });
-    for (const i of items) unsureMap.set(i.productId, (unsureMap.get(i.productId) ?? 0) + Math.max(0, i.qty - i.cancelledQty - i.movements.reduce((a, m) => a + m.onHandDelta, 0)));
+    for (const i of items) unsureMap.set(i.productId, (unsureMap.get(i.productId) ?? 0) + pendingQty(i, i.movements.reduce((a, m) => a + m.onHandDelta, 0)));
   }
   const unsureOf = (r: { p: { id: string }; s: { incoming: number } }) => Math.min(r.s.incoming, unsureMap.get(r.p.id) ?? 0);
   if (only === "stock") rows = rows.filter((r) => r.s.available > 0);
@@ -362,8 +362,9 @@ async function BatchesTab({ cat, open, owner, confirm, view }: { cat?: string; o
     counts[k] = (counts[k] ?? 0) + 1;
   }
   const ownerBatches = allBatches.filter((b) => ownerMatch(owner, b));
-  // 未確認＝還要等代購確認的（實體店買的、已取消的不用確認）
-  const pendingConfirm = (b: (typeof ownerBatches)[number]) => !b.confirmed && b.status !== "CANCELLED" && !isStoreKind(b.supplierRef?.kind);
+  // 待確認＝對單還沒對完的（實體店買的、已取消的不用對）
+  const recMap = new Map(ownerBatches.map((b) => [b.id, batchReconcile(b)]));
+  const pendingConfirm = (b: (typeof ownerBatches)[number]) => (recMap.get(b.id)?.pending ?? 0) > 0;
   const unconfirmed = ownerBatches.filter(pendingConfirm).length;
   const batches = confirm === "no" ? ownerBatches.filter(pendingConfirm) : confirm === "yes" ? ownerBatches.filter((b) => !pendingConfirm(b)) : [...ownerBatches.filter(pendingConfirm), ...ownerBatches.filter((b) => !pendingConfirm(b))];
   const splitAt = !confirm && unconfirmed > 0 && unconfirmed < batches.length ? unconfirmed : -1;
@@ -377,10 +378,10 @@ async function BatchesTab({ cat, open, owner, confirm, view }: { cat?: string; o
     <Section title="採購團" pad={false}>
       <div className="border-b border-line-2 px-4 py-2.5"><OwnerDue compact title="每個人還要付（現金流）" due={await tx((t) => dueByOwner(t, cat ? { categoryId: cat === "none" ? null : cat } : {}))} operators={operators.map((o) => ({ id: o.id, name: o.name }))} hrefFor={(k) => href(cat, "0", k === "none" ? "" : k)} /></div>
       <div className="grid grid-cols-2 gap-2 border-b border-line-2 px-4 py-3">
-        <NavSelect label="確認" current={href(cat, open, owner, { confirm, view })} options={[
-          { label: `全部（未確認在上）`, href: href(cat, open, owner, { view }) },
-          { label: `只看未確認（${unconfirmed}）`, href: href(cat, open, owner, { confirm: "no", view }) },
-          { label: "只看已確認", href: href(cat, open, owner, { confirm: "yes", view }) },
+        <NavSelect label="對單" current={href(cat, open, owner, { confirm, view })} options={[
+          { label: "全部", href: href(cat, open, owner, { view }) },
+          { label: `只看待確認（${unconfirmed}）`, href: href(cat, open, owner, { confirm: "no", view }) },
+          { label: "只看已對完", href: href(cat, open, owner, { confirm: "yes", view }) },
         ]} />
         <NavSelect label="進度" current={href(cat, mode === "cancelled" ? "cancelled" : open, owner, { confirm, view })} options={[
           { label: "進行中", href: href(cat, undefined, owner, { confirm, view }) },
@@ -398,6 +399,11 @@ async function BatchesTab({ cat, open, owner, confirm, view }: { cat?: string; o
           { label: "總計買了什麼", href: href(cat, open, owner, { confirm, view: "items" }) },
         ]} />
       </div>
+      {unconfirmed > 0 && (
+        <Link href="/reconcile" className="flex items-center justify-between border-b border-line-2 bg-warn-soft px-4 py-2.5 text-[14px] text-warn" data-testid="go-reconcile">
+          <span>還有 {unconfirmed} 團沒對完</span><span className="font-semibold">去對單</span>
+        </Link>
+      )}
       {view === "items" ? (
         <PurchasedSummary batchIds={batches.map((b) => b.id)} />
       ) : batches.length === 0 ? (
@@ -410,13 +416,18 @@ async function BatchesTab({ cat, open, owner, confirm, view }: { cat?: string; o
             const late = b.expectedAt && b.expectedAt < today && rec < ordered && b.status !== "CANCELLED";
             return (
               <Fragment key={b.id}>
-              {!confirm && unconfirmed > 0 && bi === 0 && <li className="text-[13px] font-semibold text-warn md:col-span-2 xl:col-span-3" data-testid="group-unconfirmed">未確認（{unconfirmed}）</li>}
-              {bi === splitAt && <li className="mt-2 text-[13px] font-semibold text-good md:col-span-2 xl:col-span-3" data-testid="group-confirmed">已確認（{batches.length - unconfirmed}）</li>}
+              {!confirm && unconfirmed > 0 && bi === 0 && <li className="text-[13px] font-semibold text-warn md:col-span-2 xl:col-span-3" data-testid="group-unconfirmed">待確認（{unconfirmed}）</li>}
+              {bi === splitAt && <li className="mt-2 text-[13px] font-semibold text-good md:col-span-2 xl:col-span-3" data-testid="group-confirmed">已對完（{batches.length - unconfirmed}）</li>}
               <li>
                 <Link href={`/inventory/batches/${b.id}`} className={`block h-full rounded-xl border border-line bg-white p-3 hover:border-ai ${ownerTone(b.ownership === "JOINT" ? "joint" : b.orderedById, ids).stripe}`} data-testid="batch-card">
                   <div className="flex items-start justify-between gap-2">
                     <span className="font-semibold">{b.name}</span>
-                    {b.status !== "CANCELLED" && !isStoreKind(b.supplierRef?.kind) && <ConfirmToggle batchId={b.id} confirmed={b.confirmed} name={b.name} />}
+                    {b.status !== "CANCELLED" && !isStoreKind(b.supplierRef?.kind) && (() => {
+                      const r = recMap.get(b.id)!;
+                      return r.pending > 0
+                        ? <span className="shrink-0 rounded-full bg-warn-soft px-2.5 py-1 text-[12px] whitespace-nowrap text-warn" data-testid="reconcile-badge">待確認 {r.pending}</span>
+                        : <span className="shrink-0 rounded-full bg-good-soft px-2.5 py-1 text-[12px] whitespace-nowrap text-good" data-testid="reconcile-badge">已對完</span>;
+                    })()}
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1">
                     <OwnerBadge k={b.ownership === "JOINT" ? "joint" : b.orderedById} name={b.ownership === "JOINT" ? "合資" : (b.orderedBy?.name ?? "未指定")} ids={ids} />

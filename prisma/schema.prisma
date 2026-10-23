@@ -821,6 +821,7 @@ model PurchaseBatchItem {
   weightGrams    Int? // 本筆總重（依重量分攤時使用）
   cancelledQty   Int                 @default(0)
   cancelReason   String? // 最近一次砍單原因（每次砍單的完整紀錄在稽核紀錄）
+  confirmedQty   Int                 @default(0) // 對單：代購確認買到幾件（其餘沒砍的＝待確認）
   dedupeKey      String?             @unique // 批次新增的列識別碼，重試時不重複建立
   notes          String?
   createdAt      DateTime            @default(now())

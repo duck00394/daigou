@@ -12,6 +12,7 @@ export const NAV: { href: string; label: string; group: string; hint?: string }[
   { href: "/rush", label: "搶購提醒", group: "常用", hint: "什麼時候開搶，開始前通知手機" },
   { href: "/categories", label: "活動總表", group: "常用", hint: "每個活動花多少、誰還沒付" },
   { href: "/inventory?tab=batches", label: "採購團・收貨", group: "常用", hint: "東西到了沒、登記收到" },
+  { href: "/reconcile", label: "對單", group: "常用", hint: "跟代購確認買到多少、砍了哪些" },
   { href: "/inventory?tab=stock", label: "庫存・賣出・自留", group: "常用", hint: "手上有什麼、成本多少" },
   { href: "/sales", label: "賺多少", group: "常用", hint: "賣出的收入、成本、毛利" },
   { href: "/paste", label: "貼上加單", group: "接單" },

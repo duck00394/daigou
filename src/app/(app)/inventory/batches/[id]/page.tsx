@@ -128,7 +128,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         title={b.name}
         back={{ href: "/inventory?tab=batches", label: "採購團" }}
         sub={<span className="flex flex-wrap items-center gap-2"><OwnerBadge k={b.ownership === "JOINT" ? "joint" : b.orderedById} name={b.ownership === "JOINT" ? "合資" : opName(b.orderedById)} ids={ops.map((o) => o.id)} />{isStoreKind(b.supplierRef?.kind) ? <Badge tone="info">實體店購買</Badge> : <StatusBadge map={batchStageLabel} value={batchStage(b)} />}{batchSeries.map((x) => <a key={x.id} href={`/categories/${x.id}`} className="text-ai hover:underline">{x.name}</a>)}{supplierName && supplierName !== b.name && <span>{isStoreKind(b.supplierRef?.kind) ? "店家" : "代購"}：{supplierName}</span>}<span className="text-[12px] text-mute">{b.code}</span></span>}
-        actions={<><LinkButton href={`/purchase${b.categoryId ? `?categoryId=${b.categoryId}` : ""}`}>同活動再開一團</LinkButton>{open && <CancelBatch id={b.id} />}</>}
+        actions={<>{open && <LinkButton href={`/reconcile/${b.id}`}>對單</LinkButton>}<LinkButton href={`/purchase${b.categoryId ? `?categoryId=${b.categoryId}` : ""}`}>同活動再開一團</LinkButton>{open && <CancelBatch id={b.id} />}</>}
       />
       {!open && (
         <div className="rounded-xl border border-line bg-line-2 px-4 py-3 text-[14px] text-ink-2" role="status">

@@ -232,6 +232,7 @@ export async function updateBatchItem(
     data.cancelledQty = bi.cancelledQty + input.cancelQty;
   }
   await t.purchaseBatchItem.update({ where: { id: itemId }, data });
+  await clampConfirmed(t, itemId);
   await reallocateBatch(t, bi.batchId);
   await refreshBatchStatusById(t, bi.batchId);
   await audit(t, actor, "batch.updateItem", "PurchaseBatch", bi.batchId, { itemId, before, after: input });
@@ -439,4 +440,11 @@ export async function purchaseDemand(t: Tx) {
     byProduct.set(it.productId, v);
   }
   return byProduct;
+}
+
+/** 對單：買到的件數不能超過現在的有效數量（改數量、砍單後跟著調） */
+export async function clampConfirmed(t: Tx, itemId: string) {
+  const i = await t.purchaseBatchItem.findUniqueOrThrow({ where: { id: itemId }, select: { qty: true, cancelledQty: true, confirmedQty: true } });
+  const max = Math.max(0, i.qty - i.cancelledQty);
+  if (i.confirmedQty > max) await t.purchaseBatchItem.update({ where: { id: itemId }, data: { confirmedQty: max } });
 }

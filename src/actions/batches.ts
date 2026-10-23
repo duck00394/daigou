@@ -69,10 +69,3 @@ export async function receiveAllAction(batchId: string, receivedById: string | n
   const { receiveAll } = await import("@/server/services/receiving");
   return run((a) => tx((t) => receiveAll(t, a, v.batchId, { receivedById: v.receivedById, dedupeKey: `all:${v.dedupeKey}` })));
 }
-export async function setBatchConfirmedAction(batchId: string, confirmed: boolean) {
-  return run(async (a) => {
-    const { setBatchConfirmed } = await import("@/server/services/batch-ops");
-    await tx((t) => setBatchConfirmed(t, a, batchId, !!confirmed));
-    return { confirmed: !!confirmed };
-  });
-}

@@ -17,51 +17,68 @@ async function seedUnconfirmed(tag: string) {
   }
 }
 
-test("採購團：外面直接切換已確認；總計買了什麼；庫存分一定／不一定有貨", async ({ page }) => {
+test("對單：買到幾件、砍掉剩下的；庫存分一定／不一定有貨；採購團排序", async ({ page }) => {
   const tag = Date.now().toString(36).slice(-5);
-  const { product } = await seedUnconfirmed(tag);
+  const { product, batch } = await seedUnconfirmed(tag);
   await login(page);
   await page.goto("/inventory?tab=batches&confirm=no");
   const card = page.getByTestId("batch-card").filter({ hasText: `確認測試團 ${tag}` });
+  await expect(card.getByTestId("reconcile-badge")).toHaveText("待確認 4");
   await expect(card.getByTestId("batch-paid")).toContainText("已付 0%");
-  await expect(card.getByText("到貨 0／4")).toBeVisible();
+  await expect(page.getByTestId("reconcile-badge").filter({ hasText: "已對完" })).toHaveCount(0);
 
-  // 總計買了什麼：還沒確認的團 → 不一定有貨
+  // 總計買了什麼：還沒對的 → 不一定
   await page.getByLabel("怎麼看").selectOption({ label: "總計買了什麼" });
   await expect(page).toHaveURL(/view=items/);
-  const sr = page.locator(`[data-testid="summary-row"][data-name="${product.name}"]`);
-  await expect(sr.locator('[data-k="unsure"]')).toHaveText("4");
+  await expect(page.locator(`[data-testid="summary-row"][data-name="${product.name}"] [data-k="unsure"]`)).toHaveText("4");
 
-  // 庫存：只看「預購・不一定有貨」
+  // 庫存：不一定 4
   await page.goto(`/inventory?tab=stock&only=unsure&q=${encodeURIComponent(product.name)}`);
   const row = page.locator(`[data-testid="stock-row"][data-name="${product.name}"]`);
   await expect(row.locator('[data-k="unsure"]')).toHaveText("4");
   await expect(row.locator('[data-k="sure"]')).toHaveText("–");
 
-  // 「全部」時未確認的排在最上面
+  // 「全部」時待確認排上面
   await page.goto("/inventory?tab=batches&open=0");
-  await expect(page.getByTestId("group-unconfirmed")).toBeVisible();
-  await expect(page.getByTestId("batch-card").first().getByTestId("confirm-toggle")).toHaveText("未確認");
-  // 下拉選「只看未確認」
-  await page.getByLabel("確認", { exact: true }).selectOption({ index: 1 });
-  await expect(page).toHaveURL(/confirm=no/);
-  await expect(page.getByTestId("confirm-toggle").filter({ hasText: "已確認" })).toHaveCount(0);
+  await expect(page.getByTestId("batch-card").first().getByTestId("reconcile-badge")).toContainText("待確認");
 
-  // 在列表直接按一下就變已確認，不用點進去
-  await page.goto("/inventory?tab=batches");
-  const tg = page.getByTestId("batch-card").filter({ hasText: `確認測試團 ${tag}` }).getByTestId("confirm-toggle");
-  await expect(tg).toHaveText("未確認");
-  await tg.click();
-  await expect(tg).toHaveText("✓ 已確認");
-  await expect(page).toHaveURL(/tab=batches/); // 沒有跳進那一團
-  await page.reload();
-  await expect(page.getByTestId("batch-card").filter({ hasText: `確認測試團 ${tag}` }).getByTestId("confirm-toggle")).toHaveText("✓ 已確認");
+  // 對單：買到 2、剩下 2 砍掉
+  await page.getByTestId("go-reconcile").click();
+  await expect(page).toHaveURL(/\/reconcile$/);
+  await page.getByTestId("reconcile-row").filter({ hasText: `確認測試團 ${tag}` }).click();
+  await expect(page).toHaveURL(new RegExp(`/reconcile/${batch.id}`));
+  const it = page.locator(`[data-testid="reconcile-item"][data-name="${product.name}"]`);
+  await expect(it.getByTestId("reconcile-status")).toHaveText("待確認 4");
+  await it.getByRole("button", { name: /多一件/ }).click();
+  await it.getByRole("button", { name: /多一件/ }).click();
+  await expect(it.getByTestId("reconcile-status")).toHaveText("買到 2・待確認 2");
+  await it.getByRole("button", { name: /砍$/ }).click();
+  await expect(it.getByTestId("reconcile-status")).toHaveText("買到 2・砍 2");
+  await page.getByLabel("砍單原因").selectOption("AGENT_CANCEL");
+  await expect(page.getByTestId("reconcile-sum")).toHaveText("這團：買到 2・砍 2・還要等 0");
+  await page.getByRole("button", { name: /^儲存/ }).click();
+  await toast(page, /已儲存：買到 2・砍 2，這團對完了/);
+  await expect(page).not.toHaveURL(new RegExp(`/reconcile/${batch.id}`));
 
-  // 確認後：庫存變成「一定有貨」
-  await page.goto(`/inventory?tab=stock&only=unsure&q=${encodeURIComponent(product.name)}`);
-  await expect(row).toHaveCount(0);
+  // 採購團卡片：已對完；庫存：一定有貨 2
+  await page.goto("/inventory?tab=batches&confirm=yes");
+  await expect(page.getByTestId("batch-card").filter({ hasText: `確認測試團 ${tag}` }).getByTestId("reconcile-badge")).toHaveText("已對完");
   await page.goto(`/inventory?tab=stock&only=sure&q=${encodeURIComponent(product.name)}`);
-  await expect(row.locator('[data-k="sure"]')).toHaveText("4");
+  await expect(row.locator('[data-k="sure"]')).toHaveText("2");
+  await expect(row.locator('[data-k="unsure"]')).toHaveText("–");
+});
+
+test("對單：這團全部買到，一鍵完成", async ({ page }) => {
+  const tag = Date.now().toString(36).slice(-5) + "b";
+  const { batch } = await seedUnconfirmed(tag);
+  await login(page);
+  await page.goto(`/reconcile/${batch.id}`);
+  await page.getByRole("button", { name: "這團全部買到" }).click();
+  await expect(page.getByTestId("reconcile-sum")).toHaveText("這團：買到 4・砍 0・還要等 0");
+  await page.getByRole("button", { name: /^儲存/ }).click();
+  await toast(page, /這團對完了/);
+  await page.goto("/reconcile");
+  await expect(page.getByTestId("reconcile-row").filter({ hasText: `確認測試團 ${tag}` })).toHaveCount(0);
 });
 
 test("新增品項時只知道總額：填商品總額，每件自動平均", async ({ page }) => {
