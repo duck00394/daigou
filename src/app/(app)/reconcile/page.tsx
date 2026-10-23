@@ -1,4 +1,5 @@
 // 對單：一團一團跟代購確認買到多少、砍了哪些、哪些還沒回
+import { getView } from "@/server/view";
 import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
@@ -12,10 +13,11 @@ const day = (d: Date | null) => (d ? `${d.getMonth() + 1}/${d.getDate()}` : "");
 export default async function ReconcilePage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   await requireUser();
   const sp = await searchParams;
+  const vk = (await getView()).key;
   const supplier = sp.supplier ?? "";
   const cat = sp.cat ?? "";
-  const [data, allSeries] = await Promise.all([tx((t) => reconcileList(t, { supplier, cat })), seriesOptions(prisma)]);
-  const full = cat || supplier ? await tx((t) => reconcileList(t)) : data;
+  const [data, allSeries] = await Promise.all([tx((t) => reconcileList(t, { supplier, cat, view: vk })), seriesOptions(prisma)]);
+  const full = cat || supplier ? await tx((t) => reconcileList(t, { view: vk })) : data;
   const href = (o: { supplier?: string; cat?: string }) => {
     const u = new URLSearchParams();
     const v = { supplier, cat, ...o };

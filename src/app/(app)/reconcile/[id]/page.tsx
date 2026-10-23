@@ -1,3 +1,4 @@
+import { getView } from "@/server/view";
 import { notFound } from "next/navigation";
 import { tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
@@ -9,9 +10,10 @@ export default async function ReconcileBatch({ params, searchParams }: { params:
   await requireUser();
   const { id } = await params;
   const sp = await searchParams;
+  const vk = (await getView()).key;
   const sheet = await tx((t) => reconcileSheet(t, id)).catch(() => null);
   if (!sheet) notFound();
-  const list = await tx((t) => reconcileList(t, { supplier: sp.supplier, cat: sp.cat }));
+  const list = await tx((t) => reconcileList(t, { supplier: sp.supplier, cat: sp.cat, view: vk }));
   const idx = list.todo.findIndex((r) => r.id === id);
   const others = list.todo.filter((r) => r.id !== id);
   const next = idx >= 0 ? (list.todo[idx + 1] ?? others[0]) : others[0];

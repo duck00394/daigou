@@ -38,18 +38,19 @@ export function batchReconcile(b: BatchLike & { items: ItemLike[] }) {
 const needsCheck = (b: BatchLike) => b.status !== "CANCELLED" && !isStoreKind(b.supplierRef?.kind);
 
 /** 對單清單：還沒對完的團在上面；已對完只列還沒全部到貨的 */
-export async function reconcileList(t: Tx, filter: { supplier?: string; cat?: string } = {}) {
+export async function reconcileList(t: Tx, filter: { supplier?: string; cat?: string; view?: string } = {}) {
   const batches = await t.purchaseBatch.findMany({
     where: { status: { not: "CANCELLED" } },
     orderBy: [{ orderedAt: "asc" }, { createdAt: "asc" }],
     select: {
-      id: true, name: true, status: true, orderedAt: true, supplier: true, categoryId: true,
+      id: true, name: true, status: true, orderedAt: true, supplier: true, categoryId: true, ownership: true, orderedById: true,
       supplierRef: { select: { id: true, name: true, kind: true } },
       category: { select: { id: true, name: true } },
       items: { select: { qty: true, cancelledQty: true, confirmedQty: true, categoryId: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } },
     },
   });
-  const rows = batches.filter(needsCheck).map((b) => ({
+  const v = filter.view ?? "all";
+  const rows = batches.filter((b) => needsCheck(b) && (v === "all" || b.ownership === "JOINT" || !b.orderedById || b.orderedById === v)).map((b) => ({
     id: b.id, name: b.name, orderedAt: b.orderedAt, status: b.status,
     supplierKey: b.supplierRef?.id ?? `n:${b.supplier ?? ""}`,
     supplierName: b.supplierRef?.name ?? b.supplier ?? "未指定代購",

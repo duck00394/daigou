@@ -3,11 +3,12 @@ import Link from "next/link";
 import { ownerTone } from "@/lib/owner-colors";
 import { formatTwd } from "@/lib/money";
 
-export function OwnerDue({ due, operators, hrefFor, title = "每個人還要付", compact }: { due: Map<string, { due: number; batches: number }>; operators: { id: string; name: string }[]; hrefFor?: (key: string) => string; title?: string; compact?: boolean }) {
+export function OwnerDue({ due, operators, hrefFor, title = "每個人還要付", compact, only }: { due: Map<string, { due: number; batches: number }>; operators: { id: string; name: string }[]; hrefFor?: (key: string) => string; title?: string; compact?: boolean; only?: string[] }) {
   const ids = operators.map((o) => o.id);
-  const keys = [...operators.map((o) => o.id), "joint", "none"].filter((k) => k !== "none" || due.has("none"));
+  // only：現在看某個人時，只列他自己和合資
+  const keys = [...operators.map((o) => o.id), "joint", "none"].filter((k) => (k !== "none" || due.has("none")) && (!only || only.includes(k)));
   const name = (k: string) => (k === "joint" ? "合資" : k === "none" ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
-  const total = [...due.values()].reduce((s, v) => s + v.due, 0);
+  const total = keys.reduce((s, k) => s + (due.get(k)?.due ?? 0), 0);
   if (compact)
     // 精簡版：一排小標籤，不佔版面
     return (

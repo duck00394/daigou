@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Fragment } from "react";
 import { StockFilters } from "./stock-filters";
 import { NavSelect } from "@/components/nav-select";
-import { OwnerFilter, ownerMatch } from "@/components/owner-filter";
+import { getView, inView, viewBatchWhere } from "@/server/view";
 import { OwnerBadge } from "@/components/owner-badge";
 import { ownerTone } from "@/lib/owner-colors";
 import { prisma, tx } from "@/server/db";
@@ -42,13 +42,15 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
   await requireUser();
   const sp = await searchParams;
   const tab = sp.tab ?? "stock";
+  const view = await getView();
+  const owner = view.key === "all" ? "" : view.key; // 現在看誰的（全部功能裡切換）
   return (
     <div className="space-y-4">
       <PageHeader title={tab === "batches" ? "採購團・收貨" : "庫存"} actions={<><LinkButton href="/purchase" primary small>＋ 新增採購</LinkButton><LinkButton href="/api/export/inventory" small>匯出</LinkButton></>} />
       <NavSelect label="頁面" hideLabel options={TABS.map(([k, l]) => ({ label: l, href: `/inventory?tab=${k}` }))} current={`/inventory?tab=${tab}`} />
-      {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} owner={sp.owner ?? ""} kind={sp.kind} v={sp.v} />}
+      {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} owner={owner} kind={sp.kind} v={sp.v} />}
       {tab === "demand" && <DemandTab />}
-      {tab === "batches" && <BatchesTab cat={sp.cat} open={sp.open} owner={sp.owner ?? ""} confirm={sp.confirm} view={sp.view} />}
+      {tab === "batches" && <BatchesTab cat={sp.cat} open={sp.open} owner={owner} confirm={sp.confirm} view={sp.view} />}
       {tab === "receive" && <ReceiveTab productId={sp.productId} />}
       {tab === "adjust" && (
         <Section title="盤點調整">
@@ -66,18 +68,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
     tx((t) => listOperators(t, { includeInactive: true })),
   ]);
   const applied = !!(v || cat || type || q || kind);
-  const ownerHref = (k: string) => {
-    const sp = new URLSearchParams({ tab: "stock" });
-    for (const [key, val] of Object.entries({ kind, cat, type, q, only, v: applied ? "1" : "" })) if (val) sp.set(key, val);
-    if (k) sp.set("owner", k);
-    return `/inventory?${sp.toString()}`;
-  };
-  const head = (
-    <>
-      <OwnerFilter operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} current={owner} href={ownerHref} />
-      <StockFilters series={seriesOpts} types={types} kind={kind} cat={cat} q={q ?? ""} type={type} only={only ?? ""} owner={owner} />
-    </>
-  );
+  const head = <StockFilters series={seriesOpts} types={types} kind={kind} cat={cat} q={q ?? ""} type={type} only={only ?? ""} />;
   if (!applied) {
     return (
       <div className="space-y-3">
@@ -124,12 +115,12 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
       .map(([k, x]) => ({ key: k, label: k === me ? `${ownerName(k)}（我）` : ownerName(k), free: x.free, kept: x.kept }))
       .sort((a, b) => (a.key === me ? -1 : b.key === me ? 1 : 0));
   const zero = { onHand: 0, reserved: 0, available: 0, incoming: 0, shipped: 0, kept: 0, activeOrdered: 0, openDemand: 0, unallocated: 0, shortage: 0 };
-  // 選了某個人：庫存、自留、未到貨都只算那個人的（依採購團歸屬）
-  const ownerKey = owner === "joint" ? JOINT : owner;
+  // 看某個人：庫存、自留、未到貨只算他的團＋合資的團
+  const ownerKeys = owner ? [owner, JOINT, NONE] : [];
   const ownerIncoming = new Map<string, number>();
   if (owner) {
     const items = await prisma.purchaseBatchItem.findMany({
-      where: { productId: { in: ids }, batch: { status: { not: "CANCELLED" }, ...(owner === "joint" ? { ownership: "JOINT" as const } : { ownership: "PERSONAL" as const, orderedById: owner }) } },
+      where: { productId: { in: ids }, batch: { status: { not: "CANCELLED" }, ...viewBatchWhere(owner) } },
       select: { productId: true, qty: true, cancelledQty: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
     });
     for (const i of items) ownerIncoming.set(i.productId, (ownerIncoming.get(i.productId) ?? 0) + Math.max(0, i.qty - i.cancelledQty - i.movements.reduce((a, m) => a + m.onHandDelta, 0)));
@@ -140,7 +131,9 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
     const cid = (catIds ? cands.find((c) => catIds.includes(c)) : null) ?? cands[0] ?? null;
     const series = cid ? (seriesById.get(cid) ?? null) : null;
     const all = inv.get(p.id) ?? zero;
-    const mine = owner ? byOwner.get(p.id)?.get(ownerKey) : null;
+    const mine = owner
+      ? ownerKeys.map((k) => byOwner.get(p.id)?.get(k)).reduce<{ onHand: number; free: number; reserved: number; kept: number }>((a, x) => ({ onHand: a.onHand + (x?.onHand ?? 0), free: a.free + (x?.free ?? 0), reserved: a.reserved + (x?.reserved ?? 0), kept: a.kept + (x?.kept ?? 0) }), { onHand: 0, free: 0, reserved: 0, kept: 0 })
+      : null;
     const s = owner ? { ...all, onHand: mine?.onHand ?? 0, available: mine?.free ?? 0, reserved: mine?.reserved ?? 0, kept: mine?.kept ?? 0, incoming: ownerIncoming.get(p.id) ?? 0 } : all;
     const ch = p.characters.length === 1 ? p.characters[0].character : null;
     return { p, s, v: val.get(p.id), series, ch };
@@ -149,7 +142,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
   const unsureMap = new Map<string, number>();
   {
     const items = await prisma.purchaseBatchItem.findMany({
-      where: { productId: { in: ids }, batch: { status: { not: "CANCELLED" }, ...(owner ? (owner === "joint" ? { ownership: "JOINT" as const } : { ownership: "PERSONAL" as const, orderedById: owner }) : {}) } },
+      where: { productId: { in: ids }, batch: { status: { not: "CANCELLED" }, ...viewBatchWhere(owner || "all") } },
       select: { productId: true, qty: true, cancelledQty: true, confirmedQty: true, batch: { select: { status: true, supplierRef: { select: { kind: true } } } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
     });
     for (const i of items) unsureMap.set(i.productId, (unsureMap.get(i.productId) ?? 0) + pendingQty(i, i.movements.reduce((a, m) => a + m.onHandDelta, 0)));
@@ -194,7 +187,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
   const all = sum(rows);
   const allHref = (() => {
     const sp = new URLSearchParams({ tab: "stock", v: "1" });
-    for (const [key, val] of Object.entries({ kind, cat, type, q, owner })) if (val) sp.set(key, val);
+    for (const [key, val] of Object.entries({ kind, cat, type, q })) if (val) sp.set(key, val);
     if (only !== "all") sp.set("only", "all");
     return `/inventory?${sp.toString()}`;
   })();
@@ -356,12 +349,7 @@ async function BatchesTab({ cat, open, owner, confirm, view }: { cat?: string; o
     orderBy: { createdAt: "desc" },
     include: { supplierRef: true, orderedBy: { select: { name: true } }, category: { select: { id: true, name: true } }, items: { include: { movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } } },
   });
-  const counts: Record<string, number> = { "": allBatches.length };
-  for (const b of allBatches) {
-    const k = b.ownership === "JOINT" ? "joint" : (b.orderedById ?? "none");
-    counts[k] = (counts[k] ?? 0) + 1;
-  }
-  const ownerBatches = allBatches.filter((b) => ownerMatch(owner, b));
+  const ownerBatches = allBatches.filter((b) => inView(owner || "all", b));
   // 待確認＝對單還沒對完的（實體店買的、已取消的不用對）
   const recMap = new Map(ownerBatches.map((b) => [b.id, batchReconcile(b)]));
   const pendingConfirm = (b: (typeof ownerBatches)[number]) => (recMap.get(b.id)?.pending ?? 0) > 0;
@@ -369,14 +357,14 @@ async function BatchesTab({ cat, open, owner, confirm, view }: { cat?: string; o
   const batches = confirm === "no" ? ownerBatches.filter(pendingConfirm) : confirm === "yes" ? ownerBatches.filter((b) => !pendingConfirm(b)) : [...ownerBatches.filter(pendingConfirm), ...ownerBatches.filter((b) => !pendingConfirm(b))];
   const splitAt = !confirm && unconfirmed > 0 && unconfirmed < batches.length ? unconfirmed : -1;
   const cats = await prisma.category.findMany({ where: { batches: { some: {} } }, orderBy: [{ active: "desc" }, { sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } });
-  const href = (c?: string, o?: string, w: string = owner, x: { confirm?: string; view?: string } = { confirm, view }) =>
-    `/inventory?tab=batches${c ? `&cat=${c}` : ""}${o === "0" || o === "cancelled" ? `&open=${o}` : ""}${w ? `&owner=${w}` : ""}${x.confirm ? `&confirm=${x.confirm}` : ""}${x.view ? `&view=${x.view}` : ""}`;
+  const href = (c?: string, o?: string, _w?: string, x: { confirm?: string; view?: string } = { confirm, view }) =>
+    `/inventory?tab=batches${c ? `&cat=${c}` : ""}${o === "0" || o === "cancelled" ? `&open=${o}` : ""}${x.confirm ? `&confirm=${x.confirm}` : ""}${x.view ? `&view=${x.view}` : ""}`;
   const cancelledCount = await prisma.purchaseBatch.count({ where: { status: "CANCELLED", ...(cat ? (cat === "none" ? { categoryId: null } : batchesWithSeries(cat)) : {}) } });
   const today = new Date();
   const pay = await tx((t) => batchPaySummary(t, batches.map((b) => b.id)));
   return (
     <Section title="採購團" pad={false}>
-      <div className="border-b border-line-2 px-4 py-2.5"><OwnerDue compact title="每個人還要付（現金流）" due={await tx((t) => dueByOwner(t, cat ? { categoryId: cat === "none" ? null : cat } : {}))} operators={operators.map((o) => ({ id: o.id, name: o.name }))} hrefFor={(k) => href(cat, "0", k === "none" ? "" : k)} /></div>
+      <div className="border-b border-line-2 px-4 py-2.5"><OwnerDue compact title="每個人還要付（現金流）" due={await tx((t) => dueByOwner(t, cat ? { categoryId: cat === "none" ? null : cat } : {}))} operators={operators.map((o) => ({ id: o.id, name: o.name }))} only={owner ? [owner, "joint", "none"] : undefined} /></div>
       <div className="grid grid-cols-2 gap-2 border-b border-line-2 px-4 py-3">
         <NavSelect label="對單" current={href(cat, open, owner, { confirm, view })} options={[
           { label: "全部", href: href(cat, open, owner, { view }) },
@@ -393,7 +381,6 @@ async function BatchesTab({ cat, open, owner, confirm, view }: { cat?: string; o
           ...cats.map((c) => ({ label: c.name, href: href(c.id, open, owner, { confirm, view }) })),
           { label: "未指定系列", href: href("none", open, owner, { confirm, view }) },
         ]} />
-        <OwnerFilter operators={operators.map((o) => ({ id: o.id, name: o.name }))} current={owner} counts={counts} href={(k) => href(cat, open, k)} />
         <NavSelect className="col-span-2" label="怎麼看" current={href(cat, open, owner, { confirm, view })} options={[
           { label: "一團一團看", href: href(cat, open, owner, { confirm }) },
           { label: "總計買了什麼", href: href(cat, open, owner, { confirm, view: "items" }) },

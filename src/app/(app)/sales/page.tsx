@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { listQuickSales } from "@/server/services/quick-sale";
-import { OwnerFilter } from "@/components/owner-filter";
+import { getView } from "@/server/view";
 import { OwnerBadge } from "@/components/owner-badge";
 import { ownerTone } from "@/lib/owner-colors";
 import { listOperators } from "@/server/services/operators";
@@ -33,16 +33,18 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
     tx((t) => listOperators(t, { includeInactive: true })),
   ]);
   const who = (k: string) => (k === JOINT ? "合資（還沒登記付款）" : k === NONE ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
-  const owner = sp.owner ?? "";
+  const view = await getView();
+  const owner = view.key === "all" ? "" : view.key; // 現在看誰的：他自己的＋合資的（錢算他那一份）
+  const keys = owner ? [owner, JOINT, NONE] : [];
   const ids = operators.map((o) => o.id);
-  const ownerEntries = Object.entries(data.byOwner).filter(([k, v]) => (!owner || k === owner) && (v.revenue !== 0 || (k !== JOINT && v.qty !== 0)));
-  const rows = owner ? data.rows.filter((r) => r.owners.some((x) => x.key === owner && x.qty > 0)) : data.rows;
-  const mine = owner ? data.byOwner[owner] : null;
+  const ownerEntries = Object.entries(data.byOwner).filter(([k, v]) => (!owner || keys.includes(k)) && (v.revenue !== 0 || (k !== JOINT && v.qty !== 0)));
+  const rows = owner ? data.rows.filter((r) => r.owners.some((x) => keys.includes(x.key) && x.qty > 0)) : data.rows;
+  const mine = owner ? (data.byOwner[owner] ?? { qty: 0, revenue: 0, cost: 0 }) : null;
   const total = mine ? { count: rows.filter((r) => !r.voided).length, qty: mine.qty, revenue: mine.revenue, cost: mine.cost, profit: mine.revenue - mine.cost, tentative: data.total.tentative } : data.total;
   const chip = (on: boolean) => `shrink-0 rounded-full border px-3 py-1.5 text-sm ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
   const href = (o: Record<string, string | undefined>) => {
     const u = new URLSearchParams();
-    const v = { q: sp.q, ym: sp.ym, voided: sp.voided, owner: sp.owner, ...o };
+    const v = { q: sp.q, ym: sp.ym, voided: sp.voided, ...o };
     for (const [k, x] of Object.entries(v)) if (x) u.set(k, x);
     return `/sales${u.size ? `?${u}` : ""}`;
   };
@@ -50,7 +52,6 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
     <div className="space-y-4">
       <datalist id="buyer-names">{buyers.map((b) => <option key={b.name} value={b.name} />)}</datalist>
       <PageHeader title="賺多少" actions={<><LinkButton href="/api/export/sales">匯出</LinkButton><SellButton label="＋ 出售現貨" primary autoOpen={sp.new === "1"} /></>} />
-      <OwnerFilter operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} current={owner} href={(k) => href({ owner: k || undefined })} />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat label="賣了幾筆／幾件" value={`${total.count} / ${total.qty}`} />
         <Stat label="收入" value={<Twd v={total.revenue} />} />

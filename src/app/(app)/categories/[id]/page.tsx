@@ -1,3 +1,4 @@
+import { getView } from "@/server/view";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma, tx } from "@/server/db";
@@ -29,6 +30,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
   const plan = await renamePlan(prisma, id);
   const dups = await tx((t) => duplicateGroups(t, id));
   const customTypes = await tx((t) => listCustomCategoryTypes(t));
+  const vk = (await getView()).key; // 現在看誰的
   return (
     <div className="space-y-4">
       <PageHeader
@@ -56,7 +58,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
       )}
       <RenameNames categoryId={c.id} plan={plan} />
       <MergeDuplicates groups={dups.map((g) => ({ key: g.key, name: g.name, keepId: g.keepId, products: g.products.map((p) => ({ id: p.id, code: p.code, name: p.name, bought: p.bought, onHand: p.onHand, incoming: p.incoming })) }))} />
-      <CategoryBatches categoryId={c.id} view={sp.view} owner={sp.owner ?? ""} />
+      <CategoryBatches categoryId={c.id} view={sp.view} owner={vk === "all" ? "" : vk} />
       {(d.total.activeQty > 0 || d.total.cancelledQty > 0) && (
         <div>
           <h2 className="mb-2 text-[15px] font-semibold">買家預購統計</h2>

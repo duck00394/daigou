@@ -1,3 +1,5 @@
+import { getView, inView, viewBatchWhere } from "@/server/view";
+import { stockByOwner, JOINT, NONE } from "@/server/services/ownership";
 import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
@@ -41,19 +43,42 @@ export default async function Home() {
     tx((t) => listQuickSales(t, { from: monthStart })),
     prisma.order.aggregate({ where: { source: "QUICK", confirmation: "CONFIRMED", balanceCache: { gt: 0 } }, _sum: { balanceCache: true }, _count: true }),
   ]);
+  // 現在看誰的：他自己的＋合資的（全部功能裡切換）
+  const view = await getView();
+  const vk = view.key;
   const [overdue, openBatches] = await Promise.all([
-    prisma.purchaseBatch.count({ where: { status: { in: ["ORDERED", "PARTIAL_RECEIVED"] }, expectedAt: { lt: new Date() } } }),
-    prisma.purchaseBatch.count({ where: { status: { in: ["ORDERED", "PARTIAL_RECEIVED"] } } }),
+    prisma.purchaseBatch.count({ where: { status: { in: ["ORDERED", "PARTIAL_RECEIVED"] }, expectedAt: { lt: new Date() }, ...viewBatchWhere(vk) } }),
+    prisma.purchaseBatch.count({ where: { status: { in: ["ORDERED", "PARTIAL_RECEIVED"] }, ...viewBatchWhere(vk) } }),
   ]);
-  const incoming = [...inv.values()].reduce((s, v) => s + v.incoming, 0);
+  let incoming = [...inv.values()].reduce((s, v) => s + v.incoming, 0);
+  let stockCost = { value: val.total.freeValue + val.total.keptValue, free: val.total.free, kept: val.total.kept };
+  let month = sales.total;
+  if (vk !== "all") {
+    const items = await prisma.purchaseBatchItem.findMany({ where: { batch: { status: { in: ["DRAFT", "ORDERED", "PARTIAL_RECEIVED"] }, ...viewBatchWhere(vk) } }, select: { qty: true, cancelledQty: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } });
+    incoming = items.reduce((s, i) => s + Math.max(0, i.qty - i.cancelledQty - i.movements.reduce((a, m) => a + m.onHandDelta, 0)), 0);
+    const by = await tx((t) => stockByOwner(t));
+    stockCost = { value: 0, free: 0, kept: 0 };
+    for (const [pid, per] of by) {
+      const avg = val.byProduct.get(pid)?.avgUnitCost ?? 0;
+      for (const k of [vk, JOINT, NONE]) {
+        const x = per.get(k);
+        if (!x) continue;
+        stockCost.free += x.free;
+        stockCost.kept += x.kept;
+        stockCost.value += Math.round(avg * (x.onHand + x.kept));
+      }
+    }
+    const m = sales.byOwner[vk] ?? { qty: 0, revenue: 0, cost: 0 };
+    month = { ...sales.total, qty: m.qty, revenue: m.revenue, cost: m.cost, profit: m.revenue - m.cost };
+  }
   // 客人預訂還沒給（賣給客人時沒現貨的部分）
   const preItems = await prisma.orderItem.findMany({ where: { order: { source: { not: "QUICK" }, confirmation: "CONFIRMED" } }, select: { qty: true, cancelledQtyCache: true, shippedQtyCache: true } });
   const waiting = preItems.reduce((s, i) => s + Math.max(0, i.qty - i.cancelledQtyCache - i.shippedQtyCache), 0);
   // 還要付代購：所有沒取消的團，總額 − 已付
   const live = await prisma.purchaseBatch.findMany({
     where: { status: { not: "CANCELLED" } },
-    select: { id: true, code: true, name: true, status: true, progress: true, ownership: true, orderedBy: { select: { name: true } } },
-  });
+    select: { id: true, code: true, name: true, status: true, progress: true, ownership: true, orderedById: true, orderedBy: { select: { name: true } } },
+  }).then((bs) => bs.filter((b) => inView(vk, b)));
   const pay = await tx((t) => batchPaySummary(t, live.map((b) => b.id)));
   const dueList = live
     .map((b) => ({ ...b, due: pay.get(b.id)?.dueTwd ?? 0 }))
@@ -121,14 +146,14 @@ export default async function Home() {
         )}
       </section>
 
-      <OwnerDue due={due} operators={ops.map((o) => ({ id: o.id, name: o.name }))} hrefFor={(k) => `/inventory?tab=batches&open=0${k === "none" ? "" : `&owner=${k}`}`} />
+      <OwnerDue due={due} operators={ops.map((o) => ({ id: o.id, name: o.name }))} only={vk === "all" ? undefined : [vk, "joint", "none"]} hrefFor={() => "/inventory?tab=batches&open=0"} />
 
       <div>
         <h2 className="mb-2 text-[15px] font-semibold">錢與庫存</h2>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           <Stat label="還要付代購" value={<span data-testid="home-due" className={dueTotal ? "text-bad" : ""}>{formatTwd(dueTotal)}</span>} note={dueTotal ? `${dueList.length} 團還沒付清` : "都付清了"} href="#due" tone={dueTotal ? "bad" : undefined} />
-          <Stat label="手上庫存成本" value={<Twd v={val.total.freeValue + val.total.keptValue} />} note={`可賣 ${val.total.free} 件・自留 ${val.total.kept} 件${val.total.tentative ? "（有價格還沒確定）" : ""}`} href="/inventory?tab=stock&v=1" />
-          <Stat label="本月賣出賺" value={<Twd v={sales.total.profit} />} note={`賣 ${sales.total.qty} 件・收入 ${sales.total.revenue.toLocaleString()} 元`} href="/sales" tone={sales.total.profit < 0 ? "bad" : undefined} />
+          <Stat label="手上庫存成本" value={<Twd v={stockCost.value} />} note={`可賣 ${stockCost.free} 件・自留 ${stockCost.kept} 件${val.total.tentative ? "（有價格還沒確定）" : ""}`} href="/inventory?tab=stock&v=1" />
+          <Stat label="本月賣出賺" value={<Twd v={month.profit} />} note={`賣 ${month.qty} 件・收入 ${month.revenue.toLocaleString()} 元`} href="/sales" tone={month.profit < 0 ? "bad" : undefined} />
           <Stat label="還沒到的貨" value={`${incoming} 件`} note={`${openBatches} 團還在路上`} href="/inventory?tab=batches" />
           {waiting > 0 && <Stat label="客人預訂還沒給" value={`${waiting} 件`} note="到貨了到「出貨」交給客人" href="/shipping" tone="warn" />}
           {(unpaidSales._sum.balanceCache ?? 0) > 0 && <Stat label="賣出還沒收到錢" value={<Twd v={unpaidSales._sum.balanceCache ?? 0} />} note={`${unpaidSales._count} 筆`} href="/sales" tone="warn" />}

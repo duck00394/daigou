@@ -20,6 +20,15 @@ async function newSupplier(page: Page, name: string) {
   await expect(page.getByRole("radiogroup", { name: "向哪個代購買" }).getByRole("radio", { name })).toHaveAttribute("aria-checked", "true");
 }
 
+/** 全部功能 → 現在看誰的 */
+async function switchView(page: Page, which: RegExp | number) {
+  await page.getByRole("button", { name: "全部功能" }).click();
+  const g = page.getByRole("radiogroup", { name: "現在看誰的" });
+  const r = typeof which === "number" ? g.getByRole("radio").nth(which) : g.getByRole("radio", { name: which });
+  await r.click();
+  await expect(page.getByRole("radiogroup", { name: "現在看誰的" })).toHaveCount(0);
+}
+
 test("手機：同一活動開三團（我的、對方的、合資），總表分人顯示", async ({ page }) => {
   const tag = Date.now().toString(36).slice(-4);
   const cat = `E2E ANA ${tag}`;
@@ -74,7 +83,8 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   await page.getByRole("button", { name: /或加到之前的團/ }).click();
   for (const n of [`YUANS ${tag}`, `QQ Shop ${tag}`, `頑皮貓 ${tag}`]) await expect(page.getByRole("radiogroup", { name: "哪一團" }).getByRole("radio", { name: new RegExp(n) })).toBeVisible();
 
-  // 活動總表：總額與誰買的
+  // 活動總表：總額與誰買的（切到「全部」看兩個人加起來）
+  await switchView(page, /全部/);
   await page.goto("/categories");
   const card = page.getByTestId(`cat-card-${cat}`);
   await expect(card).toContainText("NT$5,701"); // 647×3 + 660×2 + 610×4
@@ -95,15 +105,20 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   await page.goto("/");
   await expect(page.getByTestId("due-owner-joint")).toContainText("NT$");
   await page.screenshot({ path: "test-results/mobile_home_due.png", fullPage: false });
-  // 選經營者：只看合資的團，顏色標籤一眼看出是誰的
+  // 預設只看「我的」（加上合資的）；在全部功能切換看對方的，上方會提醒
+  await switchView(page, /（我）/);
   await page.goto("/inventory?tab=batches");
-  const who = page.getByLabel("誰的", { exact: true });
-  await who.selectOption((await who.locator("option", { hasText: "合資" }).getAttribute("value"))!);
-  await expect(page).toHaveURL(/owner=joint/);
+  await expect(page.getByTestId("view-banner")).toHaveCount(0);
+  await expect(page.getByTestId("batch-card").filter({ hasText: `YUANS ${tag}` })).toBeVisible();
   await expect(page.getByTestId("batch-card").filter({ hasText: `頑皮貓 ${tag}` })).toBeVisible();
+  await expect(page.getByTestId("batch-card").filter({ hasText: `QQ Shop ${tag}` })).toHaveCount(0);
+  await switchView(page, 1);
+  await expect(page.getByTestId("view-banner")).toBeVisible();
+  await expect(page.getByTestId("batch-card").filter({ hasText: `QQ Shop ${tag}` })).toBeVisible();
   await expect(page.getByTestId("batch-card").filter({ hasText: `YUANS ${tag}` })).toHaveCount(0);
-  await who.selectOption({ index: 0 });
-  await expect(page).not.toHaveURL(/owner=/);
+  await page.getByTestId("view-banner").getByRole("button", { name: "回到我的" }).click();
+  await expect(page.getByTestId("view-banner")).toHaveCount(0);
+  await expect(page.getByTestId("batch-card").filter({ hasText: `YUANS ${tag}` })).toBeVisible();
   await page.screenshot({ path: "test-results/mobile_batches_owner.png", fullPage: false });
   await page.goto("/categories");
   await page.getByTestId(`cat-card-${cat}`).click();

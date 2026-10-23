@@ -98,3 +98,23 @@ export async function setMeAction(operatorId: string | null) {
     return null;
   }, "read");
 }
+
+/** 現在看誰的：me＝回到這台裝置的人；all＝全部；或某位經營者 */
+export async function setViewAction(key: string) {
+  return run(async () => {
+    const v = z.string().max(64).parse(key);
+    const { cookies } = await import("next/headers");
+    const { VIEW_COOKIE } = await import("@/server/view");
+    const jar = await cookies();
+    if (v === "me") {
+      jar.delete(VIEW_COOKIE);
+      return null;
+    }
+    if (v !== "all") {
+      const found = await tx((t) => t.operator.findUnique({ where: { id: v } }));
+      if (!found || !found.active) throw new Error("bad operator");
+    }
+    jar.set(VIEW_COOKIE, v, { httpOnly: true, sameSite: "lax", secure: process.env.INSECURE_COOKIE !== "1" && process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 24 * 365 });
+    return null;
+  });
+}

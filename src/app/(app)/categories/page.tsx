@@ -1,3 +1,4 @@
+import { getView } from "@/server/view";
 import Link from "next/link";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
@@ -23,10 +24,11 @@ export default async function Categories() {
   );
   const who = (k: string) => (k === JOINT ? "合資（未分）" : k === NONE ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
   const withBuys = ov.categories.filter((c) => buys.has(c.id));
+  const vk = (await getView()).key; // 現在看誰的
   return (
     <div className="space-y-4">
       <PageHeader title="活動與分類" sub="點一個活動，看總額、每一團的總額、誰買的和庫存。" actions={<><LinkButton href="/purchase">新增採購</LinkButton><CategoryEditButton label="新增活動" customTypes={customTypes} /></>} />
-      <OwnerDue due={due} operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} hrefFor={(k) => `/inventory?tab=batches&open=0${k === "none" ? "" : `&owner=${k}`}`} />
+      <OwnerDue due={due} operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} only={vk === "all" ? undefined : [vk, "joint", "none"]} hrefFor={() => "/inventory?tab=batches&open=0"} />
       {withBuys.length > 0 && (
         <Section title="活動總表（我們買了多少）" pad={false}>
           <ul className="grid gap-2 p-3 md:grid-cols-2 xl:grid-cols-3">

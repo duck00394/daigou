@@ -7,7 +7,6 @@ import { batchStageLabel, fmtDay, type BatchStage } from "@/lib/labels";
 import { listOperators } from "@/server/services/operators";
 import { JOINT, NONE } from "@/server/services/ownership";
 import { formatJpy, formatTwd } from "@/lib/money";
-import { OwnerFilter } from "@/components/owner-filter";
 import { OwnerBadge } from "@/components/owner-badge";
 import { ownerTone } from "@/lib/owner-colors";
 
@@ -42,16 +41,15 @@ export async function CategoryBatches({ categoryId, view, owner = "" }: { catego
       </Section>
     );
   const ids = operators.map((x) => x.id);
-  const shownBatches = o.batches.filter((b) => b.status !== "CANCELLED" && (!owner || b.ownerKey === owner));
+  const mineKey = (k: string) => !owner || k === owner || k === JOINT || k === NONE; // 看某個人：他的＋合資的
+  const shownBatches = o.batches.filter((b) => b.status !== "CANCELLED" && mineKey(b.ownerKey));
   const cancelledN = o.batches.filter((b) => b.status === "CANCELLED").length;
-  const inOwner = (b: { ownerKey: string }) => !owner || b.ownerKey === owner;
+  const inOwner = (b: { ownerKey: string }) => mineKey(b.ownerKey);
   const cols = o.batches.filter((b) => b.status !== "CANCELLED" && inOwner(b));
   const fullView = view !== "unit"; // 預設看含運費的成本
   const q = (p: { owner?: string; view?: string }) => {
     const sp = new URLSearchParams();
-    const ow = p.owner ?? owner;
     const vw = p.view ?? (view === "unit" ? "unit" : "");
-    if (ow) sp.set("owner", ow);
     if (vw) sp.set("view", vw);
     const t = sp.toString();
     return t ? `?${t}` : "?";
@@ -73,7 +71,6 @@ export async function CategoryBatches({ categoryId, view, owner = "" }: { catego
   return (
     <>
       <Section title="總覽">
-        <div className="mb-3"><OwnerFilter operators={operators.map((x) => ({ id: x.id, name: x.name }))} current={owner} href={(k) => q({ owner: k })} /></div>
         <div className="grid grid-cols-3 gap-2">
           <div>
             <div className="text-[12px] text-mute">總額</div>
@@ -91,7 +88,7 @@ export async function CategoryBatches({ categoryId, view, owner = "" }: { catego
         <p className="mt-1 text-[12px] text-mute">{o.total.batches} 團・{o.total.qty} 件・已到 {o.total.received}・還沒到 {o.total.outstanding}{o.total.estimated ? "・金額有價格還沒確定" : ""}</p>
 
         <div className="mt-3 space-y-3">
-          {groups.filter((g) => !owner || g.key === owner).map((g) => (
+          {groups.filter((g) => mineKey(g.key)).map((g) => (
             <div key={g.key} className={`rounded-xl border border-line-2 bg-[#fafbfc] p-3 ${ownerTone(g.key, ids).stripe}`} data-testid={`owner-${g.key}`}>
               <div className="flex items-baseline justify-between gap-2">
                 <h3 className="text-[16px] font-semibold"><OwnerBadge k={g.key} name={g.label} ids={ids} /></h3>

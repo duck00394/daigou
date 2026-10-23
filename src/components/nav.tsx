@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ViewChip, ViewSwitch, type ViewInfo } from "./view-switch";
 
 // 常用：收藏轉售每天會用到的；其他：接單（LINE／訂單）與資料設定
 export const NAV: { href: string; label: string; group: string; hint?: string }[] = [
@@ -56,7 +57,7 @@ function useTab() {
 
 const visible = (ordersOn: boolean) => NAV.filter((n) => ordersOn || n.group !== "接單");
 
-export function Sidebar({ ordersOn = true }: { ordersOn?: boolean }) {
+export function Sidebar({ ordersOn = true, view }: { ordersOn?: boolean; view?: ViewInfo }) {
   const path = usePathname();
   const tab = useTab();
   const nav = visible(ordersOn);
@@ -70,6 +71,7 @@ export function Sidebar({ ordersOn = true }: { ordersOn?: boolean }) {
       <form action="/search" method="get" role="search" className="mb-4 px-1">
         <input type="search" name="q" placeholder="🔍 搜尋角色、商品" aria-label="搜尋" className="w-full rounded-lg border border-line px-2.5 py-1.5 text-[14px]" />
       </form>
+      {view && <div className="px-1"><ViewSwitch v={view} /></div>}
       {groups.map((g) => (
         <div key={g} className="mb-4">
           <div className="mb-1 px-2 text-[12px] text-mute">{g}</div>
@@ -92,7 +94,7 @@ export function Sidebar({ ordersOn = true }: { ordersOn?: boolean }) {
   );
 }
 
-export function MobileBar({ ordersOn = true }: { ordersOn?: boolean }) {
+export function MobileBar({ ordersOn = true, view }: { ordersOn?: boolean; view?: ViewInfo }) {
   const path = usePathname();
   const tab = useTab();
   const nav = visible(ordersOn);
@@ -102,9 +104,12 @@ export function MobileBar({ ordersOn = true }: { ordersOn?: boolean }) {
   return (
     <>
       <header className="no-print sticky top-0 z-40 flex items-center justify-between border-b border-line bg-white/95 px-4 py-2.5 backdrop-blur md:hidden">
-        <Link href="/" className="round text-[16px] font-semibold">
-          代購帳房
-        </Link>
+        <span className="flex min-w-0 items-center gap-2">
+          <Link href="/" className="round text-[16px] font-semibold whitespace-nowrap">
+            代購帳房
+          </Link>
+          {view && view.me && <button type="button" onClick={() => setOpen(true)} aria-label={`現在看：${view.name}，按這裡切換`}><ViewChip v={view} /></button>}
+        </span>
         <span className="flex items-center gap-2">
           <Link href="/search" aria-label="搜尋" className="rounded-lg border border-line px-2.5 py-1 text-[14px]">🔍 搜尋</Link>
           <button type="button" onClick={() => setOpen(true)} className="rounded-lg border border-line px-3 py-1 text-[14px]" aria-expanded={open}>
@@ -121,6 +126,7 @@ export function MobileBar({ ordersOn = true }: { ordersOn?: boolean }) {
                 ✕
               </button>
             </div>
+            {view && <ViewSwitch v={view} onDone={() => setOpen(false)} />}
             {[...new Set(nav.map((n) => n.group))].map((g) => (
               <div key={g} className="mb-3">
                 <div className="mb-1 text-[12px] text-mute">{g}</div>

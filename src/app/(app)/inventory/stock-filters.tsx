@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SeriesPicker, type SeriesOpt } from "@/components/series-picker";
 
-export function StockFilters({ series, types, kind, cat, q, type, only, owner = "" }: { series: SeriesOpt[]; types: { id: string; name: string }[]; kind: string; cat: string; q: string; type: string; only: string; owner?: string }) {
+export function StockFilters({ series, types, kind, cat, q, type, only }: { series: SeriesOpt[]; types: { id: string; name: string }[]; kind: string; cat: string; q: string; type: string; only: string }) {
   const router = useRouter();
   const [f, setF] = useState({ kind: kind || (series.find((s) => s.id === cat)?.kindKey ?? ""), cat, type, q, only });
   const go = () => {
@@ -14,7 +14,6 @@ export function StockFilters({ series, types, kind, cat, q, type, only, owner = 
     if (f.type) sp.set("type", f.type);
     if (f.q.trim()) sp.set("q", f.q.trim());
     if (f.only) sp.set("only", f.only);
-    if (owner) sp.set("owner", owner);
     router.push(`/inventory?${sp.toString()}`);
   };
   return (
