@@ -27,7 +27,7 @@ export function DeleteBatchButton({ batchId, name }: { batchId: string; name: st
       variant="danger"
       label="刪除這團"
       title={`刪除「${name}」`}
-      message="這團已取消、沒付過錢，刪掉就不會再出現在任何地方，不能復原。"
+      message="這團已取消、錢都結清了，刪掉就不會再出現在任何地方（付款、退款紀錄一起刪），不能復原。"
       confirmLabel="刪除"
       onConfirm={() => run(() => deleteBatchAction(batchId), { success: "已刪除", refresh: false, onOk: () => router.push("/inventory?tab=batches&open=cancelled") })}
     />

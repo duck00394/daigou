@@ -126,7 +126,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
   const pay = (await tx((t) => batchPaySummary(t, [b.id]))).get(b.id) ?? { totalTwd: totalLanded, paidTwd: 0, dueTwd: totalLanded };
   const me = await getMe();
   const anyCut = b.items.some((i) => i.cancelledQty > 0);
-  const hasPayments = (await prisma.supplierPayment.count({ where: { batchId: b.id, status: { not: "VOIDED" } } })) > 0;
+  const hasPayments = pay.paidTwd > 0; // 付的錢還沒全部退回
   const refundOwed = !open ? pay.paidTwd : anyCut ? pay.paidTwd - pay.totalTwd : 0;
   return (
     <div className="space-y-4">
@@ -151,7 +151,11 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       {!open && (
         <div className="rounded-xl border border-line bg-line-2 px-4 py-3 text-[14px] text-ink-2" role="status">
           這團已取消，不會算進總額、還要付和庫存。{pay.paidTwd > 0 ? "之前付的錢要請代購退回，退了在上面按「記退款」。" : ""}
-          {!hasPayments && <span className="mt-2 flex items-center justify-between gap-2"><span className="text-[13px] text-mute">沒付過錢，不用留著的話可以刪掉。</span><DeleteBatchButton batchId={b.id} name={b.name} /></span>}
+          {!hasPayments ? (
+            <span className="mt-2 flex items-center justify-between gap-2"><span className="text-[13px] text-mute">錢都結清了，不用留著的話可以刪掉。</span><DeleteBatchButton batchId={b.id} name={b.name} /></span>
+          ) : (
+            <span className="mt-1 block text-[13px] text-mute">要刪除這團：代購退錢後按「記退款」；如果付款是記錯的，到下面「付款」作廢那一筆。錢結清後這裡會出現「刪除這團」。</span>
+          )}
         </div>
       )}
       <section className="rounded-xl border border-line bg-card p-4" aria-label="這團金額">

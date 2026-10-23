@@ -42,7 +42,11 @@ describe("撤回收貨、刪除取消的團", () => {
     const b = await tx((t) => createBatch(t, actor, { name: "付過團", supplier: "代購", items: [{ productId: s.p1.id, qty: 1, unitCost: 100, currency: "TWD" }] }));
     await tx((t) => addSupplierPayment(t, actor, { batchId: b.id, paidById: null, paidAt: new Date(), amount: 100, currency: "TWD" }));
     await tx((t) => cancelBatch(t, actor, b.id));
-    await expect(tx((t) => deleteBatch(t, actor, b.id))).rejects.toThrow("有付款紀錄");
+    await expect(tx((t) => deleteBatch(t, actor, b.id))).rejects.toThrow("沒退回");
+    const { recordRefund } = await import("@/server/services/batch-ops");
+    await tx((t) => recordRefund(t, actor, b.id, 100));
+    await tx((t) => deleteBatch(t, actor, b.id));
+    expect(await prisma.purchaseBatch.findUnique({ where: { id: b.id } })).toBeNull();
     expect(await checkIntegrity(prisma)).toEqual([]);
   });
 });
