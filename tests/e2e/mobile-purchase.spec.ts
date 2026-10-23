@@ -7,6 +7,7 @@ async function addRow(page: Page, character: string, price: string, qty: string)
   await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
   await page.getByRole("button", { name: `＋ ${character}` }).click();
   const r1 = page.getByRole("table", { name: "批次新增採購品項" }).getByRole("row").filter({ hasText: "第 1 列" });
+  await expect(r1.getByLabel("數量")).toHaveValue("1"); // 選了角色數量先帶 1
   await r1.getByLabel("單價").fill(price);
   await r1.getByLabel("數量").fill(qty);
   await page.getByRole("button", { name: "儲存 1 項" }).click();

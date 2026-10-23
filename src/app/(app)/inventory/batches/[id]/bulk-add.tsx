@@ -159,7 +159,8 @@ export function BulkAddGrid({
     const tid = opts.productTypeId !== undefined ? opts.productTypeId : typeId || null;
     const specs: Record<string, string | null> = {};
     items.forEach((i) => (specs[i.characterId] = i.spec ?? null));
-    const pending = items.map((i) => ({ ...blankRow(supplierCurrency), characterId: i.characterId, spec: i.spec ?? "", hint: "讀取參考價…", loading: true }));
+    // 選了角色，數量先帶 1（買多件再改）
+    const pending = items.map((i) => ({ ...blankRow(supplierCurrency), characterId: i.characterId, spec: i.spec ?? "", qty: "1", hint: "讀取參考價…", loading: true }));
     const placed = new Map<string, string>(); // characterId|spec → row key
     setRows((rs) => {
       const kept = replace ? [] : rs.filter((r) => !isBlank(r));
@@ -171,7 +172,7 @@ export function BulkAddGrid({
         existing.add(k);
         const orphan = out.findIndex((r) => !r.characterId && !r.newName.trim());
         if (orphan >= 0) {
-          out[orphan] = { ...out[orphan], characterId: n.characterId, spec: out[orphan].spec || n.spec, hint: n.hint, loading: !out[orphan].unitCost };
+          out[orphan] = { ...out[orphan], characterId: n.characterId, spec: out[orphan].spec || n.spec, qty: out[orphan].qty || "1", hint: n.hint, loading: !out[orphan].unitCost };
           placed.set(k, out[orphan].key);
         } else {
           out.push(n);
@@ -556,7 +557,7 @@ export function BulkAddGrid({
                   value={r.characterId}
                   onChange={async (e) => {
                     const v = e.target.value;
-                    update(r.key, { characterId: v, newName: v === "__new__" ? r.newName : "" });
+                    update(r.key, { characterId: v, newName: v === "__new__" ? r.newName : "", qty: r.qty || (v ? "1" : "") });
                     if (v && v !== "__new__" && !r.unitCost && seriesId) {
                       update(r.key, { characterId: v, newName: "", loading: true });
                       const d = await rowDefaultsAction({ seriesId, productTypeId: typeId || null, supplierId, categoryId: cat?.id ?? null, characterIds: [v], specs: { [v]: r.spec || null } });
