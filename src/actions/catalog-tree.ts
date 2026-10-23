@@ -44,3 +44,10 @@ export async function deleteCatalogItemAction(categoryId: string, typeId: string
 export async function deleteSeriesAction(categoryId: string) {
   return run((a) => tx((t) => ct.deleteSeries(t, a, z.string().parse(categoryId))));
 }
+const dir = z.enum(["up", "down", "top"]);
+export async function moveKindAction(kindKey: string, d: "up" | "down" | "top") {
+  return run((a) => tx((t) => ct.moveKind(t, a, z.string().max(80).parse(kindKey), dir.parse(d))).then(() => null));
+}
+export async function moveSeriesOrderAction(categoryId: string, d: "up" | "down" | "top") {
+  return run((a) => tx((t) => ct.moveSeriesOrder(t, a, z.string().max(64).parse(categoryId), dir.parse(d))).then(() => null));
+}

@@ -150,8 +150,7 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await toast(page, "設成已過期");
   await page.goto("/sell");
   await expect(page.getByLabel("系列", { exact: true }).locator("option", { hasText: series })).toHaveCount(0);
-  await page.getByRole("button", { name: "🔍 找過期的系列" }).click();
-  await page.getByLabel("找系列").fill(series);
+  await page.getByLabel("找系列", { exact: true }).fill(series);
   await page.getByRole("button", { name: new RegExp(series) }).click();
   await expect(page.locator(`[data-testid="sell-sheet"][data-name="${series}"]`)).toBeVisible();
 });

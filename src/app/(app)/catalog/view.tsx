@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Button, Modal, inputCls, notify, useRun } from "@/components/client";
-import { addCatalogCharacterAction, addCatalogItemAction, deleteCatalogCharacterAction, deleteCatalogItemAction, deleteSeriesAction, moveSeriesKindAction, renameKindAction, setCatalogPriceAction } from "@/actions/catalog-tree";
+import { addCatalogCharacterAction, addCatalogItemAction, deleteCatalogCharacterAction, deleteCatalogItemAction, deleteSeriesAction, moveKindAction, moveSeriesKindAction, moveSeriesOrderAction, renameKindAction, setCatalogPriceAction } from "@/actions/catalog-tree";
 import { renameCategoryAction, saveCategoryAction, setCategoryActiveAction } from "@/actions/catalog";
 import type { TreeKind, TreeSeries, TreeItem } from "@/server/services/catalog-tree";
 
@@ -27,6 +27,7 @@ export function CatalogView({ tree, types, initialKind, initialOpen }: { tree: T
   // 種類選項：只列有系列的種類（要新的種類按「＋ 新種類…」）
   const kindOpts = new Map<string, string>(tree.map((k) => [k.key, k.label]));
   const [renamingKind, setRenamingKind] = useState<string | null>(null);
+  const [ordering, setOrdering] = useState(false);
   const toggle = (id: string) => setOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const createSeries = () => {
@@ -43,8 +44,13 @@ export function CatalogView({ tree, types, initialKind, initialOpen }: { tree: T
     });
   };
 
+  if (ordering) return <ReorderList tree={tree} onDone={() => setOrdering(false)} />;
+
   return (
     <div className="space-y-3">
+      <div className="flex justify-end">
+        <button type="button" className="min-h-10 rounded-lg border border-ai bg-white px-3 text-[14px] font-semibold text-ai" onClick={() => setOrdering(true)}>調整順序</button>
+      </div>
       <div>
         <label className="block text-[13px] font-medium text-ink-2" htmlFor="catalog-kind">種類</label>
         {renamingKind === null ? (
@@ -99,7 +105,7 @@ export function CatalogView({ tree, types, initialKind, initialOpen }: { tree: T
       ) : (
         <Button className="w-full" onClick={() => setAdding({ name: "", kindText: "" })}>＋ 新系列</Button>
       )}
-      <p className="text-[12px] text-mute">已過期的系列不會出現在採購、賣給客人的選單裡（要用時按「找過期的系列」）；庫存和紀錄都還在。</p>
+      <p className="text-[12px] text-mute">已過期的系列不會出現在採購、賣給客人的選單裡（要用時在「找系列」打名字）；庫存和紀錄都還在。</p>
     </div>
   );
 }
@@ -310,5 +316,46 @@ function DeleteButton({ label, aria, title, message, onConfirm, className }: { l
         <div className="text-sm leading-6">{message}</div>
       </Modal>
     </>
+  );
+}
+
+/** 調整順序：種類、系列都可以上移、下移、移到最上面；下拉選單照這個順序 */
+function ReorderList({ tree, onDone }: { tree: TreeKind[]; onDone: () => void }) {
+  const { run, pending } = useRun();
+  const b = "min-h-9 rounded-lg border px-2.5 text-[13px] disabled:opacity-40";
+  const btns = (label: string, i: number, n: number, fn: (d: "up" | "down" | "top") => Promise<{ ok: true; data: null } | { ok: false; error: string }>, dark?: boolean) => (
+    <span className="flex shrink-0 gap-1">
+      <button type="button" aria-label={`${label} 移到最上面`} disabled={pending || i === 0} className={`${b} ${dark ? "border-[#55606d] bg-[#2c3542] text-white" : "border-line bg-white"}`} onClick={() => run(() => fn("top"))}>移到最上面</button>
+      <button type="button" aria-label={`${label} 上移`} disabled={pending || i === 0} className={`${b} ${dark ? "border-[#55606d] bg-[#2c3542] text-white" : "border-line bg-white"}`} onClick={() => run(() => fn("up"))}>上</button>
+      <button type="button" aria-label={`${label} 下移`} disabled={pending || i === n - 1} className={`${b} ${dark ? "border-[#55606d] bg-[#2c3542] text-white" : "border-line bg-white"}`} onClick={() => run(() => fn("down"))}>下</button>
+    </span>
+  );
+  return (
+    <div className="space-y-3" data-testid="reorder">
+      <div className="flex items-center justify-between">
+        <p className="text-[13px] text-mute">排好之後，所有選系列的下拉選單都照這個順序。已過期的自動排在最後。</p>
+        <Button variant="primary" onClick={onDone}>完成</Button>
+      </div>
+      <div className="overflow-hidden rounded-xl border border-line bg-white">
+        {tree.map((k, ki) => {
+          const live = k.series.filter((s) => s.active);
+          return (
+            <div key={k.key}>
+              <div className="flex items-center justify-between gap-2 bg-ink px-3 py-2 font-semibold text-white" data-testid="reorder-kind">
+                <span className="min-w-0 truncate">{k.label}</span>
+                {btns(k.label, ki, tree.length, (d) => moveKindAction(k.key, d), true)}
+              </div>
+              {live.map((s, si) => (
+                <div key={s.id} className="flex items-center justify-between gap-2 border-b border-line-2 px-3 py-2 text-[15px]" data-testid="reorder-series">
+                  <span className="min-w-0 truncate">{s.name}</span>
+                  {btns(s.name, si, live.length, (d) => moveSeriesOrderAction(s.id, d))}
+                </div>
+              ))}
+              {k.series.length > live.length && <div className="border-b border-line-2 px-3 py-1.5 text-[12px] text-mute">另有 {k.series.length - live.length} 個已過期</div>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

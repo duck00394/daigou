@@ -176,11 +176,13 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
     kinds.set(kk, kg);
   }
   const ord = (r: R) => (r.ch ? (charOrder.get(r.ch.id) ?? 1e9) : 1e9);
-  const kindList = [...kinds.values()].sort((a, b) => (a.key === "~" ? 1 : b.key === "~" ? -1 : byText(a.label, b.label)));
+  const kindSortOf = new Map(seriesOpts.map((x) => [x.kindKey, x.kindSort]));
+  const seriesSortOf = new Map(seriesOpts.map((x) => [x.id, x.order]));
+  const kindList = [...kinds.values()].sort((a, b) => (a.key === "~" ? 1 : b.key === "~" ? -1 : (kindSortOf.get(a.key) ?? 1e6) - (kindSortOf.get(b.key) ?? 1e6) || byText(a.label, b.label)));
   const tree = kindList.map((k) => ({
     ...k,
     series: [...k.series.values()]
-      .sort((a, b) => (a.key === "none" ? 1 : b.key === "none" ? -1 : Number(b.active) - Number(a.active) || byText(a.name, b.name)))
+      .sort((a, b) => (a.key === "none" ? 1 : b.key === "none" ? -1 : Number(b.active) - Number(a.active) || (seriesSortOf.get(a.key) ?? 0) - (seriesSortOf.get(b.key) ?? 0)))
       .map((s) => ({ ...s, types: [...s.types.values()].sort((a, b) => a.sort - b.sort || byText(a.name, b.name)).map((t) => ({ ...t, rows: t.rows.sort((x, y) => ord(x) - ord(y) || byText(label(x), label(y))) })) })),
   }));
   const sum = (rs: R[]) => ({ free: rs.reduce((a, r) => a + r.s.available, 0), incoming: rs.reduce((a, r) => a + r.s.incoming, 0), unsure: rs.reduce((a, r) => a + unsureOf(r), 0), kept: rs.reduce((a, r) => a + r.s.kept, 0), cost: rs.reduce((a, r) => a + (!r.v ? 0 : owner ? (r.v.avgUnitCost ?? 0) * (r.s.onHand + r.s.kept) : r.v.freeValue + r.v.keptValue + r.v.reservedValue), 0) });
@@ -356,7 +358,9 @@ async function BatchesTab({ cat, open, owner, confirm, view }: { cat?: string; o
   const unconfirmed = ownerBatches.filter(pendingConfirm).length;
   const batches = confirm === "no" ? ownerBatches.filter(pendingConfirm) : confirm === "yes" ? ownerBatches.filter((b) => !pendingConfirm(b)) : [...ownerBatches.filter(pendingConfirm), ...ownerBatches.filter((b) => !pendingConfirm(b))];
   const splitAt = !confirm && unconfirmed > 0 && unconfirmed < batches.length ? unconfirmed : -1;
-  const cats = await prisma.category.findMany({ where: { batches: { some: {} } }, orderBy: [{ active: "desc" }, { sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } });
+  const [catsRaw, sOrder] = await Promise.all([prisma.category.findMany({ where: { batches: { some: {} } }, select: { id: true, name: true } }), seriesOptions(prisma)]);
+  const rank = new Map(sOrder.map((x) => [x.id, x.order]));
+  const cats = catsRaw.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
   const href = (c?: string, o?: string, _w?: string, x: { confirm?: string; view?: string } = { confirm, view }) =>
     `/inventory?tab=batches${c ? `&cat=${c}` : ""}${o === "0" || o === "cancelled" ? `&open=${o}` : ""}${x.confirm ? `&confirm=${x.confirm}` : ""}${x.view ? `&view=${x.view}` : ""}`;
   const cancelledCount = await prisma.purchaseBatch.count({ where: { status: "CANCELLED", ...(cat ? (cat === "none" ? { categoryId: null } : batchesWithSeries(cat)) : {}) } });

@@ -64,9 +64,11 @@ export async function catalogTree(db: Db, opts: { categoryIds?: string[] } = {})
     kind.series.push({ id: c.id, name: c.name, active: c.active, kindKey: k.key, kindLabel: k.label, items: list.map((x) => ({ typeId: x.typeId, typeName: x.typeName, price: x.price, chars: x.chars })) });
     kinds.set(k.key, kind);
   }
-  const out = [...kinds.values()].sort((a, b) => byText(a.label, b.label));
-  // 過期的排最後
-  for (const k of out) k.series.sort((a, b) => Number(b.active) - Number(a.active));
+  const ko = kindRank(await getKindOrder(db));
+  const out = [...kinds.values()].sort((a, b) => ko(a.key) - ko(b.key) || byText(a.label, b.label));
+  // 照自己排的順序；過期的排最後
+  const so = new Map(cats.map((c, i) => [c.id, i]));
+  for (const k of out) k.series.sort((a, b) => Number(b.active) - Number(a.active) || (so.get(a.id) ?? 0) - (so.get(b.id) ?? 0));
   return out;
 }
 
@@ -200,13 +202,18 @@ export async function sellSheet(t: Tx, categoryId: string) {
 
 /** 下拉選單用：所有系列（含已過期）＋它的種類 */
 export async function seriesOptions(db: Db) {
-  const cats = await db.category.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true, type: true, customType: true, active: true } });
+  const [cats, order] = await Promise.all([
+    db.category.findMany({ select: { id: true, name: true, type: true, customType: true, active: true, sortOrder: true } }),
+    getKindOrder(db),
+  ]);
+  const ko = kindRank(order);
   return cats
     .map((c) => {
       const k = categoryKind(c);
-      return { id: c.id, name: c.name, kindKey: k.key, kindLabel: k.label, active: c.active };
+      return { id: c.id, name: c.name, kindKey: k.key, kindLabel: k.label, active: c.active, sortOrder: c.sortOrder, kindSort: ko(k.key) };
     })
-    .sort((a, b) => byText(a.name, b.name));
+    .sort((a, b) => a.kindSort - b.kindSort || byText(a.kindLabel, b.kindLabel) || Number(b.active) - Number(a.active) || a.sortOrder - b.sortOrder || byText(a.name, b.name))
+    .map((x, i) => ({ id: x.id, name: x.name, kindKey: x.kindKey, kindLabel: x.kindLabel, active: x.active, kindSort: x.kindSort, order: i }));
 }
 
 function kindWhere(kindKey: string) {
@@ -295,4 +302,56 @@ export async function deleteSeries(t: Tx, actor: Actor, categoryId: string) {
   await t.category.delete({ where: { id: categoryId } });
   await audit(t, actor, "catalog.deleteSeries", "Category", categoryId, { name: cat.name, products: products.length });
   return { name: cat.name };
+}
+
+// ── 排順序：種類順序存在設定（kindOrder），系列順序用 Category.sortOrder ──
+
+const KIND_ORDER = "kindOrder";
+
+export async function getKindOrder(db: Db): Promise<string[]> {
+  const row = await db.appSetting.findUnique({ where: { key: KIND_ORDER } });
+  try {
+    const v = row ? JSON.parse(row.value) : [];
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 排過的種類照順序，沒排過的放後面（再照名稱） */
+export function kindRank(order: string[]) {
+  const m = new Map(order.map((k, i) => [k, i]));
+  return (k: string) => m.get(k) ?? 1e6;
+}
+
+type Dir = "up" | "down" | "top";
+function moved<T>(list: T[], idx: number, dir: Dir) {
+  const out = [...list];
+  if (idx < 0) return out;
+  const [x] = out.splice(idx, 1);
+  const to = dir === "top" ? 0 : dir === "up" ? Math.max(0, idx - 1) : Math.min(out.length, idx + 1);
+  out.splice(to, 0, x);
+  return out;
+}
+
+/** 種類上移／下移／移到最上面 */
+export async function moveKind(t: Tx, actor: Actor, kindKey: string, dir: Dir) {
+  const opts = await seriesOptions(t);
+  const keys = [...new Set(opts.map((o) => o.kindKey))];
+  if (!keys.includes(kindKey)) throw new BizError("找不到這個種類");
+  const next = moved(keys, keys.indexOf(kindKey), dir);
+  await t.appSetting.upsert({ where: { key: KIND_ORDER }, update: { value: JSON.stringify(next) }, create: { key: KIND_ORDER, value: JSON.stringify(next) } });
+  await audit(t, actor, "catalog.moveKind", "Category", null, { kindKey, dir });
+  return next;
+}
+
+/** 系列在同一個種類裡上移／下移／移到最上面（已過期的不用排） */
+export async function moveSeriesOrder(t: Tx, actor: Actor, categoryId: string, dir: Dir) {
+  const opts = await seriesOptions(t);
+  const me = opts.find((o) => o.id === categoryId);
+  if (!me) throw new BizError("找不到這個系列");
+  const sib = opts.filter((o) => o.kindKey === me.kindKey && o.active);
+  const next = moved(sib, sib.findIndex((o) => o.id === categoryId), dir);
+  for (let i = 0; i < next.length; i++) await t.category.update({ where: { id: next[i].id }, data: { sortOrder: (i + 1) * 10 } });
+  await audit(t, actor, "catalog.reorderSeries", "Category", categoryId, { dir });
 }

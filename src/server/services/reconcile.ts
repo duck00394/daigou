@@ -2,7 +2,9 @@
 // 每個品項：買到（confirmedQty）＋砍單（cancelledQty）＋待確認＝訂的數量
 import { BizError, lockRows, type Tx } from "@/server/db";
 import { audit, type Actor } from "./common";
-import { CANCEL_REASONS, cancelBatchItem, pendingQty } from "./batch-ops";
+import { CANCEL_REASONS, batchPaySummary, cancelBatchItem, pendingQty } from "./batch-ops";
+import { itemGoodsTwd } from "./purchase";
+import { addSupplierPayment } from "./supplier-payments";
 import { isStoreKind } from "@/lib/labels";
 
 const itemSelect = {
@@ -12,6 +14,9 @@ const itemSelect = {
   confirmedQty: true,
   cancelReason: true,
   categoryId: true,
+  currency: true,
+  estUnitCost: true,
+  actualUnitCost: true,
   createdAt: true,
   movements: { where: { kind: "RECEIVE" as const }, select: { onHandDelta: true } },
   product: { select: { id: true, name: true, productType: { select: { name: true, sortOrder: true } }, characters: { select: { character: { select: { id: true, name: true, sortOrder: true } } } } } },
@@ -70,7 +75,7 @@ export async function reconcileList(t: Tx, filter: { supplier?: string; cat?: st
 export async function reconcileSheet(t: Tx, batchId: string) {
   const b = await t.purchaseBatch.findUnique({
     where: { id: batchId },
-    select: { id: true, name: true, status: true, supplier: true, categoryId: true, supplierRef: { select: { name: true, kind: true } }, category: { select: { name: true } }, items: { select: itemSelect, orderBy: { createdAt: "asc" } } },
+    select: { id: true, name: true, status: true, supplier: true, categoryId: true, rateMicro: true, supplierRef: { select: { name: true, kind: true } }, category: { select: { name: true } }, items: { select: itemSelect, orderBy: { createdAt: "asc" } } },
   });
   if (!b) throw new BizError("找不到這一團");
   const cats = await t.category.findMany({ where: { id: { in: [...new Set(b.items.map((i) => i.categoryId).filter((x): x is string => !!x))] } }, select: { id: true, name: true } });
@@ -86,11 +91,13 @@ export async function reconcileSheet(t: Tx, batchId: string) {
       group: [seriesName(i.categoryId), i.product.productType?.name].filter(Boolean).join("・") || "其他",
       sort: [i.product.productType?.sortOrder ?? 9999, ch?.sortOrder ?? 9999] as const,
       cancelReason: i.cancelReason,
+      unitTwd: itemGoodsTwd({ ...i, qty: 1, cancelledQty: 0 }, b.rateMicro),
       ...s,
     };
   }).filter((i) => i.active > 0 || i.cut > 0)
     .sort((a, c) => a.group.localeCompare(c.group, "zh-Hant") || a.sort[0] - c.sort[0] || a.sort[1] - c.sort[1]);
-  return { id: b.id, name: b.name, supplierName: b.supplierRef?.name ?? b.supplier ?? "", needsCheck: needsCheck(b), items };
+  const pay = (await batchPaySummary(t, [b.id])).get(b.id) ?? { totalTwd: 0, paidTwd: 0, dueTwd: 0 };
+  return { id: b.id, name: b.name, supplierName: b.supplierRef?.name ?? b.supplier ?? "", needsCheck: needsCheck(b), items, pay };
 }
 
 export interface ReconcileRow {
@@ -100,7 +107,7 @@ export interface ReconcileRow {
 }
 
 /** 存對單結果：買到幾件、剩下的砍掉或繼續等 */
-export async function saveReconcile(t: Tx, actor: Actor, batchId: string, input: { rows: ReconcileRow[]; reason?: string | null; note?: string | null }) {
+export async function saveReconcile(t: Tx, actor: Actor, batchId: string, input: { rows: ReconcileRow[]; reason?: string | null; note?: string | null; paidTotal?: number | null; paidById?: string | null; payKey?: string | null }) {
   await lockRows(t, "PurchaseBatch", [batchId]);
   const b = await t.purchaseBatch.findUnique({ where: { id: batchId }, select: { status: true, supplierRef: { select: { kind: true } }, items: { select: { ...itemSelect, batchId: true } } } });
   if (!b) throw new BizError("找不到這一團");
@@ -128,6 +135,19 @@ export async function saveReconcile(t: Tx, actor: Actor, batchId: string, input:
   }
   const after = await t.purchaseBatch.findUniqueOrThrow({ where: { id: batchId }, select: { status: true, supplierRef: { select: { kind: true } }, items: { select: { qty: true, cancelledQty: true, confirmedQty: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } } } });
   const state = batchReconcile(after);
-  await audit(t, actor, "batch.reconcile", "PurchaseBatch", batchId, { rows: input.rows, reason: input.reason ?? null, bought, cut });
-  return { ...state, affected };
+  // 一起填「總共付了多少」：比已登記的多，就把差額記成一筆付款（台幣）
+  let paidAdded = 0;
+  if (input.paidTotal !== undefined && input.paidTotal !== null) {
+    if (!Number.isInteger(input.paidTotal) || input.paidTotal < 0) throw new BizError("付了多少請填整數");
+    const s = (await batchPaySummary(t, [batchId])).get(batchId)!;
+    if (input.paidTotal < s.paidTwd) throw new BizError(`已經登記付了 NT$${s.paidTwd.toLocaleString()}，要改少請到這團的付款紀錄作廢那一筆`);
+    paidAdded = input.paidTotal - s.paidTwd;
+    if (paidAdded > 0) {
+      const purpose = input.paidTotal >= s.totalTwd ? (s.paidTwd > 0 ? "BALANCE" : "FULL") : s.paidTwd > 0 ? "OTHER" : "DEPOSIT";
+      await addSupplierPayment(t, actor, { batchId, paidById: input.paidById ?? null, paidAt: new Date(), amount: paidAdded, currency: "TWD", purpose, note: "對單時登記", dedupeKey: input.payKey ? `reconcile:${input.payKey}` : null });
+    }
+  }
+  const pay = (await batchPaySummary(t, [batchId])).get(batchId)!;
+  await audit(t, actor, "batch.reconcile", "PurchaseBatch", batchId, { rows: input.rows, reason: input.reason ?? null, bought, cut, paidAdded });
+  return { ...state, affected, pay, paidAdded };
 }

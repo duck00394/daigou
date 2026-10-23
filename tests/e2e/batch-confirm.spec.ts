@@ -56,13 +56,19 @@ test("對單：買到幾件、砍掉剩下的；庫存分一定／不一定有�
   await expect(it.getByTestId("reconcile-status")).toHaveText("買到 2・砍 2");
   await page.getByLabel("砍單原因").selectOption("AGENT_CANCEL");
   await expect(page.getByTestId("reconcile-sum")).toHaveText("這團：買到 2・砍 2・還要等 0");
+  // 一起填付了多少：按「付清」帶入砍單後的總額
+  await expect(page.getByTestId("reconcile-pay")).toContainText("NT$200");
+  await page.getByTestId("reconcile-pay").getByRole("button", { name: "付清" }).click();
+  await expect(page.getByLabel("總共付了多少")).toHaveValue("200");
+  await expect(page.getByTestId("reconcile-pay-note")).toContainText("會多記一筆付款 NT$200");
   await page.getByRole("button", { name: /^儲存/ }).click();
-  await toast(page, /已儲存：買到 2・砍 2，這團對完了/);
+  await toast(page, /已儲存：買到 2・砍 2，這團對完了；記了付款 NT\$200/);
   await expect(page).not.toHaveURL(new RegExp(`/reconcile/${batch.id}`));
 
   // 採購團卡片：已對完；庫存：一定有貨 2
   await page.goto("/inventory?tab=batches&confirm=yes");
   await expect(page.getByTestId("batch-card").filter({ hasText: `確認測試團 ${tag}` }).getByTestId("reconcile-badge")).toHaveText("已對完");
+  await expect(page.getByTestId("batch-card").filter({ hasText: `確認測試團 ${tag}` }).getByTestId("batch-paid")).toContainText("已付 100%");
   await page.goto(`/inventory?tab=stock&only=sure&q=${encodeURIComponent(product.name)}`);
   await expect(row.locator('[data-k="sure"]')).toHaveText("2");
   await expect(row.locator('[data-k="unsure"]')).toHaveText("–");
@@ -104,4 +110,26 @@ test("新增品項時只知道總額：填商品總額，每件自動平均", as
   await page.getByRole("button", { name: "儲存 2 項" }).click();
   await toast(page, /已新增 2 個採購品項/);
   await expect(page.getByTestId("items-total")).toHaveText("NT$2,000");
+});
+
+test("系列：打關鍵字直接找；系列目錄調整順序後，下拉選單照順序", async ({ page }) => {
+  const tag = Date.now().toString(36).slice(-5);
+  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  await prisma.category.create({ data: { name: `排序甲${tag}`, type: "CUSTOM", customType: `E2E排序${tag}` } });
+  await prisma.category.create({ data: { name: `排序乙${tag}`, type: "CUSTOM", customType: `E2E排序${tag}` } }).finally(() => prisma.$disconnect());
+  await login(page);
+  await page.goto("/catalog");
+  await page.getByRole("button", { name: "調整順序" }).click();
+  await page.getByRole("button", { name: `E2E排序${tag} 移到最上面` }).click();
+  await expect(page.getByTestId("reorder-kind").first()).toContainText(`E2E排序${tag}`);
+  await page.getByRole("button", { name: `排序甲${tag} 移到最上面` }).click();
+  await expect(page.getByTestId("reorder-series").first()).toContainText(`排序甲${tag}`);
+  await page.getByRole("button", { name: "完成" }).click();
+
+  await page.goto("/inventory?tab=stock");
+  await expect(page.getByLabel("種類", { exact: true }).locator("option").nth(1)).toHaveText(`E2E排序${tag}`);
+  await page.getByLabel("找系列", { exact: true }).fill(`乙${tag}`);
+  await page.getByTestId("series-hits").getByRole("button", { name: new RegExp(`排序乙${tag}`) }).click();
+  await expect(page.getByLabel("系列", { exact: true }).locator("option:checked")).toHaveText(`排序乙${tag}`);
+  await expect(page.getByLabel("系列", { exact: true }).locator("option").nth(1)).toHaveText(`排序甲${tag}`);
 });

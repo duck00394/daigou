@@ -76,4 +76,43 @@ describe("採購團編輯與確認", () => {
     expect((await prisma.purchaseBatchItem.findUniqueOrThrow({ where: { id: i2.id } })).confirmedQty).toBe(1);
     expect(await checkIntegrity(prisma)).toEqual([]);
   });
+
+  it("對單時一起填總共付了多少：記差額一筆付款；填少了擋下來；重送不重複", async () => {
+    const b = await tx((t) => createBatch(t, actor, { name: "付款團", supplier: "代購", items: [{ productId: s.p1.id, qty: 2, unitCost: 500, currency: "TWD" }] }));
+    const [i1] = await prisma.purchaseBatchItem.findMany({ where: { batchId: b.id } });
+    let r = await tx((t) => saveReconcile(t, actor, b.id, { rows: [{ itemId: i1.id, bought: 1, cutRest: true }], reason: "AGENT_CANCEL", paidTotal: 300, payKey: "pay-key-0001" }));
+    expect([r.pay.totalTwd, r.pay.paidTwd, r.pay.dueTwd, r.paidAdded]).toEqual([500, 300, 200, 300]);
+    r = await tx((t) => saveReconcile(t, actor, b.id, { rows: [], paidTotal: 300, payKey: "pay-key-0001" }));
+    expect(r.paidAdded).toBe(0);
+    await expect(tx((t) => saveReconcile(t, actor, b.id, { rows: [], paidTotal: 100 }))).rejects.toThrow("要改少");
+    r = await tx((t) => saveReconcile(t, actor, b.id, { rows: [], paidTotal: 500, payKey: "pay-key-0002" }));
+    expect(r.pay.dueTwd).toBe(0);
+    expect(await prisma.supplierPayment.count({ where: { batchId: b.id } })).toBe(2);
+  });
+});
+
+describe("種類、系列排順序", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+  it("種類與系列可以移到最上面、上移、下移；下拉選單照這個順序", async () => {
+    const { saveCategory } = await import("@/server/services/catalog");
+    const { seriesOptions, moveKind, moveSeriesOrder } = await import("@/server/services/catalog-tree");
+    const { kindsOf } = await import("@/components/series-picker");
+    const a = await tx((t) => saveCategory(t, actor, null, { name: "肉包", type: "CUSTOM", customType: "常設店" }));
+    await tx((t) => saveCategory(t, actor, null, { name: "便當", type: "CUSTOM", customType: "常設店" }));
+    const c = await tx((t) => saveCategory(t, actor, null, { name: "聖誕節", type: "FESTIVAL" }));
+    await tx((t) => moveKind(t, actor, "FESTIVAL", "top"));
+    let opts = await seriesOptions(prisma);
+    expect(kindsOf(opts).map(([, l]) => l)).toEqual(["節慶", "常設店"]);
+    expect(opts[0].id).toBe(c.id);
+    await tx((t) => moveSeriesOrder(t, actor, a.id, "top"));
+    opts = await seriesOptions(prisma);
+    expect(opts.filter((o) => o.kindLabel === "常設店").map((o) => o.name)).toEqual(["肉包", "便當"]);
+    await tx((t) => moveSeriesOrder(t, actor, a.id, "down"));
+    opts = await seriesOptions(prisma);
+    expect(opts.filter((o) => o.kindLabel === "常設店").map((o) => o.name)).toEqual(["便當", "肉包"]);
+    await tx((t) => moveKind(t, actor, "FESTIVAL", "down"));
+    expect(kindsOf(await seriesOptions(prisma)).map(([, l]) => l)).toEqual(["常設店", "節慶"]);
+  });
 });

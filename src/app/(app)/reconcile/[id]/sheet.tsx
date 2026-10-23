@@ -4,17 +4,21 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, useRun } from "@/components/client";
+import { formatTwd } from "@/lib/money";
 import { saveReconcileAction } from "@/actions/reconcile";
 
-type Item = { id: string; name: string; fullName: string; group: string; active: number; received: number; bought: number; pending: number; cut: number; cancelReason: string | null };
+type Item = { id: string; name: string; fullName: string; group: string; active: number; received: number; bought: number; pending: number; cut: number; cancelReason: string | null; unitTwd: number };
+type Pay = { totalTwd: number; paidTwd: number; dueTwd: number };
 type Draft = { bought: number; cut: boolean };
 const REASONS: [string, string][] = [["AGENT_CANCEL", "代購砍單（沒搶到）"], ["OUT_OF_STOCK", "商品缺貨"], ["SELLER_CANCEL", "賣家取消"], ["SELF_CANCEL", "自己不要了"]];
 
-export function ReconcileSheet({ batchId, items, nextHref, listHref, batchHref }: { batchId: string; items: Item[]; nextHref: string | null; listHref: string; batchHref: string }) {
+export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchHref }: { batchId: string; items: Item[]; pay: Pay; nextHref: string | null; listHref: string; batchHref: string }) {
   const router = useRouter();
   const { run, pending } = useRun();
   const [d, setD] = useState<Record<string, Draft>>(() => Object.fromEntries(items.map((i) => [i.id, { bought: i.bought, cut: false }])));
   const [reason, setReason] = useState("AGENT_CANCEL");
+  const [paid, setPaid] = useState(String(pay.paidTwd));
+  const [payKey] = useState(() => `${batchId}:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
   const [affected, setAffected] = useState<{ productName: string; buyerName: string; qty: number }[] | null>(null);
   const open = items.filter((i) => i.active > 0);
   const set = (id: string, p: Partial<Draft>) => setD((x) => ({ ...x, [id]: { ...x[id], ...p } }));
@@ -30,13 +34,18 @@ export function ReconcileSheet({ batchId, items, nextHref, listHref, batchHref }
     return { bought, cut, wait };
   }, [d, open]);
   const changed = open.filter((i) => d[i.id].cut || d[i.id].bought !== i.bought);
+  // 砍掉的會從總額扣掉（約略：商品金額；運費等分攤存檔後重算）
+  const cutTwd = open.reduce((a, i) => a + (d[i.id].cut ? (i.active - d[i.id].bought) * i.unitTwd : 0), 0);
+  const newTotal = Math.max(0, pay.totalTwd - cutTwd);
+  const paidNum = paid.trim() === "" ? pay.paidTwd : Number(paid.replace(/[^\d]/g, ""));
+  const payChanged = paidNum !== pay.paidTwd;
   const anyCut = changed.some((i) => d[i.id].cut && i.active - d[i.id].bought > 0);
   const go = () => router.push(nextHref ?? listHref);
 
   const save = () => {
-    if (!changed.length) return go();
-    run(() => saveReconcileAction(batchId, { rows: changed.map((i) => ({ itemId: i.id, bought: d[i.id].bought, cutRest: d[i.id].cut })), reason: anyCut ? reason : null }), {
-      success: (r) => `已儲存：買到 ${sum.bought}${sum.cut ? `・砍 ${sum.cut}` : ""}${r.pending ? `・還要等 ${r.pending}` : "，這團對完了"}`,
+    if (!changed.length && !payChanged) return go();
+    run(() => saveReconcileAction(batchId, { rows: changed.map((i) => ({ itemId: i.id, bought: d[i.id].bought, cutRest: d[i.id].cut })), reason: anyCut ? reason : null, paidTotal: payChanged ? paidNum : null, payKey }), {
+      success: (r) => `已儲存：買到 ${sum.bought}${sum.cut ? `・砍 ${sum.cut}` : ""}${r.pending ? `・還要等 ${r.pending}` : "，這團對完了"}${r.paidAdded ? `；記了付款 ${formatTwd(r.paidAdded)}` : ""}`,
       refresh: false,
       onOk: (r) => {
         if (r.affected.length) setAffected(r.affected);
@@ -137,8 +146,24 @@ export function ReconcileSheet({ batchId, items, nextHref, listHref, batchHref }
           </select>
         </label>
       )}
+      <div className="rounded-xl border border-line bg-card p-3" data-testid="reconcile-pay">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-[14px]">
+          <span>總額 <b className="num">{formatTwd(newTotal)}</b>{cutTwd > 0 && <span className="ml-1 text-[12px] text-mute">（砍單後，原本 {formatTwd(pay.totalTwd)}）</span>}</span>
+          <span className="text-[13px] text-mute">已登記付了 {formatTwd(pay.paidTwd)}</span>
+        </div>
+        <label className="mt-2 block text-[13px] font-medium text-ink-2">
+          總共付了多少（台幣）
+          <div className="mt-1 flex gap-2">
+            <input aria-label="總共付了多少" inputMode="numeric" className="min-h-11 w-full rounded-lg border border-line bg-white px-2.5 text-[16px]" value={paid} onChange={(e) => setPaid(e.target.value.replace(/[^\d]/g, ""))} />
+            <button type="button" className="min-h-11 shrink-0 rounded-lg border border-line bg-white px-3 text-[14px]" onClick={() => setPaid(String(newTotal))}>付清</button>
+          </div>
+        </label>
+        <p className="mt-1 text-[12px] text-mute" data-testid="reconcile-pay-note">
+          {paidNum < pay.paidTwd ? <span className="text-bad">比已登記的少；要改少請到這團的付款紀錄作廢</span> : payChanged ? `會多記一筆付款 ${formatTwd(paidNum - pay.paidTwd)}，還要付 ${formatTwd(Math.max(0, newTotal - paidNum))}` : `還要付 ${formatTwd(Math.max(0, newTotal - pay.paidTwd))}`}
+        </p>
+      </div>
       <p className="text-center text-[13px] text-mute" data-testid="reconcile-sum">這團：買到 {sum.bought}・砍 {sum.cut}・還要等 {sum.wait}</p>
-      <Button variant="primary" className="w-full" loading={pending} onClick={save}>{changed.length ? (nextHref ? "儲存，下一團" : "儲存") : nextHref ? "沒有改，下一團" : "回對單清單"}</Button>
+      <Button variant="primary" className="w-full" loading={pending} onClick={save}>{changed.length || payChanged ? (nextHref ? "儲存，下一團" : "儲存") : nextHref ? "沒有改，下一團" : "回對單清單"}</Button>
       <p className="text-center text-[12px]"><Link href={batchHref} className="text-ai">看這團的付款、收貨</Link></p>
     </div>
   );
