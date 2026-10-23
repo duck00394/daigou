@@ -3,7 +3,7 @@
 import { BizError, lockRows, type Tx } from "@/server/db";
 import { audit, emptyToNull, type Actor } from "./common";
 import { checkOperator } from "./operators";
-import { receiveStock } from "./inventory";
+import { receiveStock, refreshBatchStatusById } from "./inventory";
 
 export interface ReceivingLineInput {
   batchItemId: string;
@@ -96,4 +96,45 @@ export async function receiveAll(t: Tx, actor: Actor, batchId: string, input: { 
   if (!who) throw new BizError("請先選這團是誰的，或選收貨的人");
   const r = await createReceivingRecord(t, actor, { batchId, receivedById: who, dedupeKey: input.dedupeKey ?? null, note: "全部到了", lines });
   return { received: r.duplicated ? 0 : lines.reduce((s, l) => s + l.receivedQty, 0), duplicated: r.duplicated };
+}
+
+/**
+ * 撤回收貨（按錯了）：把入庫拿掉，這團變回還沒到。
+ * 只撤回還在手上的：已經賣掉、自留、留給買家的不能撤，要先作廢或取消。
+ * recordId：撤回某一次收貨；不給就撤回這團全部的收貨。
+ */
+export async function undoReceiving(t: Tx, actor: Actor, input: { batchId: string; recordId?: string | null }) {
+  await lockRows(t, "PurchaseBatch", [input.batchId]);
+  const b = await t.purchaseBatch.findUnique({ where: { id: input.batchId }, select: { id: true, status: true, items: { select: { id: true, productId: true, product: { select: { name: true } } } } } });
+  if (!b) throw new BizError("找不到採購團");
+  const itemIds = b.items.map((i) => i.id);
+  await lockRows(t, "Product", [...new Set(b.items.map((i) => i.productId))]);
+  const recv = await t.inventoryMovement.findMany({
+    where: { kind: "RECEIVE", purchaseBatchItemId: { in: itemIds }, ...(input.recordId ? { receivingLine: { recordId: input.recordId } } : {}) },
+    select: { id: true, onHandDelta: true, purchaseBatchItemId: true },
+  });
+  if (!recv.length) throw new BizError("沒有可以撤回的收貨");
+  // 每個品項：這批手上還有多少（扣掉已賣、自留、保留）
+  const lots = await t.inventoryMovement.groupBy({ by: ["purchaseBatchItemId"], where: { purchaseBatchItemId: { in: itemIds } }, _sum: { onHandDelta: true, reservedDelta: true } });
+  const free = new Map(lots.map((l) => [l.purchaseBatchItemId, (l._sum.onHandDelta ?? 0) - (l._sum.reservedDelta ?? 0)]));
+  const want = new Map<string, number>();
+  for (const m of recv) want.set(m.purchaseBatchItemId!, (want.get(m.purchaseBatchItemId!) ?? 0) + m.onHandDelta);
+  for (const [id, q] of want) {
+    const f = free.get(id) ?? 0;
+    if (q > f) {
+      const name = b.items.find((i) => i.id === id)?.product.name ?? "";
+      throw new BizError(`「${name}」這批只剩 ${Math.max(0, f)} 件在手上（其他已賣出、自留或留給買家），要先作廢出售或取消自留，才能撤回`);
+    }
+  }
+  await t.inventoryMovement.deleteMany({ where: { id: { in: recv.map((m) => m.id) } } });
+  // 收貨清點紀錄：撤回的那幾筆一起拿掉
+  const recWhere = input.recordId ? { id: input.recordId, batchId: b.id } : { batchId: b.id };
+  const recs = await t.receivingRecord.findMany({ where: recWhere, select: { id: true } });
+  await t.inventoryMovement.updateMany({ where: { receivingLine: { recordId: { in: recs.map((r) => r.id) } } }, data: { receivingLineId: null } });
+  await t.receivingLine.deleteMany({ where: { recordId: { in: recs.map((r) => r.id) } } });
+  await t.receivingRecord.deleteMany({ where: { id: { in: recs.map((r) => r.id) } } });
+  await refreshBatchStatusById(t, b.id);
+  const qty = [...want.values()].reduce((a, x) => a + x, 0);
+  await audit(t, actor, "batch.undoReceiving", "PurchaseBatch", b.id, { recordId: input.recordId ?? null, qty });
+  return { qty };
 }

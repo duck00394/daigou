@@ -448,3 +448,22 @@ export async function clampConfirmed(t: Tx, itemId: string) {
   const max = Math.max(0, i.qty - i.cancelledQty);
   if (i.confirmedQty > max) await t.purchaseBatchItem.update({ where: { id: itemId }, data: { confirmedQty: max } });
 }
+
+/** 刪除採購團：只有已取消、沒有付款紀錄、沒有到貨紀錄的團可以刪 */
+export async function deleteBatch(t: Tx, actor: Actor, batchId: string) {
+  await lockRows(t, "PurchaseBatch", [batchId]);
+  const b = await t.purchaseBatch.findUnique({ where: { id: batchId }, include: { items: { select: { id: true } }, supplierPayments: { select: { id: true, status: true, amount: true, currency: true } }, receivings: { select: { id: true } } } });
+  if (!b) throw new BizError("找不到採購團");
+  if (b.status !== "CANCELLED") throw new BizError("要先取消這團，才能刪除");
+  const paid = b.supplierPayments.filter((p) => p.status !== "VOIDED");
+  if (paid.length) throw new BizError("這團有付款紀錄，不能刪（取消的團留著，才查得到要代購退多少錢）。付款記錯的話，先到付款紀錄作廢");
+  const itemIds = b.items.map((i) => i.id);
+  if (await t.inventoryMovement.count({ where: { purchaseBatchItemId: { in: itemIds } } })) throw new BizError("這團有庫存紀錄，不能刪");
+  if (b.receivings.length) throw new BizError("這團有收貨紀錄，不能刪");
+  await t.costAllocation.deleteMany({ where: { batchItemId: { in: itemIds } } });
+  await t.purchaseBatchItem.deleteMany({ where: { batchId } });
+  await t.batchCost.deleteMany({ where: { batchId } });
+  await t.supplierPayment.deleteMany({ where: { batchId } });
+  await t.purchaseBatch.delete({ where: { id: batchId } });
+  await audit(t, actor, "batch.delete", "PurchaseBatch", batchId, { name: b.name, code: b.code, items: itemIds.length });
+}

@@ -69,3 +69,13 @@ export async function receiveAllAction(batchId: string, receivedById: string | n
   const { receiveAll } = await import("@/server/services/receiving");
   return run((a) => tx((t) => receiveAll(t, a, v.batchId, { receivedById: v.receivedById, dedupeKey: `all:${v.dedupeKey}` })));
 }
+
+export async function undoReceivingAction(batchId: string, recordId: string | null) {
+  const { undoReceiving } = await import("@/server/services/receiving");
+  return run((a) => tx((t) => undoReceiving(t, a, { batchId: z.string().max(64).parse(batchId), recordId: z.string().max(64).nullable().parse(recordId) })));
+}
+
+export async function deleteBatchAction(batchId: string) {
+  const { deleteBatch } = await import("@/server/services/purchase");
+  return run((a) => tx((t) => deleteBatch(t, a, z.string().max(64).parse(batchId))).then(() => null));
+}

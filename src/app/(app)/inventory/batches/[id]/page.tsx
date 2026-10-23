@@ -1,3 +1,4 @@
+import { DeleteBatchButton, UndoReceivingButton } from "./undo";
 import { CopyButton } from "@/components/copy-button";
 import { RefundButton } from "../../../reconcile/reset";
 import { seriesOptions } from "@/server/services/catalog-tree";
@@ -125,6 +126,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
   const pay = (await tx((t) => batchPaySummary(t, [b.id]))).get(b.id) ?? { totalTwd: totalLanded, paidTwd: 0, dueTwd: totalLanded };
   const me = await getMe();
   const anyCut = b.items.some((i) => i.cancelledQty > 0);
+  const hasPayments = (await prisma.supplierPayment.count({ where: { batchId: b.id, status: { not: "VOIDED" } } })) > 0;
   const refundOwed = !open ? pay.paidTwd : anyCut ? pay.paidTwd - pay.totalTwd : 0;
   return (
     <div className="space-y-4">
@@ -149,6 +151,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       {!open && (
         <div className="rounded-xl border border-line bg-line-2 px-4 py-3 text-[14px] text-ink-2" role="status">
           這團已取消，不會算進總額、還要付和庫存。{pay.paidTwd > 0 ? "之前付的錢要請代購退回，退了在上面按「記退款」。" : ""}
+          {!hasPayments && <span className="mt-2 flex items-center justify-between gap-2"><span className="text-[13px] text-mute">沒付過錢，不用留著的話可以刪掉。</span><DeleteBatchButton batchId={b.id} name={b.name} /></span>}
         </div>
       )}
       <section className="rounded-xl border border-line bg-card p-4" aria-label="這團金額">
@@ -201,7 +204,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
             defaultCurrency={(b.supplierRef?.defaultCurrency as "JPY" | "TWD") ?? "TWD"}
           />
         </Section>
-        <Section id="receiving" title={`收貨清點（${b.receivings.length}）`} pad={false}>
+        <Section id="receiving" title={`收貨清點（${b.receivings.length}）`} pad={false} actions={open && received > 0 ? <UndoReceivingButton batchId={b.id} recordId={null} qty={received} label="全部撤回" /> : undefined}>
           <Receiving
             batchId={b.id}
             operators={ops}
@@ -213,6 +216,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
               receivedById: r.receivedById,
               receivedAt: r.receivedAt.toISOString(),
               note: r.note,
+              goodQty: r.lines.reduce((x, l) => x + l.receivedQty - l.defectQty, 0),
               lines: r.lines.map((l) => ({ name: l.batchItem.product.name, receivedQty: l.receivedQty, defectQty: l.defectQty, missingQty: l.missingQty, note: l.note })),
             }))}
           />

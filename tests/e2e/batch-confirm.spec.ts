@@ -2,6 +2,7 @@
 import { test, expect } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { login, toast, pickIp } from "./helpers";
+import { seedStock } from "./seed";
 
 const url = process.env.TEST_DATABASE_URL ?? "postgresql://daigou:daigou_dev@localhost:5432/daigou_test";
 
@@ -184,4 +185,24 @@ test("系列：打關鍵字直接找；系列目錄調整順序後，下拉選�
   await page.getByTestId("series-hits").getByRole("button", { name: new RegExp(`排序乙${tag}`) }).click();
   await expect(page.getByLabel("系列", { exact: true }).locator("option:checked")).toHaveText(`排序乙${tag}`);
   await expect(page.getByLabel("系列", { exact: true }).locator("option").nth(1)).toHaveText(`排序甲${tag}`);
+});
+
+test("按錯了：收貨可以撤回；已取消沒付錢的團可以刪", async ({ page }) => {
+  const tag = Date.now().toString(36).slice(-5) + "u";
+  const { batchId } = await seedStock(`撤回測試商品 ${tag}`, 2, 100);
+  await login(page);
+  await page.goto(`/inventory/batches/${batchId}`);
+  await page.getByRole("button", { name: "全部撤回" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "撤回收貨" }).click();
+  await toast(page, "已撤回 2 件");
+  await page.goto(`/inventory?tab=stock&only=stock&q=${encodeURIComponent(`撤回測試商品 ${tag}`)}`);
+  await expect(page.locator(`[data-testid="stock-row"][data-name="撤回測試商品 ${tag}"]`)).toHaveCount(0);
+
+  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  const cancelled = await prisma.purchaseBatch.create({ data: { code: `E2E-D-${tag}`, name: `刪除測試團 ${tag}`, rateMicro: 210000, status: "CANCELLED", supplier: "E2E" } }).finally(() => prisma.$disconnect());
+  await page.goto(`/inventory/batches/${cancelled.id}`);
+  await page.getByRole("button", { name: "刪除這團" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "刪除", exact: true }).click();
+  await expect(page).toHaveURL(/open=cancelled/);
+  await expect(page.getByText(`刪除測試團 ${tag}`)).toHaveCount(0);
 });

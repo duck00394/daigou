@@ -1,5 +1,6 @@
 "use client";
 // 採購團詳情：三種負責人、供應商付款紀錄、收貨清點紀錄
+import { UndoReceivingButton } from "./undo";
 import { useState } from "react";
 import { Button, Modal, TextField, useIdemKey, useRun, inputCls, notify } from "@/components/client";
 import { OperatorPicker, operatorName, type OperatorOption } from "@/components/operator-picker";
@@ -345,7 +346,7 @@ export function SupplierPayments({ batchId, operators, payments, editable, defau
 
 // ── 收貨清點 ──
 export type ReceivingItem = { id: string; name: string; ordered: number; received: number };
-export type ReceivingRow = { id: string; receivedById: string; receivedAt: string; note: string | null; lines: { name: string; receivedQty: number; defectQty: number; missingQty: number; note: string | null }[] };
+export type ReceivingRow = { id: string; receivedById: string; receivedAt: string; note: string | null; goodQty?: number; lines: { name: string; receivedQty: number; defectQty: number; missingQty: number; note: string | null }[] };
 type LineDraft = { received: string; defect: string; missing: string; note: string };
 const EMPTY_LINE: LineDraft = { received: "", defect: "", missing: "", note: "" };
 
@@ -391,6 +392,7 @@ export function Receiving({ batchId, operators, items, records, editable, defaul
             <div className="flex flex-wrap items-baseline gap-2">
               <span className="font-medium">{operatorName(operators, r.receivedById)}</span>
               <span className="text-[13px] text-mute">{fmtDate(r.receivedAt, true)} 收貨清點</span>
+              {editable && (r.goodQty ?? 0) > 0 && <span className="ml-auto"><UndoReceivingButton batchId={batchId} recordId={r.id} qty={r.goodQty ?? 0} label="按錯了，撤回" /></span>}
             </div>
             <ul className="mt-0.5 text-[13px] text-ink-2">
               {r.lines.map((l, i) => (
