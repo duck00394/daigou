@@ -1,8 +1,9 @@
 "use client";
-// 按錯了的修正：撤回收貨（貨拿出庫存、這團變回還沒到）、刪除已取消的團
+// 按錯了的修正：撤回收貨（貨拿出庫存、這團變回還沒到）、刪除整團
 import { useRouter } from "next/navigation";
 import { ConfirmButton, useRun } from "@/components/client";
 import { deleteBatchAction, undoReceivingAction } from "@/actions/batches";
+import { formatTwd } from "@/lib/money";
 
 export function UndoReceivingButton({ batchId, recordId, qty, label }: { batchId: string; recordId: string | null; qty: number; label: string }) {
   const { run } = useRun();
@@ -18,18 +19,20 @@ export function UndoReceivingButton({ batchId, recordId, qty, label }: { batchId
   );
 }
 
-export function DeleteBatchButton({ batchId, name }: { batchId: string; name: string }) {
+/** 刪除整團：品項、付款、退款、運費、收貨、自留一起刪（在採購團列表、團頁面都能按） */
+export function DeleteBatchButton({ batchId, name, paid = 0, received = 0, items = 0, goTo }: { batchId: string; name: string; paid?: number; received?: number; items?: number; goTo?: string }) {
   const { run } = useRun();
   const router = useRouter();
+  const parts = [items ? `${items} 個品項` : null, paid ? `付款紀錄（已付 ${formatTwd(paid)}）` : null, received ? `已收進庫存的 ${received} 件` : null, "運費、收貨、自留紀錄"].filter(Boolean);
   return (
     <ConfirmButton
       small
       variant="danger"
-      label="刪除這團"
-      title={`刪除「${name}」`}
-      message="這團已取消、錢都結清了，刪掉就不會再出現在任何地方（付款、退款紀錄一起刪），不能復原。"
-      confirmLabel="刪除"
-      onConfirm={() => run(() => deleteBatchAction(batchId), { success: "已刪除", refresh: false, onOk: () => router.push("/inventory?tab=batches&open=cancelled") })}
+      label="刪除"
+      title={`刪除整團「${name}」`}
+      message={`會一起刪掉：${parts.join("、")}。刪了不能復原。這團的貨如果已經賣出或留給客人，要先作廢那筆出售才能刪。`}
+      confirmLabel="刪除整團"
+      onConfirm={() => run(() => deleteBatchAction(batchId), { success: `已刪除「${name}」`, refresh: !goTo, onOk: () => goTo && router.push(goTo) })}
     />
   );
 }

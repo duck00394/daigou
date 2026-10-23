@@ -33,20 +33,25 @@ describe("撤回收貨、刪除取消的團", () => {
     expect(await checkIntegrity(prisma)).toEqual([]);
   });
 
-  it("已取消、沒付錢的團可以刪；有付款的擋下來；沒取消的不能刪", async () => {
-    const a = await tx((t) => createBatch(t, actor, { name: "取消團", supplier: "代購", items: [{ productId: s.p1.id, qty: 2, unitCost: 100, currency: "TWD" }] }));
-    await expect(tx((t) => deleteBatch(t, actor, a.id))).rejects.toThrow("要先取消");
-    await tx((t) => cancelBatch(t, actor, a.id));
+  it("刪除整團：付款、收貨、自留一起刪；貨已經賣出的擋下來", async () => {
+    const { quickSale } = await import("@/server/services/quick-sale");
+    const op = await prisma.operator.create({ data: { code: "D", name: "小華" } });
+    const a = await tx((t) => createBatch(t, actor, { name: "整團刪", supplier: "代購", orderedById: op.id, items: [{ productId: s.p1.id, qty: 2, unitCost: 100, currency: "TWD" }] }));
+    await tx((t) => addSupplierPayment(t, actor, { batchId: a.id, paidById: op.id, paidAt: new Date(), amount: 3150, currency: "TWD" }));
+    await tx((t) => receiveAll(t, actor, a.id, { receivedById: op.id }));
+    await tx((t) => keepStock(t, actor, { productId: s.p1.id, delta: 1 }));
     await tx((t) => deleteBatch(t, actor, a.id));
     expect(await prisma.purchaseBatch.findUnique({ where: { id: a.id } })).toBeNull();
-    const b = await tx((t) => createBatch(t, actor, { name: "付過團", supplier: "代購", items: [{ productId: s.p1.id, qty: 1, unitCost: 100, currency: "TWD" }] }));
-    await tx((t) => addSupplierPayment(t, actor, { batchId: b.id, paidById: null, paidAt: new Date(), amount: 100, currency: "TWD" }));
-    await tx((t) => cancelBatch(t, actor, b.id));
-    await expect(tx((t) => deleteBatch(t, actor, b.id))).rejects.toThrow("沒退回");
-    const { recordRefund } = await import("@/server/services/batch-ops");
-    await tx((t) => recordRefund(t, actor, b.id, 100));
-    await tx((t) => deleteBatch(t, actor, b.id));
-    expect(await prisma.purchaseBatch.findUnique({ where: { id: b.id } })).toBeNull();
+    expect(await prisma.supplierPayment.count({ where: { batchId: a.id } })).toBe(0);
+    const inv = (await tx((t) => inventorySummary(t, [s.p1.id]))).get(s.p1.id);
+    expect([inv?.onHand ?? 0, inv?.kept ?? 0]).toEqual([0, 0]);
+    // 賣出了就不能刪
+    const b = await tx((t) => createBatch(t, actor, { name: "賣過團", supplier: "代購", orderedById: op.id, items: [{ productId: s.p1.id, qty: 1, unitCost: 100, currency: "TWD" }] }));
+    await tx((t) => receiveAll(t, actor, b.id, { receivedById: op.id }));
+    await tx((t) => quickSale(t, actor, { productId: s.p1.id, qty: 1, unitPrice: 300, idemKey: "del-sale-0001" }));
+    await expect(tx((t) => deleteBatch(t, actor, b.id))).rejects.toThrow("已經賣出");
+    await tx((t) => cancelBatch(t, actor, b.id)).catch(() => null);
     expect(await checkIntegrity(prisma)).toEqual([]);
   });
+
 });

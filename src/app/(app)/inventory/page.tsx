@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Fragment } from "react";
 import { StockFilters } from "./stock-filters";
 import { NavSelect } from "@/components/nav-select";
+import { DeleteBatchButton } from "./batches/[id]/undo";
 import { getView, inView, viewBatchWhere } from "@/server/view";
 import { OwnerBadge } from "@/components/owner-badge";
 import { ownerTone } from "@/lib/owner-colors";
@@ -419,8 +420,9 @@ async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, lat
               <Fragment key={b.id}>
               {!confirm && unconfirmed > 0 && bi === 0 && <li className="text-[13px] font-semibold text-warn md:col-span-2 xl:col-span-3" data-testid="group-unconfirmed">待確認（{unconfirmed}）</li>}
               {bi === splitAt && <li className="mt-2 text-[13px] font-semibold text-good md:col-span-2 xl:col-span-3" data-testid="group-confirmed">已對完（{batches.length - unconfirmed}）</li>}
-              <li>
-                <Link href={`/inventory/batches/${b.id}`} className={`block h-full rounded-xl border border-line bg-white p-3 hover:border-ai ${ownerTone(b.ownership === "JOINT" ? "joint" : b.orderedById, ids).stripe}`} data-testid="batch-card">
+              <li className="relative">
+                <span className="absolute right-2 bottom-2 z-10"><DeleteBatchButton batchId={b.id} name={b.name} paid={pay.get(b.id)?.paidTwd ?? 0} received={rec} items={b.items.length} /></span>
+                <Link href={`/inventory/batches/${b.id}`} className={`block h-full rounded-xl border border-line bg-white p-3 pb-12 hover:border-ai ${ownerTone(b.ownership === "JOINT" ? "joint" : b.orderedById, ids).stripe}`} data-testid="batch-card">
                   <div className="flex items-start justify-between gap-2">
                     <span className="font-semibold">{b.name}</span>
                     {b.status !== "CANCELLED" && !isStoreKind(b.supplierRef?.kind) && (() => {

@@ -449,23 +449,34 @@ export async function clampConfirmed(t: Tx, itemId: string) {
   if (i.confirmedQty > max) await t.purchaseBatchItem.update({ where: { id: itemId }, data: { confirmedQty: max } });
 }
 
-/** 刪除採購團：只有已取消、付的錢已全部退回（或沒付過）、沒有到貨紀錄的團可以刪 */
+/**
+ * 刪除整團（按錯、不要了）：品項、付款、退款、運費、收貨、自留一起刪。
+ * 只擋一種：這團的貨已經賣出或留給客人（要先作廢那筆出售／取消保留，帳才不會亂）。
+ */
 export async function deleteBatch(t: Tx, actor: Actor, batchId: string) {
   await lockRows(t, "PurchaseBatch", [batchId]);
-  const b = await t.purchaseBatch.findUnique({ where: { id: batchId }, include: { items: { select: { id: true } }, supplierPayments: { select: { id: true, status: true, amount: true, currency: true } }, receivings: { select: { id: true } } } });
+  const b = await t.purchaseBatch.findUnique({ where: { id: batchId }, include: { items: { select: { id: true, productId: true, product: { select: { name: true } } } }, supplierPayments: { select: { status: true, amount: true } } } });
   if (!b) throw new BizError("找不到採購團");
-  if (b.status !== "CANCELLED") throw new BizError("要先取消這團，才能刪除");
-  // 付過的錢要先退回（記退款）或作廢付款，才能刪，免得代購欠的錢跟著不見
-  const { batchPaySummary } = await import("./batch-ops");
-  const net = (await batchPaySummary(t, [batchId])).get(batchId)?.paidTwd ?? 0;
-  if (net > 0) throw new BizError(`這團還有 NT$${net.toLocaleString()} 沒退回。代購退了先按「記退款」；付款是記錯的話，到付款紀錄作廢那一筆，就可以刪`);
+  await lockRows(t, "Product", [...new Set(b.items.map((i) => i.productId))]);
+  let undone = 0;
+  let kept = 0;
+  for (const i of b.items) {
+    const r = await undoItemReceipts(t, i.id, i.product.name);
+    undone += r.undone;
+    kept += r.kept;
+  }
   const itemIds = b.items.map((i) => i.id);
-  if (await t.inventoryMovement.count({ where: { purchaseBatchItemId: { in: itemIds } } })) throw new BizError("這團有庫存紀錄，不能刪");
-  if (b.receivings.length) throw new BizError("這團有收貨紀錄，不能刪");
+  await t.inventoryMovement.updateMany({ where: { purchaseBatchItemId: { in: itemIds } }, data: { purchaseBatchItemId: null } });
   await t.costAllocation.deleteMany({ where: { batchItemId: { in: itemIds } } });
+  const recs = await t.receivingRecord.findMany({ where: { batchId }, select: { id: true } });
+  await t.inventoryMovement.updateMany({ where: { receivingLine: { recordId: { in: recs.map((r) => r.id) } } }, data: { receivingLineId: null } });
+  await t.receivingLine.deleteMany({ where: { OR: [{ recordId: { in: recs.map((r) => r.id) } }, { batchItemId: { in: itemIds } }] } });
+  await t.receivingRecord.deleteMany({ where: { batchId } });
   await t.purchaseBatchItem.deleteMany({ where: { batchId } });
   await t.batchCost.deleteMany({ where: { batchId } });
   await t.supplierPayment.deleteMany({ where: { batchId } });
   await t.purchaseBatch.delete({ where: { id: batchId } });
-  await audit(t, actor, "batch.delete", "PurchaseBatch", batchId, { name: b.name, code: b.code, items: itemIds.length });
+  const paid = b.supplierPayments.filter((p) => p.status === "PAID").reduce((a2, p) => a2 + p.amount, 0);
+  await audit(t, actor, "batch.delete", "PurchaseBatch", batchId, { name: b.name, code: b.code, items: itemIds.length, payments: b.supplierPayments.length, paid, refunded: b.refundedTwd, undoneReceived: undone, keptRemoved: kept });
+  return { undone, kept };
 }

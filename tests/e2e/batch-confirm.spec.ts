@@ -187,7 +187,7 @@ test("系列：打關鍵字直接找；系列目錄調整順序後，下拉選�
   await expect(page.getByLabel("系列", { exact: true }).locator("option").nth(1)).toHaveText(`排序甲${tag}`);
 });
 
-test("按錯了：收貨可以撤回；已取消沒付錢的團可以刪", async ({ page }) => {
+test("按錯了：收貨可以撤回；整團可以在列表直接刪", async ({ page }) => {
   const tag = Date.now().toString(36).slice(-5) + "u";
   const { batchId } = await seedStock(`撤回測試商品 ${tag}`, 2, 100);
   await login(page);
@@ -200,9 +200,14 @@ test("按錯了：收貨可以撤回；已取消沒付錢的團可以刪", async
 
   const prisma = new PrismaClient({ datasources: { db: { url } } });
   const cancelled = await prisma.purchaseBatch.create({ data: { code: `E2E-D-${tag}`, name: `刪除測試團 ${tag}`, rateMicro: 210000, status: "CANCELLED", supplier: "E2E" } }).finally(() => prisma.$disconnect());
-  await page.goto(`/inventory/batches/${cancelled.id}`);
-  await page.getByRole("button", { name: "刪除這團" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "刪除", exact: true }).click();
-  await expect(page).toHaveURL(/open=cancelled/);
-  await expect(page.getByText(`刪除測試團 ${tag}`)).toHaveCount(0);
+  // 在採購團列表直接刪（付過錢也可以，付款紀錄一起刪）
+  const p2 = new PrismaClient({ datasources: { db: { url } } });
+  await p2.supplierPayment.create({ data: { batchId: cancelled.id, amount: 3150, currency: "TWD", paidAt: new Date(), status: "PAID" } }).finally(() => p2.$disconnect());
+  await page.goto("/inventory?tab=batches&open=cancelled");
+  const li = page.locator("li", { has: page.getByTestId("batch-card").filter({ hasText: `刪除測試團 ${tag}` }) });
+  await li.getByRole("button", { name: "刪除", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("NT$3,150");
+  await page.getByRole("dialog").getByRole("button", { name: "刪除整團" }).click();
+  await toast(page, `已刪除「刪除測試團 ${tag}」`);
+  await expect(page.getByTestId("batch-card").filter({ hasText: `刪除測試團 ${tag}` })).toHaveCount(0);
 });

@@ -169,6 +169,7 @@ test("手機：開團時一起記運費（常用運費方式）和訂金；實�
   await page.getByRole("button", { name: "＋ 新系列" }).click();
   await page.getByLabel(/新系列名稱/).fill(`E2E 現貨 ${tag}`);
   await page.getByRole("button", { name: "建立", exact: true }).click();
+  await expect(page.getByTestId("chosen-series")).toContainText(`E2E 現貨 ${tag}`);
   // 改活動名稱
   await openSeries(page);
   await page.getByRole("button", { name: /✎ 改/ }).click();
