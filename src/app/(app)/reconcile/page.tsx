@@ -7,6 +7,7 @@ import { reconcileList } from "@/server/services/reconcile";
 import { seriesOptions } from "@/server/services/catalog-tree";
 import { PageHeader, Section, Empty } from "@/components/ui";
 import { NavSelect } from "@/components/nav-select";
+import { ResetButton } from "./reset";
 
 const day = (d: Date | null) => (d ? `${d.getMonth() + 1}/${d.getDate()}` : "");
 
@@ -71,6 +72,10 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
       {doneCount > 0 && (
         <details className="rounded-xl border border-line bg-card">
           <summary className="cursor-pointer px-4 py-3 text-[14px] font-semibold text-ink-2">已對完（{doneCount}）<span className="ml-1 font-normal text-mute">點開可以再改</span></summary>
+          <div className="border-t border-line-2 px-4 py-2.5">
+            <ResetButton ids={data.done.map((r) => r.id)} names={data.done.map((r) => `${r.name}（${r.supplierName}）`)} label={`這 ${doneCount} 團全部改回待確認`} />
+            <p className="mt-1 text-[12px] text-mute">會照上面選的代購、系列和現在看的人，只改列出來的這些。</p>
+          </div>
           <ul className="divide-y divide-line-2 border-t border-line-2">
             {data.done.map((r) => (
               <li key={r.id}>

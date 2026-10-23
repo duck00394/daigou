@@ -112,6 +112,22 @@ test("新增品項時只知道總額：填商品總額，每件自動平均", as
   await expect(page.getByTestId("items-total")).toHaveText("NT$2,000");
 });
 
+test("對單：已對完的團可以整團改回待確認", async ({ page }) => {
+  const tag = Date.now().toString(36).slice(-5) + "r";
+  const { batch } = await seedUnconfirmed(tag);
+  await login(page);
+  await page.goto(`/reconcile/${batch.id}`);
+  await page.getByRole("button", { name: "這團全部買到" }).click();
+  await page.getByRole("button", { name: /^儲存/ }).click();
+  await toast(page, /這團對完了/);
+  await page.goto(`/reconcile/${batch.id}`);
+  await page.getByRole("button", { name: "整團改回待確認" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /改回待確認（1 團）/ }).click();
+  await toast(page, "已把 1 團改回待確認");
+  await page.goto("/reconcile");
+  await expect(page.getByTestId("reconcile-row").filter({ hasText: `確認測試團 ${tag}` })).toContainText("待確認 4");
+});
+
 test("系列：打關鍵字直接找；系列目錄調整順序後，下拉選單照順序", async ({ page }) => {
   const tag = Date.now().toString(36).slice(-5);
   const prisma = new PrismaClient({ datasources: { db: { url } } });

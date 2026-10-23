@@ -151,3 +151,14 @@ export async function saveReconcile(t: Tx, actor: Actor, batchId: string, input:
   await audit(t, actor, "batch.reconcile", "PurchaseBatch", batchId, { rows: input.rows, reason: input.reason ?? null, bought, cut, paidAdded });
   return { ...state, affected, pay, paidAdded };
 }
+
+/** 改回待確認：買到的件數歸零（已到貨的還是算買到、砍掉的不變），整團重新對單 */
+export async function resetReconcile(t: Tx, actor: Actor, batchIds: string[]) {
+  const ids = [...new Set(batchIds)];
+  if (!ids.length) return { batches: 0 };
+  if (ids.length > 500) throw new BizError("一次最多 500 團");
+  await lockRows(t, "PurchaseBatch", ids);
+  const r = await t.purchaseBatchItem.updateMany({ where: { batchId: { in: ids }, batch: { status: { not: "CANCELLED" } } }, data: { confirmedQty: 0 } });
+  await audit(t, actor, "batch.reconcileReset", "PurchaseBatch", null, { batchIds: ids, items: r.count });
+  return { batches: ids.length };
+}

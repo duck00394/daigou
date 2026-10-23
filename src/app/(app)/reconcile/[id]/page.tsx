@@ -5,6 +5,7 @@ import { requireUser } from "@/server/auth";
 import { reconcileList, reconcileSheet } from "@/server/services/reconcile";
 import { PageHeader } from "@/components/ui";
 import { ReconcileSheet } from "./sheet";
+import { ResetButton } from "../reset";
 
 export default async function ReconcileBatch({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
   await requireUser();
@@ -28,6 +29,12 @@ export default async function ReconcileBatch({ params, searchParams }: { params:
         sub={[sheet.supplierName, idx >= 0 ? `第 ${idx + 1}／${list.todo.length} 團` : "已對完"].filter(Boolean).join("｜")}
         back={{ href: `/reconcile${qs}`, label: "對單" }}
       />
+      {sheet.needsCheck && idx < 0 && sheet.items.some((i) => i.active > i.received) && (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-line bg-card px-3 py-2 text-[14px]">
+          <span className="text-mute">這團已對完</span>
+          <ResetButton ids={[sheet.id]} names={[sheet.name]} label="整團改回待確認" />
+        </div>
+      )}
       {!sheet.needsCheck ? (
         <p className="rounded-xl border border-line bg-card p-4 text-[14px] text-mute">這一團不用對單（實體店買的或已取消）。</p>
       ) : (

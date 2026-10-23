@@ -16,3 +16,9 @@ export async function saveReconcileAction(batchId: string, input: { rows: { item
   const me = await getMe(); // 付款人：這台裝置的人
   return run((a) => tx((t) => saveReconcile(t, a, z.string().max(64).parse(batchId), { ...v, paidById: me })));
 }
+
+export async function resetReconcileAction(batchIds: string[]) {
+  const ids = z.array(z.string().max(64)).max(500).parse(batchIds);
+  const { resetReconcile } = await import("@/server/services/reconcile");
+  return run((a) => tx((t) => resetReconcile(t, a, ids)));
+}

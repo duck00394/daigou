@@ -77,6 +77,18 @@ describe("採購團編輯與確認", () => {
     expect(await checkIntegrity(prisma)).toEqual([]);
   });
 
+  it("改回待確認：買到歸零，已到貨的還是算買到，砍掉的不變", async () => {
+    const { resetReconcile } = await import("@/server/services/reconcile");
+    const b = await tx((t) => createBatch(t, actor, { name: "重對團", supplier: "代購", items: [{ productId: s.p1.id, qty: 4, unitCost: 100, currency: "TWD" }] }));
+    const [i1] = await prisma.purchaseBatchItem.findMany({ where: { batchId: b.id } });
+    await tx((t) => saveReconcile(t, actor, b.id, { rows: [{ itemId: i1.id, bought: 3, cutRest: true }], reason: "AGENT_CANCEL" }));
+    await tx((t) => receiveStock(t, actor, { productId: s.p1.id, qty: 1, batchItemId: i1.id }));
+    expect((await tx((t) => reconcileSheet(t, b.id))).items[0].pending).toBe(0);
+    await tx((t) => resetReconcile(t, actor, [b.id]));
+    const it = (await tx((t) => reconcileSheet(t, b.id))).items[0];
+    expect([it.bought, it.cut, it.pending]).toEqual([1, 1, 2]);
+  });
+
   it("對單時一起填總共付了多少：記差額一筆付款；填少了擋下來；重送不重複", async () => {
     const b = await tx((t) => createBatch(t, actor, { name: "付款團", supplier: "代購", items: [{ productId: s.p1.id, qty: 2, unitCost: 500, currency: "TWD" }] }));
     const [i1] = await prisma.purchaseBatchItem.findMany({ where: { batchId: b.id } });
