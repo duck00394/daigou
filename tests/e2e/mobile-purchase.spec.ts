@@ -190,9 +190,11 @@ test("手機：開團時一起記運費（常用運費方式）和訂金；實�
   // 用訂單編號搜尋找到這一團
   await page.goto(`/search?q=MHB${tag}`);
   await expect(page.getByTestId("search-batches")).toContainText(`砂糖 ${tag}`);
-  // 同一個代購再開一團：可以帶入上次的「在哪訂的」
+  // 同一個代購再開一團：打字找代購；可以帶入上次的「在哪訂的」
   await page.goto("/purchase");
-  await page.getByLabel("向哪個代購買", { exact: true }).selectOption({ label: `砂糖 ${tag}` });
+  await page.getByLabel("找代購").fill(`砂糖 ${tag}`);
+  await page.getByTestId("supplier-hits").getByRole("button", { name: `砂糖 ${tag}`, exact: true }).click();
+  await expect(page.getByLabel("向哪個代購買", { exact: true }).locator("option:checked")).toHaveText(`砂糖 ${tag}`);
   await page.getByRole("button", { name: `用上次的：IP @sugar${tag}` }).click();
   await expect(page.getByLabel("在哪訂的")).toHaveValue(`IP @sugar${tag}`);
 

@@ -57,6 +57,7 @@ export function QuickPurchase(props: {
   const [newSup, setNewSup] = useState<string | null>(null);
   const [f, setF] = useState({ supplierId: "", name: "", owner: props.me ?? operators[0]?.id ?? "", progress: "ASKED", expectedAt: "", rate: defaultRate, deposit: "", orderNo: "", notes: "" });
   const [changingCat, setChangingCat] = useState(false);
+  const [supQ, setSupQ] = useState("");
   // 運費：點常用的帶入金額（可以再改），也可以自己填
   const [fees, setFees] = useState<Record<string, string>>({});
   const [customFee, setCustomFee] = useState<string | null>(null);
@@ -90,6 +91,7 @@ export function QuickPurchase(props: {
   // 常用的（設定裡打星號的）直接列出來；沒設過就先列最常用的 3 個；其他用搜尋
   const favs = shown.some((x) => x.favorite) ? shown.filter((x) => x.favorite) : shown.slice(0, 3);
   const pickedSup = shown.find((x) => x.id === f.supplierId);
+  const supHits = supQ.trim() ? shown.filter((x) => x.name.toLowerCase().includes(supQ.trim().toLowerCase())).slice(0, 8) : [];
   const catName = cats.find((c) => c.id === categoryId)?.name ?? null;
 
   const chooseCategory = (id: string) => {
@@ -272,6 +274,28 @@ export function QuickPurchase(props: {
               <label className="mb-1 block text-[13px] font-medium text-ink-2" htmlFor="pick-supplier">{store ? "哪家店" : "代購"}</label>
               {newSup === null ? (
                 <>
+                  <div className="relative mb-2">
+                    <input
+                      type="search"
+                      aria-label={store ? "找店家" : "找代購"}
+                      placeholder={store ? "找店家：打名字" : "找代購：打名字"}
+                      className={`${inputCls} min-h-11`}
+                      value={supQ}
+                      onChange={(e) => setSupQ(e.target.value)}
+                    />
+                    {supQ.trim() && (
+                      <ul className="absolute inset-x-0 top-full z-30 mt-1 max-h-64 divide-y divide-line-2 overflow-y-auto rounded-lg border border-line bg-white shadow-lg" data-testid="supplier-hits">
+                        {supHits.map((x) => (
+                          <li key={x.id}>
+                            <button type="button" className="block w-full px-3 py-2.5 text-left text-[15px] hover:bg-[#fafbfc]" onClick={() => { setF({ ...f, supplierId: x.id }); setSupQ(""); }}>{x.name}</button>
+                          </li>
+                        ))}
+                        <li>
+                          <button type="button" className="block w-full px-3 py-2.5 text-left text-[15px] text-ai" onClick={() => { setNewSup(supQ.trim()); setSupQ(""); }}>＋ 新增「{supQ.trim()}」</button>
+                        </li>
+                      </ul>
+                    )}
+                  </div>
                   <select
                     id="pick-supplier"
                     aria-label={store ? "哪家店" : "向哪個代購買"}
@@ -482,7 +506,7 @@ export function QuickPurchase(props: {
         )}
         {saved && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-good-soft px-3 py-2 text-sm text-good" data-testid="saved-banner">
-            <span>已存到「{saved.name}」，共 {saved.count} 項{saved.stocked ? "，已進庫存" : ""}{saved.paid ? "，已記成付清" : ""}。</span>
+            <span>已存到「{saved.name}」，共 {saved.count} 項{saved.stocked ? "，已進庫存" : ""}{saved.paid ? "，已記成付清" : ""}。<span className="block text-[12px] text-ink-2">同一單還有別的品項（例：S 娃）？上面換「品項」再點角色、儲存，會加到同一團。</span></span>
             <span className="flex gap-2">
               {saved.stocked && <Link className="underline" href="/inventory?tab=stock&v=1">看庫存</Link>}
               <Link className="underline" href={`/inventory/batches/${saved.id}`}>看這一團</Link>
