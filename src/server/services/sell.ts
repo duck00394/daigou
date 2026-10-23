@@ -11,6 +11,7 @@ export interface SellLine {
   productId: string;
   qty: number;
   unitPrice: number;
+  categoryId?: string | null; // 這個商品是哪個系列（一位客人可以一次買好幾個系列）
 }
 
 export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: string | null; categoryId?: string | null; lines: SellLine[]; idemKey: string; paid?: boolean }) {
@@ -54,15 +55,16 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
   }
   let preordered = 0;
   if (pre.length) {
-    if (input.categoryId) {
-      for (const l of pre) await t.productCategory.upsert({ where: { productId_categoryId: { productId: l.productId, categoryId: input.categoryId } }, update: {}, create: { productId: l.productId, categoryId: input.categoryId } });
+    for (const l of pre) {
+      const cid = l.categoryId ?? input.categoryId;
+      if (cid) await t.productCategory.upsert({ where: { productId_categoryId: { productId: l.productId, categoryId: cid } }, update: {}, create: { productId: l.productId, categoryId: cid } });
     }
     await createOrder(t, actor, {
       buyerId: buyer.id,
       source: "MANUAL",
       notes: "預訂（到貨再給）",
       idempotencyKey: `${key}:pre`,
-      items: pre.map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: l.unitPrice, categoryId: input.categoryId ?? null })),
+      items: pre.map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: l.unitPrice, categoryId: l.categoryId ?? input.categoryId ?? null })),
     });
     preordered = pre.reduce((s, l) => s + l.qty, 0);
   }

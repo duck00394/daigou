@@ -177,9 +177,32 @@ async function findVariantRaw(db: Db, k: { seriesId: string; productTypeId: stri
     where: { variantKey: variantKey(k.seriesId, k.productTypeId, k.characterId, k.spec) },
     include: { purchaseItems: { select: { categoryId: true, batch: { select: { categoryId: true } } } } },
   });
-  if (!legacy) return null;
-  const cats = new Set(legacy.purchaseItems.map((i) => i.categoryId ?? i.batch.categoryId));
-  return cats.size === 1 && cats.has(k.category.id) ? legacy : null;
+  if (legacy) {
+    const cats = new Set(legacy.purchaseItems.map((i) => i.categoryId ?? i.batch.categoryId));
+    if (cats.size === 1 && cats.has(k.category.id)) return legacy;
+  }
+  return sameInSeries(db, k);
+}
+
+/**
+ * 最後一道：這個系列底下已經有「同品項、同角色、沒有另外規格」的商品，就用它。
+ * 避免同一個角色因為選了不同的 IP、或從系列目錄和採購兩邊各建一次，變成兩個商品、庫存分開算。
+ */
+async function sameInSeries(db: Db, k: { productTypeId: string | null; characterId: string; spec: string | null; category: { id: string; name: string } | null }) {
+  if (!k.category || (k.spec?.trim() && k.spec.trim() !== k.category.name)) return null;
+  const found = await db.product.findMany({
+    where: {
+      archivedAt: null,
+      mergedIntoId: null,
+      productTypeId: k.productTypeId,
+      categories: { some: { categoryId: k.category.id } },
+      characters: { some: { characterId: k.characterId } },
+      OR: [{ spec: null }, { spec: "" }, { spec: k.category.name }],
+    },
+    include: { characters: true },
+    orderBy: { createdAt: "asc" },
+  });
+  return found.find((p) => p.characters.length === 1) ?? null;
 }
 
 /** 找到被合併掉的商品時，改用合併後留下的那個 */

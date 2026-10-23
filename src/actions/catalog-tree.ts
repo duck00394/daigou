@@ -24,7 +24,7 @@ const sellSchema = z.object({
   categoryId: z.string().nullish(),
   idemKey: z.string().min(8).max(100),
   paid: z.boolean().optional(),
-  lines: z.array(z.object({ productId: z.string(), qty: z.number().int(), unitPrice: z.number().int() })).max(300),
+  lines: z.array(z.object({ productId: z.string(), qty: z.number().int(), unitPrice: z.number().int(), categoryId: z.string().nullish() })).max(300),
 });
 export async function sellToCustomerAction(input: z.infer<typeof sellSchema>) {
   return run((a) => tx((t) => sellToCustomer(t, a, sellSchema.parse(input)), { timeout: 30000 }));

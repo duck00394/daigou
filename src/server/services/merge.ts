@@ -18,16 +18,41 @@ export async function duplicateGroups(db: Tx, categoryId?: string | null): Promi
       code: true,
       name: true,
       createdAt: true,
-      categories: { select: { categoryId: true } },
+      spec: true,
+      productTypeId: true,
+      characters: { select: { character: { select: { name: true } } } },
+      categories: { select: { categoryId: true, category: { select: { name: true } } } },
       purchaseItems: { select: { qty: true, cancelledQty: true, categoryId: true, batch: { select: { categoryId: true } } } },
     },
     orderBy: { createdAt: "asc" },
   });
-  const by = new Map<string, typeof all>();
+  // 兩種都算重複：名稱一樣；或同一個系列裡「同品項、同角色、沒有另外規格」（畫面上看起來一模一樣）
+  const parent = new Map<string, string>();
+  const find = (x: string): string => {
+    const p = parent.get(x) ?? x;
+    if (p === x) return x;
+    const r = find(p);
+    parent.set(x, r);
+    return r;
+  };
+  const union = (a: string, b: string) => parent.set(find(a), find(b));
+  const firstBy = new Map<string, string>();
+  const link = (key: string, id: string) => {
+    const f = firstBy.get(key);
+    if (f) union(id, f);
+    else firstBy.set(key, id);
+  };
   for (const p of all) {
     const k = normalizeKey(p.name);
-    if (!k) continue;
-    by.set(k, [...(by.get(k) ?? []), p]);
+    if (k) link(`n:${k}`, p.id);
+    if (p.characters.length === 1)
+      for (const c of p.categories)
+        if (!p.spec?.trim() || p.spec.trim() === c.category.name) link(`s:${c.categoryId}|${p.productTypeId ?? "-"}|${normalizeKey(p.characters[0].character.name)}`, p.id);
+  }
+  const by = new Map<string, typeof all>();
+  for (const p of all) {
+    const r = find(p.id);
+    by.set(r, [...(by.get(r) ?? []), p]);
   }
   const groups = [...by.entries()].filter(([, ps]) => ps.length > 1);
   const related = (ps: typeof all) => !categoryId || ps.some((p) => p.categories.some((c) => c.categoryId === categoryId) || p.purchaseItems.some((i) => (i.categoryId ?? i.batch.categoryId) === categoryId));

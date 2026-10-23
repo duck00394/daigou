@@ -55,7 +55,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
         </Section>
       )}
       <RenameNames categoryId={c.id} plan={plan} />
-      <MergeDuplicates groups={dups.map((g) => ({ key: g.key, name: g.name, keepId: g.keepId, products: g.products.map((p) => ({ id: p.id, code: p.code, bought: p.bought, onHand: p.onHand, incoming: p.incoming })) }))} />
+      <MergeDuplicates groups={dups.map((g) => ({ key: g.key, name: g.name, keepId: g.keepId, products: g.products.map((p) => ({ id: p.id, code: p.code, name: p.name, bought: p.bought, onHand: p.onHand, incoming: p.incoming })) }))} />
       <CategoryBatches categoryId={c.id} view={sp.view} owner={sp.owner ?? ""} />
       {(d.total.activeQty > 0 || d.total.cancelledQty > 0) && (
         <div>

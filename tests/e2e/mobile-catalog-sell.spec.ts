@@ -112,17 +112,23 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await page.goto("/sell");
   await page.getByLabel("種類", { exact: true }).selectOption({ label: kind });
   await page.getByLabel("系列", { exact: true }).selectOption({ label: series });
-  const chii = page.getByTestId("sell-row").filter({ hasText: "吉伊" });
+  const chii = page.locator(`[data-testid="sell-row"][data-name="${series}:吊娃:吉伊"]`);
   await expect(chii.getByLabel("吉伊 單價")).toHaveValue("650");
   await chii.getByLabel("吉伊 數量").fill("1");
-  const hachi = page.getByTestId("sell-row").filter({ hasText: "小八" });
+  const hachi = page.locator(`[data-testid="sell-row"][data-name="${series}:吊娃:小八"]`);
   await hachi.getByLabel("小八 數量").fill("1");
   await expect(chii).toContainText("現貨 1");
   await expect(hachi).toContainText("預訂 1");
+  // 同一位客人再加一個系列（幽靈）
+  await page.getByLabel("系列", { exact: true }).selectOption({ label: `幽靈${tag}` });
+  await expect(page.getByTestId("sell-sheet")).toHaveCount(2);
+  const ghost = page.locator(`[data-testid="sell-row"][data-name="幽靈${tag}:吊娃:吉伊"]`);
+  await ghost.getByLabel("吉伊 數量").fill("1");
+  await ghost.getByLabel("吉伊 單價").fill("300");
   await page.getByLabel("客人", { exact: true }).fill(`小美${tag}`);
   await page.screenshot({ path: "test-results/mobile_sell.png", fullPage: true });
-  await page.getByRole("button", { name: /登記：2 件 NT\$1,300（現貨 1・預訂 1）/ }).click();
-  await expect(page.getByTestId("sell-done")).toContainText("賣出 1 件、預訂 1 件");
+  await page.getByRole("button", { name: /登記：3 件 NT\$1,600（現貨 2・預訂 1）/ }).click();
+  await expect(page.getByTestId("sell-done")).toContainText("賣出 2 件、預訂 1 件");
   await expect(page.locator("main")).toContainText("客人預訂還沒給");
 
   // 庫存：一打開不列，選好按查看才列；種類 › 系列 › 品項 › 角色
@@ -132,7 +138,6 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await page.getByRole("button", { name: "查看" }).click();
   await expect(page).toHaveURL(/v=1/);
   await expect(page.getByTestId("stock-series").filter({ hasText: series })).toBeVisible();
-  await expect(page.getByTestId("stock-series").filter({ hasText: `幽靈${tag}` })).toBeVisible();
   await expect(page.getByTestId("stock-type").first()).toHaveText("吊娃");
   await page.screenshot({ path: "test-results/mobile_stock_tree.png", fullPage: true });
 
@@ -148,5 +153,5 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await page.getByRole("button", { name: "🔍 找過期的系列" }).click();
   await page.getByLabel("找系列").fill(series);
   await page.getByRole("button", { name: new RegExp(series) }).click();
-  await expect(page.getByLabel("系列", { exact: true }).locator("option:checked")).toHaveText(`${series}（已過期）`);
+  await expect(page.locator(`[data-testid="sell-sheet"][data-name="${series}"]`)).toBeVisible();
 });

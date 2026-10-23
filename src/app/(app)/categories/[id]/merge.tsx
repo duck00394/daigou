@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button, Modal, useRun } from "@/components/client";
 import { mergeProductsAction } from "@/actions/merge";
 
-type G = { key: string; name: string; keepId: string; products: { id: string; code: string; bought: number; onHand: number; incoming: number }[] };
+type G = { key: string; name: string; keepId: string; products: { id: string; code: string; name?: string; bought: number; onHand: number; incoming: number }[] };
 
 export function MergeDuplicates({ groups }: { groups: G[] }) {
   const [open, setOpen] = useState(false);
@@ -13,8 +13,8 @@ export function MergeDuplicates({ groups }: { groups: G[] }) {
   if (!groups.length) return null;
   const chosen = groups.filter((g) => on[g.key]);
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#f0dfa8] bg-warn-soft px-4 py-2.5 text-[14px] text-warn" data-testid="merge-banner">
-      <span>有 {groups.length} 組商品名稱重複，庫存被分開算了。</span>
+    <div id="merge" className="flex scroll-mt-24 flex-wrap items-center justify-between gap-2 rounded-xl border border-[#f0dfa8] bg-warn-soft px-4 py-2.5 text-[14px] text-warn" data-testid="merge-banner">
+      <span>有 {groups.length} 組商品重複（同一個角色被建成兩個），庫存被分開算了。</span>
       <Button small onClick={() => setOpen(true)}>看看要合併的</Button>
       <Modal
         open={open}
@@ -36,7 +36,7 @@ export function MergeDuplicates({ groups }: { groups: G[] }) {
                 <ul className="mt-1 text-[13px] text-ink-2">
                   {g.products.map((p) => (
                     <li key={p.id}>
-                      ・{p.code}　採購 {p.bought} 件・庫存 {p.onHand}・未到 {p.incoming}
+                      ・{p.name ? `${p.name}（${p.code}）` : p.code}　採購 {p.bought} 件・庫存 {p.onHand}・未到 {p.incoming}
                       {p.id === g.keepId && <span className="text-good">　← 留這個</span>}
                     </li>
                   ))}

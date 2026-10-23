@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { prisma, tx } from "@/server/db";
 import { actor, resetDb } from "../helpers";
-import { saveCategory } from "@/server/services/catalog";
+import { saveCategory, upsertCharacter } from "@/server/services/catalog";
 import { addCatalogCharacter, addCatalogItem, catalogTree, sellSheet, setCatalogPrice } from "@/server/services/catalog-tree";
 import { sellToCustomer } from "@/server/services/sell";
 import { receiveStock, inventorySummary } from "@/server/services/inventory";
@@ -103,5 +103,38 @@ describe("系列目錄刪除", () => {
     expect(await prisma.category.findUnique({ where: { id: empty.id } })).toBeNull();
     expect(await prisma.product.count({ where: { name: { contains: "打錯的系列" } } })).toBe(0);
     expect(await checkIntegrity(prisma)).toEqual([]);
+  });
+});
+
+describe("重複商品", () => {
+  beforeEach(async () => {
+    await resetDb();
+  });
+  it("系列目錄建的角色，之後採購選了別的 IP 也會用同一個商品；已經重複的會列出來可以合併", async () => {
+    const { bulkAddSeriesItems } = await import("@/server/services/series");
+    const { createBatch } = await import("@/server/services/purchase");
+    const { duplicateGroups } = await import("@/server/services/merge");
+    const { createProduct } = await import("@/server/services/catalog");
+    const s = await setup(); // 吉伊卡哇 IP 下建了 肉包 吊娃 吉伊、小八
+    const other = await tx((t) => saveSeries(t, actor, null, { name: "別的 IP" }));
+    const b = await tx((t) => createBatch(t, actor, { name: "團", supplier: "代購", categoryId: s.nikuman.id }));
+    const chii = await prisma.character.findUniqueOrThrow({ where: { name: "吉伊" } });
+    const r = await bulkAddSeriesItems(actor, { batchId: b.id, seriesId: other.id, productTypeId: s.typeId, submissionKey: "dup-1", rows: [{ rowKey: "a", characterId: chii.id, unitCost: 400, currency: "TWD", qty: 1 }] });
+    expect(r.results[0].productId).toBe(s.chii.productId);
+    // 舊資料已經重複（名稱不一樣，但同系列、同品項、同角色）：合併工具找得到
+    const momo = await tx((t) => upsertCharacter(t, actor, { name: "小桃" }));
+    await tx((t) => createProduct(t, actor, { name: "肉包小桃 吊娃", productTypeId: s.typeId, characterIds: [momo.id], categoryIds: [s.nikuman.id] }));
+    await tx((t) => createProduct(t, actor, { name: "小桃 吊娃", productTypeId: s.typeId, characterIds: [momo.id], categoryIds: [s.nikuman.id] }));
+    const g = await tx((t) => duplicateGroups(t, s.nikuman.id));
+    expect(g.map((x) => x.products.map((p) => p.name).sort())).toEqual([["小桃 吊娃", "肉包小桃 吊娃"].sort()]);
+  });
+
+  it("一位客人一次買兩個系列：預訂各自記在自己的系列", async () => {
+    const s = await setup();
+    const ghost = await tx((t) => saveCategory(t, actor, null, { name: "幽靈", type: "CUSTOM", customType: "常設店" }));
+    const g = await tx((t) => addCatalogCharacter(t, actor, { categoryId: ghost.id, typeId: s.typeId, characterName: "吉伊" }));
+    await tx((t) => sellToCustomer(t, actor, { buyerName: "小美", idemKey: "multi-0001", lines: [{ productId: s.chii.productId, qty: 1, unitPrice: 650, categoryId: s.nikuman.id }, { productId: g.productId, qty: 2, unitPrice: 300, categoryId: ghost.id }] }));
+    const items = await prisma.orderItem.findMany({ where: { order: { source: "MANUAL" } } });
+    expect(items.map((i) => [i.categoryId === ghost.id ? "幽靈" : "肉包", i.qty]).sort()).toEqual([["幽靈", 2], ["肉包", 1]]);
   });
 });

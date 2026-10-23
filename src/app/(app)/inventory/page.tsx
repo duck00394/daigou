@@ -236,12 +236,14 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                               <td colSpan={6} className="py-1 pr-3 pl-5 text-[13px] font-semibold text-ink-2" data-testid="stock-type">{tg.name}</td>
                             </tr>
                             {tg.rows.map((r) => {
+                              const dup = tg.rows.filter((x) => label(x) === label(r)).length > 1;
                               const owners = ownersOf(r.p.id);
                               const product = { id: r.p.id, name: r.p.name, salePriceTwd: r.p.salePriceTwd, available: r.s.available, avgCost: r.v?.avgUnitCost ?? null, owners };
                               return (
                                 <tr key={r.p.id} className="border-b border-line-2 last:border-b-0" data-testid="stock-row" data-name={r.p.name}>
                                   <td className="py-2 pr-3 pl-7 align-top">
                                     <Link href={`/products/${r.p.id}`} className="font-medium hover:underline" title={r.p.name}>{label(r)}</Link>
+                                    {dup && sg.key !== "none" && <Link href={`/categories/${sg.key}#merge`} className="ml-1.5 rounded-full bg-warn-soft px-2 py-0.5 text-[11px] text-warn" data-testid="dup-badge">⚠ 重複了，按這裡合併</Link>}
                                     <div className="text-[11.5px] leading-snug text-mute">
                                       {[r.v?.avgUnitCost != null ? `成本 ${formatTwd(r.v.avgUnitCost)}${r.v.tentative ? "*" : ""}` : null, r.s.kept ? `自留 ${r.s.kept}` : null, r.s.reserved ? `保留 ${r.s.reserved}` : null, owners.length > 1 ? owners.map((o) => `${o.label} ${o.free}`).join("／") : null].filter(Boolean).join("・")}
                                     </div>
