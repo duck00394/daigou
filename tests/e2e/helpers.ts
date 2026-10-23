@@ -32,11 +32,27 @@ export async function openMore(page: Page) {
   if ((await d.getAttribute("open")) === null) await d.locator("summary").click();
 }
 
-/** 新增採購：在代購（或店家）下拉選單選「＋ 新代購…」並建立 */
+/** 新增採購：打開代購（或店家）清單，按最下面的「＋ 新增」建立 */
 export async function newSupplierPick(page: Page, name: string, store = false) {
-  const sel = page.getByLabel(store ? "哪家店" : "向哪個代購買", { exact: true });
-  await sel.selectOption("__new__");
+  await page.getByRole("button", { name: store ? "哪家店" : "向哪個代購買", exact: true }).click();
+  await page.getByTestId("supplier-panel").getByRole("button", { name: store ? "＋ 新增店家" : "＋ 新增代購", exact: true }).click();
   await page.getByLabel(store ? "店名" : "代購名稱", { exact: true }).fill(name);
   await page.getByRole("button", { name: "建立", exact: true }).click();
-  await expect(sel.locator("option:checked")).toHaveText(name);
+  await expect(page.getByTestId("supplier-current")).toHaveText(name);
+}
+
+/** 新增採購：打開代購清單，打字找，按一下選好 */
+export async function pickSupplier(page: Page, name: string) {
+  await page.getByRole("button", { name: "向哪個代購買", exact: true }).click();
+  await page.getByLabel("搜尋代購").fill(name);
+  await page.getByTestId("supplier-panel").getByRole("option", { name, exact: true }).click();
+  await expect(page.getByTestId("supplier-current")).toHaveText(name);
+}
+
+/** 系列列表：打字找系列，按一下進系列頁 */
+export async function openSeriesPage(page: Page, name: string) {
+  await page.goto("/categories");
+  await page.getByLabel("找系列", { exact: true }).fill(name);
+  await page.getByTestId("series-search-hits").getByTestId(`cat-card-${name}`).click();
+  await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
 }

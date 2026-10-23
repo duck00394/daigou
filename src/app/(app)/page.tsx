@@ -1,283 +1,106 @@
-import { getView, inView, viewBatchWhere } from "@/server/view";
-import { stockByOwner, JOINT, NONE } from "@/server/services/ownership";
+// 首頁：只放「今天要做的事」——兩顆大按鈕、三個數字、一張待辦清單（按了直接到篩好的地方）、下一場搶購
 import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
-import { dashboard, stockValuation, unrealizedEstimate } from "@/server/services/reports";
-import { inventorySummary } from "@/server/services/inventory";
+import { getView, inView, viewBatchWhere } from "@/server/view";
+import { dashboard } from "@/server/services/reports";
 import { listQuickSales } from "@/server/services/quick-sale";
-import { Section, Stat, Twd, Empty, StatusBadge, Badge } from "@/components/ui";
-import { batchStage, batchStageLabel, batchStatus, fmtDate, fmtDay } from "@/lib/labels";
-import { batchPaySummary, dueByOwner } from "@/server/services/batch-ops";
-import { OwnerDue } from "@/components/owner-due";
-import { listOperators } from "@/server/services/operators";
+import { batchPaySummary, refundsOwed } from "@/server/services/batch-ops";
+import { reconcileList } from "@/server/services/reconcile";
 import { getOrdersEnabled } from "@/server/services/settings";
 import { formatTwd } from "@/lib/money";
 import { PushStatusChip } from "@/components/push-setup";
 import { vapidPublicKey } from "@/server/push";
-import { Countdown } from "./rush/[id]/parts";
 import { relativeDay, taipeiParts } from "@/lib/taipei";
-import { scheduleBadge, toneCls } from "@/lib/rush-labels";
 
 export const metadata = { title: "首頁" };
 
-// 首頁快捷：最常做的四件事，第一次用也看得懂
-const QUICK = [
-  { href: "/purchase", label: "＋ 新增採購", hint: "買了什麼、哪一團", main: true },
-  { href: "/sell", label: "賣給客人", hint: "選系列、填數量", main: true },
-  { href: "/catalog", label: "＋ 新增系列", hint: "品項、角色、售價" },
-  { href: "/inventory?tab=batches", label: "收到貨了", hint: "到哪一團登記" },
-];
-
 export default async function Home() {
   await requireUser();
+  const vk = (await getView()).key;
   const monthStart = (() => {
     const [y, m] = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit" }).format(new Date()).split("-").map(Number);
     return new Date(Date.UTC(y, m - 1, 1, -8));
   })();
-  const [d, un, val, inv, sales, unpaidSales] = await Promise.all([
-    dashboard(prisma),
-    unrealizedEstimate(prisma),
-    stockValuation(prisma),
-    tx((t) => inventorySummary(t)),
-    tx((t) => listQuickSales(t, { from: monthStart })),
-    prisma.order.aggregate({ where: { source: "QUICK", confirmation: "CONFIRMED", balanceCache: { gt: 0 } }, _sum: { balanceCache: true }, _count: true }),
-  ]);
-  // 現在看誰的：他自己的＋合資的（全部功能裡切換）
-  const view = await getView();
-  const vk = view.key;
-  const [overdue, openBatches] = await Promise.all([
-    prisma.purchaseBatch.count({ where: { status: { in: ["ORDERED", "PARTIAL_RECEIVED"] }, expectedAt: { lt: new Date() }, ...viewBatchWhere(vk) } }),
-    prisma.purchaseBatch.count({ where: { status: { in: ["ORDERED", "PARTIAL_RECEIVED"] }, ...viewBatchWhere(vk) } }),
-  ]);
-  let incoming = [...inv.values()].reduce((s, v) => s + v.incoming, 0);
-  let stockCost = { value: val.total.freeValue + val.total.keptValue, free: val.total.free, kept: val.total.kept };
-  let month = sales.total;
-  if (vk !== "all") {
-    const items = await prisma.purchaseBatchItem.findMany({ where: { batch: { status: { in: ["DRAFT", "ORDERED", "PARTIAL_RECEIVED"] }, ...viewBatchWhere(vk) } }, select: { qty: true, cancelledQty: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } });
-    incoming = items.reduce((s, i) => s + Math.max(0, i.qty - i.cancelledQty - i.movements.reduce((a, m) => a + m.onHandDelta, 0)), 0);
-    const by = await tx((t) => stockByOwner(t));
-    stockCost = { value: 0, free: 0, kept: 0 };
-    for (const [pid, per] of by) {
-      const avg = val.byProduct.get(pid)?.avgUnitCost ?? 0;
-      for (const k of [vk, JOINT, NONE]) {
-        const x = per.get(k);
-        if (!x) continue;
-        stockCost.free += x.free;
-        stockCost.kept += x.kept;
-        stockCost.value += Math.round(avg * (x.onHand + x.kept));
-      }
-    }
-    const m = sales.byOwner[vk] ?? { qty: 0, revenue: 0, cost: 0 };
-    month = { ...sales.total, qty: m.qty, revenue: m.revenue, cost: m.cost, profit: m.revenue - m.cost };
-  }
-  // 客人預訂還沒給（賣給客人時沒現貨的部分）
-  const preItems = await prisma.orderItem.findMany({ where: { order: { source: { not: "QUICK" }, confirmation: "CONFIRMED" } }, select: { qty: true, cancelledQtyCache: true, shippedQtyCache: true } });
-  const waiting = preItems.reduce((s, i) => s + Math.max(0, i.qty - i.cancelledQtyCache - i.shippedQtyCache), 0);
-  // 還要付代購：所有沒取消的團，總額 − 已付
-  const live = await prisma.purchaseBatch.findMany({
-    where: { status: { not: "CANCELLED" } },
-    select: { id: true, code: true, name: true, status: true, progress: true, ownership: true, orderedById: true, orderedBy: { select: { name: true } } },
-  }).then((bs) => bs.filter((b) => inView(vk, b)));
-  const pay = await tx((t) => batchPaySummary(t, live.map((b) => b.id)));
-  const dueList = live
-    .map((b) => ({ ...b, due: pay.get(b.id)?.dueTwd ?? 0 }))
-    .filter((b) => b.due > 0)
-    .sort((a, b) => b.due - a.due);
-  const dueTotal = dueList.reduce((s, b) => s + b.due, 0);
-  // 有在用「接單」（訂單／買家）才顯示訂單相關數字
   const usesOrders = await getOrdersEnabled(prisma);
-  const [ops, due] = await Promise.all([tx((t) => listOperators(t)), tx((t) => dueByOwner(t))]);
-  const today = new Date();
-  // 搶購提醒：接下來幾場
-  const rush = await prisma.rushEvent.findMany({ where: { status: "UPCOMING", startAt: { gte: new Date(today.getTime() - 30 * 60000) } }, orderBy: { startAt: "asc" }, take: 4 });
+  const [d, sales, unpaidSales, live, refunds, rec, overdue, rush] = await Promise.all([
+    dashboard(prisma),
+    tx((t) => listQuickSales(t, { from: monthStart })),
+    prisma.order.aggregate({ where: { source: "QUICK", confirmation: "CONFIRMED", balanceCache: { gt: 0 } }, _count: true }),
+    prisma.purchaseBatch.findMany({ where: { status: { not: "CANCELLED" }, ...viewBatchWhere(vk) }, select: { id: true } }),
+    tx((t) => refundsOwed(t)).then((l) => l.filter((r) => inView(vk, r))),
+    tx((t) => reconcileList(t, { view: vk })),
+    prisma.purchaseBatch.count({ where: { status: { in: ["ORDERED", "PARTIAL_RECEIVED"] }, expectedAt: { lt: new Date() }, ...viewBatchWhere(vk) } }),
+    prisma.rushEvent.findFirst({ where: { status: "UPCOMING", startAt: { gte: new Date(Date.now() - 30 * 60000) } }, orderBy: { startAt: "asc" } }),
+  ]);
+  const pay = await tx((t) => batchPaySummary(t, live.map((b) => b.id)));
+  const dueBatches = [...pay.values()].filter((p) => p.dueTwd > 0);
+  const dueTotal = dueBatches.reduce((s, p) => s + p.dueTwd, 0);
+  const refundTotal = refunds.reduce((s, r) => s + r.owed, 0);
+  const m = vk === "all" ? sales.total : (() => { const x = sales.byOwner[vk] ?? { qty: 0, revenue: 0, cost: 0 }; return { profit: x.revenue - x.cost }; })();
+
   const todo = [
-    { n: d.pendingConfirm, text: "張訂單待確認", href: "/orders?status=PENDING_CONFIRM" },
-    { n: d.unpaidOrders, text: "張訂單尚有待收款", href: "/payments" },
-    { n: d.toShipBuyers, text: `位買家有已到貨待出貨商品（共 ${d.toShipQty} 件）`, href: "/shipping" },
-    { n: d.refundPending, text: "筆退款待執行", href: "/payments?tab=refunds" },
-    { n: d.refundUnscheduled, text: "張訂單溢收、尚未建立退款", href: "/payments?tab=refunds" },
-    { n: d.needProducts, text: "項商品有待下單需求", href: "/inventory?tab=demand" },
-    { n: overdue, text: "個採購團已超過預計到貨日", href: "/inventory?tab=batches" },
+    { n: rec.todo.length, text: "團還沒對單", href: "/reconcile?open=todo" },
+    { n: refunds.length, text: "團被砍單、代購還沒退錢", href: "/reconcile?open=refund" },
+    { n: dueBatches.length, text: "團還沒付清", href: "/inventory?tab=batches&open=0&pay=due" },
+    { n: overdue, text: "團超過預計到貨日", href: "/inventory?tab=batches&late=1" },
+    { n: d.toShipQty, text: "件客人預訂到貨了，還沒給", href: "/shipping" },
+    { n: unpaidSales._count, text: "筆賣出還沒收到錢", href: "/sales" },
+    ...(usesOrders
+      ? [
+          { n: d.pendingConfirm, text: "張訂單待確認", href: "/orders?status=PENDING_CONFIRM" },
+          { n: d.unpaidOrders, text: "張訂單還沒收款", href: "/payments" },
+          { n: d.refundPending + d.refundUnscheduled, text: "筆退款要處理", href: "/payments?tab=refunds" },
+          { n: d.needProducts, text: "項商品客人訂了還沒買", href: "/inventory?tab=demand" },
+        ]
+      : []),
   ].filter((x) => x.n > 0);
 
+  const stat = (label: string, value: number, href: string, tone: "bad" | "good" | "plain", testid: string) => (
+    <Link href={href} className="block rounded-xl border border-line bg-card px-2.5 py-2 hover:border-ai">
+      <div className="text-[12px] text-mute">{label}</div>
+      <div className={`num text-[18px] font-semibold ${tone === "bad" && value ? "text-bad" : tone === "good" ? (value < 0 ? "text-bad" : "text-good") : ""}`} data-testid={testid}>{formatTwd(value)}</div>
+    </Link>
+  );
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <h1 className="sr-only">首頁</h1>
-      <nav aria-label="快捷入口" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {QUICK.map((q) => (
-          <Link
-            key={q.href}
-            href={q.href}
-            className={`rounded-xl border px-3.5 py-3 ${q.main ? "border-ai bg-ai text-white hover:bg-ai-2" : "border-line bg-white hover:border-ai"}`}
-          >
-            <span className="block text-[16px] font-semibold">{q.label}</span>
-            <span className={`block text-[12px] ${q.main ? "text-white/80" : "text-mute"}`}>{q.hint}</span>
-          </Link>
-        ))}
-      </nav>
-
-      <section className="rounded-xl border border-line bg-white p-3" aria-label="搶購提醒" data-testid="home-rush">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Link href="/rush" className="font-semibold">⏰ {rush.length ? "下一場搶購" : "搶購提醒"}</Link>
-          <PushStatusChip vapidKey={vapidPublicKey()} />
-        </div>
-        {rush.length ? (
-          <>
-            <Link href={`/rush/${rush[0].id}`} className="mt-1 block">
-              <div className="text-[15px]">{relativeDay(rush[0].startAt)} {taipeiParts(rush[0].startAt).time}｜{rush[0].supplierName}</div>
-              <div className="text-[14px] text-ink-2">{rush[0].seriesName}</div>
-              <div className="flex flex-wrap items-end justify-between gap-2">
-                <Countdown at={rush[0].startAt.toISOString()} />
-                {(() => {
-                  const b = scheduleBadge(rush[0]);
-                  return <span className={`rounded-full px-2 py-0.5 text-[12px] ${toneCls[b.tone]}`}>{b.text}</span>;
-                })()}
-              </div>
-            </Link>
-            {rush.length > 1 && (
-              <div className="mt-2 border-t border-line-2 pt-1.5 text-[13px] text-mute">
-                之後：{rush.slice(1).map((r) => `${relativeDay(r.startAt).split(" ")[0]} ${taipeiParts(r.startAt).time} ${r.supplierName}`).join("／")}　<Link href="/rush" className="text-ai">看全部 ›</Link>
-              </div>
-            )}
-          </>
-        ) : (
-          <p className="mt-1 text-[13px] text-mute">接下來沒有搶購。<Link href="/rush/new" className="text-ai">＋ 新增搶購提醒</Link></p>
-        )}
-      </section>
-
-      <OwnerDue due={due} operators={ops.map((o) => ({ id: o.id, name: o.name }))} only={vk === "all" ? undefined : [vk, "joint", "none"]} hrefFor={() => "/inventory?tab=batches&open=0"} />
-
-      <div>
-        <h2 className="mb-2 text-[15px] font-semibold">錢與庫存</h2>
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <Stat label="還要付代購" value={<span data-testid="home-due" className={dueTotal ? "text-bad" : ""}>{formatTwd(dueTotal)}</span>} note={dueTotal ? `${dueList.length} 團還沒付清` : "都付清了"} href="#due" tone={dueTotal ? "bad" : undefined} />
-          <Stat label="手上庫存成本" value={<Twd v={stockCost.value} />} note={`可賣 ${stockCost.free} 件・自留 ${stockCost.kept} 件${val.total.tentative ? "（有價格還沒確定）" : ""}`} href="/inventory?tab=stock&v=1" />
-          <Stat label="本月賣出賺" value={<Twd v={month.profit} />} note={`賣 ${month.qty} 件・收入 ${month.revenue.toLocaleString()} 元`} href="/sales" tone={month.profit < 0 ? "bad" : undefined} />
-          <Stat label="還沒到的貨" value={`${incoming} 件`} note={`${openBatches} 團還在路上`} href="/inventory?tab=batches" />
-          {waiting > 0 && <Stat label="客人預訂還沒給" value={`${waiting} 件`} note="到貨了到「出貨」交給客人" href="/shipping" tone="warn" />}
-          {(unpaidSales._sum.balanceCache ?? 0) > 0 && <Stat label="賣出還沒收到錢" value={<Twd v={unpaidSales._sum.balanceCache ?? 0} />} note={`${unpaidSales._count} 筆`} href="/sales" tone="warn" />}
-          {val.total.unknownCostUnits > 0 && <Stat label="沒填成本的庫存" value={`${val.total.unknownCostUnits} 件`} note="手動入庫未填成本" href="/inventory?tab=stock&v=1" tone="warn" />}
-          {usesOrders && val.total.reserved > 0 && <Stat label="留給買家" value={`${val.total.reserved} 件`} note="待出貨" href="/shipping" />}
-        </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Link href="/purchase" className="rounded-xl bg-ai px-3 py-3.5 text-center text-[17px] font-semibold text-white hover:bg-ai-2">＋ 新增採購</Link>
+        <Link href="/sell" className="rounded-xl border border-line bg-white px-3 py-3.5 text-center text-[17px] font-semibold hover:border-ai">賣給客人</Link>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {stat("還要付代購", dueTotal, "/inventory?tab=batches&open=0&pay=due", "bad", "home-due")}
+        {stat("代購要退", refundTotal, "/reconcile?open=refund", "bad", "home-refund")}
+        {stat("本月賺", m.profit, "/sales", "good", "home-profit")}
       </div>
 
-      {dueList.length > 0 && (
-        <Section title="還要付的團" pad={false}>
-          <ul id="due" className="divide-y divide-line-2" aria-label="還要付的團">
-            {dueList.slice(0, 8).map((b) => {
-              const [label, tone] = batchStageLabel[batchStage(b)];
-              return (
-                <li key={b.id}>
-                  <Link href={`/inventory/batches/${b.id}`} className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-[#fafbfd]">
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium">{b.name}</span>
-                      <span className="text-[12px] text-mute">{b.ownership === "JOINT" ? "合資" : b.orderedBy ? `${b.orderedBy.name}的` : "未指定"}・<Badge tone={tone}>{label}</Badge></span>
-                    </span>
-                    <span className="num shrink-0 font-semibold text-bad">{formatTwd(b.due)}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-          {dueList.length > 8 && <p className="px-4 py-2 text-[13px] text-mute">還有 {dueList.length - 8} 團，到「活動總表」看全部。</p>}
-        </Section>
-      )}
-
-      {todo.length > 0 && (
-      <Section title="今日待辦" pad={false}>
-        {(
-          <ul className="divide-y divide-line-2">
+      <section aria-label="要處理的事">
+        <h2 className="mb-1.5 text-[14px] font-semibold text-ink-2">要處理的事</h2>
+        {todo.length === 0 ? (
+          <p className="rounded-xl border border-line bg-card px-4 py-4 text-center text-[14px] text-good" data-testid="home-todo-empty">都處理好了</p>
+        ) : (
+          <ul className="divide-y divide-line-2 overflow-hidden rounded-xl border border-line bg-card" data-testid="home-todo">
             {todo.map((t) => (
               <li key={t.href + t.text}>
-                <Link href={t.href} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#fafbfd]">
+                <Link href={t.href} className="flex items-center gap-3 px-3 py-3 hover:bg-[#fafbfd]">
                   <span className="num min-w-8 rounded-md bg-peach px-1.5 text-center font-semibold text-peach-ink">{t.n}</span>
-                  <span className="text-[15px]">{t.text}</span>
+                  <span className="flex-1 text-[15px]">{t.text}</span>
+                  <span aria-hidden className="text-mute">›</span>
                 </Link>
               </li>
             ))}
           </ul>
         )}
-      </Section>
-      )}
+      </section>
 
-      {usesOrders && (
-        <>
-      <div>
-        <h2 className="mb-2 text-[15px] font-semibold">本月（{d.ym}）</h2>
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <Stat label="收入（已賣出）" value={<Twd v={d.month.revenue} />} note="依出貨認列，含運費收入" href="/reports" />
-          <Stat label="賺多少（已賣出）" value={<Twd v={d.month.realizedProfit} />} note={d.month.estimatedCostUnits > 0 ? `${d.month.estimatedCostUnits} 件以預估成本計` : "營收 − 銷貨成本 − 其他費用"} href="/reports" />
-          <Stat label="本月收款" value={<Twd v={d.month.cashIn} />} note={`退款 ${d.month.cashOut.toLocaleString()} 元`} />
-          <Stat label="本月新訂單金額" value={<Twd v={d.month.bookedSales} />} note="已確認訂單的應收" />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <Stat label="待收款" value={<Twd v={d.snap.balance} />} href="/payments" tone={d.snap.balance > 0 ? "warn" : undefined} />
-        <Stat label="待退款" value={<Twd v={d.snap.refundDue} />} note={d.snap.refundPending > 0 ? `其中 ${d.snap.refundPending.toLocaleString()} 元處理中` : undefined} href="/payments?tab=refunds" tone={d.snap.refundDue > 0 ? "bad" : undefined} />
-        <Stat label="待出貨件數" value={d.toShipQty} href="/shipping" />
-        <Stat label="還沒賣的預估會賺" value={<Twd v={un.profit} />} note={un.unknownCostUnits > 0 ? `${un.unknownCostUnits} 件沒有預估成本` : "未出貨部分，以預估成本計"} href="/reports" />
-      </div>
-
-        </>
-      )}
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        {usesOrders && <Section title="即將截止的開團" pad={false} actions={<Link href="/groupbuys" className="text-sm text-ai">全部</Link>}>
-          {d.closingGroupBuys.length === 0 ? (
-            <Empty>7 天內沒有截止的開團。</Empty>
-          ) : (
-            <ul className="divide-y divide-line-2 text-sm">
-              {d.closingGroupBuys.map((g) => (
-                <li key={g.id} className="flex justify-between gap-2 px-4 py-2">
-                  <Link href={`/orders?groupBuyId=${g.id}`} className="truncate hover:underline">
-                    {g.name}
-                  </Link>
-                  <span className="num shrink-0 text-mute">{fmtDate(g.closeAt, true)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>}
-        {d.incomingBatches.length > 0 && (
-        <Section title="還沒到的團" pad={false} actions={<Link href="/inventory?tab=batches" className="text-sm text-ai">全部</Link>}>
-          {d.incomingBatches.length === 0 ? (
-            <Empty>全部都到了。</Empty>
-          ) : (
-            <ul className="divide-y divide-line-2 text-sm">
-              {d.incomingBatches.map((b) => (
-                <li key={b.id} className="flex items-center justify-between gap-2 px-4 py-2">
-                  <Link href={`/inventory/batches/${b.id}`} className="min-w-0 truncate hover:underline">
-                    {b.code} {b.name}
-                    {b.expectedAt && <span className={`ml-1 text-[12px] ${b.expectedAt < today ? "text-bad" : "text-mute"}`}>預計 {fmtDay(b.expectedAt)}{b.expectedAt < today ? "・已逾期" : ""}</span>}
-                  </Link>
-                  <StatusBadge map={batchStatus} value={b.status} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-        )}
-        {d.upcomingProducts.length > 0 && (
-        <Section title="近期預計到貨的商品" pad={false}>
-          {d.upcomingProducts.length === 0 ? (
-            <Empty>14 天內沒有預計到貨的商品。</Empty>
-          ) : (
-            <ul className="divide-y divide-line-2 text-sm">
-              {d.upcomingProducts.map((p) => (
-                <li key={p.id} className="flex justify-between gap-2 px-4 py-2">
-                  <Link href={`/products/${p.id}`} className="truncate hover:underline">
-                    {p.name}
-                  </Link>
-                  <span className="num shrink-0 text-mute">{fmtDay(p.expectedArrivalDate)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-        )}
-      </div>
+      <section className="flex items-center justify-between gap-2 rounded-xl border border-line bg-card px-3 py-2.5" aria-label="搶購提醒" data-testid="home-rush">
+        <Link href={rush ? `/rush/${rush.id}` : "/rush"} className="min-w-0 flex-1 truncate text-[14px]">
+          {rush ? <>下一場搶購　{relativeDay(rush.startAt).split(" ")[0]} {taipeiParts(rush.startAt).time}　{rush.supplierName}</> : <span className="text-mute">接下來沒有搶購，按這裡新增</span>}
+        </Link>
+        <PushStatusChip vapidKey={vapidPublicKey()} />
+      </section>
     </div>
   );
 }

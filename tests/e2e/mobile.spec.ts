@@ -1,6 +1,6 @@
 // 手機版（iPhone 15 Pro 尺寸）：主要頁面不能出現整頁橫向捲動，表格在自己的容器內捲動
 import { test, expect } from "@playwright/test";
-import { login } from "./helpers";
+import { login, openSeriesPage } from "./helpers";
 
 const PAGES = ["/", "/sell", "/catalog", "/search?q=吉伊", "/purchase", "/inventory?tab=stock", "/orders", "/paste", "/import", "/buyers", "/products", "/categories", "/inventory", "/payments", "/shipping", "/reports", "/settings", "/tags", "/groupbuys", "/sales", "/inventory?tab=batches", "/suppliers", "/operators"];
 
@@ -15,24 +15,25 @@ test("手機版主要頁面沒有整頁橫向捲動，底部導覽可用", async
     await page.screenshot({ path: `test-results/mobile${p === "/" ? "_home" : p.replace(/[/?=]/g, "_")}.png`, fullPage: false });
   }
   // 活動頁（含跨團比價表）
-  await page.goto("/categories");
-  await page.getByRole("link", { name: "萬聖節", exact: true }).first().click();
+  await openSeriesPage(page, "萬聖節");
   await expect(page.locator("main")).toBeVisible();
   const ov = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(ov, "活動頁出現整頁橫向捲動").toBeLessThanOrEqual(1);
   await page.screenshot({ path: "test-results/mobile_category.png", fullPage: true });
-  // 首頁快捷：賣給客人、新增系列
+  // 首頁兩顆大按鈕：新增採購、賣給客人
   await page.goto("/");
   await page.getByRole("link", { name: /賣給客人/ }).first().click();
   await expect(page).toHaveURL(/\/sell/);
   await page.goto("/");
-  await page.getByRole("link", { name: /新增系列/ }).first().click();
-  await expect(page).toHaveURL(/\/catalog/);
+  await page.getByRole("link", { name: /新增採購/ }).first().click();
+  await expect(page).toHaveURL(/\/purchase/);
   await page.screenshot({ path: "test-results/mobile_home_quick.png", fullPage: false });
   await page.goto("/");
-  // 首頁看得到錢：還要付代購、手上庫存成本、本月賺多少
+  // 首頁只放三個數字＋要處理的事
   await expect(page.getByText("還要付代購")).toBeVisible();
-  await expect(page.getByText("手上庫存成本")).toBeVisible();
+  await expect(page.getByText("代購要退")).toBeVisible();
+  await expect(page.getByText("本月賺")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "要處理的事" })).toBeVisible();
   // 底部導覽：最常用的直接按，不用進「全部功能」
   const bar = page.getByRole("navigation", { name: "常用功能" });
   await bar.getByRole("link", { name: "＋ 採購" }).click();
@@ -40,7 +41,7 @@ test("手機版主要頁面沒有整頁橫向捲動，底部導覽可用", async
   await bar.getByRole("link", { name: "庫存" }).click();
   await expect(page).toHaveURL(/tab=stock/);
   await expect(bar.getByRole("link", { name: "庫存" })).toHaveAttribute("aria-current", "page");
-  await bar.getByRole("link", { name: "活動" }).click();
+  await bar.getByRole("link", { name: "系列" }).click();
   await expect(page).toHaveURL(/\/categories$/);
   // 全站搜尋
   await page.getByRole("link", { name: "搜尋" }).first().click();

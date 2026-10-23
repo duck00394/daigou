@@ -52,7 +52,7 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
         </div>
       </div>
       {refunds.length > 0 && (
-        <details className="rounded-xl border border-[#f1b5b5] bg-card" data-testid="refund-section">
+        <details className="rounded-xl border border-[#f1b5b5] bg-card" data-testid="refund-section" open={sp.open === "refund" || undefined}>
           <summary className="cursor-pointer px-4 py-3 text-[14px] font-semibold text-bad">已砍單，未退款（{refunds.length}）<span className="ml-1 font-normal">代購要退 {formatTwd(refunds.reduce((a, r) => a + r.owed, 0))}</span></summary>
           <ul className="divide-y divide-line-2 border-t border-line-2">
             {refunds.map((r) => (
@@ -70,7 +70,7 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
           </ul>
         </details>
       )}
-      <details className="rounded-xl border border-line bg-card" data-testid="todo-section">
+      <details className="rounded-xl border border-line bg-card" data-testid="todo-section" open={sp.open === "todo" || undefined}>
         <summary className="cursor-pointer px-4 py-3 text-[14px] font-semibold text-warn">未確認・還沒對完（{data.todo.length}）</summary>
         {data.todo.length === 0 ? (
           <div className="border-t border-line-2"><Empty>全部對完了。</Empty></div>

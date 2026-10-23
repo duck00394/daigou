@@ -50,7 +50,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
       <NavSelect label="頁面" hideLabel options={TABS.map(([k, l]) => ({ label: l, href: `/inventory?tab=${k}` }))} current={`/inventory?tab=${tab}`} />
       {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} owner={owner} kind={sp.kind} v={sp.v} />}
       {tab === "demand" && <DemandTab />}
-      {tab === "batches" && <BatchesTab cat={sp.cat} open={sp.open} owner={owner} confirm={sp.confirm} view={sp.view} />}
+      {tab === "batches" && <BatchesTab cat={sp.cat} open={sp.open} owner={owner} confirm={sp.confirm} view={sp.view} pay={sp.pay} late={sp.late} />}
       {tab === "receive" && <ReceiveTab productId={sp.productId} />}
       {tab === "adjust" && (
         <Section title="盤點調整">
@@ -341,7 +341,7 @@ async function DemandTab() {
   );
 }
 
-async function BatchesTab({ cat, open, owner, confirm, view }: { cat?: string; open?: string; owner: string; confirm?: string; view?: string }) {
+async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, late: lateFilter }: { cat?: string; open?: string; owner: string; confirm?: string; view?: string; pay?: string; late?: string }) {
   // 進行中（預設）／含已完成／已取消：已取消的只在「已取消」裡看，平常不出現
   const mode = open === "cancelled" ? "cancelled" : open === "0" ? "all" : "open";
   const operators = await tx((t) => listOperators(t));
@@ -356,7 +356,7 @@ async function BatchesTab({ cat, open, owner, confirm, view }: { cat?: string; o
   const recMap = new Map(ownerBatches.map((b) => [b.id, batchReconcile(b)]));
   const pendingConfirm = (b: (typeof ownerBatches)[number]) => (recMap.get(b.id)?.pending ?? 0) > 0;
   const unconfirmed = ownerBatches.filter(pendingConfirm).length;
-  const batches = confirm === "no" ? ownerBatches.filter(pendingConfirm) : confirm === "yes" ? ownerBatches.filter((b) => !pendingConfirm(b)) : [...ownerBatches.filter(pendingConfirm), ...ownerBatches.filter((b) => !pendingConfirm(b))];
+  let batches = confirm === "no" ? ownerBatches.filter(pendingConfirm) : confirm === "yes" ? ownerBatches.filter((b) => !pendingConfirm(b)) : [...ownerBatches.filter(pendingConfirm), ...ownerBatches.filter((b) => !pendingConfirm(b))];
   const splitAt = !confirm && unconfirmed > 0 && unconfirmed < batches.length ? unconfirmed : -1;
   const [catsRaw, sOrder] = await Promise.all([prisma.category.findMany({ where: { batches: { some: {} } }, select: { id: true, name: true } }), seriesOptions(prisma)]);
   const rank = new Map(sOrder.map((x) => [x.id, x.order]));
@@ -365,7 +365,11 @@ async function BatchesTab({ cat, open, owner, confirm, view }: { cat?: string; o
     `/inventory?tab=batches${c ? `&cat=${c}` : ""}${o === "0" || o === "cancelled" ? `&open=${o}` : ""}${x.confirm ? `&confirm=${x.confirm}` : ""}${x.view ? `&view=${x.view}` : ""}`;
   const cancelledCount = await prisma.purchaseBatch.count({ where: { status: "CANCELLED", ...(cat ? (cat === "none" ? { categoryId: null } : batchesWithSeries(cat)) : {}) } });
   const today = new Date();
-  const pay = await tx((t) => batchPaySummary(t, batches.map((b) => b.id)));
+  let pay = await tx((t) => batchPaySummary(t, batches.map((b) => b.id)));
+  // 從首頁來的篩選：還沒付清、超過預計到貨
+  if (payFilter === "due") batches = batches.filter((b) => (pay.get(b.id)?.dueTwd ?? 0) > 0);
+  if (lateFilter === "1") batches = batches.filter((b) => b.expectedAt && b.expectedAt < today && b.status !== "CANCELLED" && b.items.reduce((s2, i) => s2 + i.movements.reduce((a, m) => a + m.onHandDelta, 0), 0) < b.items.reduce((s2, i) => s2 + i.qty - i.cancelledQty, 0));
+  if (payFilter || lateFilter) pay = await tx((t) => batchPaySummary(t, batches.map((b) => b.id)));
   return (
     <Section title="採購團" pad={false}>
       <div className="border-b border-line-2 px-4 py-2.5"><OwnerDue compact title="每個人還要付（現金流）" due={await tx((t) => dueByOwner(t, cat ? { categoryId: cat === "none" ? null : cat } : {}))} operators={operators.map((o) => ({ id: o.id, name: o.name }))} only={owner ? [owner, "joint", "none"] : undefined} /></div>
@@ -390,6 +394,12 @@ async function BatchesTab({ cat, open, owner, confirm, view }: { cat?: string; o
           { label: "總計買了什麼", href: href(cat, open, owner, { confirm, view: "items" }) },
         ]} />
       </div>
+      {(payFilter === "due" || lateFilter === "1") && (
+        <div className="flex items-center justify-between border-b border-line-2 bg-ai-soft px-4 py-2 text-[14px]" data-testid="batch-filter-chip">
+          <span>只看：{payFilter === "due" ? "還沒付清的團" : "超過預計到貨日的團"}（{batches.length}）</span>
+          <Link href={href(cat, open)} className="font-semibold text-ai">看全部</Link>
+        </div>
+      )}
       {unconfirmed > 0 && (
         <Link href="/reconcile" className="flex items-center justify-between border-b border-line-2 bg-warn-soft px-4 py-2.5 text-[14px] text-warn" data-testid="go-reconcile">
           <span>還有 {unconfirmed} 團沒對完</span><span className="font-semibold">去對單</span>

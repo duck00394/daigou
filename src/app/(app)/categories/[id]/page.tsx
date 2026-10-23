@@ -8,6 +8,9 @@ import { PageHeader, Section, TableWrap, Stat, Twd, Empty, LinkButton, StatusBad
 import { ProductImage } from "@/components/client";
 import { CategoryEditButton, CategoryActiveButton } from "../forms";
 import { CategoryBatches } from "./batches";
+import { SeriesCatalogPanel } from "../../catalog/view";
+import { catalogTree } from "@/server/services/catalog-tree";
+import { getOrdersEnabled } from "@/server/services/settings";
 import { RenameNames } from "./rename";
 import { MergeDuplicates } from "./merge";
 import { duplicateGroups } from "@/server/services/merge";
@@ -15,7 +18,7 @@ import { listCustomCategoryTypes } from "@/server/services/catalog";
 import { renamePlan } from "@/server/services/series";
 import { categoryType, dayInput, fmtDay, productStatus } from "@/lib/labels";
 
-export default async function CategoryPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ q?: string; sort?: string; view?: string; owner?: string }> }) {
+export default async function CategoryPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ q?: string; sort?: string; view?: string; owner?: string; tab?: string }> }) {
   await requireUser();
   const { id } = await params;
   const sp = await searchParams;
@@ -31,11 +34,17 @@ export default async function CategoryPage({ params, searchParams }: { params: P
   const dups = await tx((t) => duplicateGroups(t, id));
   const customTypes = await tx((t) => listCustomCategoryTypes(t));
   const vk = (await getView()).key; // 現在看誰的
+  // 分頁：買了什麼（預設）／採購團／品項售價
+  const tab = sp.tab === "batches" || sp.tab === "catalog" ? sp.tab : "items";
+  const [tree, types] = tab === "catalog" ? await Promise.all([catalogTree(prisma), prisma.productType.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } })]) : [[], []];
+  const treeSeries = tree.flatMap((k) => k.series).find((x) => x.id === c.id);
+  const usesOrders = await getOrdersEnabled(prisma);
+  const tabCls = (on: boolean) => `flex-1 rounded-lg py-2 text-center text-[14px] ${on ? "bg-white font-semibold shadow-sm" : "text-ink-2"}`;
   return (
     <div className="space-y-4">
       <PageHeader
         title={c.name}
-        back={{ href: "/categories", label: "活動與分類" }}
+        back={{ href: "/categories", label: "系列" }}
         sub={
           <span className="flex flex-wrap items-center gap-2">
             {c.type === "CUSTOM" ? (c.customType ?? "自訂") : categoryType[c.type]}
@@ -44,9 +53,10 @@ export default async function CategoryPage({ params, searchParams }: { params: P
         }
         actions={
           <>
+            <LinkButton href={`/purchase?categoryId=${c.id}`} primary>＋ 採購</LinkButton>
+            <LinkButton href={`/sell?cat=${c.id}`}>賣給客人</LinkButton>
             <CategoryEditButton label="編輯名稱" customTypes={customTypes} cat={{ id: c.id, name: c.name, type: c.type, customType: c.customType, startDate: dayInput(c.startDate) || null, endDate: dayInput(c.endDate) || null, notes: c.notes, active: c.active }} />
             <LinkButton href={`/api/export/category?id=${c.id}`}>匯出 Excel</LinkButton>
-            <LinkButton href={`/products/new?categoryId=${c.id}`}>新增商品到此分類</LinkButton>
             <CategoryActiveButton id={c.id} active={c.active} />
           </>
         }
@@ -58,8 +68,17 @@ export default async function CategoryPage({ params, searchParams }: { params: P
       )}
       <RenameNames categoryId={c.id} plan={plan} />
       <MergeDuplicates groups={dups.map((g) => ({ key: g.key, name: g.name, keepId: g.keepId, products: g.products.map((p) => ({ id: p.id, code: p.code, name: p.name, bought: p.bought, onHand: p.onHand, incoming: p.incoming })) }))} />
-      <CategoryBatches categoryId={c.id} view={sp.view} owner={vk === "all" ? "" : vk} />
-      {(d.total.activeQty > 0 || d.total.cancelledQty > 0) && (
+      <nav aria-label="系列分頁" className="flex gap-1 rounded-xl bg-line-2 p-1">
+        <Link href={`/categories/${c.id}`} className={tabCls(tab === "items")} aria-current={tab === "items" ? "page" : undefined}>買了什麼</Link>
+        <Link href={`/categories/${c.id}?tab=batches`} className={tabCls(tab === "batches")} aria-current={tab === "batches" ? "page" : undefined}>採購團</Link>
+        <Link href={`/categories/${c.id}?tab=catalog`} className={tabCls(tab === "catalog")} aria-current={tab === "catalog" ? "page" : undefined}>品項售價</Link>
+      </nav>
+      {tab === "catalog" ? (
+        treeSeries ? <SeriesCatalogPanel s={treeSeries} types={types} kinds={tree.map((k) => [k.key, k.label] as [string, string])} /> : <Empty>找不到這個系列的目錄。</Empty>
+      ) : (
+        <CategoryBatches categoryId={c.id} view={sp.view} owner={vk === "all" ? "" : vk} part={tab} tab={tab === "items" ? undefined : tab} />
+      )}
+      {tab === "items" && usesOrders && (d.total.activeQty > 0 || d.total.cancelledQty > 0) && (
         <div>
           <h2 className="mb-2 text-[15px] font-semibold">買家預購統計</h2>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-7">
@@ -73,6 +92,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
         </div>
           </div>
       )}
+      {tab === "items" && usesOrders && (
       <Section title="分類內商品" pad={false}>
         <form className="flex flex-wrap gap-2 border-b border-line-2 px-4 py-3" method="get">
           <input type="search" name="q" defaultValue={sp.q} placeholder="搜尋商品" className="min-w-[12rem] flex-1 rounded-lg border border-line px-3 py-2" />
@@ -134,6 +154,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
           </TableWrap>
         )}
       </Section>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 // 手機：一個畫面新增採購（活動 → 哪一團 → 買了什麼），三團分別是我的、對方的、合資；活動總表看總額、各團與誰買的
 import { test, expect, type Page } from "@playwright/test";
-import { login, toast, pickIp, newSupplierPick, openSeries, openMore } from "./helpers";
+import { login, toast, pickIp, newSupplierPick, openSeries, openMore, pickSupplier, openSeriesPage } from "./helpers";
 
 async function addRow(page: Page, character: string, price: string, qty: string) {
   await pickIp(page);
@@ -86,13 +86,15 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   // 活動總表：總額與誰買的（切到「全部」看兩個人加起來）
   await switchView(page, /全部/);
   await page.goto("/categories");
-  const card = page.getByTestId(`cat-card-${cat}`);
+  await page.getByLabel("找系列", { exact: true }).fill(cat);
+  const card = page.getByTestId("series-search-hits").getByTestId(`cat-card-${cat}`);
   await expect(card).toContainText("NT$5,701"); // 647×3 + 660×2 + 610×4
   await expect(card).toContainText("3 團");
   await card.click();
   await expect(page.getByTestId("cat-total")).toHaveText("NT$5,701");
   await expect(page.getByTestId("cat-due")).toHaveText("NT$5,701");
   await expect(page.getByTestId("cat-paid")).toHaveText("NT$0");
+  await page.getByRole("navigation", { name: "系列分頁" }).getByRole("link", { name: "採購團" }).click();
   await expect(page.getByTestId("due-joint")).toContainText("NT$2,440");
   await expect(page.locator("main")).toContainText("NT$1,941");
   await expect(page.locator("main")).toContainText("NT$1,320");
@@ -101,9 +103,12 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   expect(ov2).toBeLessThanOrEqual(1);
   await page.screenshot({ path: "test-results/mobile_category_owner.png", fullPage: true });
 
-  // 每個人還要付多少（現金流）
+  // 首頁：還要付代購（三團都還沒付）；待辦「還沒付清」按了到篩好的採購團
   await page.goto("/");
-  await expect(page.getByTestId("due-owner-joint")).toContainText("NT$");
+  await expect(page.getByTestId("home-due")).not.toHaveText("NT$0");
+  await page.getByTestId("home-todo").getByRole("link", { name: /團還沒付清/ }).click();
+  await expect(page.getByTestId("batch-filter-chip")).toContainText("還沒付清");
+  await expect(page.getByTestId("batch-card").filter({ hasText: `YUANS ${tag}` })).toBeVisible();
   await page.screenshot({ path: "test-results/mobile_home_due.png", fullPage: false });
   // 預設只看「我的」（加上合資的）；在全部功能切換看對方的，上方會提醒
   await switchView(page, /（我）/);
@@ -120,8 +125,8 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   await expect(page.getByTestId("view-banner")).toHaveCount(0);
   await expect(page.getByTestId("batch-card").filter({ hasText: `YUANS ${tag}` })).toBeVisible();
   await page.screenshot({ path: "test-results/mobile_batches_owner.png", fullPage: false });
-  await page.goto("/categories");
-  await page.getByTestId(`cat-card-${cat}`).click();
+  await openSeriesPage(page, cat);
+  await page.getByRole("navigation", { name: "系列分頁" }).getByRole("link", { name: "採購團" }).click();
 
   // 點進第一團改進度
   await page.getByRole("link", { name: new RegExp(`YUANS ${tag}`) }).first().click();
@@ -137,8 +142,7 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   await toast(page, "已登記付款 NT$1,941");
   await expect(page.getByTestId("batch-due")).toHaveText("NT$0");
   await page.screenshot({ path: "test-results/mobile_batch_paid.png", fullPage: true });
-  await page.goto("/categories");
-  await page.getByTestId(`cat-card-${cat}`).click();
+  await openSeriesPage(page, cat);
   await expect(page.getByTestId("cat-due")).toHaveText("NT$3,760");
   await expect(page.getByTestId("cat-paid")).toHaveText("NT$1,941");
   await page.screenshot({ path: "test-results/mobile_category_pay.png", fullPage: true });
@@ -193,9 +197,7 @@ test("手機：開團時一起記運費（常用運費方式）和訂金；實�
   await expect(page.getByTestId("search-batches")).toContainText(`砂糖 ${tag}`);
   // 同一個代購再開一團：打字找代購；可以帶入上次的「在哪訂的」
   await page.goto("/purchase");
-  await page.getByLabel("找代購").fill(`砂糖 ${tag}`);
-  await page.getByTestId("supplier-hits").getByRole("button", { name: `砂糖 ${tag}`, exact: true }).click();
-  await expect(page.getByLabel("向哪個代購買", { exact: true }).locator("option:checked")).toHaveText(`砂糖 ${tag}`);
+  await pickSupplier(page, `砂糖 ${tag}`);
   await page.getByRole("button", { name: `用上次的：IP @sugar${tag}` }).click();
   await expect(page.getByLabel("在哪訂的")).toHaveValue(`IP @sugar${tag}`);
 

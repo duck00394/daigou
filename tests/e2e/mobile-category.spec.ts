@@ -7,7 +7,7 @@ test("手機：自訂類型記住、活動改名", async ({ page }) => {
   const type = `快閃${tag}`;
   await login(page);
   await page.goto("/categories");
-  await page.getByRole("button", { name: "新增活動" }).first().click();
+  await page.getByRole("button", { name: "＋ 新系列" }).first().click();
   await page.getByLabel("名稱", { exact: true }).fill(`E2E 活動 ${tag}`);
   const types = page.getByRole("radiogroup", { name: "類型" });
   await types.getByRole("radio", { name: "＋ 自訂" }).click();
@@ -28,6 +28,6 @@ test("手機：自訂類型記住、活動改名", async ({ page }) => {
 
   // 下次新增：自訂類型直接可以點
   await page.goto("/categories");
-  await page.getByRole("button", { name: "新增活動" }).first().click();
+  await page.getByRole("button", { name: "＋ 新系列" }).first().click();
   await expect(page.getByRole("radiogroup", { name: "類型" }).getByRole("radio", { name: type })).toBeVisible();
 });

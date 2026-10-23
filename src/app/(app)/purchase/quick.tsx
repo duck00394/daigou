@@ -58,6 +58,7 @@ export function QuickPurchase(props: {
   const [f, setF] = useState({ supplierId: "", name: "", owner: props.me ?? operators[0]?.id ?? "", progress: "ASKED", expectedAt: "", rate: defaultRate, deposit: "", orderNo: "", notes: "" });
   const [changingCat, setChangingCat] = useState(false);
   const [supQ, setSupQ] = useState("");
+  const [supOpen, setSupOpen] = useState(false);
   // 運費：點常用的帶入金額（可以再改），也可以自己填
   const [fees, setFees] = useState<Record<string, string>>({});
   const [customFee, setCustomFee] = useState<string | null>(null);
@@ -91,7 +92,7 @@ export function QuickPurchase(props: {
   // 常用的（設定裡打星號的）直接列出來；沒設過就先列最常用的 3 個；其他用搜尋
   const favs = shown.some((x) => x.favorite) ? shown.filter((x) => x.favorite) : shown.slice(0, 3);
   const pickedSup = shown.find((x) => x.id === f.supplierId);
-  const supHits = supQ.trim() ? shown.filter((x) => x.name.toLowerCase().includes(supQ.trim().toLowerCase())).slice(0, 8) : [];
+  const supHits = supQ.trim() ? shown.filter((x) => x.name.toLowerCase().includes(supQ.trim().toLowerCase())).slice(0, 20) : [];
   const catName = cats.find((c) => c.id === categoryId)?.name ?? null;
 
   const chooseCategory = (id: string) => {
@@ -274,43 +275,56 @@ export function QuickPurchase(props: {
               <label className="mb-1 block text-[13px] font-medium text-ink-2" htmlFor="pick-supplier">{store ? "哪家店" : "代購"}</label>
               {newSup === null ? (
                 <>
-                  <div className="relative mb-2">
-                    <input
-                      type="search"
-                      aria-label={store ? "找店家" : "找代購"}
-                      placeholder={store ? "找店家：打名字" : "找代購：打名字"}
-                      className={`${inputCls} min-h-11`}
-                      value={supQ}
-                      onChange={(e) => setSupQ(e.target.value)}
-                    />
-                    {supQ.trim() && (
-                      <ul className="absolute inset-x-0 top-full z-30 mt-1 max-h-64 divide-y divide-line-2 overflow-y-auto rounded-lg border border-line bg-white shadow-lg" data-testid="supplier-hits">
-                        {supHits.map((x) => (
-                          <li key={x.id}>
-                            <button type="button" className="block w-full px-3 py-2.5 text-left text-[15px] hover:bg-[#fafbfc]" onClick={() => { setF({ ...f, supplierId: x.id }); setSupQ(""); }}>{x.name}</button>
-                          </li>
-                        ))}
-                        <li>
-                          <button type="button" className="block w-full px-3 py-2.5 text-left text-[15px] text-ai" onClick={() => { setNewSup(supQ.trim()); setSupQ(""); }}>＋ 新增「{supQ.trim()}」</button>
-                        </li>
-                      </ul>
-                    )}
-                  </div>
-                  <select
+                  {/* 選代購：按一下打開清單，上面可以打字找，最下面才是新增 */}
+                  <button
+                    type="button"
                     id="pick-supplier"
                     aria-label={store ? "哪家店" : "向哪個代購買"}
-                    className={`${inputCls} min-h-11`}
-                    value={f.supplierId}
-                    onChange={(e) => {
-                      if (e.target.value === NEW) return setNewSup("");
-                      setF({ ...f, supplierId: e.target.value });
-                    }}
+                    aria-expanded={supOpen}
+                    data-value={f.supplierId}
+                    className={`${inputCls} flex min-h-11 items-center justify-between text-left`}
+                    onClick={() => { setSupOpen(!supOpen); setSupQ(""); }}
                   >
-                    <option value="">{store ? "請選店家" : "請選代購"}</option>
-                    {favs.length > 0 && <optgroup label="常用">{favs.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>}
-                    {shown.length > favs.length && <optgroup label="其他">{shown.filter((x) => !favs.includes(x)).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>}
-                    <option value={NEW}>{store ? "＋ 新店家…" : "＋ 新代購…"}</option>
-                  </select>
+                    <span className={pickedSup ? "" : "text-mute"} data-testid="supplier-current">{pickedSup?.name ?? (store ? "請選店家" : "請選代購")}</span>
+                    <span aria-hidden className="text-mute">{supOpen ? "▴" : "▾"}</span>
+                  </button>
+                  {supOpen && (
+                    <div className="mt-1 overflow-hidden rounded-xl border border-ai bg-white shadow-lg" data-testid="supplier-panel">
+                      <div className="border-b border-line-2 p-2">
+                        <input
+                          autoFocus
+                          type="search"
+                          aria-label={store ? "搜尋店家" : "搜尋代購"}
+                          placeholder={store ? "搜尋店家名字" : "搜尋代購名字"}
+                          className={`${inputCls} min-h-10`}
+                          value={supQ}
+                          onChange={(e) => setSupQ(e.target.value)}
+                        />
+                      </div>
+                      <ul className="max-h-72 overflow-y-auto" role="listbox" aria-label={store ? "店家" : "代購"}>
+                        {(supQ.trim() ? [["搜尋結果", supHits] as const] : ([["常用", favs], ["其他", shown.filter((x) => !favs.includes(x))]] as const)).map(([title, list]) =>
+                          list.length ? (
+                            <li key={title}>
+                              <div className="bg-[#f7f8fa] px-3 py-1 text-[12px] text-mute">{title}</div>
+                              <ul>
+                                {list.map((x) => (
+                                  <li key={x.id}>
+                                    <button type="button" role="option" aria-selected={f.supplierId === x.id} className={`flex w-full items-center justify-between px-3 py-2.5 text-left text-[15px] ${f.supplierId === x.id ? "bg-ai-soft font-semibold text-ai" : "hover:bg-[#fafbfc]"}`} onClick={() => { setF({ ...f, supplierId: x.id }); setSupOpen(false); setSupQ(""); }}>
+                                      {x.name}{f.supplierId === x.id && <span className="text-[12px]">已選</span>}
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            </li>
+                          ) : null,
+                        )}
+                        {supQ.trim() && !supHits.length && <li className="px-3 py-2.5 text-[14px] text-mute">找不到「{supQ.trim()}」</li>}
+                      </ul>
+                      <button type="button" className="block w-full border-t border-line-2 px-3 py-2.5 text-left text-[14px] text-ai" onClick={() => { setNewSup(supQ.trim()); setSupQ(""); setSupOpen(false); }}>
+                        {supQ.trim() ? `＋ 新增${store ? "店家" : "代購"}「${supQ.trim()}」` : `＋ 新增${store ? "店家" : "代購"}`}
+                      </button>
+                    </div>
+                  )}
                   {pickedSup && !pickedSup.favorite && (
                     <button
                       type="button"

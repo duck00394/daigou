@@ -636,3 +636,56 @@ export async function recordRefund(t: Tx, actor: Actor, batchId: string, amount:
   await audit(t, actor, "batch.refund", "PurchaseBatch", batchId, { amount });
   return { refundedTwd: b.refundedTwd + amount };
 }
+
+/**
+ * 系列列表用：每個系列花了多少、還要付、代購要退、訂了幾件、到了幾件、幾團還沒對單
+ * view：現在看誰的（"all" 或經營者 id；看某人時含合資、未指定的團）
+ */
+export async function seriesSummary(t: Tx, view = "all") {
+  const batches = await t.purchaseBatch.findMany({
+    where: { OR: [{ categoryId: { not: null } }, { items: { some: { categoryId: { not: null } } } }] },
+    select: {
+      id: true,
+      status: true,
+      categoryId: true,
+      ownership: true,
+      orderedById: true,
+      rateMicro: true,
+      supplierRef: { select: { kind: true } },
+      items: { select: { categoryId: true, qty: true, cancelledQty: true, confirmedQty: true, currency: true, estUnitCost: true, actualUnitCost: true, allocations: { select: { amountTwd: true } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } },
+    },
+  });
+  const mine = batches.filter((b) => view === "all" || b.ownership === "JOINT" || !b.orderedById || b.orderedById === view);
+  const pay = await batchPaySummary(t, mine.map((b) => b.id));
+  const out = new Map<string, { batches: number; totalTwd: number; dueTwd: number; refundTwd: number; ordered: number; received: number; pendingBatches: number }>();
+  for (const b of mine) {
+    const p = pay.get(b.id)!;
+    const cancelled = b.status === "CANCELLED";
+    const anyCut = b.items.some((i) => i.cancelledQty > 0);
+    const refund = cancelled ? p.paidTwd : anyCut ? Math.max(0, p.paidTwd - p.totalTwd) : 0;
+    if (cancelled && refund <= 0) continue;
+    const ids = new Set(b.items.map((i) => itemSeries(i, b)).filter((x): x is string => !!x));
+    if (!b.items.length && b.categoryId) ids.add(b.categoryId);
+    for (const cid of ids) {
+      const r = seriesRatio(b, cid);
+      const v = out.get(cid) ?? { batches: 0, totalTwd: 0, dueTwd: 0, refundTwd: 0, ordered: 0, received: 0, pendingBatches: 0 };
+      v.refundTwd += Math.round(refund * r);
+      if (!cancelled) {
+        v.batches += 1;
+        v.totalTwd += Math.round(p.totalTwd * r);
+        v.dueTwd += Math.round(p.dueTwd * r);
+        let pend = 0;
+        for (const i of b.items) {
+          if (itemSeries(i, b) !== cid) continue;
+          const rec = i.movements.reduce((s, m) => s + m.onHandDelta, 0);
+          v.ordered += i.qty - i.cancelledQty;
+          v.received += rec;
+          pend += pendingQty({ ...i, batch: b }, rec);
+        }
+        if (pend > 0) v.pendingBatches += 1;
+      }
+      out.set(cid, v);
+    }
+  }
+  return out;
+}

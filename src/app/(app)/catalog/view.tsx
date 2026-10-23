@@ -17,7 +17,7 @@ function kindToType(key: string, custom: string) {
   return { type: (key || "GENERAL") as "GENERAL", customType: null };
 }
 
-export function CatalogView({ tree, types, initialKind, initialOpen }: { tree: TreeKind[]; types: Opt[]; initialKind: string | null; initialOpen: string | null }) {
+export function CatalogView({ tree, types, initialKind, initialOpen, initialOrdering = false }: { tree: TreeKind[]; types: Opt[]; initialKind: string | null; initialOpen: string | null; initialOrdering?: boolean }) {
   const openKind = initialOpen ? tree.find((k) => k.series.some((s) => s.id === initialOpen))?.key : null;
   const [kind, setKind] = useState(openKind ?? (initialKind && tree.some((k) => k.key === initialKind) ? initialKind : (tree[0]?.key ?? NEW_KIND)));
   const [open, setOpen] = useState<Set<string>>(() => new Set(initialOpen ? [initialOpen] : []));
@@ -27,7 +27,7 @@ export function CatalogView({ tree, types, initialKind, initialOpen }: { tree: T
   // 種類選項：只列有系列的種類（要新的種類按「＋ 新種類…」）
   const kindOpts = new Map<string, string>(tree.map((k) => [k.key, k.label]));
   const [renamingKind, setRenamingKind] = useState<string | null>(null);
-  const [ordering, setOrdering] = useState(false);
+  const [ordering, setOrdering] = useState(initialOrdering);
   const toggle = (id: string) => setOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const createSeries = () => {
@@ -358,4 +358,10 @@ function ReorderList({ tree, onDone }: { tree: TreeKind[]; onDone: () => void })
       </div>
     </div>
   );
+}
+
+/** 系列頁的「品項售價」分頁：只放這一個系列的品項、角色、預設售價 */
+export function SeriesCatalogPanel({ s, types, kinds }: { s: TreeSeries; types: Opt[]; kinds: [string, string][] }) {
+  const [open, setOpen] = useState(true);
+  return <SeriesCard s={s} types={types} kinds={kinds} open={open} onToggle={() => setOpen(!open)} />;
 }

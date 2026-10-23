@@ -13,7 +13,9 @@ import { ownerTone } from "@/lib/owner-colors";
 const money = (v: number, c: string) => (c === "JPY" ? formatJpy(v) : formatTwd(v));
 const sums = (m: Record<string, number>) => Object.entries(m).map(([c, v]) => money(v, c)).join("、");
 
-export async function CategoryBatches({ categoryId, view, owner = "" }: { categoryId: string; view?: string; owner?: string }) {
+export async function CategoryBatches({ categoryId, view, owner = "", part = "all", tab }: { categoryId: string; view?: string; owner?: string; part?: "all" | "items" | "batches"; tab?: string }) {
+  const showBatches = part !== "items";
+  const showItems = part !== "batches";
   const [o, operators] = await Promise.all([tx((t) => categoryOverview(t, categoryId)), tx((t) => listOperators(t, { includeInactive: true }))]);
   const who = (k: string) => (k === JOINT ? "合資（還沒登記付款）" : k === NONE ? "未指定" : (operators.find((x) => x.id === k)?.name ?? "未指定"));
   // 依「這團是誰的」分組：個人、合資、未指定；每組分待付款、已付款
@@ -37,7 +39,7 @@ export async function CategoryBatches({ categoryId, view, owner = "" }: { catego
   if (!o.batches.length)
     return (
       <Section title="採購團" actions={add}>
-        <Empty>這個活動還沒有採購團。建立採購團時選擇這個活動，就能在這裡比較各團價格與進度。</Empty>
+        <Empty>這個系列還沒有採購。按上面「＋ 採購」開始買。</Empty>
       </Section>
     );
   const ids = operators.map((x) => x.id);
@@ -50,6 +52,7 @@ export async function CategoryBatches({ categoryId, view, owner = "" }: { catego
   const q = (p: { owner?: string; view?: string }) => {
     const sp = new URLSearchParams();
     const vw = p.view ?? (view === "unit" ? "unit" : "");
+    if (tab) sp.set("tab", tab);
     if (vw) sp.set("view", vw);
     const t = sp.toString();
     return t ? `?${t}` : "?";
@@ -87,6 +90,7 @@ export async function CategoryBatches({ categoryId, view, owner = "" }: { catego
         </div>
         <p className="mt-1 text-[12px] text-mute">{o.total.batches} 團・{o.total.qty} 件・已到 {o.total.received}・還沒到 {o.total.outstanding}{o.total.estimated ? "・金額有價格還沒確定" : ""}</p>
 
+        {showBatches && <>
         <div className="mt-3 space-y-3">
           {groups.filter((g) => mineKey(g.key)).map((g) => (
             <div key={g.key} className={`rounded-xl border border-line-2 bg-[#fafbfc] p-3 ${ownerTone(g.key, ids).stripe}`} data-testid={`owner-${g.key}`}>
@@ -132,9 +136,10 @@ export async function CategoryBatches({ categoryId, view, owner = "" }: { catego
           ))}
         </ul>
         {cancelledN > 0 && <p className="px-4 pb-3 text-[13px] text-mute">另外有 {cancelledN} 團已取消，<Link href={`/inventory?tab=batches&open=cancelled&cat=${categoryId}`} className="text-ai underline">到「已取消」看</Link>。</p>}
+        </>}
       </Section>
 
-
+      {showBatches && (
       <Section title={`採購團（${shownBatches.length}）`} pad={false} actions={add}>
         <ul className="grid gap-2 p-3 md:grid-cols-2">
           {shownBatches.map((b) => (
@@ -162,7 +167,8 @@ export async function CategoryBatches({ categoryId, view, owner = "" }: { catego
         </ul>
       </Section>
 
-      {summary.length > 0 && (
+      )}
+      {showItems && summary.length > 0 && (
         <Section
           title="商品數量與平均成本"
           pad={false}

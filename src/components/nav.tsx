@@ -9,9 +9,8 @@ export const NAV: { href: string; label: string; group: string; hint?: string }[
   { href: "/", label: "首頁", group: "常用", hint: "今天要做什麼、還要付多少" },
   { href: "/purchase", label: "＋ 新增採購", group: "常用", hint: "買了什麼、哪一團" },
   { href: "/sell", label: "賣給客人", group: "常用", hint: "選系列、填數量，沒貨記預訂" },
-  { href: "/catalog", label: "系列目錄", group: "常用", hint: "種類、系列、品項、角色、售價" },
   { href: "/rush", label: "搶購提醒", group: "常用", hint: "什麼時候開搶，開始前通知手機" },
-  { href: "/categories", label: "活動總表", group: "常用", hint: "每個活動花多少、誰還沒付" },
+  { href: "/categories", label: "系列", group: "常用", hint: "每個系列買了什麼、花多少、品項售價" },
   { href: "/inventory?tab=batches", label: "採購團・收貨", group: "常用", hint: "東西到了沒、登記收到" },
   { href: "/reconcile", label: "對單", group: "常用", hint: "跟代購確認買到多少、砍了哪些" },
   { href: "/inventory?tab=stock", label: "庫存・賣出・自留", group: "常用", hint: "手上有什麼、成本多少" },
@@ -23,6 +22,7 @@ export const NAV: { href: string; label: string; group: string; hint?: string }[
   { href: "/buyers", label: "買家", group: "接單" },
   { href: "/groupbuys", label: "開團（接單用）", group: "接單" },
   { href: "/import", label: "Excel 匯入", group: "接單" },
+  { href: "/catalog", label: "種類與系列管理", group: "資料與設定" },
   { href: "/products", label: "商品", group: "資料與設定" },
   { href: "/series", label: "系列與角色", group: "資料與設定" },
   { href: "/suppliers", label: "供應商・代購", group: "資料與設定" },
@@ -33,7 +33,7 @@ export const NAV: { href: string; label: string; group: string; hint?: string }[
 
 const BOTTOM = [
   { href: "/", label: "首頁" },
-  { href: "/categories", label: "活動" },
+  { href: "/categories", label: "系列" },
   { href: "/purchase", label: "＋ 採購", main: true },
   { href: "/inventory?tab=stock", label: "庫存" },
   { href: "/sales", label: "賺多少" },

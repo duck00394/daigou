@@ -215,8 +215,9 @@ test("買家標籤提醒不會阻擋建單；匯出與備份需要登入且可�
 test("資料重新整理後仍存在", async ({ page }) => {
   await login(page);
   await page.goto("/categories");
-  await expect(page.getByRole("link", { name: "萬聖節", exact: true })).toBeVisible();
+  await page.getByLabel("找系列", { exact: true }).fill("萬聖節");
+  await expect(page.getByTestId("cat-card-萬聖節")).toBeVisible();
   await page.reload();
-  const row = page.getByRole("row").filter({ hasText: "萬聖節" });
-  await expect(row).toBeVisible();
+  await page.getByLabel("找系列", { exact: true }).fill("萬聖節");
+  await expect(page.getByTestId("cat-card-萬聖節")).toBeVisible();
 });

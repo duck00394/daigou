@@ -1,6 +1,6 @@
 // 日常操作（桌面）：活動下建兩團 → 砍單 → 跨團複製 → 活動頁跨團比價 → 收貨 → 自留
 import { test, expect, type Page } from "@playwright/test";
-import { login, toast, pickIp } from "./helpers";
+import { login, toast, pickIp, openSeriesPage } from "./helpers";
 
 const cell = (page: Page, row: number, col: number) => page.locator(`[data-row="${row}"][data-col="${col}"]`).first();
 
@@ -79,8 +79,7 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
   await expect(page.getByText("還沒有付給供應商的款項")).toBeVisible();
 
   // 活動頁：兩團與跨團比價
-  await page.goto("/categories");
-  await page.getByRole("link", { name: "萬聖節", exact: true }).first().click();
+  await openSeriesPage(page, "萬聖節");
   // 活動頁：每個商品先看總數量與平均成本，點開才看各團價格
   const row = page.getByTestId("product-summary").filter({ hasText: "萬聖節吉伊 吊娃" });
   await expect(row).toContainText("350～380");
