@@ -6,6 +6,7 @@ import { supplierKind } from "@/lib/labels";
 import { normalizeKey } from "@/lib/normalize";
 import { audit, emptyToNull, nextCode, type Actor } from "./common";
 import { addBatchItem, updateBatchItem, type Currency } from "./purchase";
+import { cancelBatchItem, restoreCancelled } from "./batch-ops";
 import type { Prisma } from "@prisma/client";
 
 // ── 系列 ──
@@ -496,7 +497,7 @@ export async function bulkAddSeriesItems(
 export async function bulkUpdateBatchItems(
   actor: Actor,
   batchId: string,
-  rows: { itemId: string; qty?: number; unitCost?: number; actualUnitCost?: number | null; currency?: Currency; salePriceTwd?: number | null }[],
+  rows: { itemId: string; qty?: number; unitCost?: number; actualUnitCost?: number | null; currency?: Currency; salePriceTwd?: number | null; cancelQty?: number; cancelReason?: string; restoreQty?: number }[],
 ) {
   const errors: { itemId: string; error: string }[] = [];
   // 先逐列檢查，任何一列不合法就全部不寫入，避免改到一半
@@ -509,7 +510,11 @@ export async function bulkUpdateBatchItems(
           continue;
         }
         try {
-          await updateBatchItem(t, actor, r.itemId, r);
+          const { cancelQty, cancelReason, restoreQty, ...rest } = r;
+          if (restoreQty) await restoreCancelled(t, actor, r.itemId, restoreQty);
+          if (Object.keys(rest).length > 1) await updateBatchItem(t, actor, r.itemId, rest);
+          // 砍單：跟一般修改一起存（同一次全部成功或全部不寫入）
+          if (cancelQty) await cancelBatchItem(t, actor, r.itemId, { qty: cancelQty, reason: cancelReason || "AGENT_CANCEL", markShortage: true });
         } catch (e) {
           if (e instanceof BizError) errors.push({ itemId: r.itemId, error: e.message });
           else throw e;

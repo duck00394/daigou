@@ -42,15 +42,22 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
   await page.getByRole("button", { name: "編輯", exact: true }).click();
   const table = page.getByRole("table", { name: "採購品項", exact: true });
   const rowOf = (name: string) => table.getByRole("row").filter({ hasText: name });
-
-  // 砍單：小八砍 1 件
-  await rowOf("萬聖節小八 吊娃").getByRole("button", { name: "砍單" }).click();
   const dlg = page.getByRole("dialog");
-  await dlg.getByRole("radio", { name: "代購砍單" }).click();
-  await dlg.getByLabel("砍單數量").fill("1");
-  await dlg.getByRole("button", { name: "砍掉 1 件" }).click();
-  await expect(dlg.getByText("已取消 1 件，這個品項還有 1 件有效")).toBeVisible();
-  await dlg.getByRole("button", { name: "知道了" }).click();
+
+  // 砍單：按「編輯」後每一列直接有「砍幾件」，原因選一次，跟其他修改一起存
+  await rowOf("萬聖節小八 吊娃").getByLabel("萬聖節小八 吊娃 砍幾件").fill("1");
+  await page.getByLabel("砍單原因").selectOption("AGENT_CANCEL");
+  await page.getByRole("button", { name: "儲存修改" }).click();
+  await toast(page, "已儲存 1 列");
+  await expect(rowOf("萬聖節小八 吊娃")).toContainText("已砍單 1 件（代購砍單）");
+  // 砍錯了可以恢復
+  await rowOf("萬聖節小八 吊娃").getByRole("button", { name: "砍錯了，恢復" }).click();
+  await page.getByRole("button", { name: "儲存修改" }).click();
+  await toast(page, "已儲存 1 列");
+  await expect(rowOf("萬聖節小八 吊娃")).not.toContainText("已砍單");
+  await rowOf("萬聖節小八 吊娃").getByLabel("萬聖節小八 吊娃 砍幾件").fill("1");
+  await page.getByRole("button", { name: "儲存修改" }).click();
+  await toast(page, "已儲存 1 列");
   await expect(rowOf("萬聖節小八 吊娃")).toContainText("已砍單 1 件（代購砍單）");
   await expect(rowOf("萬聖節吉伊 吊娃").getByLabel("數量")).toHaveValue("3"); // 其他品項不受影響
 

@@ -182,7 +182,6 @@ test("手機：開團時一起記運費（常用運費方式）和訂金；實�
   // 買錯了：已入庫但還沒動過，可以直接刪
   await page.getByRole("button", { name: "編輯", exact: true }).click();
   const row = page.getByRole("table", { name: "採購品項", exact: true }).getByRole("row").filter({ hasText: "吉伊 吊娃" });
-  await row.getByRole("button", { name: /⋯/ }).click();
   await row.getByRole("button", { name: "刪除" }).click();
   await expect(page.getByRole("dialog")).toContainText("已經收進庫存的 1 件會一起從庫存拿掉");
   await page.getByRole("button", { name: "刪除品項" }).click();

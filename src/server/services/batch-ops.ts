@@ -118,6 +118,61 @@ export async function cancelBatchItem(t: Tx, actor: Actor, itemId: string, input
   };
 }
 
+/** 恢復砍單（砍錯了）：把砍掉的數量加回來 */
+export async function restoreCancelled(t: Tx, actor: Actor, itemId: string, qty?: number) {
+  const bi = await t.purchaseBatchItem.findUnique({ where: { id: itemId }, include: { batch: true } });
+  if (!bi) throw new BizError("找不到採購品項");
+  if (bi.batch.status === "CANCELLED") throw new BizError("採購團已取消");
+  const n = qty ?? bi.cancelledQty;
+  if (!Number.isInteger(n) || n <= 0 || n > bi.cancelledQty) throw new BizError(`最多只能恢復 ${bi.cancelledQty} 件`);
+  await lockRows(t, "PurchaseBatch", [bi.batchId]);
+  const left = bi.cancelledQty - n;
+  await t.purchaseBatchItem.update({ where: { id: itemId }, data: { cancelledQty: left, ...(left === 0 ? { cancelReason: null } : {}) } });
+  await reallocateBatch(t, bi.batchId);
+  await refreshBatchStatus(t, itemId);
+  await audit(t, actor, "batch.restoreCancel", "PurchaseBatch", bi.batchId, { itemId, qty: n });
+}
+
+/** 已確認／未確認（代購確認買得到了沒） */
+export async function setBatchConfirmed(t: Tx, actor: Actor, batchId: string, confirmed: boolean) {
+  await t.purchaseBatch.update({ where: { id: batchId }, data: { confirmed } });
+  await audit(t, actor, "batch.confirm", "PurchaseBatch", batchId, { confirmed });
+}
+
+/** 總計買了什麼：把好幾團的品項加起來（依系列 › 品項 › 角色） */
+export async function purchasedSummary(t: Tx, batchIds: string[]) {
+  const items = await t.purchaseBatchItem.findMany({
+    where: { batchId: { in: batchIds } },
+    select: {
+      productId: true,
+      qty: true,
+      cancelledQty: true,
+      categoryId: true,
+      batchId: true,
+      batch: { select: { categoryId: true, confirmed: true } },
+      movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } },
+      product: { select: { name: true, spec: true, productType: { select: { id: true, name: true, sortOrder: true } }, characters: { select: { character: { select: { id: true, name: true } } } } } },
+    },
+  });
+  type Row = { productId: string; name: string; charId: string | null; ordered: number; received: number; cancelled: number; unsure: number; batches: Set<string> };
+  const map = new Map<string, { seriesId: string | null; typeName: string; typeSort: number; row: Row }>();
+  for (const i of items) {
+    const seriesId = i.categoryId ?? i.batch.categoryId;
+    const key = `${seriesId ?? "-"}|${i.productId}`;
+    const ch = i.product.characters.length === 1 ? i.product.characters[0].character : null;
+    const v = map.get(key) ?? { seriesId, typeName: i.product.productType?.name ?? "其他", typeSort: i.product.productType?.sortOrder ?? 9999, row: { productId: i.productId, name: ch?.name ?? i.product.name, charId: ch?.id ?? null, ordered: 0, received: 0, cancelled: 0, unsure: 0, batches: new Set<string>() } };
+    const active = i.qty - i.cancelledQty;
+    const rec = i.movements.reduce((s, m) => s + m.onHandDelta, 0);
+    v.row.ordered += active;
+    v.row.received += rec;
+    v.row.cancelled += i.cancelledQty;
+    if (!i.batch.confirmed) v.row.unsure += Math.max(0, active - rec);
+    v.row.batches.add(i.batchId);
+    map.set(key, v);
+  }
+  return [...map.values()].map((v) => ({ seriesId: v.seriesId, typeName: v.typeName, typeSort: v.typeSort, ...v.row, batches: v.row.batches.size }));
+}
+
 /** 已向供應商下單、但目前庫存與所有在途都不夠的買家明細（從最晚下單的開始算缺貨） */
 async function shortageItems(t: Tx, productId: string) {
   const demand = await t.orderItem.findMany({

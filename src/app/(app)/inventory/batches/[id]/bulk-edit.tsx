@@ -6,7 +6,6 @@ import { Button, ConfirmButton, inputCls, notify, useRun, useToast } from "@/com
 import { bulkUpdateItemsAction } from "@/actions/series";
 import { deleteBatchItemAction } from "@/actions/ops";
 import { formatTwd } from "@/lib/money";
-import { CancelItemButton } from "./manage";
 
 type Currency = "JPY" | "TWD";
 export type EditItem = {
@@ -32,12 +31,13 @@ export type EditItem = {
   seriesId?: string | null; // 這個品項的系列（一團可以有好幾個系列）
 };
 
-type Draft = { qty: string; est: string; actual: string; currency: Currency; sale: string };
-const toDraft = (i: EditItem): Draft => ({ qty: String(i.qty), est: String(i.estUnitCost), actual: i.actualUnitCost == null ? "" : String(i.actualUnitCost), currency: i.currency, sale: i.salePriceTwd == null ? "" : String(i.salePriceTwd) });
+type Draft = { qty: string; est: string; actual: string; currency: Currency; sale: string; cut: string; restore: boolean };
+const toDraft = (i: EditItem): Draft => ({ qty: String(i.qty), est: String(i.estUnitCost), actual: i.actualUnitCost == null ? "" : String(i.actualUnitCost), currency: i.currency, sale: i.salePriceTwd == null ? "" : String(i.salePriceTwd), cut: "", restore: false });
+const CUT_REASONS: [string, string][] = [["AGENT_CANCEL", "代購砍單（沒搶到）"], ["OUT_OF_STOCK", "商品缺貨"], ["SELLER_CANCEL", "賣家取消"], ["SELF_CANCEL", "自己不要了"]];
 const num = (s: string) => (s.trim() === "" ? null : /^\d+$/.test(s.trim().replace(/,/g, "")) ? Number(s.trim().replace(/,/g, "")) : NaN);
 
 export function BulkEditTable({ batchId, items, editable }: { batchId: string; items: EditItem[]; editable: boolean }) {
-  const [more, setMore] = useState<Record<string, boolean>>({});
+  const [reason, setReason] = useState("AGENT_CANCEL");
   const [drafts, setDrafts] = useState<Record<string, Draft>>(() => Object.fromEntries(items.map((i) => [i.id, toDraft(i)])));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { run, pending } = useRun();
@@ -50,7 +50,7 @@ export function BulkEditTable({ batchId, items, editable }: { batchId: string; i
   }
 
   const changed = useMemo(() => {
-    const out: { itemId: string; qty?: number; unitCost?: number; actualUnitCost?: number | null; currency?: Currency; salePriceTwd?: number | null }[] = [];
+    const out: { itemId: string; qty?: number; unitCost?: number; actualUnitCost?: number | null; currency?: Currency; salePriceTwd?: number | null; cancelQty?: number; cancelReason?: string; restoreQty?: number }[] = [];
     const local: Record<string, string> = {};
     for (const i of items) {
       const d = drafts[i.id];
@@ -65,16 +65,24 @@ export function BulkEditTable({ batchId, items, editable }: { batchId: string; i
       else if (q < i.minQty) local[i.id] = `數量不能少於 ${i.minQty}（${i.promisedNote}）`;
       else if (e === null || Number.isNaN(e)) local[i.id] = "預估單價必須是整數";
       else if (Number.isNaN(a) || Number.isNaN(s)) local[i.id] = "價格必須是整數";
+      const cut = num(d.cut);
+      const canCut = (q ?? i.qty) - i.received;
+      if (cut !== null && (Number.isNaN(cut) || cut > canCut)) local[i.id] = canCut > 0 ? `最多只能砍 ${canCut} 件（已到貨的不能砍）` : "已經全部到貨，不能砍";
       const row: (typeof out)[number] = { itemId: i.id };
       if (d.qty !== o.qty) row.qty = q ?? undefined;
       if (d.est !== o.est) row.unitCost = e ?? undefined;
       if (d.actual !== o.actual) row.actualUnitCost = a;
       if (d.currency !== o.currency) row.currency = d.currency;
       if (d.sale !== o.sale) row.salePriceTwd = s;
+      if (cut) {
+        row.cancelQty = cut;
+        row.cancelReason = reason;
+      }
+      if (d.restore && i.cancelledQty > 0) row.restoreQty = i.cancelledQty;
       out.push(row);
     }
     return { rows: out, local };
-  }, [drafts, items]);
+  }, [drafts, items, reason]);
 
   const set = (id: string, patch: Partial<Draft>) => {
     setDrafts((d) => ({ ...d, [id]: { ...d[id], ...patch } }));
@@ -105,18 +113,23 @@ export function BulkEditTable({ batchId, items, editable }: { batchId: string; i
           const d = drafts[i.id] ?? toDraft(i);
           const err = allErrors[i.id];
           const dirty = JSON.stringify(d) !== JSON.stringify(toDraft(i));
-          // 手機：平常只看名稱、數量（＋／−）、單價；其他點「⋯」才出現
-          const x = more[i.id] ? "" : "hidden md:block";
+          // 按「編輯」後每一列的欄位全部打開，不用一列一列點
+          const x = "";
           return (
             <div key={i.id} role="row" className={`grid grid-cols-2 gap-2 rounded-xl border p-3 md:grid-cols-[minmax(10rem,1.6fr)_4.5rem_5.5rem_6.5rem_6.5rem_5rem_6.5rem_7rem_7.5rem] md:items-start md:rounded-none md:border-0 md:border-b md:px-4 md:py-1.5 ${err ? "border-[#f5c9c4] bg-bad-soft/40" : dirty ? "border-[#cfd9ea] bg-info-soft/60" : "border-line md:border-line-2"}`}>
               <div role="cell" className="col-span-2 md:col-span-1 md:pt-2">
                 <Link href={`/products/${i.productId}`} className="font-medium hover:underline">{i.name}</Link>
                 {i.specNote && <span className="ml-1 text-[12px] text-mute">{i.specNote}</span>}
                 {i.minQty > 0 && <div className="text-[12px] text-mute">最少 {i.minQty} 件（{i.promisedNote}）</div>}
-                {i.cancelledQty > 0 && <div className="text-[12px] text-bad">已砍單 {i.cancelledQty} 件{i.cancelReason ? `（${i.cancelReason}）` : ""}</div>}
-                {editable && <button type="button" className="mt-0.5 text-[13px] text-ai md:hidden" onClick={() => setMore({ ...more, [i.id]: !more[i.id] })} aria-expanded={!!more[i.id]}>{more[i.id] ? "收起" : "⋯ 改實際單價、砍單、刪除"}</button>}
+                {i.cancelledQty > 0 && (
+                  <div className="text-[12px] text-bad">
+                    {d.restore ? <span className="text-good">會恢復砍掉的 {i.cancelledQty} 件</span> : <>已砍單 {i.cancelledQty} 件{i.cancelReason ? `（${i.cancelReason}）` : ""}</>}
+                    {editable && <button type="button" className="ml-2 text-ai underline" onClick={() => set(i.id, { restore: !d.restore })}>{d.restore ? "不要恢復" : "砍錯了，恢復"}</button>}
+                  </div>
+                )}
+
               </div>
-              <div role="cell" className={`flex items-center justify-between md:block md:pt-2 md:text-right ${more[i.id] ? "" : "hidden md:block"}`}>
+              <div role="cell" className="flex items-center justify-between md:block md:pt-2 md:text-right">
                 <span className="text-[12px] text-mute md:sr-only">已到貨</span>
                 <span className="num">{i.received}</span>
               </div>
@@ -147,13 +160,19 @@ export function BulkEditTable({ batchId, items, editable }: { batchId: string; i
                 <label className={lbl} htmlFor={`es-${i.id}`}>想賣價</label>
                 <input id={`es-${i.id}`} disabled={!editable} className={`${inputCls} num text-right`} inputMode="numeric" value={d.sale} onChange={(e) => set(i.id, { sale: e.target.value })} placeholder="選填" />
               </div>
-              <div role="cell" className={`col-span-2 items-center justify-between md:col-span-1 md:block md:pt-2 md:text-right ${more[i.id] ? "flex" : "hidden md:block"}`}>
+              <div role="cell" className="col-span-2 flex items-center justify-between md:col-span-1 md:block md:pt-2 md:text-right">
                 <span className="text-[12px] text-mute md:sr-only">成本（台幣）</span>
                 <span className="num">{formatTwd(i.goodsTwd + i.feesTwd)}</span>
                 <span className="block text-[11px] text-mute">{i.actualUnitCost == null ? "依預估單價" : "依實際單價"}{i.feesTwd ? `，含費用 ${i.feesTwd}` : ""}</span>
               </div>
-              <div role="cell" className={`col-span-2 flex-wrap justify-end gap-1 md:col-span-1 md:flex md:pt-1 ${more[i.id] ? "flex" : "hidden"}`}>
-                {editable && <CancelItemButton itemId={i.id} name={i.name} max={i.qty - i.received} />}
+              <div role="cell" className="col-span-2 flex flex-wrap items-center justify-end gap-1 md:col-span-1 md:pt-1">
+                {editable && i.qty - i.received > 0 && (
+                  <label className="flex items-center gap-1 text-[13px] text-bad">
+                    ✂ 砍
+                    <input aria-label={`${i.name} 砍幾件`} className={`${inputCls} num w-14 text-center`} inputMode="numeric" value={d.cut} onChange={(e) => set(i.id, { cut: e.target.value })} placeholder="0" />
+                    件
+                  </label>
+                )}
                 {editable && !i.canDelete && i.deleteBlocked && <span className="w-full text-right text-[12px] text-mute">不能刪：{i.deleteBlocked}</span>}
                 {editable && i.canDelete && (
                   <ConfirmButton small variant="danger" label="刪除" title={`刪除「${i.name}」`} message={i.received > 0 ? `已經收進庫存的 ${i.received} 件會一起從庫存拿掉${i.kept ? `（其中自留的 ${i.kept} 件也會一起拿掉）` : ""}。` : "這個品項還沒到貨，刪掉就不見了。"} confirmLabel="刪除品項" onConfirm={() => run(() => deleteBatchItemAction(i.id), { success: "已刪除品項" })} />
@@ -164,6 +183,15 @@ export function BulkEditTable({ batchId, items, editable }: { batchId: string; i
           );
         })}
       </div>
+      {editable && Object.values(drafts).some((d) => d.cut.trim() && d.cut.trim() !== "0") && (
+        <label className="flex flex-wrap items-center gap-2 border-t border-line-2 px-4 py-2 text-[14px]">
+          砍單原因
+          <select aria-label="砍單原因" className={`${inputCls} w-auto`} value={reason} onChange={(e) => setReason(e.target.value)}>
+            {CUT_REASONS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <span className="text-[12px] text-mute">砍了之後總額、還要付會自動重算；買家訂的會標成缺貨</span>
+        </label>
+      )}
       {editable && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line-2 px-4 py-3">
           <span className="text-[13px] text-mute">

@@ -434,6 +434,7 @@ export function QuickPurchase(props: {
         ) : (
           <BulkAddGrid
             category={catName ? { id: categoryId, name: catName } : null}
+            seriesOptions={cats}
             batchId={pick === NEW ? created.current : pick}
             ensureBatch={ensureBatch}
             initialSeriesId={props.lastSeriesId}

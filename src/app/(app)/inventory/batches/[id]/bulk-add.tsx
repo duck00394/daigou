@@ -276,13 +276,30 @@ export function BulkAddGrid({
   }
 
   // ── 統計 ──
+  // 不知道單價：填這批商品總共多少，空白單價的列平均分（之後知道實際單價再到「編輯」改）
+  const [lump, setLump] = useState("");
+  const fill = useMemo(() => {
+    const out = new Map<string, string>();
+    const L = toInt(lump);
+    if (L === null || !Number.isInteger(L) || L < 0) return out;
+    // 空白或自動帶入（沒自己改過）的單價都算「不知道」
+    const unknown = (r: RowState) => toInt(r.unitCost) === null || !r.touched;
+    const blanks = rows.filter((r) => !isBlank(r) && unknown(r) && Number.isInteger(toInt(r.qty)) && (toInt(r.qty) ?? 0) > 0);
+    if (!blanks.length) return out;
+    const known = rows.filter((r) => !isBlank(r) && !unknown(r) && Number.isInteger(toInt(r.unitCost)) && Number.isInteger(toInt(r.qty))).reduce((sum, r) => sum + toInt(r.qty)! * toInt(r.unitCost)!, 0);
+    const pieces = blanks.reduce((sum, r) => sum + toInt(r.qty)!, 0);
+    const per = Math.round(Math.max(0, L - known) / pieces);
+    for (const r of blanks) out.set(r.key, String(per));
+    return out;
+  }, [lump, rows]);
+  const eff = useMemo(() => rows.map((r) => (fill.has(r.key) ? { ...r, unitCost: fill.get(r.key)! } : r)), [rows, fill]);
   const stats = useMemo(() => {
     let valid = 0;
     let qty = 0;
     let jpy = 0;
     let twd = 0;
     let invalid = 0;
-    for (const r of rows) {
+    for (const r of eff) {
       if (isBlank(r)) continue;
       if (rowError(r)) {
         invalid++;
@@ -296,7 +313,7 @@ export function BulkAddGrid({
       else twd += q * c;
     }
     return { valid, invalid, qty, jpy, twd, approxTwd: twd + jpyToTwd(jpy, rateMicro) };
-  }, [rows, rateMicro]);
+  }, [eff, rateMicro]);
 
   // 同次送出中的重複角色與規格
   const dupKeys = useMemo(() => {
@@ -317,7 +334,7 @@ export function BulkAddGrid({
   async function submit() {
     setBusy(true);
     try {
-      const payload = rows
+      const payload = eff
         .filter((r) => !isBlank(r))
         .map((r) => ({
           rowKey: r.key,
@@ -506,7 +523,7 @@ export function BulkAddGrid({
           <span role="columnheader"><span className="sr-only">操作</span></span>
         </div>
         {rows.map((r, i) => {
-          const err = (showErrors || !isBlank(r) ? rowError(r) : null) ?? (dupKeys.has(r.key) ? "與上面的列角色與規格重複" : null) ?? r.serverError ?? null;
+          const err = (showErrors || !isBlank(r) ? rowError(eff[i]) : null) ?? (dupKeys.has(r.key) ? "與上面的列角色與規格重複" : null) ?? r.serverError ?? null;
           const q = toInt(r.qty);
           const c = toInt(r.unitCost);
           const sub = q !== null && c !== null && Number.isInteger(q) && Number.isInteger(c) ? q * c : null;
@@ -571,7 +588,7 @@ export function BulkAddGrid({
               </div>
               <div role="cell">
                 <label className={lbl} htmlFor={`u-${r.key}`}>單價</label>
-                <input id={`u-${r.key}`} {...cell(2)} className={`${inputCls} num text-right`} inputMode="numeric" disabled={r.loading} placeholder={r.loading ? "讀取中…" : undefined} value={r.unitCost} onFocus={() => !r.touched && update(r.key, { touched: true })} onChange={(e) => update(r.key, { unitCost: e.target.value, hint: "", touched: true })} />
+                <input id={`u-${r.key}`} {...cell(2)} className={`${inputCls} num text-right`} inputMode="numeric" disabled={r.loading} placeholder={r.loading ? "讀取中…" : fill.get(r.key) ? `≈${fill.get(r.key)}` : undefined} value={fill.has(r.key) && !r.touched ? "" : r.unitCost} onFocus={() => !r.touched && update(r.key, { touched: true })} onChange={(e) => update(r.key, { unitCost: e.target.value, hint: "", touched: true })} />
                 {r.hint && <span className="mt-0.5 hidden text-[11px] leading-tight text-mute md:block">{r.hint}</span>}
               </div>
               <div role="cell" className={`order-last col-span-2 md:order-none md:col-span-1 ${extra}`}>
@@ -617,6 +634,16 @@ export function BulkAddGrid({
       </div>
       <p className="hidden text-[12px] text-mute md:block">可以從 Excel 複製「角色、規格、單價、幣別、數量、對客售價」整塊貼到任一格；Enter 或 ↓ 移到下一列，Tab 切換欄位，Ctrl+D 複製這一列。空白列不會建立。</p>
 
+      <div className="rounded-xl border border-line bg-white p-3" data-testid="lump-sum">
+        <b className="text-[14px]">不知道單價？</b>
+        <p className="text-[12px] text-mute">單價空著，填這批商品總共多少，存的時候平均分到每一件（之後知道再到「編輯」改）。</p>
+        <label className="mt-1.5 flex items-center gap-2 text-[14px]">
+          商品總額
+          <input className={`${inputCls} num w-32 text-right`} inputMode="numeric" aria-label="商品總額" value={lump} onChange={(e) => setLump(e.target.value)} placeholder="例：2700" />
+          {fill.size > 0 && <span className="text-[13px] text-good" data-testid="lump-per">→ 每件約 {formatTwd(Number([...fill.values()][0]))}</span>}
+        </label>
+      </div>
+
       {/* 6：統計與送出 */}
       <div className="no-print sticky bottom-16 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-white px-4 py-3 shadow-sm md:bottom-4">
         <div className="text-sm">
@@ -634,7 +661,7 @@ export function BulkAddGrid({
             if (stats.valid === 0) return notify(stats.invalid ? "還有資料需要修正" : "請至少填寫一列");
             if (dupKeys.size) return notify("有重複的角色與規格，請修正後再送出");
             // 一般情況直接存；有新角色、單價特別高或有不完整的列，才多確認一次
-            const ok = rows.filter((r) => !isBlank(r) && !rowError(r));
+            const ok = eff.filter((r) => !isBlank(r) && !rowError(r));
             const risky = stats.invalid > 0 || ok.some((r) => r.characterId === "__new__" || (r.currency === "JPY" ? toInt(r.unitCost)! >= 100000 : toInt(r.unitCost)! >= 20000));
             if (risky) setConfirm(true);
             else submit();
@@ -693,7 +720,7 @@ export function BulkAddGrid({
             <tr className="text-left text-mute"><th className="py-1">角色／款式</th><th>規格</th><th className="text-right">單價</th><th className="text-right">數量</th><th className="text-right">小計</th></tr>
           </thead>
           <tbody>
-            {rows.filter((r) => !isBlank(r) && !rowError(r)).map((r) => {
+            {eff.filter((r) => !isBlank(r) && !rowError(r)).map((r) => {
               const q = toInt(r.qty)!;
               const c = toInt(r.unitCost)!;
               return (

@@ -84,6 +84,9 @@ const updRow = z.object({
   actualUnitCost: z.number().int().min(0).nullish(),
   currency: currency.optional(),
   salePriceTwd: z.number().int().min(0).nullish(),
+  cancelQty: z.number().int().min(0).optional(),
+  cancelReason: z.string().max(30).optional(),
+  restoreQty: z.number().int().min(0).optional(),
 });
 export async function bulkUpdateItemsAction(batchId: string, rows: z.infer<typeof updRow>[]) {
   return run((a) => sr.bulkUpdateBatchItems(a, batchId, z.array(updRow).max(300).parse(rows)));
