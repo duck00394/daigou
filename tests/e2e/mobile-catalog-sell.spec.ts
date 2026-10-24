@@ -127,10 +127,17 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   const ghost = page.locator(`[data-testid="sell-row"][data-name="幽靈${tag}:吊娃:吉伊"]`);
   await ghost.getByLabel("吉伊 數量").fill("1");
   await ghost.getByLabel("吉伊 單價").fill("300");
+  await choose(page, "販售平台", "賣貨便");
   await page.getByLabel("客人", { exact: true }).fill(`小美${tag}`);
   await page.screenshot({ path: "test-results/mobile_sell.png", fullPage: true });
   await page.getByRole("button", { name: /登記：3 件 NT\$1,600（現貨 2・預訂 1）/ }).click();
   await expect(page.getByTestId("sell-done")).toContainText("賣出 2 件、預訂 1 件");
+  await expect(page.getByTestId("sell-done")).toContainText(`賣貨便・小美${tag}`);
+  // 平台記住了；賺多少看得到是哪個平台賣的，也可以用平台搜尋
+  await expect(page.getByLabel("販售平台", { exact: true }).locator("option:checked")).toHaveText("賣貨便");
+  await page.goto(`/sales?ym=all&q=小美${tag}`);
+  await expect(page.getByTestId("sale-row").first()).toContainText(`賣貨便・小美${tag}`);
+  await page.goBack();
   await expect(page.locator("main")).toContainText("客人預訂還沒給");
 
   // 庫存：一打開不列，選好按查看才列；種類 › 系列 › 品項 › 角色

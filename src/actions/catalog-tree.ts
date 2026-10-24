@@ -21,6 +21,7 @@ export async function sellSheetAction(categoryId: string) {
 }
 const sellSchema = z.object({
   buyerName: z.string().max(100).nullish(),
+  channel: z.string().max(40).nullish(),
   categoryId: z.string().nullish(),
   idemKey: z.string().min(8).max(100),
   paid: z.boolean().optional(),

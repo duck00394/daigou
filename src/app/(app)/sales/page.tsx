@@ -98,7 +98,7 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
                       {r.voided && <span className="ml-2 rounded bg-line-2 px-1.5 text-[12px] text-mute">已作廢</span>}
                     </div>
                     <div className="text-[13px] text-mute">
-                      {fmtDate(r.soldAt)}｜{r.buyer.name}｜每件 {formatTwd(r.unitPrice)}
+                      {fmtDate(r.soldAt)}｜{r.channel ? `${r.channel}・` : ""}{r.buyer.name}｜每件 {formatTwd(r.unitPrice)}
                       {!r.voided && r.owners.filter((x) => x.qty > 0).map((x) => <span key={x.key} className="ml-1"><OwnerBadge k={x.key} name={x.key === JOINT ? "合資" : who(x.key)} ids={ids} /></span>)}
                       {!r.voided && (r.paid >= r.revenue ? "｜已收款" : `｜未收 ${formatTwd(r.revenue - r.paid)}`)}
                       {r.note ? `｜${r.note}` : ""}

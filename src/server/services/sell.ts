@@ -14,7 +14,8 @@ export interface SellLine {
   categoryId?: string | null; // 這個商品是哪個系列（一位客人可以一次買好幾個系列）
 }
 
-export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: string | null; categoryId?: string | null; lines: SellLine[]; idemKey: string; paid?: boolean }) {
+export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: string | null; channel?: string | null; categoryId?: string | null; lines: SellLine[]; idemKey: string; paid?: boolean }) {
+  const channel = input.channel?.trim() ? input.channel.trim().slice(0, 40) : null;
   if (!input.idemKey || input.idemKey.length < 8) throw new BizError("缺少送出識別碼");
   const lines = input.lines.filter((l) => l.qty > 0);
   if (!lines.length) throw new BizError("至少要填一個數量");
@@ -43,30 +44,32 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
   if (plan.some((x) => x.l.qty > x.now) && !input.buyerName?.trim()) throw new BizError("有沒現貨要預訂的，請填客人名字（到貨才知道要給誰）");
   let sold = 0;
   let total = 0;
-  const pre: SellLine[] = [];
+  const preLines: SellLine[] = [];
   const buyer = await resolveBuyer(t, actor, input.buyerName);
   for (const { l, now } of plan) {
     if (now > 0) {
-      await quickSale(t, actor, { productId: l.productId, qty: now, unitPrice: l.unitPrice, buyerName: input.buyerName ?? null, paid: input.paid !== false, idemKey: `${input.idemKey}:${l.productId}` });
+      const q = await quickSale(t, actor, { productId: l.productId, qty: now, unitPrice: l.unitPrice, buyerName: input.buyerName ?? null, paid: input.paid !== false, idemKey: `${input.idemKey}:${l.productId}` });
+      if (channel) await t.order.update({ where: { id: q.orderId }, data: { salesChannel: channel } });
       sold += now;
     }
-    if (l.qty > now) pre.push({ ...l, qty: l.qty - now });
+    if (l.qty > now) preLines.push({ ...l, qty: l.qty - now });
     total += l.qty * l.unitPrice;
   }
   let preordered = 0;
-  if (pre.length) {
-    for (const l of pre) {
+  if (preLines.length) {
+    for (const l of preLines) {
       const cid = l.categoryId ?? input.categoryId;
       if (cid) await t.productCategory.upsert({ where: { productId_categoryId: { productId: l.productId, categoryId: cid } }, update: {}, create: { productId: l.productId, categoryId: cid } });
     }
-    await createOrder(t, actor, {
+    const pre = await createOrder(t, actor, {
       buyerId: buyer.id,
       source: "MANUAL",
       notes: "預訂（到貨再給）",
       idempotencyKey: `${key}:pre`,
-      items: pre.map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: l.unitPrice, categoryId: l.categoryId ?? input.categoryId ?? null })),
+      items: preLines.map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: l.unitPrice, categoryId: l.categoryId ?? input.categoryId ?? null })),
     });
-    preordered = pre.reduce((s, l) => s + l.qty, 0);
+    if (channel) await t.order.update({ where: { id: pre.id }, data: { salesChannel: channel } });
+    preordered = preLines.reduce((s, l) => s + l.qty, 0);
   }
   const result = { sold, preordered, total };
   await audit(t, actor, "sell.create", "Sell", key, result);

@@ -479,6 +479,7 @@ model Order {
   appendOrders       Order[]           @relation("OrderAppend")
   source             OrderSource       @default(MANUAL)
   externalRef        String? // 來源訂單編號（Excel 等）
+  salesChannel       String? // 販售平台（賣貨便、蝦皮、IG、面交…）
   rawInput           String? // 原始輸入資料
   orderedAt          DateTime          @default(now())
   confirmation       OrderConfirmation @default(CONFIRMED)
