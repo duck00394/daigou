@@ -228,8 +228,28 @@ export async function renameKind(t: Tx, actor: Actor, kindKey: string, name: str
   if (!n) throw new BizError("請填種類名稱");
   if (n.length > 50) throw new BizError("種類名稱太長");
   const r = await t.category.updateMany({ where: kindWhere(kindKey), data: { type: "CUSTOM", customType: n } });
+  // 排好的順序跟著新名稱走
+  const order = await getKindOrder(t);
+  const next = `c:${n}`;
+  if (order.includes(kindKey)) await saveKindOrder(t, order.includes(next) ? order.filter((k) => k !== kindKey) : order.map((k) => (k === kindKey ? next : k)));
   await audit(t, actor, "catalog.renameKind", "Category", null, { kindKey, name: n, count: r.count });
-  return { key: `c:${n}`, count: r.count };
+  return { key: next, count: r.count };
+}
+
+/** 刪除種類：裡面的系列移到別的種類（moveTo），或連系列一起刪（有紀錄的系列不能刪，整個不動） */
+export async function deleteKind(t: Tx, actor: Actor, kindKey: string, input: { moveTo?: string | null; deleteSeries?: boolean }) {
+  const cats = await t.category.findMany({ where: kindWhere(kindKey), select: { id: true, name: true } });
+  if (input.deleteSeries) {
+    for (const c of cats) await deleteSeries(t, actor, c.id);
+  } else {
+    const to = input.moveTo || "GENERAL";
+    if (to === kindKey) throw new BizError("請選別的種類");
+    for (const c of cats) await moveSeriesKind(t, actor, c.id, { kindKey: to });
+  }
+  const order = await getKindOrder(t);
+  if (order.includes(kindKey)) await saveKindOrder(t, order.filter((k) => k !== kindKey));
+  await audit(t, actor, "catalog.deleteKind", "Category", null, { kindKey, ...input, count: cats.length });
+  return { count: cats.length };
 }
 
 /** 系列換到別的種類（kindKey＝已有的種類；或給 newKind＝新的種類名稱） */
@@ -318,6 +338,10 @@ export async function getKindOrder(db: Db): Promise<string[]> {
   }
 }
 
+async function saveKindOrder(t: Tx, next: string[]) {
+  await t.appSetting.upsert({ where: { key: KIND_ORDER }, update: { value: JSON.stringify(next) }, create: { key: KIND_ORDER, value: JSON.stringify(next) } });
+}
+
 /** 排過的種類照順序，沒排過的放後面（再照名稱） */
 export function kindRank(order: string[]) {
   const m = new Map(order.map((k, i) => [k, i]));
@@ -340,7 +364,7 @@ export async function moveKind(t: Tx, actor: Actor, kindKey: string, dir: Dir) {
   const keys = [...new Set(opts.map((o) => o.kindKey))];
   if (!keys.includes(kindKey)) throw new BizError("找不到這個種類");
   const next = moved(keys, keys.indexOf(kindKey), dir);
-  await t.appSetting.upsert({ where: { key: KIND_ORDER }, update: { value: JSON.stringify(next) }, create: { key: KIND_ORDER, value: JSON.stringify(next) } });
+  await saveKindOrder(t, next);
   await audit(t, actor, "catalog.moveKind", "Category", null, { kindKey, dir });
   return next;
 }

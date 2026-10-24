@@ -45,6 +45,9 @@ export async function deleteCatalogItemAction(categoryId: string, typeId: string
 export async function deleteSeriesAction(categoryId: string) {
   return run((a) => tx((t) => ct.deleteSeries(t, a, z.string().parse(categoryId))));
 }
+export async function deleteKindAction(kindKey: string, input: { moveTo?: string | null; deleteSeries?: boolean }) {
+  return run((a) => tx((t) => ct.deleteKind(t, a, z.string().max(80).parse(kindKey), z.object({ moveTo: z.string().max(80).nullish(), deleteSeries: z.boolean().optional() }).parse(input))));
+}
 const dir = z.enum(["up", "down", "top"]);
 export async function moveKindAction(kindKey: string, d: "up" | "down" | "top") {
   return run((a) => tx((t) => ct.moveKind(t, a, z.string().max(80).parse(kindKey), dir.parse(d))).then(() => null));

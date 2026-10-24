@@ -43,7 +43,7 @@ export function CategoryEditButton({ cat, label = "編輯", customTypes = [], sm
       <Button variant={cat ? "default" : "primary"} small={small ?? !!cat} onClick={openIt}>
         {label}
       </Button>
-      <Modal open={open} onClose={() => setOpen(false)} title={cat ? `編輯「${cat.name}」` : "新增活動"} footer={<Button variant="primary" loading={pending} onClick={save}>{cat ? "儲存" : "新增"}</Button>}>
+      <Modal open={open} onClose={() => setOpen(false)} title={cat ? `編輯「${cat.name}」` : "新增系列"} footer={<Button variant="primary" loading={pending} onClick={save}>{cat ? "儲存" : "新增"}</Button>}>
         <div className="grid gap-3 sm:grid-cols-2">
           <TextField label="名稱" placeholder="例：ANA、手遊、萬聖節" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className="sm:col-span-2" />
           <div className="sm:col-span-2">
