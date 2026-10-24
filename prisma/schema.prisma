@@ -324,6 +324,7 @@ model Buyer {
   recipientPhone String?
   address        String?
   shippingMethod String?
+  salesChannel   String? // 這位客人在哪個平台跟我們買（賣貨便、蝦皮、IG…）
   notes          String? // 內部備註，不得出現在未來公開頁面
   mergedIntoId   String?
   mergedInto     Buyer?          @relation("BuyerMerge", fields: [mergedIntoId], references: [id])

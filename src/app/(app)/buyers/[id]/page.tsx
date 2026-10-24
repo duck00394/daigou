@@ -68,6 +68,7 @@ export default async function BuyerPage({ params, searchParams }: { params: Prom
         sub={
           <span className="flex flex-wrap items-center gap-2">
             {b.code}
+            {b.salesChannel && <span className="rounded-full bg-info-soft px-2 py-0.5 text-[12px] text-info" data-testid="buyer-channel">{b.salesChannel}</span>}
             {b.lineName && <span>｜LINE：{b.lineName}</span>}
             {b.tags.filter((t) => !t.removedAt).map((t) => (
               <span key={t.id} className="inline-flex items-center gap-1 rounded-full border border-line bg-white px-2 py-0.5 text-[12px] text-ink">
@@ -346,7 +347,7 @@ export default async function BuyerPage({ params, searchParams }: { params: Prom
 
       {tab === "profile" && (
         <Section title="基本資料">
-          <BuyerFormView id={id} initial={{ name: b.name, lineName: b.lineName, contact: b.contact, recipientName: b.recipientName, recipientPhone: b.recipientPhone, address: b.address, shippingMethod: b.shippingMethod, notes: b.notes }} />
+          <BuyerFormView id={id} initial={{ name: b.name, lineName: b.lineName, contact: b.contact, recipientName: b.recipientName, recipientPhone: b.recipientPhone, address: b.address, shippingMethod: b.shippingMethod, salesChannel: b.salesChannel, notes: b.notes }} channels={(await prisma.order.groupBy({ by: ["salesChannel"], where: { salesChannel: { not: null } }, _count: true })).map((c) => c.salesChannel!)} />
         </Section>
       )}
     </div>

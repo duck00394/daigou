@@ -46,6 +46,8 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
   let total = 0;
   const preLines: SellLine[] = [];
   const buyer = await resolveBuyer(t, actor, input.buyerName);
+  // 記住這位客人的平台（還沒記過、或這次換了）
+  if (channel && input.buyerName?.trim() && buyer.salesChannel !== channel) await t.buyer.update({ where: { id: buyer.id }, data: { salesChannel: channel } });
   for (const { l, now } of plan) {
     if (now > 0) {
       const q = await quickSale(t, actor, { productId: l.productId, qty: now, unitPrice: l.unitPrice, buyerName: input.buyerName ?? null, paid: input.paid !== false, idemKey: `${input.idemKey}:${l.productId}` });

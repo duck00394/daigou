@@ -197,7 +197,7 @@ export async function listQuickSales(t: Tx, opts: { q?: string | null; from?: Da
     orderBy: [{ orderedAt: "desc" }, { createdAt: "desc" }],
     take: 300,
     include: {
-      buyer: { select: { id: true, name: true } },
+      buyer: { select: { id: true, name: true, salesChannel: true } },
       items: { select: { id: true, productId: true, productNameSnapshot: true, qty: true, unitPrice: true, estUnitCostTwd: true, cancellations: { select: { qty: true } } } },
       payments: { select: { amount: true, voidedAt: true } },
     },
@@ -244,7 +244,7 @@ export async function listQuickSales(t: Tx, opts: { q?: string | null; from?: Da
       orderNo: o.orderNo,
       soldAt: o.orderedAt,
       buyer: o.buyer,
-      channel: o.salesChannel,
+      channel: o.salesChannel ?? o.buyer.salesChannel ?? null,
       productId: o.items[0]?.productId ?? null,
       productName: o.items.map((i) => i.productNameSnapshot).join("、"),
       originalQty: o.items.reduce((a, i) => a + i.qty, 0),

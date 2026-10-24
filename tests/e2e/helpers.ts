@@ -1,9 +1,19 @@
 import { expect, type Page } from "@playwright/test";
 
 export async function login(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("密碼").fill("e2e-password-123");
-  await page.getByRole("button", { name: "登入" }).click();
+  // 偶爾第一次按太快（頁面還沒準備好），沒進去就再按一次
+  for (let i = 0; i < 3; i++) {
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+    await page.getByLabel("密碼").fill("e2e-password-123");
+    await page.getByRole("button", { name: "登入" }).click();
+    try {
+      await expect(page).toHaveURL("/", { timeout: 8000 });
+      return;
+    } catch {
+      /* 再試一次 */
+    }
+  }
   await expect(page).toHaveURL("/");
 }
 

@@ -3,11 +3,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, ConfirmButton, Modal, TextField, TextArea, SelectField, useRun, inputCls, notify } from "@/components/client";
 import { BuyerPicker, type BuyerOpt } from "@/components/pickers";
+import { ChannelPicker } from "@/components/channel-picker";
 import { saveBuyerAction, addBuyerAliasAction, removeBuyerAliasAction, addBuyerTagAction, removeBuyerTagAction, addIncidentAction, mergePreviewAction, mergeBuyersAction, type BuyerForm } from "@/actions/buyers";
 import { incidentKind } from "@/lib/labels";
 
-export function BuyerFormView({ id, initial }: { id: string | null; initial: BuyerForm }) {
-  const [f, setF] = useState<BuyerForm>(initial);
+export function BuyerFormView({ id, initial, channels = [] }: { id: string | null; initial: BuyerForm; channels?: string[] }) {
+  const [f, setF] = useState<BuyerForm>({ ...initial, applyChannelToOrders: true });
   const { run, pending } = useRun();
   const router = useRouter();
   const set = (k: keyof BuyerForm, v: string) => setF((x) => ({ ...x, [k]: v }));
@@ -23,6 +24,15 @@ export function BuyerFormView({ id, initial }: { id: string | null; initial: Buy
         <TextField label="目前使用的名稱（必填）" value={f.name} onChange={(e) => set("name", e.target.value)} required />
         <TextField label="LINE 暱稱" value={f.lineName ?? ""} onChange={(e) => set("lineName", e.target.value)} hint="LINE 暱稱可能會變，改名時舊名稱會自動保留為別名" />
         <TextField label="聯絡方式（選填）" value={f.contact ?? ""} onChange={(e) => set("contact", e.target.value)} />
+        <div>
+          <ChannelPicker value={f.salesChannel ?? ""} onChange={(v) => setF((x) => ({ ...x, salesChannel: v || null }))} extra={channels} />
+          {id && (f.salesChannel ?? "") !== (initial.salesChannel ?? "") && (
+            <label className="mt-1 flex items-center gap-2 text-[13px] text-ink-2">
+              <input type="checkbox" className="h-4 w-4" checked={f.applyChannelToOrders !== false} onChange={(e) => setF((x) => ({ ...x, applyChannelToOrders: e.target.checked }))} />
+              這位客人以前的單也一起改成這個平台
+            </label>
+          )}
+        </div>
         <TextField label="常用配送方式" value={f.shippingMethod ?? ""} onChange={(e) => set("shippingMethod", e.target.value)} placeholder="例：7-11 店到店、面交" />
       </div>
       <details className="rounded-lg border border-line px-3 py-2">

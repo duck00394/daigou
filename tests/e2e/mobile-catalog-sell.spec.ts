@@ -137,7 +137,19 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await expect(page.getByLabel("販售平台", { exact: true }).locator("option:checked")).toHaveText("賣貨便");
   await page.goto(`/sales?ym=all&q=小美${tag}`);
   await expect(page.getByTestId("sale-row").first()).toContainText(`賣貨便・小美${tag}`);
-  await page.goBack();
+  // 以前的客人：到買家基本資料改平台，以前的單一起改
+  await page.goto(`/buyers?q=${encodeURIComponent(`小美${tag}`)}`);
+  await page.getByRole("link", { name: `小美${tag}` }).first().click();
+  await expect(page.getByTestId("buyer-channel")).toHaveText("賣貨便");
+  await page.getByRole("link", { name: "基本資料" }).click();
+  await choose(page, "販售平台", "蝦皮");
+  await expect(page.getByLabel(/以前的單也一起改/)).toBeChecked();
+  await page.getByRole("button", { name: "儲存買家" }).click();
+  await toast(page, "已儲存買家");
+  await expect(page.getByTestId("buyer-channel")).toHaveText("蝦皮");
+  await page.goto(`/sales?ym=all&q=小美${tag}`);
+  await expect(page.getByTestId("sale-row").first()).toContainText(`蝦皮・小美${tag}`);
+  await page.goto("/sell");
   await expect(page.locator("main")).toContainText("客人預訂還沒給");
 
   // 庫存：一打開不列，選好按查看才列；種類 › 系列 › 品項 › 角色

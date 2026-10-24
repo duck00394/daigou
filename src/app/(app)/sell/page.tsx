@@ -11,7 +11,7 @@ export default async function SellPage({ searchParams }: { searchParams: Promise
   const sp = await searchParams;
   const [series, buyers, lastOrder, usedChannels] = await Promise.all([
     seriesOptions(prisma),
-    prisma.buyer.findMany({ where: { mergedIntoId: null }, orderBy: { updatedAt: "desc" }, take: 300, select: { name: true } }),
+    prisma.buyer.findMany({ where: { mergedIntoId: null }, orderBy: { updatedAt: "desc" }, take: 300, select: { name: true, salesChannel: true } }),
     prisma.orderItem.findFirst({ where: { categoryId: { not: null } }, orderBy: { createdAt: "desc" }, select: { categoryId: true } }),
     prisma.order.groupBy({ by: ["salesChannel"], where: { salesChannel: { not: null } }, _count: true, orderBy: { _count: { salesChannel: "desc" } }, take: 20 }),
   ]);
@@ -22,7 +22,7 @@ export default async function SellPage({ searchParams }: { searchParams: Promise
   return (
     <div className="space-y-4">
       <PageHeader title="賣給客人" sub="選系列，填每個角色的數量；超過現貨的自動記成預訂，到貨再給。" />
-      <SellForm series={series} buyers={buyers.map((b) => b.name).filter((n) => n !== "散客")} initialCategory={initial} waiting={waiting} channels={usedChannels.map((c) => c.salesChannel!).filter(Boolean)} />
+      <SellForm series={series} buyers={buyers.map((b) => b.name).filter((n) => n !== "散客")} initialCategory={initial} waiting={waiting} channels={usedChannels.map((c) => c.salesChannel!).filter(Boolean)} buyerChannels={Object.fromEntries(buyers.filter((b) => b.salesChannel).map((b) => [b.name, b.salesChannel!]))} />
     </div>
   );
 }

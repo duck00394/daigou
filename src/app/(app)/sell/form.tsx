@@ -6,15 +6,13 @@ import Link from "next/link";
 import { Button, inputCls, notify, useIdemKey, useRun } from "@/components/client";
 import { SeriesPicker, type SeriesOpt } from "@/components/series-picker";
 import { sellSheetAction, sellToCustomerAction } from "@/actions/catalog-tree";
-import { Choice } from "@/components/choice";
-
-const DEFAULT_CHANNELS = ["賣貨便", "蝦皮", "IG", "Threads", "LINE", "Facebook", "面交"];
+import { ChannelPicker } from "@/components/channel-picker";
 import { formatTwd } from "@/lib/money";
 
 type Row = { productId: string; name: string; free: number; incoming: number; price: number | null };
 type Sheet = { id: string; name: string; items: { typeId: string; typeName: string; price: number | null; rows: Row[] }[] };
 
-export function SellForm({ series, buyers, initialCategory, waiting, channels = [] }: { series: SeriesOpt[]; buyers: string[]; initialCategory: string; waiting: number; channels?: string[] }) {
+export function SellForm({ series, buyers, initialCategory, waiting, channels = [], buyerChannels = {} }: { series: SeriesOpt[]; buyers: string[]; initialCategory: string; waiting: number; channels?: string[]; buyerChannels?: Record<string, string> }) {
   const [sheets, setSheets] = useState<Sheet[]>([]);
   const [picker, setPicker] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
@@ -24,7 +22,6 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
   const [buyer, setBuyer] = useState("");
   // 販售平台：記住上次選的（這台裝置）
   const [channel, setChannelState] = useState("");
-  const [otherChannel, setOtherChannel] = useState<string | null>(null);
   useEffect(() => {
     try {
       const v = localStorage.getItem("sell-channel");
@@ -41,7 +38,6 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
       /* 不能存就算了 */
     }
   };
-  const channelOpts = [...new Set([...DEFAULT_CHANNELS, ...channels, ...(channel ? [channel] : [])])];
   const [paid, setPaid] = useState(true);
   const [done, setDone] = useState<string | null>(null);
   const idem = useIdemKey();
@@ -143,27 +139,14 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
     <div className="space-y-4">
       <section className="space-y-3 rounded-xl border border-line bg-card p-4">
         <div className="grid grid-cols-2 gap-2">
-          {otherChannel === null ? (
-            <Choice
-              label="販售平台"
-              value={channel}
-              placeholder="不指定"
-              options={[...channelOpts.map((c) => ({ value: c, label: c })), { value: "__other__", label: "＋ 其他…" }]}
-              onChange={(v) => (v === "__other__" ? setOtherChannel("") : setChannel(v))}
-            />
-          ) : (
-            <label className="block text-[13px] font-medium text-ink-2">
-              <span className="mb-1 block">販售平台（自己打）</span>
-              <input autoFocus aria-label="其他販售平台" className={`${inputCls} min-h-11`} value={otherChannel} onChange={(e) => setOtherChannel(e.target.value)} onBlur={() => { if (otherChannel.trim()) setChannel(otherChannel.trim()); setOtherChannel(null); }} placeholder="例：小紅書" />
-            </label>
-          )}
+          <ChannelPicker value={channel} onChange={setChannel} extra={channels} />
           <label className="block text-[13px] font-medium text-ink-2">
             <span className="mb-1 block">客人名稱</span>
-            <input list="sell-buyers" className={`${inputCls} min-h-11`} aria-label="客人" placeholder="打名字找，沒有會新增" value={buyer} onChange={(e) => setBuyer(e.target.value)} />
+            <input list="sell-buyers" className={`${inputCls} min-h-11`} aria-label="客人" placeholder="打名字找，沒有會新增" value={buyer} onChange={(e) => { setBuyer(e.target.value); const ch = buyerChannels[e.target.value.trim()]; if (ch) setChannel(ch); }} />
             <datalist id="sell-buyers">{buyers.map((b) => <option key={b} value={b} />)}</datalist>
           </label>
         </div>
-        <p className="-mt-1 text-[12px] text-mute">客人名稱可以不填；有要預訂的一定要填。平台會記住，下一位不用再選。</p>
+        <p className="-mt-1 text-[12px] text-mute">客人名稱可以不填；有要預訂的一定要填。平台會記住；選了以前的客人會自動帶他的平台。</p>
         <div>
           <div className="mb-1 text-[13px] font-semibold text-ink-2">{sheets.length ? "＋ 再加一個系列（客人一次買好幾個系列）" : "買了哪個系列？"}</div>
           <SeriesPicker series={series} value={picker} onChange={(id) => { setPicker(id); addSeries(id); }} />

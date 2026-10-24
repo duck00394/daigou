@@ -14,6 +14,8 @@ export interface BuyerInput {
   address?: string | null;
   shippingMethod?: string | null;
   notes?: string | null;
+  salesChannel?: string | null;
+  applyChannelToOrders?: boolean;
 }
 
 function buyerData(input: BuyerInput) {
@@ -26,6 +28,7 @@ function buyerData(input: BuyerInput) {
     recipientPhone: emptyToNull(input.recipientPhone),
     address: emptyToNull(input.address),
     shippingMethod: emptyToNull(input.shippingMethod),
+    salesChannel: emptyToNull(input.salesChannel),
     notes: emptyToNull(input.notes),
   };
 }
@@ -41,6 +44,8 @@ export async function updateBuyer(t: Tx, actor: Actor, id: string, input: BuyerI
   const before = await t.buyer.findUniqueOrThrow({ where: { id } });
   const data = buyerData(input);
   await t.buyer.update({ where: { id }, data });
+  // 改了平台：以前的單也一起改
+  if (input.applyChannelToOrders && data.salesChannel !== before.salesChannel) await t.order.updateMany({ where: { buyerId: id }, data: { salesChannel: data.salesChannel } });
   // 改名時保留舊名稱作為別名，方便之後辨識
   if (before.name !== data.name) await addBuyerAlias(t, actor, id, before.name);
   if (before.lineName && before.lineName !== data.lineName) await addBuyerAlias(t, actor, id, before.lineName);

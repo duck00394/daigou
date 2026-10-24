@@ -12,6 +12,8 @@ const buyerSchema = z.object({
   recipientPhone: z.string().max(50).nullish(),
   address: z.string().max(300).nullish(),
   shippingMethod: z.string().max(100).nullish(),
+  salesChannel: z.string().max(40).nullish(),
+  applyChannelToOrders: z.boolean().optional(),
   notes: z.string().max(5000).nullish(),
 });
 export type BuyerForm = z.infer<typeof buyerSchema>;
