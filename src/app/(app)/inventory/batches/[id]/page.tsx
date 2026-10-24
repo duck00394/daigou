@@ -18,7 +18,9 @@ import { getMe } from "@/server/me";
 import { listShippingMethods } from "@/server/services/shipping-methods";
 import { ProgressBar, ResponsibilityCard, SupplierPayments, Receiving, type PaymentRow } from "./operators";
 import { listOperators } from "@/server/services/operators";
-import { jointWeights, sharePercents } from "@/server/services/ownership";
+import { sharePercents } from "@/server/services/ownership";
+import { jointSettlement, jointWeights } from "@/server/services/joint";
+import { JointPanel } from "./joint";
 import { supplierPaymentHistory } from "@/server/services/supplier-payments";
 import { isStoreKind, allocMethod, batchStage, batchStageLabel, costKind, currencyName, dayInput, fmtDate, paymentPurpose, supplierPaymentStatus, toDateTimeInput } from "@/lib/labels";
 import { formatRate, formatTwd, jpyToTwd } from "@/lib/money";
@@ -113,6 +115,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       cancelledQty: i.cancelledQty,
       cancelReason: i.cancelReason,
       seriesId: i.categoryId ?? b.categoryId,
+      ownerId: i.ownerId,
     });
   }
   // 這團有哪些系列（團本身的＋品項各自指定的）
@@ -126,6 +129,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
   const pay = (await tx((t) => batchPaySummary(t, [b.id]))).get(b.id) ?? { totalTwd: totalLanded, paidTwd: 0, dueTwd: totalLanded };
   const me = await getMe();
   const anyCut = b.items.some((i) => i.cancelledQty > 0);
+  const joint = b.ownership === "JOINT" ? await tx((t) => jointSettlement(t, b.id)) : null;
   const refundOwed = !open ? pay.paidTwd : anyCut ? pay.paidTwd - pay.totalTwd : 0;
   return (
     <div className="space-y-4">
@@ -169,6 +173,8 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         )}
       </section>
 
+      {joint && <JointPanel batchId={b.id} s={joint} editable={open} />}
+
       {!isStoreKind(b.supplierRef?.kind) && <ProgressBar batchId={b.id} progress={b.progress} stage={batchStage(b)} editable={b.status !== "CANCELLED"} />}
 
 
@@ -180,6 +186,8 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
           batchId={b.id}
           items={editItems}
           editable={open}
+          jointOps={joint ? joint.people.map((p) => ({ id: p.id, name: p.name })) : undefined}
+          jointPct={joint ? Object.fromEntries(joint.people.map((p) => [p.id, p.percent])) : undefined}
           initialMode={open && (sp.bulk === "1" || b.items.length === 0) ? "add" : "view"}
           supplierId={b.supplierId}
           supplierCurrency={(b.supplierRef?.defaultCurrency as "JPY" | "TWD") ?? "TWD"}

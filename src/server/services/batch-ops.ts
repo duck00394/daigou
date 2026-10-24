@@ -6,7 +6,8 @@ import { audit, emptyToNull, type Actor } from "./common";
 import { addBatchItem, clampConfirmed, effectiveUnitCost, itemGoodsTwd, minCommittedQty, reallocateBatch, type Currency } from "./purchase";
 import { recomputeOrder } from "./recompute";
 import { refreshBatchStatus } from "./inventory";
-import { batchOwnerKey, JOINT, jointWeights, sharePercents, splitByWeights, stockByOwner } from "./ownership";
+import { batchOwnerKey, JOINT, sharePercents, splitByWeights, stockByOwner } from "./ownership";
+import { jointWeights } from "./joint";
 import { batchStage, isStoreKind } from "@/lib/labels";
 
 // ── 基本資料 ──

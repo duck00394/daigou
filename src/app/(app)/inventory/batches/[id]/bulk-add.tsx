@@ -34,6 +34,7 @@ type RowState = {
   touched?: boolean; // 使用者已經點進價格欄位：背景帶入的參考價不再覆蓋或接在後面
   loading?: boolean; // 正在讀取參考價：價格欄暫停輸入，避免讀到的數字和正在打的字混在一起
   more?: boolean; // 手機：展開規格、幣別、想賣價
+  ownerId?: string; // 合資團：這件是誰的（沒設＝跟著「全部設成」）
 };
 type Result = { rowKey: string; ok: boolean; already?: boolean; error?: string; productName?: string };
 
@@ -82,7 +83,10 @@ export function BulkAddGrid({
   seriesOptions,
   initialSeriesId = null,
   initialTypeId = null,
+  joint = null,
 }: {
+  /** 合資團：每一列可以選「誰的」；pct＝一起的怎麼分（用來算各人小計） */
+  joint?: { ops: Opt[]; pct: Record<string, number> } | null;
   /** 預設帶上次用的 IP／系列、種類 */
   initialSeriesId?: string | null;
   initialTypeId?: string | null;
@@ -110,6 +114,8 @@ export function BulkAddGrid({
   const [seriesId, setSeriesId] = useState((initialSeriesId && seriesInit.some((x) => x.id === initialSeriesId) ? initialSeriesId : null) ?? seriesInit[0]?.id ?? "");
   const [typeId, setTypeId] = useState(initialTypeId && typesInit.some((x) => x.id === initialTypeId) ? initialTypeId : "");
   const [roster, setRoster] = useState<Opt[]>([]);
+  const [ownerAll, setOwnerAll] = useState(""); // 合資：全部設成（"" ＝ 一起的）
+  const ownerOf = (r: RowState) => r.ownerId ?? ownerAll;
   const [templates, setTemplates] = useState<Template[]>([]);
   const [rows, setRows] = useState<RowState[]>([blankRow(supplierCurrency)]);
   const [confirm, setConfirm] = useState(false);
@@ -295,6 +301,24 @@ export function BulkAddGrid({
     return out;
   }, [lump, rows]);
   const eff = useMemo(() => rows.map((r) => (fill.has(r.key) ? { ...r, unitCost: fill.get(r.key)! } : r)), [rows, fill]);
+  // 合資：這批各人小計（台幣，一起的照比例）
+  const jointSum = useMemo(() => {
+    if (!joint) return "";
+    const by = new Map<string, number>(joint.ops.map((o) => [o.id, 0]));
+    let shared = 0;
+    for (const r of eff) {
+      const q = toInt(r.qty);
+      const c = toInt(r.unitCost);
+      if (isBlank(r) || q === null || c === null || !Number.isFinite(q * c)) continue;
+      const v = r.currency === "JPY" ? Math.round((q * c * rateMicro) / 1_000_000) : q * c;
+      const o = ownerOf(r);
+      if (o && by.has(o)) by.set(o, by.get(o)! + v);
+      else shared += v;
+    }
+    const tot = Object.values(joint.pct).reduce((a, b) => a + b, 0) || 1;
+    return joint.ops.map((o) => `${o.name} ${formatTwd(Math.round(by.get(o.id)! + (shared * (joint.pct[o.id] ?? 0)) / tot))}`).join("・") + (shared ? `（含一起的 ${formatTwd(shared)}）` : "");
+  }, [eff, joint, ownerAll, rateMicro]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const stats = useMemo(() => {
     let valid = 0;
     let qty = 0;
@@ -347,6 +371,7 @@ export function BulkAddGrid({
           currency: r.currency,
           qty: toInt(r.qty),
           salePriceTwd: toInt(r.salePrice),
+          ...(joint ? { ownerId: ownerOf(r) || null } : {}),
         }));
       const targetId = batchId ?? (ensureBatch ? await ensureBatch() : null);
       if (!targetId) return;
@@ -513,6 +538,19 @@ export function BulkAddGrid({
       )}
 
       {/* 5：表格 */}
+      {joint && (
+        <div className="rounded-xl border border-[#d9c8f2] bg-[#f7f2fd] p-3" data-testid="joint-owner-box">
+          <label className="block text-[13px] font-medium text-ink-2">
+            合資：這批全部設成
+            <select aria-label="這批全部設成" className={`${inputCls} mt-1 min-h-11`} value={ownerAll} onChange={(e) => { setOwnerAll(e.target.value); setRows((rs) => rs.map((r) => ({ ...r, ownerId: undefined }))); }}>
+              {joint.ops.map((o) => <option key={o.id} value={o.id}>{o.name} 的</option>)}
+              <option value="">一起的（照比例分）</option>
+            </select>
+          </label>
+          <p className="mt-1 text-[12px] text-mute">每一列下面也可以單獨改。</p>
+          <p className="mt-1 text-[13px]" data-testid="joint-row-summary">{jointSum}</p>
+        </div>
+      )}
       <div ref={grid} role="table" aria-label="批次新增採購品項" className="rounded-xl border border-line bg-white px-2 md:rounded-none md:border-0 md:bg-transparent md:px-0">
         <div aria-hidden className="grid grid-cols-[minmax(0,1fr)_4.5rem_6.25rem_1.25rem] gap-2 border-b border-line px-1 py-1.5 text-[12px] text-mute md:hidden">
           <span>角色</span><span className="text-right">單價</span><span className="text-center">數量</span><span />
@@ -586,6 +624,12 @@ export function BulkAddGrid({
                   <button type="button" className="mt-0.5 block max-w-full truncate text-left text-[11.5px] text-mute md:pointer-events-none" onClick={() => update(r.key, { more: !r.more })} title="存好後的商品名稱；點一下填規格、日幣、想賣價" data-testid="name-preview">
                     {preview}<span className="text-ai md:hidden">{extra ? "　＋細項" : "　收起"}</span>
                   </button>
+                )}
+                {joint && (
+                  <select aria-label={`第 ${i + 1} 列 誰的`} className={`${inputCls} mt-1 min-h-9 py-1 text-[13px]`} value={ownerOf(r)} onChange={(e) => update(r.key, { ownerId: e.target.value })} data-testid="row-owner">
+                    {joint.ops.map((o) => <option key={o.id} value={o.id}>{o.name} 的</option>)}
+                    <option value="">一起的</option>
+                  </select>
                 )}
               </div>
               <div className={`order-last col-span-2 md:order-none md:col-span-1 ${extra}`} role="cell">

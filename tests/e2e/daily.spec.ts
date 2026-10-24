@@ -1,6 +1,6 @@
 // 日常操作（桌面）：活動下建兩團 → 砍單 → 跨團複製 → 活動頁跨團比價 → 收貨 → 自留
 import { test, expect, type Page } from "@playwright/test";
-import { login, toast, pickIp, openSeriesPage, choose, chosen } from "./helpers";
+import { login, toast, pickIp, openSeriesPage, choose } from "./helpers";
 
 const cell = (page: Page, row: number, col: number) => page.locator(`[data-row="${row}"][data-col="${col}"]`).first();
 

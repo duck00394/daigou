@@ -79,3 +79,29 @@ export async function deleteBatchAction(batchId: string) {
   const { deleteBatch } = await import("@/server/services/purchase");
   return run((a) => tx((t) => deleteBatch(t, a, z.string().max(64).parse(batchId))).then(() => null));
 }
+
+const splitSchema = z.record(z.string().max(64), z.number().min(0).max(100000)).nullable();
+export async function saveJointSetupAction(batchId: string, input: { split?: Record<string, number> | null; feeSplit?: "HALF" | "GOODS" }) {
+  const v = z.object({ split: splitSchema.optional(), feeSplit: z.enum(["HALF", "GOODS"]).optional() }).parse(input);
+  const { saveJointSetup } = await import("@/server/services/joint");
+  return run((a) => tx((t) => saveJointSetup(t, a, z.string().max(64).parse(batchId), v)).then(() => null));
+}
+export async function setPaidByAction(batchId: string, entries: { paidById: string; total: number }[], payKey: string) {
+  const v = z.array(z.object({ paidById: z.string().max(64), total: z.number().int().min(0).max(100_000_000) })).max(10).parse(entries);
+  const { setPaidBy } = await import("@/server/services/joint");
+  return run((a) => tx((t) => setPaidBy(t, a, z.string().max(64).parse(batchId), v, z.string().min(8).max(100).parse(payKey))));
+}
+export async function recordJointTransferAction(batchId: string, input: { from: string; to: string; amount: number }) {
+  const v = z.object({ from: z.string().max(64), to: z.string().max(64), amount: z.number().int() }).parse(input);
+  const { recordJointTransfer } = await import("@/server/services/joint");
+  return run((a) => tx((t) => recordJointTransfer(t, a, z.string().max(64).parse(batchId), v)).then(() => null));
+}
+export async function jointSettlementAction(batchId: string) {
+  const { jointSettlement } = await import("@/server/services/joint");
+  return run(async () => {
+    const s = await tx((t) => jointSettlement(t, z.string().max(64).parse(batchId)));
+    const name = (id: string) => s.people.find((p) => p.id === id)?.name ?? "";
+    const text = s.debts.length ? s.debts.map((d) => `${name(d.from)}要給${name(d.to)} NT$${d.amount.toLocaleString()}`).join("、") : s.paidTotal > 0 ? "兩人之間不用互相給錢" : "";
+    return { ...s, text };
+  });
+}

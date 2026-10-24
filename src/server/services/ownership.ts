@@ -1,10 +1,9 @@
 // 歸屬：每一件庫存來自哪個採購團，就歸那一團的主人。
 // - 個人團：歸「這團是誰的」（PurchaseBatch.orderedById）。
-// - 合資團：庫存件數列在「合資」，賣掉的錢（收入、成本、毛利）依各自實際付給代購的金額比例分（誰付錢誰拿錢）；
-//   還沒登記付款時不分，列在「合資（尚未登記付款）」。
+// - 合資團：品項有指定「誰的」就歸那個人；一起的庫存件數列在「合資」，賣掉的錢照這團「一起的」比例分（沒設＝平均）。
 // - 手動入庫（不屬於任何採購團）：歸「未指定」。
 import type { Tx } from "@/server/db";
-import { allocate, jpyToTwd } from "@/lib/money";
+import { allocate } from "@/lib/money";
 import type { Lot } from "./inventory";
 
 export const JOINT = "joint";
@@ -18,9 +17,10 @@ export function batchOwnerKey(b: { ownership: string; orderedById: string | null
 /** 採購品項（成本批次）→ 歸屬 */
 export async function lotOwners(t: Tx, batchItemIds: (string | null)[]) {
   const ids = [...new Set(batchItemIds.filter(Boolean) as string[])];
-  const rows = ids.length ? await t.purchaseBatchItem.findMany({ where: { id: { in: ids } }, select: { id: true, batch: { select: { id: true, ownership: true, orderedById: true } } } }) : [];
+  const rows = ids.length ? await t.purchaseBatchItem.findMany({ where: { id: { in: ids } }, select: { id: true, ownerId: true, batch: { select: { id: true, ownership: true, orderedById: true } } } }) : [];
   const m = new Map<string, { key: OwnerKey; batchId: string }>();
-  for (const r of rows) m.set(r.id, { key: batchOwnerKey(r.batch), batchId: r.batch.id });
+  // 合資團裡指定了「誰的」的品項，就歸那個人；一起的歸合資
+  for (const r of rows) m.set(r.id, { key: r.batch.ownership === "JOINT" && r.ownerId ? r.ownerId : batchOwnerKey(r.batch), batchId: r.batch.id });
   return m;
 }
 
@@ -34,21 +34,6 @@ export async function filterLotsByOwner(t: Tx, lots: Lot[], owner: OwnerKey | nu
 }
 
 /** 合資團的分配權重：各經營者實際付給代購的台幣金額（已付款；日幣用該筆實際匯率，沒有就用該團匯率） */
-export async function jointWeights(t: Tx, batchIds: string[]) {
-  const ids = [...new Set(batchIds)];
-  const pays = ids.length
-    ? await t.supplierPayment.findMany({ where: { batchId: { in: ids }, status: "PAID" }, select: { batchId: true, paidById: true, amount: true, currency: true, rateMicro: true, batch: { select: { rateMicro: true } } } })
-    : [];
-  const m = new Map<string, Map<OwnerKey, number>>();
-  for (const p of pays) {
-    const twd = p.currency === "TWD" ? p.amount : jpyToTwd(p.amount, p.rateMicro ?? p.batch.rateMicro);
-    const w = m.get(p.batchId) ?? new Map<OwnerKey, number>();
-    const k = p.paidById ?? NONE;
-    w.set(k, (w.get(k) ?? 0) + twd);
-    m.set(p.batchId, w);
-  }
-  return m;
-}
 
 /** 依權重把整數金額分給各人（最大餘數法，合計不變）；沒有權重時回傳 null */
 export function splitByWeights(amount: number, weights: Map<OwnerKey, number> | undefined): Map<OwnerKey, number> | null {
@@ -117,7 +102,8 @@ export interface OwnerMoney {
  */
 export async function ownerAttributor(t: Tx, batchItemIds: (string | null)[]) {
   const owners = await lotOwners(t, batchItemIds);
-  const weights = await jointWeights(t, [...owners.values()].filter((o) => o.key === JOINT).map((o) => o.batchId));
+  const { jointSplitWeights } = await import("./joint");
+  const weights = await jointSplitWeights(t, [...owners.values()].filter((o) => o.key === JOINT).map((o) => o.batchId));
   return (moves: { purchaseBatchItemId: string | null; qty: number; revenue: number; cost: number }[]) => {
     const out = new Map<OwnerKey, OwnerMoney>();
     const add = (k: OwnerKey, qty: number, revenue: number, cost: number) => {

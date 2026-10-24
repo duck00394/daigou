@@ -60,16 +60,16 @@ describe("各自採買與合資", () => {
     await expect(tx((t) => keepStock(t, actor, { productId: s.p3.id, delta: -1, owner: B }))).rejects.toThrow("自留只有 0 件");
   });
 
-  it("合資團賣掉的錢：誰付錢誰拿錢（依實際付款比例）；還沒付款時不分", async () => {
-    // 還沒登記付款
-    let list = await tx((t) => listQuickSales(t, {}));
+  it("合資團一起的商品賣掉：照這團的比例分（沒設＝各半），不看誰付錢", async () => {
     await tx((t) => quickSale(t, actor, { productId: s.p3.id, qty: 2, unitPrice: 500, owner: JOINT, idemKey: "joint-sale-1" }));
-    list = await tx((t) => listQuickSales(t, {}));
-    expect(list.byOwner[JOINT]).toMatchObject({ qty: 2, revenue: 1000, cost: 600 });
-    // A 付 900、B 付 600 → 60% / 40%
+    let list = await tx((t) => listQuickSales(t, {}));
+    expect(list.byOwner[A]).toMatchObject({ revenue: 500, cost: 300 });
+    expect(list.byOwner[B]).toMatchObject({ revenue: 500, cost: 300 });
+    // 付款不影響分法；改成 A 60%、B 40% 才改
     await tx(async (t) => {
       await addSupplierPayment(t, actor, { batchId: ids.j, paidById: A, paidAt: new Date(), amount: 900, currency: "TWD" });
-      await addSupplierPayment(t, actor, { batchId: ids.j, paidById: B, paidAt: new Date(), amount: 600, currency: "TWD" });
+      const { saveJointSetup } = await import("@/server/services/joint");
+      await saveJointSetup(t, actor, ids.j, { split: { [A]: 60, [B]: 40 } });
     });
     list = await tx((t) => listQuickSales(t, {}));
     expect(list.byOwner[A]).toMatchObject({ revenue: 600, cost: 360 });
@@ -84,14 +84,15 @@ describe("各自採買與合資", () => {
     const o = await tx((t) => categoryOverview(t, s.halloween.id));
     expect(o.total.totalTwd).toBe(800 + 1350 + 1500);
     expect(o.batches.map((b) => b.totalTwd)).toEqual([800, 1350, 1500]);
-    expect(o.byOwner[A].amount).toBe(800);
-    expect(o.byOwner[B].amount).toBe(1350 + 1500); // 合資團全部由 B 付款
+    expect(o.byOwner[A].amount).toBe(800 + 750);
+    expect(o.byOwner[A].amount + o.byOwner[B].amount).toBe(800 + 1350 + 1500);
+    expect(o.byOwner[B].amount).toBe(1350 + 750); // 合資團：沒設比例＝各半（不看誰付錢）
     expect(o.byOwner[JOINT]).toMatchObject({ amount: 0, qty: 5, batches: 1 });
-    expect(o.jointShares[ids.j]).toEqual([{ key: B, amount: 1500, percent: 100 }]);
+    expect(o.jointShares[ids.j].map((x) => x.percent)).toEqual([50, 50]);
     expect(o.stock[A].free + o.stock[B].free + o.stock[JOINT].free).toBe(10);
     expect(o.byStage.DONE.batches).toBe(3);
     const all = await tx((t) => categoriesSummary(t));
-    expect(all.get(s.halloween.id)).toMatchObject({ batches: 3, totalTwd: o.total.totalTwd, byOwner: { [A]: 800, [B]: 2850 } });
+    expect(all.get(s.halloween.id)).toMatchObject({ batches: 3, totalTwd: o.total.totalTwd, byOwner: { [A]: 1550, [B]: 2100 } });
   });
 
   it("改歸屬與進度都有紀錄；改成合資會清掉單一主人", async () => {
@@ -154,9 +155,9 @@ describe("運費：預設不攤、單獨記；兩人一起付才分擔", () => {
     expect((await tx((t) => landedCosts(t, [ids.ai]))).get(ids.ai)!.totalTwd).toBe(before);
     expect((await tx((t) => batchPaySummary(t, [ids.a]))).get(ids.a)).toEqual({ totalTwd: 920, paidTwd: 0, dueTwd: 920 });
     const o = await tx((t) => categoryOverview(t, s.halloween.id));
-    expect(o.byOwner[A].amount).toBe(920);
+    expect(o.byOwner[A].amount).toBe(920 + 750); // 加上合資團各半
     expect(o.batches.find((b) => b.id === ids.a)!.totalTwd).toBe(920);
-    expect((await tx((t) => categoriesSummary(t))).get(s.halloween.id)!.byOwner[A]).toBe(920);
+    expect((await tx((t) => categoriesSummary(t))).get(s.halloween.id)!.byOwner[A]).toBe(920 + 750);
     expect((await monthlyReport(prisma, currentYm())).expenses).toBe(exp0 + 120);
   });
 
@@ -168,8 +169,8 @@ describe("運費：預設不攤、單獨記；兩人一起付才分擔", () => {
     expect((await tx((t) => landedCosts(t, [ids.ai]))).get(ids.ai)!.feesTwd).toBe(300);
     const o = await tx((t) => categoryOverview(t, s.halloween.id));
     expect(o.batches.find((b) => b.id === ids.a)!.totalTwd).toBe(800 + 50 + 300);
-    expect(o.byOwner[A].amount).toBe(800 + 150);
-    expect(o.byOwner[B].amount).toBe(1350 + 50 + 150);
+    expect(o.byOwner[A].amount).toBe(800 + 150 + 750);
+    expect(o.byOwner[B].amount).toBe(1350 + 50 + 150 + 750);
     expect(Object.values(o.byOwner).reduce((x, v) => x + v.amount, 0)).toBe(o.total.totalTwd); // 分完合計不變
   });
 });

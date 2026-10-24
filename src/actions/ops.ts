@@ -98,6 +98,8 @@ export async function createBatchAction(input: {
   fees?: { kind: string; currency: "TWD" | "JPY"; amount: number; note?: string | null }[];
   /** 開團時已付的訂金（台幣） */
   deposit?: { amount: number; paidById: string | null } | null;
+  /** 合資：一起的比例、運費怎麼分、誰付了多少 */
+  joint?: { split?: Record<string, number> | null; feeSplit?: "HALF" | "GOODS"; paidBy?: { paidById: string; total: number }[] } | null;
 }) {
   return run(async (a) => {
     const items = z.array(batchItem).max(300).parse(input.items);
@@ -109,7 +111,9 @@ export async function createBatchAction(input: {
       .parse(input);
     const fees = z.array(z.object({ kind: z.enum(["AGENT_FEE", "JP_DOMESTIC_SHIPPING", "INTL_SHIPPING", "TW_DOMESTIC_SHIPPING", "DUTY", "PACKAGING", "PLATFORM_FEE", "OTHER"]), currency: z.enum(["TWD", "JPY"]), amount: z.number().int().min(0), note: z.string().max(100).nullish() })).max(10).parse(input.fees ?? []);
     const deposit = z.object({ amount: z.number().int().min(0), paidById: z.string().max(64).nullable() }).nullish().parse(input.deposit);
-    const { fees: _f, deposit: _d, ...rest } = input;
+    const joint = z.object({ split: z.record(z.string().max(64), z.number().min(0)).nullish(), feeSplit: z.enum(["HALF", "GOODS"]).optional(), paidBy: z.array(z.object({ paidById: z.string().max(64), total: z.number().int().min(0) })).max(10).optional() }).nullish().parse(input.joint);
+    const { fees: _f, deposit: _d, joint: _j, ...rest } = input;
+    void _j;
     void _f;
     void _d;
     const b = await tx(
@@ -119,6 +123,11 @@ export async function createBatchAction(input: {
         if (deposit && deposit.amount > 0) {
           const { addSupplierPayment } = await import("@/server/services/supplier-payments");
           await addSupplierPayment(t, a, { batchId: row.id, paidById: deposit.paidById, paidAt: new Date(), amount: deposit.amount, currency: "TWD", purpose: "DEPOSIT", note: "開團時付的訂金" });
+        }
+        if (joint && extra.ownership === "JOINT") {
+          const j = await import("@/server/services/joint");
+          await j.saveJointSetup(t, a, row.id, { split: joint.split ?? null, feeSplit: joint.feeSplit });
+          if (joint.paidBy?.length) await j.setPaidBy(t, a, row.id, joint.paidBy.filter((x) => x.total > 0));
         }
         return row;
       },

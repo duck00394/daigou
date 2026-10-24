@@ -1,7 +1,7 @@
 // 完整流程：LINE 貼上 → 訂單 → 付款 → 採購 → 到貨 → 部分出貨 → 報表
 import { test, expect } from "@playwright/test";
 import * as XLSX from "@e965/xlsx";
-import { login, toast, choose, chosen } from "./helpers";
+import { login, toast, choose } from "./helpers";
 
 test.describe.configure({ mode: "serial" });
 

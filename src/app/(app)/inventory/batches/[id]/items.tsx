@@ -27,6 +27,8 @@ export function ItemsPanel(props: {
   copyButton?: React.ReactNode;
   category?: { id: string; name: string } | null;
   seriesOptions?: SeriesOpt[];
+  jointOps?: { id: string; name: string }[];
+  jointPct?: Record<string, number>;
 }) {
   const { items, editable } = props;
   const [mode, setMode] = useState<"view" | "edit" | "add">(props.initialMode);
@@ -68,12 +70,12 @@ export function ItemsPanel(props: {
 
       {mode === "add" && (
         <div className="border-b border-line-2 p-4">
-          <BulkAddGrid category={props.category ?? null} seriesOptions={props.seriesOptions} batchId={props.batchId} supplierId={props.supplierId} supplierCurrency={props.supplierCurrency} rateMicro={props.rateMicro} series={props.series} types={props.types} onClosed={(allOk) => allOk && setMode("view")} />
+          <BulkAddGrid category={props.category ?? null} seriesOptions={props.seriesOptions} batchId={props.batchId} supplierId={props.supplierId} supplierCurrency={props.supplierCurrency} rateMicro={props.rateMicro} series={props.series} types={props.types} joint={props.jointOps ? { ops: props.jointOps, pct: props.jointPct ?? {} } : null} onClosed={(allOk) => allOk && setMode("view")} />
         </div>
       )}
 
       {mode === "edit" ? (
-        <BulkEditTable batchId={props.batchId} items={items} editable={editable} />
+        <BulkEditTable batchId={props.batchId} items={items} editable={editable} jointOps={props.jointOps} />
       ) : live.length === 0 ? (
         mode === "view" && <p className="px-4 py-8 text-center text-sm text-mute">還沒有品項。{editable && <>按「＋ 加商品」開始加入。</>}</p>
       ) : (
@@ -93,6 +95,7 @@ export function ItemsPanel(props: {
                   </div>
                   <div className="text-[12px] text-mute">
                     {i.received > 0 ? `已到 ${i.received}` : "還沒到"}
+                    {props.jointOps && <span data-testid="item-owner">・{props.jointOps.find((o) => o.id === i.ownerId)?.name ? `${props.jointOps.find((o) => o.id === i.ownerId)!.name}的` : "大家一起"}</span>}
                     {i.cancelledQty > 0 && <span className="text-bad">・已砍 {i.cancelledQty}{i.cancelReason ? `（${i.cancelReason}）` : ""}</span>}
                   </div>
                 </div>

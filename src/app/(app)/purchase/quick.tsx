@@ -10,7 +10,7 @@ import { saveSupplierAction, setSupplierFavoriteAction } from "@/actions/series"
 import { SeriesPicker, type SeriesOpt } from "@/components/series-picker";
 import { renameCategoryAction, saveCategoryAction } from "@/actions/catalog";
 import { setMeAction } from "@/actions/operators";
-import { payRemainingAction, receiveAllAction } from "@/actions/batches";
+import { jointSettlementAction, payRemainingAction, receiveAllAction, saveJointSetupAction, setPaidByAction } from "@/actions/batches";
 import { batchProgress } from "@/lib/labels";
 import { formatJpy, formatTwd, parseRate } from "@/lib/money";
 import { Choice } from "@/components/choice";
@@ -54,6 +54,16 @@ export function QuickPurchase(props: {
   const [newSup, setNewSup] = useState<string | null>(null);
   const [f, setF] = useState({ supplierId: "", name: "", owner: props.me ?? operators[0]?.id ?? "", progress: "ASKED", expectedAt: "", rate: defaultRate, deposit: "", orderNo: "", notes: "" });
   const [changingCat, setChangingCat] = useState(false);
+  // 合資：一起的比例（百分比）、運費怎麼分、誰付了多少給代購
+  const [jointPct, setJointPct] = useState<Record<string, string>>(() => Object.fromEntries(operators.map((o) => [o.id, String(Math.round(100 / Math.max(1, operators.length)))])));
+  const [feeSplit, setFeeSplit] = useState<"HALF" | "GOODS">("HALF");
+  const [paidBy, setPaidBy] = useState<Record<string, string>>({});
+  const [settle, setSettle] = useState<string | null>(null);
+  const jointInput = () => ({
+    split: Object.fromEntries(operators.map((o) => [o.id, Number(jointPct[o.id]) || 0])),
+    feeSplit,
+    paidBy: operators.map((o) => ({ paidById: o.id, total: Number((paidBy[o.id] ?? "").replace(/[^\d]/g, "")) || 0 })),
+  });
   const [supQ, setSupQ] = useState("");
   const [supOpen, setSupOpen] = useState(false);
   // 運費：點常用的帶入金額（可以再改），也可以自己填
@@ -139,7 +149,8 @@ export function QuickPurchase(props: {
       orderedById: f.owner === JOINT ? null : f.owner || null,
       progress: (store ? "ASKED" : f.progress) as "ASKED",
       fees: feeList as never,
-      deposit: dep > 0 ? { amount: dep, paidById: f.owner === JOINT ? me : f.owner || me } : null,
+      deposit: dep > 0 && f.owner !== JOINT ? { amount: dep, paidById: f.owner || me } : null,
+      joint: f.owner === JOINT ? jointInput() : null,
     });
     if (!r.ok) {
       notify(r.error);
@@ -149,6 +160,37 @@ export function QuickPurchase(props: {
     return r.data.id;
   }
 
+
+  const jointBox = () => (
+    <div className="space-y-3 rounded-xl border border-[#d9c8f2] bg-[#f7f2fd] p-3" data-testid="joint-box">
+      <div className="text-[14px] font-semibold text-[#6b3fb0]">合資怎麼分</div>
+      <div>
+        <div className="mb-1 text-[13px] font-medium text-ink-2">「一起的」商品比例（%）</div>
+        <div className="grid grid-cols-2 gap-2">
+          {operators.map((o) => (
+            <label key={o.id} className="flex items-center gap-2 text-[14px]">
+              <span className="w-14 shrink-0 truncate">{o.name}</span>
+              <input aria-label={`${o.name} 比例`} inputMode="numeric" className={`${inputCls} num min-h-10 text-right`} value={jointPct[o.id] ?? ""} onChange={(e) => setJointPct({ ...jointPct, [o.id]: e.target.value.replace(/[^\d.]/g, "") })} />
+            </label>
+          ))}
+        </div>
+      </div>
+      <Choice label="運費怎麼分" value={feeSplit} options={[{ value: "HALF", label: "平均分" }, { value: "GOODS", label: "照各自商品金額比例" }]} onChange={(v) => setFeeSplit(v as "HALF" | "GOODS")} />
+      <div>
+        <div className="mb-1 text-[13px] font-medium text-ink-2">誰付了多少給代購（台幣，累計）</div>
+        <div className="grid grid-cols-2 gap-2">
+          {operators.map((o) => (
+            <label key={o.id} className="flex items-center gap-2 text-[14px]">
+              <span className="w-14 shrink-0 truncate">{o.name}</span>
+              <input aria-label={`${o.name} 付了多少`} inputMode="numeric" className={`${inputCls} num min-h-10 text-right`} value={paidBy[o.id] ?? ""} onChange={(e) => setPaidBy({ ...paidBy, [o.id]: e.target.value.replace(/[^\d]/g, "") })} placeholder="0" />
+            </label>
+          ))}
+        </div>
+        <p className="mt-1 text-[12px] text-mute">還沒付可以先空著，之後在這裡或團頁面再填。每件是誰的在下面「買了什麼」選。</p>
+      </div>
+      {settle && <p className="rounded-lg bg-white px-3 py-2 text-[14px] font-semibold text-bad" data-testid="joint-settle">{settle}</p>}
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -367,8 +409,8 @@ export function QuickPurchase(props: {
             </div>
             <div>
               <Choice label="這團是誰的" value={f.owner} options={owners.map(([v, l]) => ({ value: v, label: l }))} onChange={(v) => setF({ ...f, owner: v })} />
-              {f.owner === JOINT && <p className="mt-1 text-[12px] text-mute">合資：賣掉的錢依各自實際付給代購的金額比例分（誰付錢誰拿錢）。</p>}
             </div>
+            {f.owner === JOINT && jointBox()}
             {store && (
               <label className="flex items-center gap-2 rounded-xl border border-line-2 bg-[#fafbfc] p-3 text-[15px]">
                 <input type="checkbox" className="h-5 w-5" checked={paidAtStore} onChange={(e) => setPaidAtStore(e.target.checked)} />
@@ -426,8 +468,8 @@ export function QuickPurchase(props: {
                         </label>
                       )}
                       <label className="flex items-center justify-between gap-2 pt-1 text-[14px] font-medium text-ink-2">
-                        已付訂金
-                        <input className={`${inputCls} num w-28 text-right`} inputMode="numeric" aria-label="已付訂金" value={f.deposit} onChange={(e) => setF({ ...f, deposit: e.target.value })} placeholder="0" />
+                        {f.owner === JOINT ? "已付訂金（合資請填上面「誰付了多少」）" : "已付訂金"}
+                        <input disabled={f.owner === JOINT} className={`${inputCls} num w-28 text-right`} inputMode="numeric" aria-label="已付訂金" value={f.deposit} onChange={(e) => setF({ ...f, deposit: e.target.value })} placeholder="0" />
                       </label>
                       <p className="text-[12px] text-mute">運費：不攤、算這團主人的。訂金：記成一筆今天的付款。</p>
                     </div>
@@ -442,6 +484,7 @@ export function QuickPurchase(props: {
             </details>
           </div>
         )}
+        {pick === NEW && created.current && f.owner === JOINT && jointBox()}
         {chosen && (
           <p className="text-[13px] text-mute">
             加到「{chosen.label}」（{chosen.owner}的）。<Link className="text-ai underline" href={`/inventory/batches/${chosen.id}`}>看這一團</Link>
@@ -463,6 +506,14 @@ export function QuickPurchase(props: {
             initialTypeId={props.lastTypeId}
             onSaved={async (id, count) => {
               const name = chosen?.label ?? (f.name.trim() || supplier?.name || "新的一團");
+              if (pick === NEW && f.owner === JOINT) {
+                const j = jointInput();
+                await saveJointSetupAction(id, { split: j.split, feeSplit: j.feeSplit });
+                const pr = await setPaidByAction(id, j.paidBy, `${id}:${j.paidBy.map((x) => x.total).join("-")}`);
+                if (!pr.ok) notify(pr.error);
+                const st = await jointSettlementAction(id);
+                if (st.ok) setSettle(st.data.text);
+              }
               let stocked = false;
               let paid = false;
               const storeBatch = pick === NEW ? store : !!chosen && chosen.stage === "實體店購買";
@@ -485,6 +536,7 @@ export function QuickPurchase(props: {
             supplierId={chosen?.supplierId ?? (f.supplierId || null)}
             supplierCurrency={currency}
             rateMicro={rateMicro}
+            joint={(pick === NEW ? f.owner === JOINT : chosen?.ownerKey === JOINT) ? { ops: operators.map((o) => ({ id: o.id, name: o.name })), pct: Object.fromEntries(operators.map((o) => [o.id, Number(jointPct[o.id]) || 0])) } : null}
             series={series}
             types={types}
           />

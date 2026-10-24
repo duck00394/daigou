@@ -72,6 +72,7 @@ const bulkRow = z.object({
   currency,
   qty: z.number().nullable(),
   salePriceTwd: z.number().nullish(),
+  ownerId: z.string().max(64).nullish(),
 });
 export async function bulkAddAction(input: { batchId: string; seriesId: string; productTypeId: string | null; submissionKey: string; rows: z.infer<typeof bulkRow>[]; categoryId?: string | null }) {
   return run((a) => sr.bulkAddSeriesItems(a, { ...input, categoryId: z.string().nullish().parse(input.categoryId), rows: z.array(bulkRow).max(300).parse(input.rows) }));
@@ -87,6 +88,7 @@ const updRow = z.object({
   cancelQty: z.number().int().min(0).optional(),
   cancelReason: z.string().max(30).optional(),
   restoreQty: z.number().int().min(0).optional(),
+  ownerId: z.string().max(64).nullable().optional(),
 });
 export async function bulkUpdateItemsAction(batchId: string, rows: z.infer<typeof updRow>[]) {
   return run((a) => sr.bulkUpdateBatchItems(a, batchId, z.array(updRow).max(300).parse(rows)));

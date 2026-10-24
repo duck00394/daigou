@@ -6,6 +6,7 @@ import { getView, inView, viewBatchWhere } from "@/server/view";
 import { dashboard } from "@/server/services/reports";
 import { listQuickSales } from "@/server/services/quick-sale";
 import { batchPaySummary, refundsOwed } from "@/server/services/batch-ops";
+import { unsettledJoint } from "@/server/services/joint";
 import { reconcileList } from "@/server/services/reconcile";
 import { getOrdersEnabled } from "@/server/services/settings";
 import { formatTwd } from "@/lib/money";
@@ -34,6 +35,8 @@ export default async function Home() {
     prisma.rushEvent.findFirst({ where: { status: "UPCOMING", startAt: { gte: new Date(Date.now() - 30 * 60000) } }, orderBy: { startAt: "asc" } }),
   ]);
   const pay = await tx((t) => batchPaySummary(t, live.map((b) => b.id)));
+  const liveIds = new Set(live.map((b) => b.id));
+  const unsettled = (await tx((t) => unsettledJoint(t))).filter((x) => liveIds.has(x.id));
   const dueBatches = [...pay.values()].filter((p) => p.dueTwd > 0);
   const dueTotal = dueBatches.reduce((s, p) => s + p.dueTwd, 0);
   const refundTotal = refunds.reduce((s, r) => s + r.owed, 0);
@@ -43,6 +46,7 @@ export default async function Home() {
     { n: rec.todo.length, text: "團還沒對單", href: "/reconcile?open=todo" },
     { n: refunds.length, text: "團被砍單、代購還沒退錢", href: "/reconcile?open=refund" },
     { n: dueBatches.length, text: "團還沒付清", href: "/inventory?tab=batches&open=0&pay=due" },
+    { n: unsettled.length, text: "團合資還沒結清", href: unsettled.length === 1 ? `/inventory/batches/${unsettled[0].id}` : "/inventory?tab=batches&settle=1" },
     { n: overdue, text: "團超過預計到貨日", href: "/inventory?tab=batches&late=1" },
     { n: d.toShipQty, text: "件客人預訂到貨了，還沒給", href: "/shipping" },
     { n: unpaidSales._count, text: "筆賣出還沒收到錢", href: "/sales" },

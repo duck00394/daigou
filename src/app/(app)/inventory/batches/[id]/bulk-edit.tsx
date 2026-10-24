@@ -29,20 +29,21 @@ export type EditItem = {
   cancelledQty: number;
   cancelReason: string | null;
   seriesId?: string | null; // 這個品項的系列（一團可以有好幾個系列）
+  ownerId?: string | null; // 合資團：這個品項是誰的（空白＝大家一起）
 };
 
-type Draft = { qty: string; est: string; actual: string; currency: Currency; sale: string; cut: string; restore: boolean };
-const toDraft = (i: EditItem): Draft => ({ qty: String(i.qty), est: String(i.estUnitCost), actual: i.actualUnitCost == null ? "" : String(i.actualUnitCost), currency: i.currency, sale: i.salePriceTwd == null ? "" : String(i.salePriceTwd), cut: "", restore: false });
+type Draft = { qty: string; est: string; actual: string; currency: Currency; sale: string; cut: string; restore: boolean; owner: string };
+const toDraft = (i: EditItem): Draft => ({ qty: String(i.qty), est: String(i.estUnitCost), actual: i.actualUnitCost == null ? "" : String(i.actualUnitCost), currency: i.currency, sale: i.salePriceTwd == null ? "" : String(i.salePriceTwd), cut: "", restore: false, owner: i.ownerId ?? "" });
 const CUT_REASONS: [string, string][] = [["AGENT_CANCEL", "代購砍單（沒搶到）"], ["OUT_OF_STOCK", "商品缺貨"], ["SELLER_CANCEL", "賣家取消"], ["SELF_CANCEL", "自己不要了"]];
 const num = (s: string) => (s.trim() === "" ? null : /^\d+$/.test(s.trim().replace(/,/g, "")) ? Number(s.trim().replace(/,/g, "")) : NaN);
 
-export function BulkEditTable({ batchId, items, editable }: { batchId: string; items: EditItem[]; editable: boolean }) {
+export function BulkEditTable({ batchId, items, editable, jointOps }: { batchId: string; items: EditItem[]; editable: boolean; jointOps?: { id: string; name: string }[] }) {
   const [reason, setReason] = useState("AGENT_CANCEL");
   const [drafts, setDrafts] = useState<Record<string, Draft>>(() => Object.fromEntries(items.map((i) => [i.id, toDraft(i)])));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { run, pending } = useRun();
   const toast = useToast();
-  const key = items.map((i) => `${i.id}:${i.qty}:${i.estUnitCost}:${i.actualUnitCost}:${i.currency}:${i.salePriceTwd}:${i.cancelledQty}`).join("|");
+  const key = items.map((i) => `${i.id}:${i.qty}:${i.estUnitCost}:${i.actualUnitCost}:${i.currency}:${i.salePriceTwd}:${i.cancelledQty}:${i.ownerId ?? ""}`).join("|");
   const [lastKey, setLastKey] = useState(key);
   if (key !== lastKey) {
     setLastKey(key);
@@ -50,7 +51,7 @@ export function BulkEditTable({ batchId, items, editable }: { batchId: string; i
   }
 
   const changed = useMemo(() => {
-    const out: { itemId: string; qty?: number; unitCost?: number; actualUnitCost?: number | null; currency?: Currency; salePriceTwd?: number | null; cancelQty?: number; cancelReason?: string; restoreQty?: number }[] = [];
+    const out: { itemId: string; qty?: number; unitCost?: number; actualUnitCost?: number | null; currency?: Currency; salePriceTwd?: number | null; cancelQty?: number; cancelReason?: string; restoreQty?: number; ownerId?: string | null }[] = [];
     const local: Record<string, string> = {};
     for (const i of items) {
       const d = drafts[i.id];
@@ -79,6 +80,7 @@ export function BulkEditTable({ batchId, items, editable }: { batchId: string; i
         row.cancelReason = reason;
       }
       if (d.restore && i.cancelledQty > 0) row.restoreQty = i.cancelledQty;
+      if (d.owner !== o.owner) row.ownerId = d.owner || null;
       out.push(row);
     }
     return { rows: out, local };
@@ -120,6 +122,14 @@ export function BulkEditTable({ batchId, items, editable }: { batchId: string; i
               <div role="cell" className="col-span-2 md:col-span-1 md:pt-2">
                 <Link href={`/products/${i.productId}`} className="font-medium hover:underline">{i.name}</Link>
                 {i.specNote && <span className="ml-1 text-[12px] text-mute">{i.specNote}</span>}
+                {jointOps && (editable ? (
+                  <select aria-label={`${i.name} 誰的`} data-testid="edit-owner" className={`${inputCls} mt-1 h-9 w-full max-w-[12rem] text-[13px]`} value={d.owner} onChange={(e) => set(i.id, { owner: e.target.value })}>
+                    <option value="">大家一起</option>
+                    {jointOps.map((o) => <option key={o.id} value={o.id}>{o.name}的</option>)}
+                  </select>
+                ) : (
+                  <div className="text-[12px] text-mute" data-testid="item-owner">{jointOps.find((o) => o.id === i.ownerId)?.name ? `${jointOps.find((o) => o.id === i.ownerId)!.name}的` : "大家一起"}</div>
+                ))}
                 {i.minQty > 0 && <div className="text-[12px] text-mute">最少 {i.minQty} 件（{i.promisedNote}）</div>}
                 {i.cancelledQty > 0 && (
                   <div className="text-[12px] text-bad">

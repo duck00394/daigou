@@ -305,6 +305,7 @@ export interface BulkRow {
   currency: Currency;
   qty: number | null;
   salePriceTwd?: number | null;
+  ownerId?: string | null; // 合資團：這件是誰的（空白＝一起的）
 }
 
 export interface BulkRowResult {
@@ -454,6 +455,7 @@ export async function bulkAddSeriesItems(
           dedupeKey,
           categoryId: category?.id ?? null,
         });
+        if (r.ownerId && batch.ownership === "JOINT") await t.purchaseBatchItem.update({ where: { id: item.id }, data: { ownerId: r.ownerId } });
         // 實體店買的：一加進來就算拿到了，直接入庫（合資團沒有主人時，留給使用者按「全部到了」）
         const receiver = storeBatch ? (batch.receivingResponsibleById ?? batch.orderedById) : null;
         if (receiver) {
@@ -497,7 +499,7 @@ export async function bulkAddSeriesItems(
 export async function bulkUpdateBatchItems(
   actor: Actor,
   batchId: string,
-  rows: { itemId: string; qty?: number; unitCost?: number; actualUnitCost?: number | null; currency?: Currency; salePriceTwd?: number | null; cancelQty?: number; cancelReason?: string; restoreQty?: number }[],
+  rows: { itemId: string; qty?: number; unitCost?: number; actualUnitCost?: number | null; currency?: Currency; salePriceTwd?: number | null; cancelQty?: number; cancelReason?: string; restoreQty?: number; ownerId?: string | null }[],
 ) {
   const errors: { itemId: string; error: string }[] = [];
   // 先逐列檢查，任何一列不合法就全部不寫入，避免改到一半
@@ -510,7 +512,9 @@ export async function bulkUpdateBatchItems(
           continue;
         }
         try {
-          const { cancelQty, cancelReason, restoreQty, ...rest } = r;
+          const { cancelQty, cancelReason, restoreQty, ownerId, ...rest } = r;
+          // 合資團：改這件是誰的
+          if (ownerId !== undefined) await t.purchaseBatchItem.update({ where: { id: r.itemId }, data: { ownerId: ownerId || null } });
           if (restoreQty) await restoreCancelled(t, actor, r.itemId, restoreQty);
           if (Object.keys(rest).length > 1) await updateBatchItem(t, actor, r.itemId, rest);
           // 砍單：跟一般修改一起存（同一次全部成功或全部不寫入）

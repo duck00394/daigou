@@ -51,7 +51,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
       <NavSelect label="頁面" hideLabel options={TABS.map(([k, l]) => ({ label: l, href: `/inventory?tab=${k}` }))} current={`/inventory?tab=${tab}`} />
       {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} owner={owner} kind={sp.kind} v={sp.v} />}
       {tab === "demand" && <DemandTab />}
-      {tab === "batches" && <BatchesTab cat={sp.cat} open={sp.open} owner={owner} confirm={sp.confirm} view={sp.view} pay={sp.pay} late={sp.late} />}
+      {tab === "batches" && <BatchesTab cat={sp.cat} open={sp.open} owner={owner} confirm={sp.confirm} view={sp.view} pay={sp.pay} late={sp.late} settle={sp.settle} />}
       {tab === "receive" && <ReceiveTab productId={sp.productId} />}
       {tab === "adjust" && (
         <Section title="盤點調整">
@@ -350,7 +350,7 @@ async function DemandTab() {
   );
 }
 
-async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, late: lateFilter }: { cat?: string; open?: string; owner: string; confirm?: string; view?: string; pay?: string; late?: string }) {
+async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, late: lateFilter, settle }: { cat?: string; open?: string; owner: string; confirm?: string; view?: string; pay?: string; late?: string; settle?: string }) {
   // 進行中（預設）／含已完成／已取消：已取消的只在「已取消」裡看，平常不出現
   const mode = open === "cancelled" ? "cancelled" : open === "0" ? "all" : "open";
   const operators = await tx((t) => listOperators(t));
@@ -378,7 +378,12 @@ async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, lat
   // 從首頁來的篩選：還沒付清、超過預計到貨
   if (payFilter === "due") batches = batches.filter((b) => (pay.get(b.id)?.dueTwd ?? 0) > 0);
   if (lateFilter === "1") batches = batches.filter((b) => b.expectedAt && b.expectedAt < today && b.status !== "CANCELLED" && b.items.reduce((s2, i) => s2 + i.movements.reduce((a, m) => a + m.onHandDelta, 0), 0) < b.items.reduce((s2, i) => s2 + i.qty - i.cancelledQty, 0));
-  if (payFilter || lateFilter) pay = await tx((t) => batchPaySummary(t, batches.map((b) => b.id)));
+  if (settle === "1") {
+    const { unsettledJoint } = await import("@/server/services/joint");
+    const ids = new Set((await tx((t) => unsettledJoint(t))).map((x) => x.id));
+    batches = batches.filter((b) => ids.has(b.id));
+  }
+  if (payFilter || lateFilter || settle) pay = await tx((t) => batchPaySummary(t, batches.map((b) => b.id)));
   return (
     <Section title="採購團" pad={false}>
       <div className="border-b border-line-2 px-4 py-2.5"><OwnerDue compact title="每個人還要付（現金流）" due={await tx((t) => dueByOwner(t, cat ? { categoryId: cat === "none" ? null : cat } : {}))} operators={operators.map((o) => ({ id: o.id, name: o.name }))} only={owner ? [owner, "joint", "none"] : undefined} /></div>
@@ -403,9 +408,9 @@ async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, lat
           { label: "總計買了什麼", href: href(cat, open, owner, { confirm, view: "items" }) },
         ]} />
       </div>
-      {(payFilter === "due" || lateFilter === "1") && (
+      {(payFilter === "due" || lateFilter === "1" || settle === "1") && (
         <div className="flex items-center justify-between border-b border-line-2 bg-ai-soft px-4 py-2 text-[14px]" data-testid="batch-filter-chip">
-          <span>只看：{payFilter === "due" ? "還沒付清的團" : "超過預計到貨日的團"}（{batches.length}）</span>
+          <span>只看：{payFilter === "due" ? "還沒付清的團" : settle === "1" ? "合資還沒結清的團" : "超過預計到貨日的團"}（{batches.length}）</span>
           <Link href={href(cat, open)} className="font-semibold text-ai">看全部</Link>
         </div>
       )}
