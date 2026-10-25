@@ -1,4 +1,5 @@
 import { prisma } from "@/server/db";
+import { Term } from "@/components/help";
 import { requireUser } from "@/server/auth";
 import { PageHeader } from "@/components/ui";
 import { seriesOptions } from "@/server/services/catalog-tree";
@@ -21,7 +22,7 @@ export default async function SellPage({ searchParams }: { searchParams: Promise
   const initial = sp.cat ?? (series.find((s) => s.id === lastOrder?.categoryId && s.active)?.id ?? "");
   return (
     <div className="space-y-4">
-      <PageHeader title="賣給客人" sub="選系列，填每個角色的數量；超過現貨的自動記成預訂，到貨再給。" />
+      <PageHeader title="賣給客人" sub="選系列，填每個角色的數量；超過現貨的自動記成預訂，到貨再給。" help={<><Term name="現貨" tone="good">手上有的直接賣掉，算進「賺多少」</Term><Term name="預訂" tone="info">沒貨的先記成客人預訂，到貨後在「出貨」給客人</Term><div className="mt-1">單價會帶這系列設好的售價；客人名字、平台記一次，下次自動帶。</div></>} />
       <SellForm series={series} buyers={buyers.map((b) => b.name).filter((n) => n !== "散客")} initialCategory={initial} waiting={waiting} channels={usedChannels.map((c) => c.salesChannel!).filter(Boolean)} buyerChannels={Object.fromEntries(buyers.filter((b) => b.salesChannel).map((b) => [b.name, b.salesChannel!]))} />
     </div>
   );

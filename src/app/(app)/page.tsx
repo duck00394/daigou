@@ -8,6 +8,8 @@ import { listQuickSales } from "@/server/services/quick-sale";
 import { batchPaySummary, refundsOwed } from "@/server/services/batch-ops";
 import { unsettledJoint } from "@/server/services/joint";
 import { preorderProfit } from "@/server/services/preorder";
+import { Onboarding } from "@/components/onboarding";
+import { getMe } from "@/server/me";
 import { reconcileList } from "@/server/services/reconcile";
 import { getOrdersEnabled } from "@/server/services/settings";
 import { formatTwd } from "@/lib/money";
@@ -37,6 +39,20 @@ export default async function Home() {
   ]);
   const pay = await tx((t) => batchPaySummary(t, live.map((b) => b.id)));
   const pre = await tx((t) => preorderProfit(t));
+  const [me, nCat, nBatch, nRec, nSale] = await Promise.all([
+    getMe(),
+    prisma.category.count(),
+    prisma.purchaseBatch.count(),
+    prisma.purchaseBatchItem.count({ where: { OR: [{ confirmedQty: { gt: 0 } }, { cancelledQty: { gt: 0 } }, { movements: { some: { kind: "RECEIVE" } } }] } }),
+    prisma.order.count(),
+  ]);
+  const steps = [
+    { key: "me", title: "設定這支手機是誰", note: "之後新增、賣出都會記成你的", href: "/purchase", done: !!me },
+    { key: "cat", title: "建立第一個系列", note: "例：ANA、萬聖節", href: "/categories", done: nCat > 0 },
+    { key: "buy", title: "新增一筆採購", note: "跟哪個代購、買了哪些角色", href: "/purchase", done: nBatch > 0 },
+    { key: "rec", title: "跟代購對單", note: "確認有沒有買到", href: "/reconcile", done: nRec > 0 },
+    { key: "sell", title: "賣給客人", note: "現貨直接賣，沒貨記成預訂", href: "/sell", done: nSale > 0 },
+  ];
   const liveIds = new Set(live.map((b) => b.id));
   const unsettled = (await tx((t) => unsettledJoint(t))).filter((x) => liveIds.has(x.id));
   const dueBatches = [...pay.values()].filter((p) => p.dueTwd > 0);
@@ -72,6 +88,7 @@ export default async function Home() {
   return (
     <div className="space-y-4">
       <h1 className="sr-only">首頁</h1>
+      <Onboarding steps={steps} />
       <div className="grid grid-cols-2 gap-2">
         <Link href="/purchase" className="rounded-xl bg-ai px-3 py-3.5 text-center text-[17px] font-semibold text-white hover:bg-ai-2">＋ 新增採購</Link>
         <Link href="/sell" className="rounded-xl border border-line bg-white px-3 py-3.5 text-center text-[17px] font-semibold hover:border-ai">賣給客人</Link>

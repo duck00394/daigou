@@ -16,7 +16,8 @@ export default async function Shipping({ searchParams }: { searchParams: Promise
     <div className="space-y-4">
       <PageHeader
         title="出貨"
-        sub="只能出貨已到貨保留的數量；部分出貨時，剩下的數量會保留在待出貨。"
+        sub="把到貨的預訂交給客人"
+        help={<><div>客人預訂的東西到貨後，會出現在「待出貨」。選好要給的件數按出貨，就算交給客人了。</div><div className="mt-1">只能出貨已到貨、留給這位客人的數量；部分出貨時，剩下的會留在待出貨。</div></>}
         actions={<><LinkButton href="/api/export/to-ship">匯出待出貨清單</LinkButton><LinkButton href="/api/export/shipments">匯出出貨紀錄</LinkButton></>}
       />
       <nav className="flex flex-wrap gap-1" aria-label="分頁">
@@ -73,7 +74,7 @@ async function TodoTab({ byOrder, sp }: { byOrder: boolean; sp: Record<string, s
         <button className="rounded-lg border border-ai bg-ai px-3 py-2 text-sm text-white">套用</button>
       </form>
       {list.length === 0 ? (
-        <Section><Empty>沒有待出貨的商品。</Empty></Section>
+        <Section><Empty action={<LinkButton href="/sell">賣給客人</LinkButton>}>沒有要給客人的東西。客人預訂的商品到貨後，會出現在這裡。</Empty></Section>
       ) : (
         <div className="space-y-3">
           {list.map((g) => {

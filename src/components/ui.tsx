@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { BackLink } from "./back";
+import { HeaderTitle } from "./help";
 import type { Tone } from "@/lib/labels";
 import { formatJpy, formatTwd } from "@/lib/money";
 
@@ -44,13 +45,17 @@ export function Jpy({ v, className = "" }: { v: number | null | undefined; class
   return <span className={`num whitespace-nowrap ${className}`}>{formatJpy(v)}</span>;
 }
 
-export function PageHeader({ title, sub, actions, back }: { title: string; sub?: React.ReactNode; actions?: React.ReactNode; back?: { href: string; label: string } }) {
+export function PageHeader({ title, sub, actions, back, help }: { title: string; sub?: React.ReactNode; actions?: React.ReactNode; back?: { href: string; label: string }; help?: React.ReactNode }) {
   return (
     <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
         <Suspense>{<BackLink fallback={back} />}</Suspense>
-        <h1 className="round text-[22px] leading-tight font-semibold text-ink">{title}</h1>
-        {sub && <div className="mt-1 text-sm text-mute">{sub}</div>}
+        {help ? <HeaderTitle title={title} sub={sub} help={help} /> : (
+          <>
+            <h1 className="round text-[22px] leading-tight font-semibold text-ink">{title}</h1>
+            {sub && <div className="mt-1 text-sm text-mute">{sub}</div>}
+          </>
+        )}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>

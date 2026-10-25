@@ -98,6 +98,7 @@ export function SeriesList({ groups }: { groups: KindGroup[] }) {
   const [q, setQ] = useState("");
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const hits = words.length ? groups.flatMap((g) => g.rows.filter((r) => words.every((w) => `${r.name} ${g.label}`.toLowerCase().includes(w)))) : [];
+  if (!groups.length) return <p className="rounded-xl border border-line bg-card px-4 py-8 text-center text-[14px] text-mute" data-testid="series-empty">還沒有系列。按上面「＋ 新系列」建立第一個（例：ANA、萬聖節），之後採購、賣給客人都會用到。</p>;
   return (
     <div className="space-y-2">
       <input type="search" aria-label="找系列" placeholder="找系列：打關鍵字" className="min-h-11 w-full rounded-xl border border-line bg-white px-3 text-[15px]" value={q} onChange={(e) => setQ(e.target.value)} />

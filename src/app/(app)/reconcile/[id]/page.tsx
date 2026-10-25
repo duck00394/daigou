@@ -29,6 +29,7 @@ export default async function ReconcileBatch({ params, searchParams }: { params:
         title={sheet.name}
         sub={[sheet.supplierName, idx >= 0 ? `第 ${idx + 1}／${list.todo.length} 團` : "已對完"].filter(Boolean).join("｜")}
         back={{ href: `/reconcile${qs}`, label: "對單" }}
+        help={<><div>每個角色填「買到幾件」。沒買到的：選「剩下的砍掉」並選原因，或先不管等代購回覆。</div><div className="mt-1">全部都買到就按「這團全部買到」，再按儲存；可以順便填這團總共付了多少。</div></>}
       />
       {(sheet.orderNo || sheet.notes) && (
         <div className="space-y-1 rounded-xl border border-line bg-card px-3 py-2 text-[14px]">

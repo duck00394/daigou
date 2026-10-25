@@ -267,7 +267,7 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
               <span role="cell" className="num text-right text-good">{formatTwd(summary.reduce((a, r) => a + (P(r)?.profit ?? 0), 0))}</span>
             </div>
           </div>
-          <p className="px-4 py-2 text-[12px] text-mute">庫存＝現有＋一定到－客人訂；可賺＝已賣＋客人預訂＋剩下照售價賣（— ＝還沒填售價）。勾選可以算成本合計。點商品看更多。平均成本不算「不一定」的，{fullView ? "含攤進去的運費、關稅" : "只看商品單價，不含運費"}；* 表示有價格還沒確定。</p>
+          <p className="px-4 py-2 text-[12px] text-mute">勾選可以算成本合計；點商品看更多。名詞看不懂按上面「這是什麼？」。</p>
         </Section>
         </PickProvider>
       )}

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Term } from "@/components/help";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { listQuickSales } from "@/server/services/quick-sale";
@@ -54,7 +55,7 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
   return (
     <div className="space-y-4">
       <datalist id="buyer-names">{buyers.map((b) => <option key={b.name} value={b.name} />)}</datalist>
-      <PageHeader title="賺多少" actions={<><LinkButton href="/api/export/sales">匯出</LinkButton><SellButton label="＋ 出售現貨" primary autoOpen={sp.new === "1"} /></>} />
+      <PageHeader title="賺多少" sub="賣掉的收入、成本、賺多少；客人預訂預估可賺" help={<><Term name="收入">賣掉的成交價</Term><Term name="成本">那幾件買進來的成本（含攤進去的運費、關稅）</Term><Term name="預估可賺" tone="good">客人預訂還沒給的：預訂價－預購平均成本，還沒有成本的先不算</Term><div className="mt-1">賣錯了按「更正」或「作廢」，庫存會自動回來。</div></>} actions={<><LinkButton href="/api/export/sales">匯出</LinkButton><SellButton label="＋ 出售現貨" primary autoOpen={sp.new === "1"} /></>} />
       <PreorderCard p={pre} />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat label="賣了幾筆／幾件" value={`${total.count} / ${total.qty}`} />

@@ -36,6 +36,7 @@ export default async function Categories() {
       <PageHeader
         title="系列"
         sub="點種類展開；點系列看買了什麼、採購團、品項售價。"
+        help={<><div>系列＝一個活動或主題（例：ANA、萬聖節），同類的系列放在同一個「種類」（例：聯名、節慶）。</div><div className="mt-1">點開種類可以「排順序」「改名稱」「刪除」。右邊紅字是這種類還要付代購、或代購要退的錢。</div></>}
         actions={
           <>
             <CategoryEditButton label="＋ 新系列" customTypes={customTypes} />
