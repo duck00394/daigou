@@ -69,4 +69,19 @@ test("手機：關稅 %、預購平均成本、庫存欄", async ({ page }) => {
   await page.screenshot({ path: "test-results/mobile_pick.png" });
   await page.getByRole("button", { name: "清除" }).click();
   await expect(page.getByTestId("pick-bar")).toHaveCount(0);
+
+  // 同一頁看成本、庫存、可賺：庫存 2、還沒填售價 → 可賺先不算
+  await expect(page.getByTestId("series-profit")).toBeVisible();
+  await expect(page.getByTestId("profit-free")).toContainText("2 件");
+  const prod = page.getByTestId("product-summary").first();
+  await expect(prod.locator('[data-k="left"]')).toContainText("2");
+  await page.screenshot({ path: "test-results/mobile_series_profit.png", fullPage: true });
+  // 點到庫存，再按返回 → 回到系列頁（不是首頁）
+  const seriesUrl = page.url();
+  await prod.locator("summary").click();
+  await prod.getByRole("link", { name: "看庫存 ›" }).click();
+  await expect(page).toHaveURL(/tab=stock/);
+  await page.getByTestId("back").click();
+  await expect(page).toHaveURL(seriesUrl);
+  await expect(page.getByTestId("series-profit")).toBeVisible();
 });

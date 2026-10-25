@@ -8,9 +8,15 @@ import { pendingQty } from "./batch-ops";
 export type PreorderCost = { avg: number; tentative: boolean };
 
 export async function preorderCosts(t: Tx, productIds: string[]) {
+  return (await preorderDetail(t, productIds)).costs;
+}
+
+/** 預購成本＋每個商品一定到（對單買到、還沒到）的件數 */
+export async function preorderDetail(t: Tx, productIds: string[]) {
   const ids = [...new Set(productIds)];
   const out = new Map<string, PreorderCost>();
-  if (!ids.length) return out;
+  const sureQty = new Map<string, number>();
+  if (!ids.length) return { costs: out, sureQty };
   const [val, items] = await Promise.all([
     stockValuation(t, ids),
     t.purchaseBatchItem.findMany({
@@ -38,8 +44,9 @@ export async function preorderCosts(t: Tx, productIds: string[]) {
     const q = hq + (s?.qty ?? 0);
     if (q > 0) out.set(id, { avg: Math.round((hq * (h?.avgUnitCost ?? 0) + (s?.val ?? 0)) / q), tentative: !!(s?.tentative || (hq && h?.tentative)) });
     else if (h?.avgUnitCost != null) out.set(id, { avg: h.avgUnitCost, tentative: h.tentative });
+    if (s?.qty) sureQty.set(id, s.qty);
   }
-  return out;
+  return { costs: out, sureQty };
 }
 
 export type ProfitLine = { productId: string; name: string; qty: number; revenue: number; cost: number | null; tentative: boolean };
@@ -90,4 +97,108 @@ export async function preorderProfit(t: Tx) {
     buyers: [...buyers.values()].sort((a, b) => b.revenue - a.revenue),
     products: [...products.values()].sort((a, b) => b.revenue - a.revenue),
   };
+}
+
+export type SeriesProduct = {
+  id: string;
+  onHand: number; // 現有（不含自留）
+  sure: number; // 一定到
+  ordered: number; // 客人訂還沒給
+  left: number; // 庫存＝現有＋一定到－客人訂
+  sold: { qty: number; revenue: number; cost: number };
+  pre: { qty: number; revenue: number; cost: number | null };
+  free: { qty: number; revenue: number | null; cost: number | null }; // 還沒人訂的（照售價）
+  price: number | null;
+  avg: number | null;
+  profit: number; // 算得出來的部分加總
+};
+
+/** 一個系列：已經賣掉、客人預訂、還沒人訂的（現有＋一定到），各收多少、成本多少、可賺多少 */
+export async function seriesProfit(t: Tx, categoryId: string) {
+  const [linked, bought, typePrices] = await Promise.all([
+    t.productCategory.findMany({ where: { categoryId }, select: { productId: true } }),
+    t.purchaseBatchItem.findMany({ where: { OR: [{ categoryId }, { categoryId: null, batch: { categoryId } }] }, select: { productId: true } }),
+    t.categoryTypePrice.findMany({ where: { categoryId }, select: { productTypeId: true, salePriceTwd: true } }),
+  ]);
+  const ids = [...new Set([...linked, ...bought].map((x) => x.productId))];
+  const tp = new Map(typePrices.map((x) => [x.productTypeId, x.salePriceTwd]));
+  const [products, detail, stock, moves, orderItems] = await Promise.all([
+    t.product.findMany({ where: { id: { in: ids } }, select: { id: true, salePriceTwd: true, productTypeId: true } }),
+    preorderDetail(t, ids),
+    t.inventoryMovement.groupBy({ by: ["productId"], where: { productId: { in: ids } }, _sum: { onHandDelta: true } }),
+    t.inventoryMovement.findMany({ where: { productId: { in: ids }, kind: "SHIP", orderItemId: { not: null } }, select: { productId: true, onHandDelta: true, purchaseBatchItemId: true, unitCostTwd: true, orderItem: { select: { id: true, unitPrice: true, estUnitCostTwd: true } } } }),
+    t.orderItem.findMany({ where: { productId: { in: ids }, order: { confirmation: "CONFIRMED", statusCache: { not: "CANCELLED" } } }, select: { productId: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true, unitPrice: true } }),
+  ]);
+  // 已經賣掉：出貨流水（作廢退回的會抵掉）× 成交價；成本照出貨批次
+  const lots = [...new Set(moves.map((m) => m.purchaseBatchItemId).filter((x): x is string => !!x))];
+  const landed = await landedCosts(t, lots);
+  const { costOfMove } = await import("./reports");
+  const net = new Map<string, { productId: string; qty: number; lot: string | null; unitCost: number | null; price: number; est: number | null }>();
+  for (const m of moves) {
+    const k = `${m.orderItem!.id}|${m.purchaseBatchItemId ?? ""}|${m.unitCostTwd ?? ""}`;
+    const v = net.get(k) ?? { productId: m.productId, qty: 0, lot: m.purchaseBatchItemId, unitCost: m.unitCostTwd, price: m.orderItem!.unitPrice, est: m.orderItem!.estUnitCostTwd };
+    v.qty -= m.onHandDelta;
+    net.set(k, v);
+  }
+  const sold = new Map<string, { qty: number; revenue: number; cost: number }>();
+  for (const v of net.values()) {
+    if (v.qty <= 0) continue;
+    const x = sold.get(v.productId) ?? { qty: 0, revenue: 0, cost: 0 };
+    x.qty += v.qty;
+    x.revenue += v.qty * v.price;
+    x.cost += costOfMove(landed, { qty: v.qty, purchaseBatchItemId: v.lot, unitCostTwd: v.unitCost, estUnitCostTwd: v.est }).cost;
+    sold.set(v.productId, x);
+  }
+  const onHandOf = new Map(stock.map((x) => [x.productId, x._sum.onHandDelta ?? 0]));
+  const pre = new Map<string, { qty: number; revenue: number }>();
+  for (const o of orderItems) {
+    const q = Math.max(0, o.qty - o.cancelledQtyCache - o.shippedQtyCache);
+    if (!q) continue;
+    const x = pre.get(o.productId) ?? { qty: 0, revenue: 0 };
+    x.qty += q;
+    x.revenue += q * o.unitPrice;
+    pre.set(o.productId, x);
+  }
+  const rows = new Map<string, SeriesProduct>();
+  const total = {
+    sold: { qty: 0, revenue: 0, cost: 0 },
+    pre: { qty: 0, revenue: 0, cost: 0, uncosted: 0 },
+    free: { qty: 0, revenue: 0, cost: 0, unpriced: 0, uncosted: 0 },
+  };
+  for (const p of products) {
+    const c = detail.costs.get(p.id);
+    const onHand = Math.max(0, onHandOf.get(p.id) ?? 0);
+    const sure = detail.sureQty.get(p.id) ?? 0;
+    const pr = pre.get(p.id) ?? { qty: 0, revenue: 0 };
+    const sd = sold.get(p.id) ?? { qty: 0, revenue: 0, cost: 0 };
+    const left = onHand + sure - pr.qty;
+    const freeQty = Math.max(0, left);
+    const price = p.salePriceTwd ?? (p.productTypeId ? (tp.get(p.productTypeId) ?? null) : null);
+    const preCost = c ? c.avg * pr.qty : null;
+    const freeCost = c ? c.avg * freeQty : null;
+    const freeRev = price != null ? price * freeQty : null;
+    let profit = sd.revenue - sd.cost;
+    if (preCost != null) profit += pr.revenue - preCost;
+    if (freeCost != null && freeRev != null) profit += freeRev - freeCost;
+    rows.set(p.id, { id: p.id, onHand, sure, ordered: pr.qty, left, sold: sd, pre: { ...pr, cost: preCost }, free: { qty: freeQty, revenue: freeRev, cost: freeCost }, price, avg: c?.avg ?? null, profit });
+    total.sold.qty += sd.qty;
+    total.sold.revenue += sd.revenue;
+    total.sold.cost += sd.cost;
+    total.pre.qty += pr.qty;
+    if (preCost == null) total.pre.uncosted += pr.qty;
+    else {
+      total.pre.revenue += pr.revenue;
+      total.pre.cost += preCost;
+    }
+    total.free.qty += freeQty;
+    if (freeQty && freeCost == null) total.free.uncosted += freeQty;
+    else if (freeQty && freeRev == null) total.free.unpriced += freeQty;
+    else if (freeQty) {
+      total.free.revenue += freeRev!;
+      total.free.cost += freeCost!;
+    }
+  }
+  const revenue = total.sold.revenue + total.pre.revenue + total.free.revenue;
+  const cost = total.sold.cost + total.pre.cost + total.free.cost;
+  return { rows, ...total, revenue, cost, profit: revenue - cost };
 }

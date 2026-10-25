@@ -1,5 +1,7 @@
 // 伺服器端可用的基本元件
 import Link from "next/link";
+import { Suspense } from "react";
+import { BackLink } from "./back";
 import type { Tone } from "@/lib/labels";
 import { formatJpy, formatTwd } from "@/lib/money";
 
@@ -46,11 +48,7 @@ export function PageHeader({ title, sub, actions, back }: { title: string; sub?:
   return (
     <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
-        {back && (
-          <Link href={back.href} className="mb-1 inline-block text-sm text-ai hover:underline">
-            ‹ {back.label}
-          </Link>
-        )}
+        <Suspense>{<BackLink fallback={back} />}</Suspense>
         <h1 className="round text-[22px] leading-tight font-semibold text-ink">{title}</h1>
         {sub && <div className="mt-1 text-sm text-mute">{sub}</div>}
       </div>

@@ -5,12 +5,15 @@ import { checkIntegrity } from "@/server/services/integrity";
 import { actor, resetDb, seedBasics } from "../helpers";
 import { addBatchItem, createBatch } from "@/server/services/purchase";
 import { sellToCustomer } from "@/server/services/sell";
-import { preorderCosts, preorderProfit } from "@/server/services/preorder";
+import { preorderCosts, preorderProfit, seriesProfit } from "@/server/services/preorder";
+import { createReceivingRecord } from "@/server/services/receiving";
+import { ensureDefaultOperators } from "@/server/services/operators";
 
 let s: Awaited<ReturnType<typeof seedBasics>>;
 beforeEach(async () => {
   await resetDb();
   s = await seedBasics();
+  await tx((t) => ensureDefaultOperators(t));
 });
 afterEach(async () => {
   expect(await checkIntegrity(prisma)).toEqual([]);
@@ -39,5 +42,27 @@ describe("預購成本與預估可賺", () => {
     expect(p.profit).toBe(400); // 只算有成本的：1000 − 600
     expect(p.uncosted).toBe(2);
     expect(p.buyers.map((x) => [x.name, x.profit, x.uncosted])).toEqual([["小美", 400, 2]]);
+  });
+
+  it("系列預估可賺：已賣、客人預訂、還沒人訂的（照售價）", async () => {
+    const cat = s.halloween.id; // p1、p2 在萬聖節
+    const b = await tx((t) => createBatch(t, actor, { name: "萬聖團", supplier: "代購", categoryId: cat }));
+    const i1 = await tx((t) => addBatchItem(t, actor, b.id, { productId: s.p1.id, qty: 4, unitCost: 300, currency: "TWD" }));
+    await prisma.purchaseBatchItem.update({ where: { id: i1.id }, data: { confirmedQty: 4 } });
+    await tx((t) => createReceivingRecord(t, actor, { batchId: b.id, receivedById: "op_a", lines: [{ batchItemId: i1.id, receivedQty: 2 }] }));
+    // 賣掉 1 件現貨 500；再預訂 2 件（1 件現貨不夠→預訂）
+    await tx((t) => sellToCustomer(t, actor, { buyerName: "阿明", lines: [{ productId: s.p1.id, qty: 1, unitPrice: 500 }], idemKey: "series-0001" }));
+    await tx((t) => sellToCustomer(t, actor, { buyerName: "小美", lines: [{ productId: s.p1.id, qty: 2, unitPrice: 520 }], idemKey: "series-0002" }));
+    const p = await tx((t) => seriesProfit(t, cat));
+    const r = p.rows.get(s.p1.id)!;
+    // 現有 2−1−1(賣)… 現有 0、一定到 2、客人訂 1 → 庫存 1，剩 1 件照售價 500
+    expect(p.sold.qty).toBe(2);
+    expect(p.sold.revenue).toBe(500 + 520);
+    expect(p.sold.cost).toBe(600);
+    expect([r.onHand, r.sure, r.ordered, r.left]).toEqual([0, 2, 1, 1]);
+    expect(p.pre).toMatchObject({ qty: 1, revenue: 520, cost: 300 });
+    expect(p.free).toMatchObject({ qty: 1, revenue: 500, cost: 300 });
+    expect(p.profit).toBe(1020 - 600 + 220 + 200);
+    expect(r.profit).toBe(p.profit);
   });
 });

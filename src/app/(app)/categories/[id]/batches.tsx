@@ -2,6 +2,8 @@
 import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { PickBox, PickProvider, SetButton } from "./pick";
+import { seriesProfit } from "@/server/services/preorder";
+import { ProfitCard } from "./profit";
 import { categoryOverview } from "@/server/services/batch-ops";
 import { Section, StatusBadge, Empty, LinkButton } from "@/components/ui";
 import { batchStageLabel, fmtDay, type BatchStage } from "@/lib/labels";
@@ -82,7 +84,8 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
   const charSort = (r: (typeof summary)[number]) => (r.product.characters.length === 1 ? r.product.characters[0].character.sortOrder : 9999);
   for (const g of typeGroups) g.rows.sort((a, b) => charSort(a) - charSort(b));
   const pickItems = summary.map((r) => ({ id: r.product.id, name: r.product.name, cost: r.avg, price: priceOf(r.product), tentative: r.tentative }));
-  const allQty = summary.reduce((a, r) => a + r.qty, 0);
+  const prof = showItems ? await tx((t) => seriesProfit(t, categoryId)) : null;
+  const P = (r: { product: { id: string } }) => prof?.rows.get(r.product.id);
   const allSure = summary.reduce((a, r) => a + r.sureQty, 0);
   const allAmount = summary.reduce((a, r) => a + r.amount, 0);
   return (
@@ -182,10 +185,11 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
       </Section>
 
       )}
+      {showItems && prof && summary.length > 0 && <ProfitCard p={prof} categoryId={categoryId} />}
       {showItems && summary.length > 0 && (
         <PickProvider items={pickItems}>
         <Section
-          title="商品數量與平均成本"
+          title="每個商品：庫存、成本、可賺"
           pad={false}
           actions={
             <span className="flex gap-1 text-sm">
@@ -197,9 +201,9 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
           <div aria-label="商品數量與平均成本" role="table" className="text-[14px]">
             <div role="row" className="grid grid-cols-[minmax(0,1fr)_3.5rem_4.75rem_6.5rem] gap-2 border-b border-line bg-[#fafbfc] py-2 pr-3 pl-14 text-[12px] text-mute">
               <span role="columnheader">商品</span>
-              <span role="columnheader" className="text-right">總數量</span>
+              <span role="columnheader" className="text-right">庫存</span>
               <span role="columnheader" className="text-right">平均成本</span>
-              <span role="columnheader" className="text-right">最低～最高</span>
+              <span role="columnheader" className="text-right">可賺</span>
             </div>
             {typeGroups.map((g) => (
               <div key={g.key} data-testid="pick-type" data-name={g.name}>
@@ -213,10 +217,21 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
               <details className="group min-w-0 flex-1" data-testid="product-summary">
                 <summary role="row" className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_3.5rem_4.75rem_6.5rem] items-baseline gap-2 px-3 py-2.5 hover:bg-[#fafbfd] [&::-webkit-details-marker]:hidden">
                   <span role="cell" className="min-w-0 font-medium"><span className="mr-1 inline-block text-mute transition-transform group-open:rotate-90">▸</span>{r.product.characters.length === 1 ? <span title={r.product.name}>{r.product.characters[0].character.name}</span> : r.product.name}</span>
-                  <span role="cell" className="num text-right font-semibold" data-k="qty">{r.qty}{r.unsure > 0 && <span className="block text-[11px] font-normal text-warn" data-k="unsure">不一定 {r.unsure}</span>}</span>
+                  <span role="cell" className={`num text-right font-semibold ${(P(r)?.left ?? 0) < 0 ? "text-bad" : ""}`} data-k="left">{P(r)?.left ?? 0}{r.unsure > 0 && <span className="block text-[11px] font-normal text-warn" data-k="unsure">不一定 {r.unsure}</span>}</span>
                   <span role="cell" className="num text-right font-semibold" data-k="avg">{r.avg == null ? <span className="text-mute">—</span> : <>{formatTwd(r.avg)}{r.tentative ? <span className="text-warn">*</span> : null}</>}</span>
-                  <span role="cell" className="num text-right text-[12.5px] text-mute">{r.min === r.max ? formatTwd(r.min) : `${r.min.toLocaleString()}～${r.max.toLocaleString()}`}</span>
+                  <span role="cell" className={`num text-right font-semibold ${(P(r)?.profit ?? 0) < 0 ? "text-bad" : "text-good"}`} data-k="profit">{P(r) && (P(r)!.sold.qty > 0 || (P(r)!.pre.qty > 0 && P(r)!.pre.cost != null) || (P(r)!.free.qty > 0 && P(r)!.free.revenue != null && P(r)!.free.cost != null)) ? formatTwd(P(r)!.profit) : <span className="text-mute" title="還沒填售價或沒有成本">—</span>}</span>
                 </summary>
+                {P(r) && (
+                  <div className="border-t border-line-2 bg-white px-4 py-2 text-[13px]" data-testid="product-numbers">
+                    <div>買了 {r.qty}{r.unsure ? `（不一定 ${r.unsure}）` : ""}・現有 {P(r)!.onHand}・一定到 {P(r)!.sure}・客人訂 {P(r)!.ordered}・已賣 {P(r)!.sold.qty}</div>
+                    <div className="text-mute">售價 {P(r)!.price != null ? formatTwd(P(r)!.price!) : "還沒填"}・各團單價 {r.min === r.max ? formatTwd(r.min) : `${r.min.toLocaleString()}～${r.max.toLocaleString()}`}</div>
+                    <div className="mt-1 flex flex-wrap gap-3">
+                      <Link href={`/inventory?tab=stock&only=all&v=1&q=${encodeURIComponent(r.product.name)}`} className="text-ai">看庫存 ›</Link>
+                      {P(r)!.sold.qty > 0 && <Link href={`/sales?ym=all&q=${encodeURIComponent(r.product.name)}`} className="text-ai">看賣出紀錄 ›</Link>}
+                      <Link href={`/products/${r.product.id}`} className="text-ai">看這個商品 ›</Link>
+                    </div>
+                  </div>
+                )}
                 <ul className="space-y-1 bg-[#f6f8fc] px-4 py-2 text-[13px]">
                   {r.cells
                     .slice()
@@ -239,7 +254,6 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
                         </li>
                       );
                     })}
-                  <li className="pt-1 text-right"><Link href={`/products/${r.product.id}`} className="text-ai">看這個商品 ›</Link></li>
                 </ul>
               </details>
               </div>
@@ -248,12 +262,12 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
             ))}
             <div role="row" className="grid grid-cols-[minmax(0,1fr)_3.5rem_4.75rem_6.5rem] gap-2 bg-[#fafbfc] py-2 pr-3 pl-14 font-semibold">
               <span role="cell">合計</span>
-              <span role="cell" className="num text-right" data-testid="summary-qty">{allQty}</span>
+              <span role="cell" className="num text-right" data-testid="summary-left">{summary.reduce((a, r) => a + (P(r)?.left ?? 0), 0)}</span>
               <span role="cell" className="num text-right">{allSure ? formatTwd(Math.round(allAmount / allSure)) : "—"}</span>
-              <span role="cell" />
+              <span role="cell" className="num text-right text-good">{formatTwd(summary.reduce((a, r) => a + (P(r)?.profit ?? 0), 0))}</span>
             </div>
           </div>
-          <p className="px-4 py-2 text-[12px] text-mute">勾選商品可以算成本合計；「選整套」＝這個品項每個角色各 1 件。點商品展開看各團價格。平均成本只算已到貨＋一定到的（對單還沒確定的「不一定」不算），{fullView ? "含攤進去的運費、關稅" : "只看商品單價，不含運費"}；* 表示有價格還沒確定。</p>
+          <p className="px-4 py-2 text-[12px] text-mute">庫存＝現有＋一定到－客人訂；可賺＝已賣＋客人預訂＋剩下照售價賣（— ＝還沒填售價）。勾選可以算成本合計。點商品看更多。平均成本不算「不一定」的，{fullView ? "含攤進去的運費、關稅" : "只看商品單價，不含運費"}；* 表示有價格還沒確定。</p>
         </Section>
         </PickProvider>
       )}
