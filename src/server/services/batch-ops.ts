@@ -301,7 +301,7 @@ export async function categoryOverview(t: Tx, categoryId: string) {
       receivings: { select: { lines: { select: { defectQty: true, missingQty: true } } } },
       items: {
         include: {
-          product: { select: { id: true, code: true, name: true } },
+          product: { select: { id: true, code: true, name: true, salePriceTwd: true, productType: { select: { id: true, name: true, sortOrder: true } }, characters: { select: { character: { select: { name: true, sortOrder: true } } } } } },
           allocations: { select: { amountTwd: true } },
           movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } },
         },
@@ -309,7 +309,8 @@ export async function categoryOverview(t: Tx, categoryId: string) {
     },
   });
   const today = new Date();
-  const rows = new Map<string, { product: { id: string; code: string; name: string }; cells: Map<string, PriceCell[]> }>();
+  type RowProduct = { id: string; code: string; name: string; salePriceTwd: number | null; productType: { id: string; name: string; sortOrder: number } | null; characters: { character: { name: string; sortOrder: number } }[] };
+  const rows = new Map<string, { product: RowProduct; cells: Map<string, PriceCell[]> }>();
   const summaries = batches.map((b) => {
     const ratio = seriesRatio(b, categoryId);
     const allItems = b.items;

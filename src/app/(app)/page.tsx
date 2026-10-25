@@ -7,6 +7,7 @@ import { dashboard } from "@/server/services/reports";
 import { listQuickSales } from "@/server/services/quick-sale";
 import { batchPaySummary, refundsOwed } from "@/server/services/batch-ops";
 import { unsettledJoint } from "@/server/services/joint";
+import { preorderProfit } from "@/server/services/preorder";
 import { reconcileList } from "@/server/services/reconcile";
 import { getOrdersEnabled } from "@/server/services/settings";
 import { formatTwd } from "@/lib/money";
@@ -35,6 +36,7 @@ export default async function Home() {
     prisma.rushEvent.findFirst({ where: { status: "UPCOMING", startAt: { gte: new Date(Date.now() - 30 * 60000) } }, orderBy: { startAt: "asc" } }),
   ]);
   const pay = await tx((t) => batchPaySummary(t, live.map((b) => b.id)));
+  const pre = await tx((t) => preorderProfit(t));
   const liveIds = new Set(live.map((b) => b.id));
   const unsettled = (await tx((t) => unsettledJoint(t))).filter((x) => liveIds.has(x.id));
   const dueBatches = [...pay.values()].filter((p) => p.dueTwd > 0);
@@ -74,10 +76,11 @@ export default async function Home() {
         <Link href="/purchase" className="rounded-xl bg-ai px-3 py-3.5 text-center text-[17px] font-semibold text-white hover:bg-ai-2">＋ 新增採購</Link>
         <Link href="/sell" className="rounded-xl border border-line bg-white px-3 py-3.5 text-center text-[17px] font-semibold hover:border-ai">賣給客人</Link>
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         {stat("還要付代購", dueTotal, "/inventory?tab=batches&open=0&pay=due", "bad", "home-due")}
         {stat("代購要退", refundTotal, "/reconcile?open=refund", "bad", "home-refund")}
         {stat("本月賺", m.profit, "/sales", "good", "home-profit")}
+        {stat("預訂預估可賺", pre.profit, "/sales#preorder", "good", "home-preorder")}
       </div>
 
       <section aria-label="要處理的事">

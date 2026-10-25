@@ -151,6 +151,12 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await expect(page.getByTestId("sale-row").first()).toContainText(`蝦皮・小美${tag}`);
   await page.goto("/sell");
   await expect(page.locator("main")).toContainText("客人預訂還沒給");
+  // 賺多少：客人預訂預估可賺，看得到每位客人
+  await page.goto("/sales");
+  const pre = page.getByTestId("preorder-card");
+  await expect(pre).toBeVisible();
+  await pre.getByText("看每位客人").click();
+  await expect(pre.getByTestId("pre-buyers").locator(`[data-name="小美${tag}"]`)).toContainText("1 件");
 
   // 庫存：一打開不列，選好按查看才列；種類 › 系列 › 品項 › 角色
   await page.goto("/inventory?tab=stock");

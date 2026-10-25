@@ -1,6 +1,7 @@
 // 活動（代購系列）總覽：各採購團進度、成本、付款，以及跨團價格比較
 import Link from "next/link";
-import { tx } from "@/server/db";
+import { prisma, tx } from "@/server/db";
+import { PickBox, PickProvider, SetButton } from "./pick";
 import { categoryOverview } from "@/server/services/batch-ops";
 import { Section, StatusBadge, Empty, LinkButton } from "@/components/ui";
 import { batchStageLabel, fmtDay, type BatchStage } from "@/lib/labels";
@@ -73,6 +74,14 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
       return { product: r.product, cells, qty, unsure, sureQty, amount, avg: sureQty ? Math.round(amount / sureQty) : null, min: Math.min(...vals), max: Math.max(...vals), tentative: sureCells.some((c) => c.estimated || (fullView && !c.feesConfirmed)) };
     })
     .filter((r) => r.qty > 0);
+  // 依品項分組（吊娃、S 娃…），組內照角色順序；售價：商品自己的，沒填用這系列這個品項的售價
+  const typePrices = new Map((await prisma.categoryTypePrice.findMany({ where: { categoryId }, select: { productTypeId: true, salePriceTwd: true } })).map((x) => [x.productTypeId, x.salePriceTwd]));
+  const priceOf = (p: (typeof summary)[number]["product"]) => p.salePriceTwd ?? (p.productType ? (typePrices.get(p.productType.id) ?? null) : null);
+  const typeGroups = [...new Map(summary.map((r) => [r.product.productType?.id ?? "-", { key: r.product.productType?.id ?? "-", name: r.product.productType?.name ?? "其他", sort: r.product.productType?.sortOrder ?? 9999, rows: [] as typeof summary }])).values()].sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name, "zh-Hant"));
+  for (const r of summary) typeGroups.find((g) => g.key === (r.product.productType?.id ?? "-"))!.rows.push(r);
+  const charSort = (r: (typeof summary)[number]) => (r.product.characters.length === 1 ? r.product.characters[0].character.sortOrder : 9999);
+  for (const g of typeGroups) g.rows.sort((a, b) => charSort(a) - charSort(b));
+  const pickItems = summary.map((r) => ({ id: r.product.id, name: r.product.name, cost: r.avg, price: priceOf(r.product), tentative: r.tentative }));
   const allQty = summary.reduce((a, r) => a + r.qty, 0);
   const allSure = summary.reduce((a, r) => a + r.sureQty, 0);
   const allAmount = summary.reduce((a, r) => a + r.amount, 0);
@@ -174,6 +183,7 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
 
       )}
       {showItems && summary.length > 0 && (
+        <PickProvider items={pickItems}>
         <Section
           title="商品數量與平均成本"
           pad={false}
@@ -185,16 +195,24 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
           }
         >
           <div aria-label="商品數量與平均成本" role="table" className="text-[14px]">
-            <div role="row" className="grid grid-cols-[minmax(0,1fr)_3.5rem_4.75rem_6.5rem] gap-2 border-b border-line bg-[#fafbfc] px-3 py-2 text-[12px] text-mute">
+            <div role="row" className="grid grid-cols-[minmax(0,1fr)_3.5rem_4.75rem_6.5rem] gap-2 border-b border-line bg-[#fafbfc] py-2 pr-3 pl-14 text-[12px] text-mute">
               <span role="columnheader">商品</span>
               <span role="columnheader" className="text-right">總數量</span>
               <span role="columnheader" className="text-right">平均成本</span>
               <span role="columnheader" className="text-right">最低～最高</span>
             </div>
-            {summary.map((r) => (
-              <details key={r.product.id} className="group border-b border-line-2" data-testid="product-summary">
+            {typeGroups.map((g) => (
+              <div key={g.key} data-testid="pick-type" data-name={g.name}>
+              <div className="flex items-center justify-between gap-2 border-b border-line-2 bg-[#f7f8fa] px-3 py-1.5 text-[13px] font-semibold text-ink-2">
+                <span>{g.name}</span>
+                {g.rows.length > 1 && <SetButton ids={g.rows.filter((r) => r.avg != null).map((r) => r.product.id)} label={`選整套（${g.rows.filter((r) => r.avg != null).length} 隻）`} />}
+              </div>
+            {g.rows.map((r) => (
+              <div key={r.product.id} className="flex items-start border-b border-line-2">
+              <PickBox id={r.product.id} name={r.product.name} />
+              <details className="group min-w-0 flex-1" data-testid="product-summary">
                 <summary role="row" className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_3.5rem_4.75rem_6.5rem] items-baseline gap-2 px-3 py-2.5 hover:bg-[#fafbfd] [&::-webkit-details-marker]:hidden">
-                  <span role="cell" className="min-w-0 font-medium"><span className="mr-1 inline-block text-mute transition-transform group-open:rotate-90">▸</span>{r.product.name}</span>
+                  <span role="cell" className="min-w-0 font-medium"><span className="mr-1 inline-block text-mute transition-transform group-open:rotate-90">▸</span>{r.product.characters.length === 1 ? <span title={r.product.name}>{r.product.characters[0].character.name}</span> : r.product.name}</span>
                   <span role="cell" className="num text-right font-semibold" data-k="qty">{r.qty}{r.unsure > 0 && <span className="block text-[11px] font-normal text-warn" data-k="unsure">不一定 {r.unsure}</span>}</span>
                   <span role="cell" className="num text-right font-semibold" data-k="avg">{r.avg == null ? <span className="text-mute">—</span> : <>{formatTwd(r.avg)}{r.tentative ? <span className="text-warn">*</span> : null}</>}</span>
                   <span role="cell" className="num text-right text-[12.5px] text-mute">{r.min === r.max ? formatTwd(r.min) : `${r.min.toLocaleString()}～${r.max.toLocaleString()}`}</span>
@@ -224,16 +242,20 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
                   <li className="pt-1 text-right"><Link href={`/products/${r.product.id}`} className="text-ai">看這個商品 ›</Link></li>
                 </ul>
               </details>
+              </div>
             ))}
-            <div role="row" className="grid grid-cols-[minmax(0,1fr)_3.5rem_4.75rem_6.5rem] gap-2 bg-[#fafbfc] px-3 py-2 font-semibold">
+              </div>
+            ))}
+            <div role="row" className="grid grid-cols-[minmax(0,1fr)_3.5rem_4.75rem_6.5rem] gap-2 bg-[#fafbfc] py-2 pr-3 pl-14 font-semibold">
               <span role="cell">合計</span>
               <span role="cell" className="num text-right" data-testid="summary-qty">{allQty}</span>
               <span role="cell" className="num text-right">{allSure ? formatTwd(Math.round(allAmount / allSure)) : "—"}</span>
               <span role="cell" />
             </div>
           </div>
-          <p className="px-4 py-2 text-[12px] text-mute">點商品展開看各團價格。平均成本只算已到貨＋一定到的（對單還沒確定的「不一定」不算），{fullView ? "含攤進去的運費、關稅" : "只看商品單價，不含運費"}；* 表示有價格還沒確定。</p>
+          <p className="px-4 py-2 text-[12px] text-mute">勾選商品可以算成本合計；「選整套」＝這個品項每個角色各 1 件。點商品展開看各團價格。平均成本只算已到貨＋一定到的（對單還沒確定的「不一定」不算），{fullView ? "含攤進去的運費、關稅" : "只看商品單價，不含運費"}；* 表示有價格還沒確定。</p>
         </Section>
+        </PickProvider>
       )}
     </>
   );

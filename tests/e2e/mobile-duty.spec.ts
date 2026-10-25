@@ -1,6 +1,6 @@
 // 手機：開團填關稅 %，自動估出關稅攤進成本；單件另填 %；對單買到後庫存＝現有＋一定到，平均成本含一定到的
 import { test, expect } from "@playwright/test";
-import { login, toast, pickIp, newSupplierPick, openSeries, openMore } from "./helpers";
+import { login, toast, pickIp, newSupplierPick, openSeries, openMore, openSeriesPage } from "./helpers";
 
 test("手機：關稅 %、預購平均成本、庫存欄", async ({ page }) => {
   const tag = Date.now().toString(36).slice(-4);
@@ -58,4 +58,15 @@ test("手機：關稅 %、預購平均成本、庫存欄", async ({ page }) => {
   await expect(row.locator('[data-k="free"]')).toHaveText("2");
   await expect(row).toContainText("平均成本 NT$525");
   await page.getByRole("table", { name: "庫存表" }).screenshot({ path: "test-results/mobile_stock_avg.png" });
+
+  // 系列頁「買了什麼」：勾選算成本，件數改 3 → 525 × 3
+  await openSeriesPage(page, cat);
+  await page.getByRole("link", { name: "買了什麼" }).click();
+  await page.getByLabel(/^選 .*吉伊/).check();
+  await expect(page.getByTestId("pick-cost")).toHaveText("NT$525");
+  await page.getByLabel(/吉伊.* 件數$/).fill("3");
+  await expect(page.getByTestId("pick-cost")).toHaveText("NT$1,575");
+  await page.screenshot({ path: "test-results/mobile_pick.png" });
+  await page.getByRole("button", { name: "清除" }).click();
+  await expect(page.getByTestId("pick-bar")).toHaveCount(0);
 });
