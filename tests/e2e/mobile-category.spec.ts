@@ -17,7 +17,8 @@ test("手機：自訂類型記住、活動改名", async ({ page }) => {
   await expect(page).toHaveURL(/\/categories\/[^/]+$/);
   await expect(page.getByText(type).first()).toBeVisible();
 
-  // 改名
+  // 改名（收在「⋯ 更多」）
+  await page.getByRole("button", { name: "⋯ 更多" }).click();
   await page.getByRole("button", { name: "編輯名稱" }).click();
   await expect(chosen(page, "類型")).toHaveText(type);
   await page.getByLabel("名稱", { exact: true }).fill(`E2E 改名 ${tag}`);

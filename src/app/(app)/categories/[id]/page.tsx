@@ -1,5 +1,5 @@
 import { getView } from "@/server/view";
-import { Term } from "@/components/help";
+import { MoreMenu } from "@/components/more-menu";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma, tx } from "@/server/db";
@@ -46,7 +46,6 @@ export default async function CategoryPage({ params, searchParams }: { params: P
       <PageHeader
         title={c.name}
         back={{ href: "/categories", label: "系列" }}
-        help={<><div className="mb-1 font-semibold">這個系列的三個分頁</div><Term name="買了什麼">預估可賺、每個商品的庫存、平均成本、可賺；可以勾選算成本或「選整套」</Term><Term name="採購團">這系列開過的團、誰的、還要付多少</Term><Term name="品項售價">每個品項（吊娃、S 娃…）的售價，賣給客人時自動帶入</Term><div className="mt-1 font-semibold">名詞</div><Term name="庫存" tone="ink">現有＋一定到－客人訂</Term><Term name="不一定" tone="warn">還沒跟代購確認買到沒，不算成本</Term><Term name="可賺" tone="good">已賣＋客人預訂＋剩下照售價賣；— 表示還沒填售價</Term><div className="mt-1">* 表示價格還是預估的。「含運費成本／只看商品單價」切換平均成本要不要含運費、關稅。</div></>}
         sub={
           <span className="flex flex-wrap items-center gap-2">
             {c.type === "CUSTOM" ? (c.customType ?? "自訂") : categoryType[c.type]}
@@ -57,9 +56,11 @@ export default async function CategoryPage({ params, searchParams }: { params: P
           <>
             <LinkButton href={`/purchase?categoryId=${c.id}`} primary>＋ 採購</LinkButton>
             <LinkButton href={`/sell?cat=${c.id}`}>賣給客人</LinkButton>
-            <CategoryEditButton label="編輯名稱" customTypes={customTypes} cat={{ id: c.id, name: c.name, type: c.type, customType: c.customType, startDate: dayInput(c.startDate) || null, endDate: dayInput(c.endDate) || null, notes: c.notes, active: c.active }} />
-            <LinkButton href={`/api/export/category?id=${c.id}`}>匯出 Excel</LinkButton>
-            <CategoryActiveButton id={c.id} active={c.active} />
+            <MoreMenu>
+              <CategoryEditButton label="編輯名稱" customTypes={customTypes} cat={{ id: c.id, name: c.name, type: c.type, customType: c.customType, startDate: dayInput(c.startDate) || null, endDate: dayInput(c.endDate) || null, notes: c.notes, active: c.active }} />
+              <LinkButton href={`/api/export/category?id=${c.id}`}>匯出 Excel</LinkButton>
+              <CategoryActiveButton id={c.id} active={c.active} />
+            </MoreMenu>
           </>
         }
       />
@@ -73,7 +74,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
       <nav aria-label="系列分頁" className="flex gap-1 rounded-xl bg-line-2 p-1">
         <Link href={`/categories/${c.id}`} className={tabCls(tab === "items")} aria-current={tab === "items" ? "page" : undefined}>買了什麼</Link>
         <Link href={`/categories/${c.id}?tab=batches`} className={tabCls(tab === "batches")} aria-current={tab === "batches" ? "page" : undefined}>採購團</Link>
-        <Link href={`/categories/${c.id}?tab=catalog`} className={tabCls(tab === "catalog")} aria-current={tab === "catalog" ? "page" : undefined}>品項售價</Link>
+        <Link href={`/categories/${c.id}?tab=catalog`} className={tabCls(tab === "catalog")} aria-current={tab === "catalog" ? "page" : undefined}>售價</Link>
       </nav>
       {tab === "catalog" ? (
         treeSeries ? <SeriesCatalogPanel s={treeSeries} types={types} kinds={tree.map((k) => [k.key, k.label] as [string, string])} /> : <Empty>找不到這個系列的目錄。</Empty>

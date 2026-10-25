@@ -222,7 +222,7 @@ export function QuickPurchase(props: {
         </div>
       )}
 
-      <section className="space-y-2 rounded-xl border border-line bg-card p-4">
+      <section className="space-y-2 rounded-xl border border-line bg-card p-4" data-tour="buy-series">
         <h2 className="text-[15px] font-semibold">1. 系列</h2>
         {newCat === null && categoryId && !changingCat && renaming === null ? (
           <div className="flex items-center justify-between gap-2 rounded-lg bg-ai-soft px-3 py-2.5" data-testid="chosen-series">

@@ -17,7 +17,6 @@ export default async function Shipping({ searchParams }: { searchParams: Promise
       <PageHeader
         title="出貨"
         sub="把到貨的預訂交給客人"
-        help={<><div>客人預訂的東西到貨後，會出現在「待出貨」。選好要給的件數按出貨，就算交給客人了。</div><div className="mt-1">只能出貨已到貨、留給這位客人的數量；部分出貨時，剩下的會留在待出貨。</div></>}
         actions={<><LinkButton href="/api/export/to-ship">匯出待出貨清單</LinkButton><LinkButton href="/api/export/shipments">匯出出貨紀錄</LinkButton></>}
       />
       <nav className="flex flex-wrap gap-1" aria-label="分頁">

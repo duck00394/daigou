@@ -15,6 +15,8 @@ export const NAV: { href: string; label: string; group: string; hint?: string }[
   { href: "/reconcile", label: "對單", group: "常用", hint: "跟代購確認買到多少、砍了哪些" },
   { href: "/inventory?tab=stock", label: "庫存・賣出・自留", group: "常用", hint: "手上有什麼、成本多少" },
   { href: "/sales", label: "賺多少", group: "常用", hint: "賣出的收入、成本、毛利" },
+  { href: "/?tour=1", label: "新手教學", group: "幫助", hint: "一步一步帶你走一次" },
+  { href: "/help", label: "名詞說明", group: "幫助", hint: "有幾隻、每隻成本、對單是什麼" },
   { href: "/paste", label: "貼上加單", group: "接單" },
   { href: "/orders", label: "訂單", group: "接單" },
   { href: "/payments", label: "收款與退款", group: "接單" },
@@ -41,6 +43,7 @@ const BOTTOM = [
 
 function active(path: string, href: string, tab?: string | null) {
   const [base, q] = href.split("?");
+  if (q?.includes("tour=")) return false;
   if (base === "/") return path === "/";
   if (!(path === base || path.startsWith(base + "/"))) return false;
   if (!q) return true;

@@ -77,6 +77,7 @@ test("手機：關稅 %、預購平均成本、庫存欄", async ({ page }) => {
   // 系列頁「買了什麼」：勾選算成本，件數改 3 → 525 × 3
   await openSeriesPage(page, cat);
   await page.getByRole("link", { name: "買了什麼" }).click();
+  await page.getByRole("button", { name: "勾選算成本" }).click();
   await page.getByLabel(/^選 .*吉伊/).check();
   await expect(page.getByTestId("pick-cost")).toHaveText("NT$525");
   await page.getByLabel(/吉伊.* 件數$/).fill("3");
@@ -87,7 +88,7 @@ test("手機：關稅 %、預購平均成本、庫存欄", async ({ page }) => {
 
   // 同一頁看成本、庫存、可賺：庫存 2、還沒填售價 → 可賺先不算
   await expect(page.getByTestId("series-profit")).toBeVisible();
-  await expect(page.getByTestId("profit-free")).toContainText("2 件");
+  await expect(page.getByTestId("profit-unpriced")).toContainText("2 隻沒填售價");
   const prod = page.getByTestId("product-summary").first();
   await expect(prod.locator('[data-k="left"]')).toContainText("2");
   await page.screenshot({ path: "test-results/mobile_series_profit.png", fullPage: true });

@@ -551,7 +551,7 @@ export function BulkAddGrid({
           <p className="mt-1 text-[13px]" data-testid="joint-row-summary">{jointSum}</p>
         </div>
       )}
-      <div ref={grid} role="table" aria-label="批次新增採購品項" className="rounded-xl border border-line bg-white px-2 md:rounded-none md:border-0 md:bg-transparent md:px-0">
+      <div ref={grid} data-tour="buy-grid" role="table" aria-label="批次新增採購品項" className="rounded-xl border border-line bg-white px-2 md:rounded-none md:border-0 md:bg-transparent md:px-0">
         <div aria-hidden className="grid grid-cols-[minmax(0,1fr)_4.5rem_6.25rem_1.25rem] gap-2 border-b border-line px-1 py-1.5 text-[12px] text-mute md:hidden">
           <span>角色</span><span className="text-right">單價</span><span className="text-center">數量</span><span />
         </div>

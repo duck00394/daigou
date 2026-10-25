@@ -46,7 +46,7 @@ export default async function PurchasePage({ searchParams }: { searchParams: Pro
   const lastCategory = batches.find((b) => b.categoryId && categories.some((c) => c.id === b.categoryId && c.active))?.categoryId ?? null;
   return (
     <div className="space-y-4">
-      <PageHeader title="新增採購" sub="一個畫面記完：哪個系列 → 跟哪個代購 → 買了哪些角色" help={<><div className="mb-1 font-semibold">怎麼填</div><div>1. 選系列（例：ANA），沒有就按「＋ 新系列」。</div><div>2. 選代購、要不要填訂單編號；運費、訂金、關稅在「更多」。</div><div>3. 點角色（數量自動帶 1）、填單價，按「儲存」。</div><div className="mt-1">同一單還有別的品項（例：S 娃）？換「品項」再點角色、儲存，會加到同一團。存好之後到「對單」確認有沒有買到。</div></>} />
+      <PageHeader title="新增採購" sub="一個畫面記完：哪個系列 → 跟哪個代購 → 買了哪些角色" />
       <QuickPurchase
         me={me}
         operators={operators.map((o) => ({ id: o.id, name: o.name, code: o.code }))}

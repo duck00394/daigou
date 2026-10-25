@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Term } from "@/components/help";
 import { Fragment } from "react";
 import { StockFilters } from "./stock-filters";
 import { NavSelect } from "@/components/nav-select";
@@ -49,7 +48,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
   const owner = view.key === "all" ? "" : view.key; // 現在看誰的（全部功能裡切換）
   return (
     <div className="space-y-4">
-      <PageHeader title={tab === "batches" ? "採購團・收貨" : "庫存"} sub={tab === "batches" ? "每一次跟代購下單、付款、到貨" : tab === "stock" ? "手上有多少、還會到多少、客人訂了多少" : undefined} help={tab === "batches" ? <><div className="mb-1 font-semibold">採購團是什麼</div><div>每跟代購下一次單就是一團。一團裡記買了哪些角色、付了多少、到了幾件。</div><Term name="對單" tone="warn">跟代購確認有沒有買到；確認前算「不一定」</Term><Term name="收貨" tone="good">東西寄到了，點進團按「全部到手了」就進庫存</Term><Term name="付款">按「付清」記一筆付給代購的錢</Term></> : tab === "stock" ? <><div className="mb-1 font-semibold">庫存表的欄位</div><Term name="現有">已經在手上的（自留的不算）</Term><Term name="一定到" tone="good">對單時代購說有買到、還沒寄到</Term><Term name="客人訂" tone="info">客人預訂了還沒給</Term><Term name="庫存" tone="ink">現有＋一定到－客人訂，可以再賣的數量；負的代表不夠</Term><Term name="不一定" tone="warn">還沒跟代購確認買到沒（到「對單」確認）</Term><div className="mt-1">平均成本算現有＋一定到，含攤進去的運費、關稅；* 表示還有預估價格。按「賣」直接出售，「留」是自己留著不賣。</div></> : undefined} actions={<><LinkButton href="/purchase" primary small>＋ 新增採購</LinkButton><LinkButton href="/api/export/inventory" small>匯出</LinkButton></>} />
+      <PageHeader title={tab === "batches" ? "採購團・收貨" : "庫存"} sub={tab === "batches" ? "每一次跟代購下單、付款、到貨" : tab === "stock" ? "手上有多少、還會到多少、客人訂了多少" : undefined} actions={<><LinkButton href="/purchase" primary small>＋ 新增採購</LinkButton><LinkButton href="/api/export/inventory" small>匯出</LinkButton></>} />
       <NavSelect label="頁面" hideLabel options={TABS.map(([k, l]) => ({ label: l, href: `/inventory?tab=${k}` }))} current={`/inventory?tab=${tab}`} />
       {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} owner={owner} kind={sp.kind} v={sp.v} />}
       {tab === "demand" && <DemandTab />}
@@ -71,7 +70,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
     tx((t) => listOperators(t, { includeInactive: true })),
   ]);
   const applied = !!(v || cat || type || q || kind);
-  const head = <StockFilters series={seriesOpts} types={types} kind={kind} cat={cat} q={q ?? ""} type={type} only={only ?? ""} />;
+  const head = <div data-tour="stock-filters"><StockFilters series={seriesOpts} types={types} kind={kind} cat={cat} q={q ?? ""} type={type} only={only ?? ""} /></div>;
   if (!applied) {
     return (
       <div className="space-y-3">
@@ -320,7 +319,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
         </div>
       )}
       <p className="text-[12px] text-mute">
-        欄位看不懂？按上面「這是什麼？」。{" "}
+        欄位看不懂？到「全部功能 › 名詞說明」。{" "}
         <Link href={allHref} className="text-ai">{only === "all" ? "只看有庫存的" : "也顯示沒庫存的商品"}</Link>
       </p>
     </div>

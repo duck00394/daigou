@@ -1,6 +1,5 @@
 // 對單：一團一團跟代購確認買到多少、砍了哪些、哪些還沒回
 import { getView, inView } from "@/server/view";
-import { Term } from "@/components/help";
 import { refundsOwed } from "@/server/services/batch-ops";
 import { formatTwd } from "@/lib/money";
 import Link from "next/link";
@@ -40,7 +39,7 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
   const q = href({}).includes("?") ? href({}).slice(href({}).indexOf("?")) : "";
   return (
     <div className="space-y-3">
-      <PageHeader title="對單" sub="跟代購確認：買到幾件、砍了哪些、哪些還沒回" help={<><div className="mb-1 font-semibold">為什麼要對單</div><div>代購常常不是全部都搶得到。對單就是一團一團確認：</div><Term name="買到" tone="good">變成「一定到」，算進庫存和成本</Term><Term name="砍單" tone="bad">沒買到的，記原因；付過的錢會列在「已砍單，未退款」</Term><Term name="還沒回" tone="warn">先不填，之後再來對</Term><div className="mt-1">點一團進去，最快是按「這團全部買到」再儲存；也可以順便填付了多少。</div></>} />
+      <PageHeader title="對單" sub="跟代購確認：買到幾件、砍了哪些、哪些還沒回"  />
       <div className="rounded-xl border border-line bg-card p-3">
         <div className="flex items-baseline justify-between text-[15px]">
           <b data-testid="reconcile-progress">已對完 {doneCount}／{all} 團</b>

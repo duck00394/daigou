@@ -1,7 +1,7 @@
 // 活動（代購系列）總覽：各採購團進度、成本、付款，以及跨團價格比較
 import Link from "next/link";
 import { prisma, tx } from "@/server/db";
-import { PickBox, PickProvider, SetButton } from "./pick";
+import { PickBox, PickProvider, PickSpacer, PickToggle, SetButton } from "./pick";
 import { seriesProfit } from "@/server/services/preorder";
 import { ProfitCard } from "./profit";
 import { categoryOverview } from "@/server/services/batch-ops";
@@ -90,22 +90,20 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
   const allAmount = summary.reduce((a, r) => a + r.amount, 0);
   return (
     <>
-      <Section title="總覽">
-        <div className="grid grid-cols-3 gap-2">
-          <div>
-            <div className="text-[12px] text-mute">總額</div>
-            <div className="num text-[20px] font-semibold" data-testid="cat-total">{formatTwd(o.total.totalTwd)}</div>
+      <Section>
+        <div data-tour="series-money">
+          <div className="text-[13px] text-ink-2">這個系列總共要付代購</div>
+          <div className="num text-[24px] font-bold" data-testid="cat-total">{formatTwd(o.total.totalTwd)}</div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-line-2" aria-hidden><div className="h-full rounded-full bg-good" style={{ width: `${o.total.totalTwd > 0 ? Math.min(100, Math.round((o.total.paidTwd / o.total.totalTwd) * 100)) : 0}%` }} /></div>
+          <div className="mt-1.5 flex flex-wrap justify-between gap-x-3 text-[14px]">
+            <span>已付 <b className="num text-good" data-testid="cat-paid">{formatTwd(o.total.paidTwd)}</b></span>
+            <span>還沒付 <b className={`num ${o.total.dueTwd ? "text-bad" : ""}`} data-testid="cat-due">{formatTwd(o.total.dueTwd)}</b></span>
           </div>
-          <div>
-            <div className="text-[12px] text-mute">待付款</div>
-            <div className={`num text-[20px] font-semibold ${o.total.dueTwd ? "text-bad" : ""}`} data-testid="cat-due">{formatTwd(o.total.dueTwd)}</div>
-          </div>
-          <div>
-            <div className="text-[12px] text-mute">已付款</div>
-            <div className="num text-[20px] font-semibold text-good" data-testid="cat-paid">{formatTwd(o.total.paidTwd)}</div>
+          <div className="mt-0.5 flex flex-wrap justify-between gap-x-3 text-[13px] text-mute">
+            <span>{o.total.batches} 團・{o.total.qty} 隻{o.total.estimated ? "・有價格還沒確定" : ""}</span>
+            <span>到貨 {o.total.received}／{o.total.qty}</span>
           </div>
         </div>
-        <p className="mt-1 text-[12px] text-mute">{o.total.batches} 團・{o.total.qty} 件・已到 {o.total.received}・還沒到 {o.total.outstanding}{o.total.estimated ? "・金額有價格還沒確定" : ""}</p>
 
         {showBatches && <>
         <div className="mt-3 space-y-3">
@@ -188,87 +186,93 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
       {showItems && prof && summary.length > 0 && <ProfitCard p={prof} categoryId={categoryId} />}
       {showItems && summary.length > 0 && (
         <PickProvider items={pickItems}>
-        <Section
-          title="每個商品：庫存、成本、可賺"
-          pad={false}
-          actions={
-            <span className="flex gap-1 text-sm">
-              <Link href={q({ view: "" })} className={`rounded-lg px-2.5 py-1 ${fullView ? "bg-ai text-white" : "text-ai"}`}>含運費成本</Link>
-              <Link href={q({ view: "unit" })} className={`rounded-lg px-2.5 py-1 ${!fullView ? "bg-ai text-white" : "text-ai"}`}>只看商品單價</Link>
-            </span>
-          }
-        >
-          <div aria-label="商品數量與平均成本" role="table" className="text-[14px]">
-            <div role="row" className="grid grid-cols-[minmax(0,1fr)_3.5rem_4.75rem_6.5rem] gap-2 border-b border-line bg-[#fafbfc] py-2 pr-3 pl-14 text-[12px] text-mute">
-              <span role="columnheader">商品</span>
-              <span role="columnheader" className="text-right">庫存</span>
-              <span role="columnheader" className="text-right">平均成本</span>
-              <span role="columnheader" className="text-right">可賺</span>
+          <section className="rounded-xl border border-line bg-card" aria-label="每個角色" data-tour="series-items">
+            <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-1">
+              <h2 className="text-[16px] font-semibold">每個角色</h2>
+              <PickToggle />
             </div>
-            {typeGroups.map((g) => (
-              <div key={g.key} data-testid="pick-type" data-name={g.name}>
-              <div className="flex items-center justify-between gap-2 border-b border-line-2 bg-[#f7f8fa] px-3 py-1.5 text-[13px] font-semibold text-ink-2">
-                <span>{g.name}</span>
-                {g.rows.length > 1 && <SetButton ids={g.rows.filter((r) => r.avg != null).map((r) => r.product.id)} label={`選整套（${g.rows.filter((r) => r.avg != null).length} 隻）`} />}
+            <div aria-label="每個角色：有幾隻、每隻成本、可賺" role="table" className="text-[15px]">
+              <div role="row" className="flex border-b border-line text-[12px] text-ink-2">
+                <PickSpacer />
+                <div className="grid flex-1 grid-cols-[minmax(0,1fr)_3.25rem_4.25rem_4.5rem] gap-2 px-4 py-1.5">
+                  <span role="columnheader">角色</span>
+                  <span role="columnheader" className="text-right">有幾隻</span>
+                  <span role="columnheader" className="text-right">每隻成本</span>
+                  <span role="columnheader" className="text-right">可賺</span>
+                </div>
               </div>
-            {g.rows.map((r) => (
-              <div key={r.product.id} className="flex items-start border-b border-line-2">
-              <PickBox id={r.product.id} name={r.product.name} />
-              <details className="group min-w-0 flex-1" data-testid="product-summary">
-                <summary role="row" className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_3.5rem_4.75rem_6.5rem] items-baseline gap-2 px-3 py-2.5 hover:bg-[#fafbfd] [&::-webkit-details-marker]:hidden">
-                  <span role="cell" className="min-w-0 font-medium"><span className="mr-1 inline-block text-mute transition-transform group-open:rotate-90">▸</span>{r.product.characters.length === 1 ? <span title={r.product.name}>{r.product.characters[0].character.name}</span> : r.product.name}</span>
-                  <span role="cell" className={`num text-right font-semibold ${(P(r)?.left ?? 0) < 0 ? "text-bad" : ""}`} data-k="left">{P(r)?.left ?? 0}{r.unsure > 0 && <span className="block text-[11px] font-normal text-warn" data-k="unsure">不一定 {r.unsure}</span>}</span>
-                  <span role="cell" className="num text-right font-semibold" data-k="avg">{r.avg == null ? <span className="text-mute">—</span> : <>{formatTwd(r.avg)}{r.tentative ? <span className="text-warn">*</span> : null}</>}</span>
-                  <span role="cell" className={`num text-right font-semibold ${(P(r)?.profit ?? 0) < 0 ? "text-bad" : "text-good"}`} data-k="profit">{P(r) && (P(r)!.sold.qty > 0 || (P(r)!.pre.qty > 0 && P(r)!.pre.cost != null) || (P(r)!.free.qty > 0 && P(r)!.free.revenue != null && P(r)!.free.cost != null)) ? formatTwd(P(r)!.profit) : <span className="text-mute" title="還沒填售價或沒有成本">—</span>}</span>
-                </summary>
-                {P(r) && (
-                  <div className="border-t border-line-2 bg-white px-4 py-2 text-[13px]" data-testid="product-numbers">
-                    <div>買了 {r.qty}{r.unsure ? `（不一定 ${r.unsure}）` : ""}・現有 {P(r)!.onHand}・一定到 {P(r)!.sure}・客人訂 {P(r)!.ordered}・已賣 {P(r)!.sold.qty}</div>
-                    <div className="text-mute">售價 {P(r)!.price != null ? formatTwd(P(r)!.price!) : "還沒填"}・各團單價 {r.min === r.max ? formatTwd(r.min) : `${r.min.toLocaleString()}～${r.max.toLocaleString()}`}</div>
-                    <div className="mt-1 flex flex-wrap gap-3">
-                      <Link href={`/inventory?tab=stock&only=all&v=1&q=${encodeURIComponent(r.product.name)}`} className="text-ai">看庫存 ›</Link>
-                      {P(r)!.sold.qty > 0 && <Link href={`/sales?ym=all&q=${encodeURIComponent(r.product.name)}`} className="text-ai">看賣出紀錄 ›</Link>}
-                      <Link href={`/products/${r.product.id}`} className="text-ai">看這個商品 ›</Link>
-                    </div>
+              {typeGroups.map((g) => (
+                <div key={g.key} data-testid="pick-type" data-name={g.name}>
+                  <div className="flex min-h-9 items-center justify-between gap-2 border-b border-line-2 bg-[#f6f7f9] px-4 py-1 text-[13px] font-semibold text-ink-2">
+                    <span>{g.name}</span>
+                    {g.rows.length > 1 && <SetButton ids={g.rows.filter((r) => r.avg != null).map((r) => r.product.id)} label={`選整套（${g.rows.filter((r) => r.avg != null).length} 隻）`} />}
                   </div>
-                )}
-                <ul className="space-y-1 bg-[#f6f8fc] px-4 py-2 text-[13px]">
-                  {r.cells
-                    .slice()
-                    .sort((x, y) => (fullView ? x.fullUnitTwd - y.fullUnitTwd : x.unitTwd - y.unitTwd))
-                    .map((c) => {
-                      const v = fullView ? c.fullUnitTwd : c.unitTwd;
-                      const tentative = fullView ? c.estimated || !c.feesConfirmed : c.estimated;
-                      return (
-                        <li key={c.itemId} className="flex items-center justify-between gap-2">
-                          <Link href={`/inventory/batches/${c.batch.id}`} className="flex min-w-0 items-center gap-1.5 hover:underline">
-                            <OwnerBadge k={c.batch.ownerKey} name={nameOf(c.batch.ownerKey)} ids={ids} />
-                            <span className="truncate">{c.batch.supplier ?? c.batch.name}</span>
-                          </Link>
-                          <span className="num shrink-0">
-                            <span className={v === r.min && r.min !== r.max ? "font-semibold text-good" : ""}>{formatTwd(v)}</span> × {c.qty}
-                            {c.unsure > 0 && <span className="ml-1 rounded bg-warn-soft px-1 text-[11px] text-warn">不一定 {c.unsure}</span>}
-                            {tentative && <span className="ml-1 rounded bg-warn-soft px-1 text-[11px] text-warn">價格還沒確定</span>}
-                            {c.currency === "JPY" && !fullView && <span className="ml-1 text-[11px] text-mute">（{formatJpy(c.unitCost)}）</span>}
-                          </span>
-                        </li>
-                      );
-                    })}
-                </ul>
-              </details>
+                  {g.rows.map((r) => {
+                    const x = P(r);
+                    const canProfit = !!x && (x.sold.qty > 0 || (x.pre.qty > 0 && x.pre.cost != null) || (x.free.qty > 0 && x.free.revenue != null && x.free.cost != null));
+                    const name = r.product.characters.length === 1 ? r.product.characters[0].character.name : r.product.name;
+                    return (
+                      <div key={r.product.id} className="flex items-start border-b border-line-2">
+                        <PickBox id={r.product.id} name={r.product.name} />
+                        <details className="group min-w-0 flex-1" data-testid="product-summary">
+                          <summary role="row" className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_3.25rem_4.25rem_4.5rem] items-baseline gap-2 px-4 py-2.5 hover:bg-[#fafbfd] [&::-webkit-details-marker]:hidden">
+                            <span role="cell" className="min-w-0 truncate"><span title={r.product.name}>{name}</span></span>
+                            <span role="cell" className={`num text-right ${(x?.left ?? 0) < 0 ? "text-bad" : ""}`} data-k="left">{x?.left ?? 0}</span>
+                            <span role="cell" className="num text-right" data-k="avg">{r.avg == null ? <span className="text-mute">—</span> : r.avg.toLocaleString()}</span>
+                            <span role="cell" className={`num text-right ${canProfit ? ((x?.profit ?? 0) < 0 ? "text-bad" : "text-good") : "text-[13px] text-mute"}`} data-k="profit">{canProfit ? x!.profit.toLocaleString() : x?.price == null ? "沒售價" : "—"}</span>
+                          </summary>
+                          <div className="space-y-1 border-t border-line-2 bg-[#f8f9fb] px-4 py-2.5 text-[13.5px]" data-testid="product-numbers">
+                            {x && <div>手上 {x.onHand}・確定買到還沒到 {x.sure}・客人訂 {x.ordered}・已賣 {x.sold.qty}</div>}
+                            <div className="text-ink-2">售價 {x?.price != null ? formatTwd(x.price) : "還沒填"}・各團{fullView ? "成本" : "買價"} {r.min === r.max ? formatTwd(r.min) : `${r.min.toLocaleString()}～${r.max.toLocaleString()}`}</div>
+                            <ul className="space-y-0.5 pt-1">
+                              {r.cells
+                                .slice()
+                                .sort((a, b) => (fullView ? a.fullUnitTwd - b.fullUnitTwd : a.unitTwd - b.unitTwd))
+                                .map((c) => {
+                                  const v = fullView ? c.fullUnitTwd : c.unitTwd;
+                                  const tentative = fullView ? c.estimated || !c.feesConfirmed : c.estimated;
+                                  return (
+                                    <li key={c.itemId} className="flex items-center justify-between gap-2">
+                                      <Link href={`/inventory/batches/${c.batch.id}`} className="flex min-w-0 items-center gap-1.5 text-ai">
+                                        <OwnerBadge k={c.batch.ownerKey} name={nameOf(c.batch.ownerKey)} ids={ids} />
+                                        <span className="truncate">{c.batch.supplier ?? c.batch.name}</span>
+                                      </Link>
+                                      <span className="num shrink-0">{formatTwd(v)} × {c.qty}{c.unsure > 0 && <span className="ml-1 text-[12px] text-mute">（還沒確認買到）</span>}{tentative && <span className="ml-1 text-[12px] text-mute">（預估）</span>}{c.currency === "JPY" && !fullView && <span className="ml-1 text-[12px] text-mute">{formatJpy(c.unitCost)}</span>}</span>
+                                    </li>
+                                  );
+                                })}
+                            </ul>
+                            <div className="flex flex-wrap gap-4 pt-1">
+                              <Link href={`/inventory?tab=stock&only=all&v=1&q=${encodeURIComponent(r.product.name)}`} className="text-ai">看庫存 ›</Link>
+                              {x && x.sold.qty > 0 && <Link href={`/sales?ym=all&q=${encodeURIComponent(r.product.name)}`} className="text-ai">看賣出紀錄 ›</Link>}
+                              <Link href={`/products/${r.product.id}`} className="text-ai">商品資料 ›</Link>
+                            </div>
+                          </div>
+                        </details>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+              <div role="row" className="flex font-semibold">
+                <PickSpacer />
+                <div className="grid flex-1 grid-cols-[minmax(0,1fr)_3.25rem_4.25rem_4.5rem] gap-2 px-4 py-2.5">
+                  <span role="cell">合計</span>
+                  <span role="cell" className="num text-right" data-testid="summary-left">{summary.reduce((a, r) => a + (P(r)?.left ?? 0), 0)}</span>
+                  <span role="cell" className="num text-right">{allSure ? Math.round(allAmount / allSure).toLocaleString() : "—"}</span>
+                  <span role="cell" className="num text-right text-good">{prof && prof.cost > 0 ? summary.reduce((a, r) => a + (P(r)?.profit ?? 0), 0).toLocaleString() : <span className="text-mute">—</span>}</span>
+                </div>
               </div>
-            ))}
-              </div>
-            ))}
-            <div role="row" className="grid grid-cols-[minmax(0,1fr)_3.5rem_4.75rem_6.5rem] gap-2 bg-[#fafbfc] py-2 pr-3 pl-14 font-semibold">
-              <span role="cell">合計</span>
-              <span role="cell" className="num text-right" data-testid="summary-left">{summary.reduce((a, r) => a + (P(r)?.left ?? 0), 0)}</span>
-              <span role="cell" className="num text-right">{allSure ? formatTwd(Math.round(allAmount / allSure)) : "—"}</span>
-              <span role="cell" className="num text-right text-good">{formatTwd(summary.reduce((a, r) => a + (P(r)?.profit ?? 0), 0))}</span>
             </div>
-          </div>
-          <p className="px-4 py-2 text-[12px] text-mute">勾選可以算成本合計；點商品看更多。名詞看不懂按上面「這是什麼？」。</p>
-        </Section>
+            <div className="space-y-0.5 border-t border-line-2 px-4 py-2.5 text-[12.5px] text-ink-2">
+              <div><b className="font-medium">有幾隻</b>＝手上的＋確定買到的，扣掉客人訂的</div>
+              <div><b className="font-medium">每隻成本</b>＝{fullView ? "買價＋運費、關稅平均分到每隻" : "只看買價（不含運費、關稅）"}，台幣{summary.some((r) => r.tentative) ? "；有些價格還沒確定，先用預估的" : ""}</div>
+              <div className="flex flex-wrap gap-x-4 pt-0.5">
+                <span className="text-mute">點角色看詳細</span>
+                <Link href={q({ view: fullView ? "unit" : "" })} className="text-ai">{fullView ? "改成只看買價" : "改成含運費、關稅"}</Link>
+              </div>
+            </div>
+          </section>
         </PickProvider>
       )}
     </>
