@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { ConfirmButton, useRun } from "@/components/client";
 import { deleteBatchAction, undoReceivingAction } from "@/actions/batches";
 import { formatTwd } from "@/lib/money";
+import { Impact } from "@/components/help";
 
 export function UndoReceivingButton({ batchId, recordId, qty, label }: { batchId: string; recordId: string | null; qty: number; label: string }) {
   const { run } = useRun();
@@ -20,17 +21,23 @@ export function UndoReceivingButton({ batchId, recordId, qty, label }: { batchId
 }
 
 /** 刪除整團：品項、付款、退款、運費、收貨、自留一起刪（在採購團列表、團頁面都能按） */
-export function DeleteBatchButton({ batchId, name, paid = 0, received = 0, items = 0, goTo }: { batchId: string; name: string; paid?: number; received?: number; items?: number; goTo?: string }) {
+export function DeleteBatchButton({ batchId, name, paid = 0, received = 0, items = 0, qty = 0, payments = 0, fees = 0, goTo }: { batchId: string; name: string; paid?: number; received?: number; items?: number; qty?: number; payments?: number; fees?: number; goTo?: string }) {
   const { run } = useRun();
   const router = useRouter();
-  const parts = [items ? `${items} 個品項` : null, paid ? `付款紀錄（已付 ${formatTwd(paid)}）` : null, received ? `已收進庫存的 ${received} 件` : null, "運費、收貨、自留紀錄"].filter(Boolean);
+  const parts = [
+    items ? <>品項 {items} 項{qty ? `（共 ${qty} 件）` : ""}</> : null,
+    received ? <>庫存 <b>{received} 件</b>（已收貨的，自留的也一起）</> : null,
+    paid ? <>付款紀錄{payments ? ` ${payments} 筆` : ""}，共 <b>{formatTwd(paid)}</b></> : null,
+    fees ? <>運費等 {fees} 筆</> : null,
+    "收貨、退款紀錄",
+  ];
   return (
     <ConfirmButton
       small
       variant="danger"
       label="刪除"
       title={`刪除整團「${name}」`}
-      message={`會一起刪掉：${parts.join("、")}。刪了不能復原。這團的貨如果已經賣出或留給客人，要先作廢那筆出售才能刪。`}
+      message={<Impact lead="會一起刪掉：" items={parts} warn={<>刪了就找不回來。只是沒買到？用「編輯」砍單比較好。已經賣出或留給客人的，要先作廢那筆出售才能刪。</>} />}
       confirmLabel="刪除整團"
       onConfirm={() => run(() => deleteBatchAction(batchId), { success: `已刪除「${name}」`, refresh: !goTo, onOk: () => goTo && router.push(goTo) })}
     />

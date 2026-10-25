@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Impact } from "@/components/help";
 import { Button, ConfirmButton, Modal, TextField, SelectField, useRun, useIdemKey, inputCls, notify } from "@/components/client";
 import { Choice } from "@/components/choice";
 import { addBatchCostAction, deleteBatchCostAction, cancelBatchAction } from "@/actions/ops";
@@ -130,7 +131,7 @@ export function DeleteCost({ id }: { id: string }) {
 
 export function CancelBatch({ id }: { id: string }) {
   const { run } = useRun();
-  return <ConfirmButton variant="danger" label="取消採購團" title="取消採購團" message="已經收進庫存的東西會一起從庫存拿掉（自留的也一起拿掉）。已經賣掉的，要先到「賺多少」把那筆出售作廢才能取消。付款紀錄會留著。" confirmLabel="取消採購團" onConfirm={() => run(() => cancelBatchAction(id), { success: "已取消採購團" })} />;
+  return <ConfirmButton variant="danger" label="取消採購團" title="取消採購團" message={<Impact items={["已收進庫存的件數從庫存拿掉（自留的也一起）", "這團不算進總額、還要付、預購"]} keep={["付款紀錄（付過的錢會列在「已砍單，未退款」，代購退了再記退款）", "品項清單（取消後還看得到）"]} warn="已經賣掉的，要先到「賺多少」把那筆出售作廢才能取消。" />} confirmLabel="取消採購團" onConfirm={() => run(() => cancelBatchAction(id), { success: "已取消採購團" })} />;
 }
 
 export function Collapsible({ title, defaultOpen, children }: { title: React.ReactNode; defaultOpen?: boolean; children: React.ReactNode }) {

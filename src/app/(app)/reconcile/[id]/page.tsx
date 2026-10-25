@@ -46,7 +46,7 @@ export default async function ReconcileBatch({ params, searchParams }: { params:
       {!sheet.needsCheck ? (
         <p className="rounded-xl border border-line bg-card p-4 text-[14px] text-mute">這一團不用對單（實體店買的或已取消）。</p>
       ) : (
-        <ReconcileSheet key={JSON.stringify([sheet.items.map((i) => [i.id, i.bought, i.cut]), sheet.pay.paidTwd])} batchId={sheet.id} items={sheet.items} pay={sheet.pay} nextHref={next ? `/reconcile/${next.id}${qs}` : null} listHref={`/reconcile${qs}`} batchHref={`/inventory/batches/${sheet.id}`} />
+        <ReconcileSheet key={JSON.stringify([sheet.items.map((i) => [i.id, i.bought, i.cut]), sheet.pay.paidTwd])} batchId={sheet.id} items={sheet.items} pay={sheet.pay} nextHref={next ? `/reconcile/${next.id}${qs}` : null} left={Math.max(0, list.todo.filter((x) => x.id !== sheet.id).length)} listHref={`/reconcile${qs}`} batchHref={`/inventory/batches/${sheet.id}`} />
       )}
     </div>
   );

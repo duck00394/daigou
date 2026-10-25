@@ -4,6 +4,7 @@ import { Fragment } from "react";
 import { StockFilters } from "./stock-filters";
 import { NavSelect } from "@/components/nav-select";
 import { DeleteBatchButton } from "./batches/[id]/undo";
+import { PayOffButton, ReceiveAllButton } from "./batches/[id]/items";
 import { getView, inView, viewBatchWhere } from "@/server/view";
 import { OwnerBadge } from "@/components/owner-badge";
 import { ownerTone } from "@/lib/owner-colors";
@@ -379,6 +380,8 @@ async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, lat
   const mode = open === "cancelled" ? "cancelled" : open === "0" ? "all" : "open";
   const operators = await tx((t) => listOperators(t));
   const ids = operators.map((o) => o.id);
+  const meId = await getMe();
+  const opOpts = operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name, code: o.code, active: o.active }));
   const allBatches = await prisma.purchaseBatch.findMany({
     where: { ...(cat ? (cat === "none" ? { categoryId: null } : batchesWithSeries(cat)) : {}), ...(mode === "open" ? { status: { in: ["DRAFT", "ORDERED", "PARTIAL_RECEIVED"] } } : mode === "cancelled" ? { status: "CANCELLED" as const } : { status: { not: "CANCELLED" as const } }) },
     orderBy: { createdAt: "desc" },
@@ -458,7 +461,13 @@ async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, lat
               {!confirm && unconfirmed > 0 && bi === 0 && <li className="text-[13px] font-semibold text-warn md:col-span-2 xl:col-span-3" data-testid="group-unconfirmed">待確認（{unconfirmed}）</li>}
               {bi === splitAt && <li className="mt-2 text-[13px] font-semibold text-good md:col-span-2 xl:col-span-3" data-testid="group-confirmed">已對完（{batches.length - unconfirmed}）</li>}
               <li className="relative">
-                <span className="absolute right-2 bottom-2 z-10"><DeleteBatchButton batchId={b.id} name={b.name} paid={pay.get(b.id)?.paidTwd ?? 0} received={rec} items={b.items.length} /></span>
+                {b.status !== "CANCELLED" && (
+                  <span className="absolute bottom-2 left-2 z-10 flex gap-1.5" data-testid="card-actions">
+                    {(pay.get(b.id)?.dueTwd ?? 0) > 0 && <PayOffButton batchId={b.id} due={pay.get(b.id)!.dueTwd} operators={opOpts} defaultPayer={b.ownership === "JOINT" ? meId : (b.orderedById ?? meId)} />}
+                    {lateFilter === "1" && rec < ordered && <span className="w-24"><ReceiveAllButton batchId={b.id} outstanding={ordered - rec} operators={opOpts} defaultReceiver={b.orderedById ?? meId} /></span>}
+                  </span>
+                )}
+                <span className="absolute right-2 bottom-2 z-10"><DeleteBatchButton batchId={b.id} name={b.name} paid={pay.get(b.id)?.paidTwd ?? 0} received={rec} items={b.items.length} qty={b.items.reduce((x, i) => x + i.qty - i.cancelledQty, 0)} /></span>
                 <Link href={`/inventory/batches/${b.id}`} className={`block h-full rounded-xl border border-line bg-white p-3 pb-12 hover:border-ai ${ownerTone(b.ownership === "JOINT" ? "joint" : b.orderedById, ids).stripe}`} data-testid="batch-card">
                   <div className="flex items-start justify-between gap-2">
                     <span className="font-semibold">{b.name}</span>

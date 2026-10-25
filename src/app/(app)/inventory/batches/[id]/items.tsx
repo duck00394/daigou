@@ -144,23 +144,41 @@ export function PayOffButton({ batchId, due, operators, defaultPayer, big }: { b
 }
 
 /** 全部到了：還沒收到的一次入庫，收貨的人預設這團的收貨負責人或主人 */
-export function ReceiveAllButton({ batchId, outstanding, operators, defaultReceiver, doneLabel = "全部到手了" }: { batchId: string; outstanding: number; operators: OperatorOption[]; defaultReceiver: string | null; doneLabel?: string }) {
+export function ReceiveAllButton({ batchId, outstanding, operators, defaultReceiver, doneLabel = "全部到手了", due = 0, payer = null }: { batchId: string; outstanding: number; operators: OperatorOption[]; defaultReceiver: string | null; doneLabel?: string; due?: number; payer?: string | null }) {
   const [open, setOpen] = useState(false);
   const [who, setWho] = useState<string | null>(defaultReceiver);
+  const [got, setGot] = useState<number | null>(null); // 收完貨：問要不要順便付清
   const idem = useIdemKey();
+  const payIdem = useIdemKey();
   const { run, pending } = useRun();
   const go = () =>
     run(() => receiveAllAction(batchId, who, idem.key), {
       success: (r) => (r.received ? `${r.received} 件已進庫存` : "沒有還沒到的了"),
-      onOk: () => { idem.renew(); setOpen(false); },
+      refresh: due <= 0,
+      onOk: (r) => {
+        idem.renew();
+        setOpen(false);
+        if (due > 0 && r.received) setGot(r.received);
+      },
     });
-  if (outstanding <= 0) return <span className="flex items-center justify-center rounded-lg bg-good-soft px-3 py-2 text-[14px] text-good">{doneLabel}</span>;
+  const router = useRouter();
+  const later = () => {
+    setGot(null);
+    router.refresh();
+  };
+  const payModal = (
+    <Modal open={got !== null} onClose={later} title={`已收貨 ${got ?? 0} 件，進庫存了`} footer={<><Button onClick={later}>先不用</Button><Button variant="primary" loading={pending} onClick={() => run(() => payRemainingAction(batchId, payer ?? who, payIdem.key), { success: "已記成付清", onOk: () => { payIdem.renew(); setGot(null); } })}>付清 {formatTwd(due)}</Button></>}>
+      <p className="text-[14px]" data-testid="pay-after-receive">這團還要付 <b className="num text-bad">{formatTwd(due)}</b>，要順便記成付清嗎？</p>
+    </Modal>
+  );
+  if (outstanding <= 0) return <>{payModal}<span className="flex items-center justify-center rounded-lg bg-good-soft px-3 py-2 text-[14px] text-good">{doneLabel}</span></>;
   return (
     <>
       <Button variant="primary" className="w-full" loading={pending && !open} onClick={() => (defaultReceiver ? go() : setOpen(true))}>全部到了</Button>
       <Modal open={open} onClose={() => setOpen(false)} title="誰收到的？" footer={<Button variant="primary" loading={pending} disabled={!who} onClick={go}>{outstanding} 件全部入庫</Button>}>
         <OperatorPicker label="收貨的人" operators={operators} value={who} onChange={setWho} />
       </Modal>
+      {payModal}
     </>
   );
 }

@@ -584,6 +584,8 @@ export function BulkAddGrid({
               key={r.key}
               role="row"
               className={`grid grid-cols-[minmax(0,1fr)_4.5rem_6.25rem_1.25rem] items-start gap-x-2 gap-y-1.5 border-b border-line-2 px-1 py-2 last:border-b-0 md:grid-cols-[2rem_minmax(9rem,1.4fr)_minmax(6rem,1fr)_6.5rem_5.5rem_5rem_6.5rem_7rem_5.5rem] md:border-line-2 md:px-0 md:py-1.5 md:last:border-b ${err && !isBlank(r) ? "bg-bad-soft/40 md:bg-bad-soft/30" : ""}`}
+              data-err={err && (!isBlank(r) || showErrors) ? (err.includes("單價") ? "u" : err.includes("數量") ? "q" : "c") : undefined}
+              data-key={r.key}
             >
               <span className="num sr-only text-[12px] text-mute md:not-sr-only md:pt-2.5">第 {i + 1} 列</span>
               <div role="cell" className="min-w-0">
@@ -638,7 +640,7 @@ export function BulkAddGrid({
               </div>
               <div role="cell">
                 <label className={lbl} htmlFor={`u-${r.key}`}>單價</label>
-                <input id={`u-${r.key}`} {...cell(2)} className={`${inputCls} num text-right`} inputMode="numeric" disabled={r.loading} placeholder={r.loading ? "讀取中…" : fill.get(r.key) ? `≈${fill.get(r.key)}` : undefined} value={fill.has(r.key) && !r.touched ? "" : r.unitCost} onFocus={() => !r.touched && update(r.key, { touched: true })} onChange={(e) => update(r.key, { unitCost: e.target.value, hint: "", touched: true })} />
+                <input id={`u-${r.key}`} {...cell(2)} className={`${inputCls} num text-right ${err?.includes("單價") && !isBlank(r) ? "border-bad ring-1 ring-bad" : ""}`} inputMode="numeric" disabled={r.loading} placeholder={r.loading ? "讀取中…" : fill.get(r.key) ? `≈${fill.get(r.key)}` : undefined} value={fill.has(r.key) && !r.touched ? "" : r.unitCost} onFocus={() => !r.touched && update(r.key, { touched: true })} onChange={(e) => update(r.key, { unitCost: e.target.value, hint: "", touched: true })} />
                 {r.hint && <span className="mt-0.5 hidden text-[11px] leading-tight text-mute md:block">{r.hint}</span>}
               </div>
               <div role="cell" className={`order-last col-span-2 md:order-none md:col-span-1 ${extra}`}>
@@ -652,7 +654,7 @@ export function BulkAddGrid({
                 <label className={lbl} htmlFor={`q-${r.key}`}>數量</label>
                 <div className="flex items-center gap-0.5 md:gap-1">
                   <button type="button" className="h-10 w-7 shrink-0 rounded-lg border border-line text-[17px] md:hidden" aria-label={`第 ${i + 1} 列少一件`} onClick={() => update(r.key, { qty: String(Math.max(1, (toInt(r.qty) ?? 1) - 1)) })}>−</button>
-                  <input id={`q-${r.key}`} {...cell(4)} className={`${inputCls} num px-1 text-center md:px-2.5 md:text-right`} inputMode="numeric" value={r.qty} onChange={(e) => update(r.key, { qty: e.target.value })} />
+                  <input id={`q-${r.key}`} {...cell(4)} className={`${inputCls} num px-1 text-center md:px-2.5 md:text-right ${err?.includes("數量") && !isBlank(r) ? "border-bad ring-1 ring-bad" : ""}`} inputMode="numeric" value={r.qty} onChange={(e) => update(r.key, { qty: e.target.value })} />
                   <button type="button" className="h-10 w-7 shrink-0 rounded-lg border border-line text-[17px] md:hidden" aria-label={`第 ${i + 1} 列多一件`} onClick={() => update(r.key, { qty: String((toInt(r.qty) ?? 0) + 1) })}>＋</button>
                 </div>
               </div>
@@ -673,7 +675,7 @@ export function BulkAddGrid({
                   <button type="button" className="rounded-md px-2 py-1 text-[13px] text-ai" onClick={() => duplicateRow(r.key)}>複製這一列</button>
                 </div>
               )}
-              {err && !isBlank(r) && <p role="alert" className="order-last col-span-4 text-[13px] text-bad md:col-span-9 md:pl-[2.5rem]">{err}</p>}
+              {err && !isBlank(r) && <p role="alert" className="order-last col-span-4 text-[13px] text-bad md:col-span-9 md:pl-[2.5rem]">{charName ? `${charName}：` : `第 ${i + 1} 列：`}{err}</p>}
             </div>
           );
         })}
@@ -708,7 +710,20 @@ export function BulkAddGrid({
           disabled={!seriesId}
           onClick={() => {
             setShowErrors(true);
-            if (stats.valid === 0) return notify(stats.invalid ? "還有資料需要修正" : "請至少填寫一列");
+            // 有沒填好的：直接捲到那一格、游標放進去
+            const jump = () =>
+              requestAnimationFrame(() => {
+                const row = grid.current?.querySelector<HTMLElement>("[data-err]");
+                const k = row?.getAttribute("data-key");
+                const f = row?.getAttribute("data-err");
+                const el = k ? document.getElementById(`${f}-${k}`) : null;
+                (el ?? row)?.scrollIntoView({ block: "center", behavior: "smooth" });
+                el?.focus({ preventScroll: true });
+              });
+            if (stats.valid === 0) {
+              jump();
+              return notify(stats.invalid ? "還有資料需要修正，已經跳到那一格" : "請至少填寫一列：先點上面的角色");
+            }
             if (dupKeys.size) return notify("有重複的角色與規格，請修正後再送出");
             // 一般情況直接存；有新角色、單價特別高或有不完整的列，才多確認一次
             const ok = eff.filter((r) => !isBlank(r) && !rowError(r));

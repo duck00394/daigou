@@ -73,6 +73,9 @@ test("手機：卡片式表格可新增、修改、刪除列並確認儲存", as
     await who.getByRole("button", { name: /全部入庫/ }).click();
   }
   await toast(page, /件已進庫存/);
-  await expect(page.getByText("全部到手了")).toBeVisible();
+  // 收完貨問要不要順便付清
+  await expect(page.getByTestId("pay-after-receive")).toBeVisible();
+  await page.getByRole("button", { name: "先不用" }).click();
+  await expect(page.getByText("全部到手了", { exact: true })).toBeVisible();
   await page.screenshot({ path: "test-results/mobile_batch_top.png", fullPage: false });
 });

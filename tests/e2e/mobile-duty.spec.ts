@@ -14,16 +14,23 @@ test("手機：關稅 %、預購平均成本、庫存欄", async ({ page }) => {
   await page.getByLabel(/新系列名稱/).fill(cat);
   await page.getByRole("button", { name: "建立", exact: true }).click();
   await expect(page.getByTestId("chosen-series")).toContainText(cat);
-  await newSupplierPick(page, `稅代購 ${tag}`);
-  await openMore(page);
-  await page.getByLabel("關稅 %").fill("10");
-
+  // 先填商品、忘了選代購 → 直接指出那一格
   await pickIp(page);
   await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
   await page.getByRole("button", { name: "＋ 吉伊" }).click();
   const r1 = page.getByRole("table", { name: "批次新增採購品項" }).getByRole("row").filter({ hasText: "第 1 列" });
-  await r1.getByLabel("單價").fill("500");
   await r1.getByLabel("數量").fill("2");
+  await page.getByRole("button", { name: /^儲存 \d+ 項$/ }).click();
+  // 單價沒填：標出哪個角色
+  await expect(r1.getByRole("alert")).toContainText("吉伊：請填寫單價");
+  await expect(r1.getByLabel("單價")).toBeFocused();
+  await r1.getByLabel("單價").fill("500");
+  await page.getByRole("button", { name: "儲存 1 項" }).click();
+  await expect(page.getByTestId("supplier-error")).toBeVisible();
+  await newSupplierPick(page, `稅代購 ${tag}`);
+  await expect(page.getByTestId("supplier-error")).toHaveCount(0);
+  await openMore(page);
+  await page.getByLabel("關稅 %").fill("10");
   await page.getByRole("button", { name: "儲存 1 項" }).click();
   await toast(page, /已新增 1 個採購品項/);
 
@@ -41,6 +48,14 @@ test("手機：關稅 %、預購平均成本、庫存欄", async ({ page }) => {
   await toast(page, "已儲存 1 列");
   await expect(fee).toContainText("NT$50");
   const batchUrl = page.url();
+
+  // 首頁待辦「還沒付清」→ 列表上直接付清
+  await page.goto("/inventory?tab=batches&open=0&pay=due");
+  const card = page.locator("li", { has: page.getByTestId("batch-card").filter({ hasText: `稅代購 ${tag}` }) });
+  await card.getByRole("button", { name: "付清" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /登記已付/ }).click();
+  await toast(page, /已登記付款/);
+  await expect(page.getByTestId("batch-card").filter({ hasText: `稅代購 ${tag}` })).toHaveCount(0); // 付清了就不在「還沒付清」裡
 
   // 對單前：不一定 2，庫存 0
   await page.goto(`/inventory?tab=stock&only=all&q=${encodeURIComponent(cat)}`);

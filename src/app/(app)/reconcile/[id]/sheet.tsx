@@ -12,7 +12,7 @@ type Pay = { totalTwd: number; paidTwd: number; dueTwd: number };
 type Draft = { bought: number; cut: boolean };
 const REASONS: [string, string][] = [["AGENT_CANCEL", "代購砍單（沒搶到）"], ["OUT_OF_STOCK", "商品缺貨"], ["SELLER_CANCEL", "賣家取消"], ["SELF_CANCEL", "自己不要了"]];
 
-export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchHref }: { batchId: string; items: Item[]; pay: Pay; nextHref: string | null; listHref: string; batchHref: string }) {
+export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchHref, left = 0 }: { batchId: string; items: Item[]; pay: Pay; nextHref: string | null; listHref: string; batchHref: string; left?: number }) {
   const router = useRouter();
   const { run, pending } = useRun();
   const [d, setD] = useState<Record<string, Draft>>(() => Object.fromEntries(items.map((i) => [i.id, { bought: i.bought, cut: false }])));
@@ -163,7 +163,7 @@ export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchH
         </p>
       </div>
       <p className="text-center text-[13px] text-mute" data-testid="reconcile-sum">這團：買到 {sum.bought}・砍 {sum.cut}・還要等 {sum.wait}</p>
-      <Button variant="primary" className="w-full" loading={pending} onClick={save}>{changed.length || payChanged ? (nextHref ? "儲存，下一團" : "儲存") : nextHref ? "沒有改，下一團" : "回對單清單"}</Button>
+      <Button variant="primary" className="w-full" loading={pending} onClick={save}>{changed.length || payChanged ? (nextHref ? `儲存，下一團${left ? `（還有 ${left} 團）` : ""}` : "儲存") : nextHref ? "沒有改，下一團" : "回對單清單"}</Button>
       <p className="text-center text-[12px]"><Link href={batchHref} className="text-ai">看這團的付款、收貨</Link></p>
     </div>
   );

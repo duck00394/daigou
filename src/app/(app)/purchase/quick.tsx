@@ -68,6 +68,7 @@ export function QuickPurchase(props: {
   const [supOpen, setSupOpen] = useState(false);
   // 運費：點常用的帶入金額（可以再改），也可以自己填
   const [fees, setFees] = useState<Record<string, string>>({});
+  const [supErr, setSupErr] = useState(false);
   const [customFee, setCustomFee] = useState<string | null>(null);
   const [saved, setSaved] = useState<{ id: string; name: string; count: number; stocked: boolean; paid: boolean } | null>(null);
   // 跟誰買：代購（要等寄來）或自己去實體店買（買了就拿到、當場付清）
@@ -116,7 +117,11 @@ export function QuickPurchase(props: {
     if (created.current) return created.current;
     const name = f.name.trim() || supplier?.name || "";
     if (!name) {
-      notify("請選擇代購，或填寫團名");
+      setSupErr(true);
+      const el = document.getElementById("pick-supplier");
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      el?.focus({ preventScroll: true });
+      notify(store ? "請選是哪家店（已經跳到那一格）" : "請選跟哪個代購買的（已經跳到那一格）");
       return null;
     }
     const feeList = (store ? [] : Object.entries(fees))
@@ -314,12 +319,13 @@ export function QuickPurchase(props: {
                     aria-label={store ? "哪家店" : "向哪個代購買"}
                     aria-expanded={supOpen}
                     data-value={f.supplierId}
-                    className={`${inputCls} flex min-h-11 items-center justify-between text-left`}
-                    onClick={() => { setSupOpen(!supOpen); setSupQ(""); }}
+                    className={`${inputCls} flex min-h-11 items-center justify-between text-left ${supErr && !f.supplierId ? "border-bad ring-1 ring-bad" : ""}`}
+                    onClick={() => { setSupOpen(!supOpen); setSupQ(""); setSupErr(false); }}
                   >
                     <span className={pickedSup ? "" : "text-mute"} data-testid="supplier-current">{pickedSup?.name ?? (store ? "請選店家" : "請選代購")}</span>
                     <span aria-hidden className="text-mute">{supOpen ? "▴" : "▾"}</span>
                   </button>
+                  {supErr && !f.supplierId && <p role="alert" className="mt-1 text-[13px] text-bad" data-testid="supplier-error">{store ? "請選是哪家店" : "請選跟哪個代購買的"}</p>}
                   {supOpen && (
                     <div className="mt-1 overflow-hidden rounded-xl border border-ai bg-white shadow-lg" data-testid="supplier-panel">
                       <div className="border-b border-line-2 p-2">

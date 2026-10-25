@@ -47,3 +47,25 @@ export function Term({ name, tone, children }: { name: string; tone?: "good" | "
     </div>
   );
 }
+
+/** 確認視窗：會影響哪些東西（一條一條列），加上提醒 */
+export function Impact({ lead = "會一起：", items, keep, warn }: { lead?: string; items: React.ReactNode[]; keep?: React.ReactNode[]; warn?: React.ReactNode }) {
+  const list = items.filter(Boolean);
+  return (
+    <div data-testid="impact">
+      {list.length > 0 && (
+        <>
+          <div>{lead}</div>
+          <ul className="mt-1 list-disc pl-5">{list.map((x, i) => <li key={i}>{x}</li>)}</ul>
+        </>
+      )}
+      {keep && keep.filter(Boolean).length > 0 && (
+        <>
+          <div className="mt-2">不會動到：</div>
+          <ul className="mt-1 list-disc pl-5 text-mute">{keep.filter(Boolean).map((x, i) => <li key={i}>{x}</li>)}</ul>
+        </>
+      )}
+      {warn && <p className="mt-2 text-bad">{warn}</p>}
+    </div>
+  );
+}
