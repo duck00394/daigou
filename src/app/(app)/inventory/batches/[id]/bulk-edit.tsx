@@ -30,20 +30,21 @@ export type EditItem = {
   cancelReason: string | null;
   seriesId?: string | null; // 這個品項的系列（一團可以有好幾個系列）
   ownerId?: string | null; // 合資團：這個品項是誰的（空白＝大家一起）
+  dutyPct?: number | null; // 這件另外的關稅 %（空白＝跟著整團）
 };
 
-type Draft = { qty: string; est: string; actual: string; currency: Currency; sale: string; cut: string; restore: boolean; owner: string };
-const toDraft = (i: EditItem): Draft => ({ qty: String(i.qty), est: String(i.estUnitCost), actual: i.actualUnitCost == null ? "" : String(i.actualUnitCost), currency: i.currency, sale: i.salePriceTwd == null ? "" : String(i.salePriceTwd), cut: "", restore: false, owner: i.ownerId ?? "" });
+type Draft = { qty: string; est: string; actual: string; currency: Currency; sale: string; cut: string; restore: boolean; owner: string; duty: string };
+const toDraft = (i: EditItem): Draft => ({ qty: String(i.qty), est: String(i.estUnitCost), actual: i.actualUnitCost == null ? "" : String(i.actualUnitCost), currency: i.currency, sale: i.salePriceTwd == null ? "" : String(i.salePriceTwd), cut: "", restore: false, owner: i.ownerId ?? "", duty: i.dutyPct == null ? "" : String(i.dutyPct) });
 const CUT_REASONS: [string, string][] = [["AGENT_CANCEL", "代購砍單（沒搶到）"], ["OUT_OF_STOCK", "商品缺貨"], ["SELLER_CANCEL", "賣家取消"], ["SELF_CANCEL", "自己不要了"]];
 const num = (s: string) => (s.trim() === "" ? null : /^\d+$/.test(s.trim().replace(/,/g, "")) ? Number(s.trim().replace(/,/g, "")) : NaN);
 
-export function BulkEditTable({ batchId, items, editable, jointOps }: { batchId: string; items: EditItem[]; editable: boolean; jointOps?: { id: string; name: string }[] }) {
+export function BulkEditTable({ batchId, items, editable, jointOps, batchDutyPct = null }: { batchId: string; items: EditItem[]; editable: boolean; jointOps?: { id: string; name: string }[]; batchDutyPct?: number | null }) {
   const [reason, setReason] = useState("AGENT_CANCEL");
   const [drafts, setDrafts] = useState<Record<string, Draft>>(() => Object.fromEntries(items.map((i) => [i.id, toDraft(i)])));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { run, pending } = useRun();
   const toast = useToast();
-  const key = items.map((i) => `${i.id}:${i.qty}:${i.estUnitCost}:${i.actualUnitCost}:${i.currency}:${i.salePriceTwd}:${i.cancelledQty}:${i.ownerId ?? ""}`).join("|");
+  const key = items.map((i) => `${i.id}:${i.qty}:${i.estUnitCost}:${i.actualUnitCost}:${i.currency}:${i.salePriceTwd}:${i.cancelledQty}:${i.ownerId ?? ""}:${i.dutyPct ?? ""}`).join("|");
   const [lastKey, setLastKey] = useState(key);
   if (key !== lastKey) {
     setLastKey(key);
@@ -51,7 +52,7 @@ export function BulkEditTable({ batchId, items, editable, jointOps }: { batchId:
   }
 
   const changed = useMemo(() => {
-    const out: { itemId: string; qty?: number; unitCost?: number; actualUnitCost?: number | null; currency?: Currency; salePriceTwd?: number | null; cancelQty?: number; cancelReason?: string; restoreQty?: number; ownerId?: string | null }[] = [];
+    const out: { itemId: string; qty?: number; unitCost?: number; actualUnitCost?: number | null; currency?: Currency; salePriceTwd?: number | null; cancelQty?: number; cancelReason?: string; restoreQty?: number; ownerId?: string | null; dutyPct?: number | null }[] = [];
     const local: Record<string, string> = {};
     for (const i of items) {
       const d = drafts[i.id];
@@ -81,6 +82,11 @@ export function BulkEditTable({ batchId, items, editable, jointOps }: { batchId:
       }
       if (d.restore && i.cancelledQty > 0) row.restoreQty = i.cancelledQty;
       if (d.owner !== o.owner) row.ownerId = d.owner || null;
+      if (d.duty !== o.duty) {
+        const dp = d.duty.trim() === "" ? null : Number(d.duty);
+        if (dp !== null && (!Number.isFinite(dp) || dp < 0 || dp > 100)) local[i.id] = "關稅 % 請填 0～100";
+        else row.dutyPct = dp;
+      }
       out.push(row);
     }
     return { rows: out, local };
@@ -130,6 +136,13 @@ export function BulkEditTable({ batchId, items, editable, jointOps }: { batchId:
                 ) : (
                   <div className="text-[12px] text-mute" data-testid="item-owner">{jointOps.find((o) => o.id === i.ownerId)?.name ? `${jointOps.find((o) => o.id === i.ownerId)!.name}的` : "大家一起"}</div>
                 ))}
+                {editable ? (
+                  <label className="mt-1 flex items-center gap-1 text-[12px] text-mute">
+                    關稅
+                    <input aria-label={`${i.name} 關稅 %`} inputMode="decimal" data-testid="item-duty" className={`${inputCls} num h-8 w-14 px-1.5 text-right text-[13px]`} value={d.duty} onChange={(e) => set(i.id, { duty: e.target.value.replace(/[^\d.]/g, "") })} placeholder={batchDutyPct != null ? String(batchDutyPct) : "0"} />
+                    %{d.duty === "" && batchDutyPct != null ? "（跟整團）" : ""}
+                  </label>
+                ) : i.dutyPct != null ? <div className="text-[12px] text-mute">關稅 {i.dutyPct}%</div> : null}
                 {i.minQty > 0 && <div className="text-[12px] text-mute">最少 {i.minQty} 件（{i.promisedNote}）</div>}
                 {i.cancelledQty > 0 && (
                   <div className="text-[12px] text-bad">

@@ -684,6 +684,7 @@ model PurchaseBatch {
   status                   PurchaseBatchStatus @default(ORDERED)
   // 代購有沒有確認這團買得到（未確認＝預購不一定有貨）
   refundedTwd              Int                 @default(0) // 代購退回的錢（砍單、取消後退款）
+  dutyBp                   Int? // 關稅／稅金：整團預設百分比（萬分之幾；10% = 1000）；空白＝不自動算
   // 合資團：一起的商品怎麼分（{經營者id: 百分比}；空白＝平均）、運費怎麼分（HALF 平均／GOODS 照商品金額）、兩人之間已經轉過的錢
   jointSplit               Json?
   feeSplit                 String              @default("HALF")
@@ -820,6 +821,7 @@ model PurchaseBatchItem {
   // 這個品項屬於哪個系列；空白＝跟著這團的系列（一團可以放好幾個系列）
   categoryId     String?
   category       Category?           @relation(fields: [categoryId], references: [id])
+  dutyBp         Int? // 這件另外的關稅百分比（萬分之幾）；空白＝跟著整團
   qty            Int
   currency       String              @default("JPY") // JPY 或 TWD；JPY 以本批匯率換算
   estUnitCost    Int // 採購預估單價（依幣別）
@@ -868,6 +870,7 @@ model BatchCost {
   manualSplit Json? // MANUAL 時：{ batchItemId: 台幣金額 }
   payer       String? // 誰付的：經營者 id，或 "joint"（兩人一起付）；null＝跟著這團的歸屬
   shareSplit  Json? // payer = "joint" 時：{ 經營者 id: 台幣金額 }，合計等於費用台幣金額
+  autoDuty    Boolean          @default(false) // 依關稅 % 自動算的那一筆（商品改了會自動重算）
   note        String?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt

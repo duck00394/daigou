@@ -499,7 +499,7 @@ export async function bulkAddSeriesItems(
 export async function bulkUpdateBatchItems(
   actor: Actor,
   batchId: string,
-  rows: { itemId: string; qty?: number; unitCost?: number; actualUnitCost?: number | null; currency?: Currency; salePriceTwd?: number | null; cancelQty?: number; cancelReason?: string; restoreQty?: number; ownerId?: string | null }[],
+  rows: { itemId: string; qty?: number; unitCost?: number; actualUnitCost?: number | null; currency?: Currency; salePriceTwd?: number | null; cancelQty?: number; cancelReason?: string; restoreQty?: number; ownerId?: string | null; dutyPct?: number | null }[],
 ) {
   const errors: { itemId: string; error: string }[] = [];
   // 先逐列檢查，任何一列不合法就全部不寫入，避免改到一半
@@ -512,7 +512,11 @@ export async function bulkUpdateBatchItems(
           continue;
         }
         try {
-          const { cancelQty, cancelReason, restoreQty, ownerId, ...rest } = r;
+          const { cancelQty, cancelReason, restoreQty, ownerId, dutyPct, ...rest } = r;
+          if (dutyPct !== undefined) {
+            const { setItemDuty } = await import("./purchase");
+            await setItemDuty(t, actor, r.itemId, dutyPct);
+          }
           // 合資團：改這件是誰的
           if (ownerId !== undefined) await t.purchaseBatchItem.update({ where: { id: r.itemId }, data: { ownerId: ownerId || null } });
           if (restoreQty) await restoreCancelled(t, actor, r.itemId, restoreQty);

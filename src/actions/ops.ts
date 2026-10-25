@@ -100,6 +100,8 @@ export async function createBatchAction(input: {
   deposit?: { amount: number; paidById: string | null } | null;
   /** 合資：一起的比例、運費怎麼分、誰付了多少 */
   joint?: { split?: Record<string, number> | null; feeSplit?: "HALF" | "GOODS"; paidBy?: { paidById: string; total: number }[] } | null;
+  /** 關稅 %（整團預設） */
+  dutyPct?: number | null;
 }) {
   return run(async (a) => {
     const items = z.array(batchItem).max(300).parse(input.items);
@@ -112,7 +114,9 @@ export async function createBatchAction(input: {
     const fees = z.array(z.object({ kind: z.enum(["AGENT_FEE", "JP_DOMESTIC_SHIPPING", "INTL_SHIPPING", "TW_DOMESTIC_SHIPPING", "DUTY", "PACKAGING", "PLATFORM_FEE", "OTHER"]), currency: z.enum(["TWD", "JPY"]), amount: z.number().int().min(0), note: z.string().max(100).nullish() })).max(10).parse(input.fees ?? []);
     const deposit = z.object({ amount: z.number().int().min(0), paidById: z.string().max(64).nullable() }).nullish().parse(input.deposit);
     const joint = z.object({ split: z.record(z.string().max(64), z.number().min(0)).nullish(), feeSplit: z.enum(["HALF", "GOODS"]).optional(), paidBy: z.array(z.object({ paidById: z.string().max(64), total: z.number().int().min(0) })).max(10).optional() }).nullish().parse(input.joint);
-    const { fees: _f, deposit: _d, joint: _j, ...rest } = input;
+    const dutyPct = z.number().min(0).max(100).nullish().parse(input.dutyPct);
+    const { fees: _f, deposit: _d, joint: _j, dutyPct: _p, ...rest } = input;
+    void _p;
     void _j;
     void _f;
     void _d;
@@ -120,6 +124,7 @@ export async function createBatchAction(input: {
       async (t) => {
         const row = await pur.createBatch(t, a, { ...rest, ...resp, ...extra, expectedAt: parseDay(extra.expectedAt), orderedAt: parseDateTimeInput(input.orderedAt), items });
         for (const f of fees.filter((x) => x.amount > 0)) await pur.addBatchCost(t, a, { batchId: row.id, kind: f.kind, currency: f.currency, amount: f.amount, method: "NONE", note: f.note ?? null });
+        if (dutyPct) await pur.setBatchDuty(t, a, row.id, dutyPct);
         if (deposit && deposit.amount > 0) {
           const { addSupplierPayment } = await import("@/server/services/supplier-payments");
           await addSupplierPayment(t, a, { batchId: row.id, paidById: deposit.paidById, paidAt: new Date(), amount: deposit.amount, currency: "TWD", purpose: "DEPOSIT", note: "開團時付的訂金" });
@@ -144,6 +149,12 @@ export async function updateBatchItemAction(
   input: { qty?: number; unitCost?: number; actualUnitCost?: number | null; currency?: "JPY" | "TWD"; salePriceTwd?: number | null; specNote?: string | null; weightGrams?: number | null; cancelQty?: number },
 ) {
   return run((a) => tx((t) => pur.updateBatchItem(t, a, itemId, input)));
+}
+export async function setBatchDutyAction(batchId: string, pct: number | null) {
+  return run((a) => tx((t) => pur.setBatchDuty(t, a, z.string().max(64).parse(batchId), z.number().min(0).max(100).nullable().parse(pct))).then(() => null));
+}
+export async function fixAutoDutyAction(costId: string, amount: number) {
+  return run((a) => tx((t) => pur.fixAutoDuty(t, a, z.string().max(64).parse(costId), z.number().int().min(0).max(100_000_000).parse(amount))).then(() => null));
 }
 export async function deleteBatchItemAction(itemId: string) {
   return run((a) => tx((t) => pur.deleteBatchItem(t, a, itemId)));

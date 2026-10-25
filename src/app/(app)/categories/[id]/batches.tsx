@@ -65,11 +65,16 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
       const cells = Object.entries(r.cells).flatMap(([bid, cs]) => (colById.has(bid) ? cs.map((c) => ({ ...c, batch: colById.get(bid)! })) : []));
       const qty = cells.reduce((a, c) => a + c.qty, 0);
       const vals = cells.map((c) => (fullView ? c.fullUnitTwd : c.unitTwd));
-      const amount = cells.reduce((a, c) => a + (fullView ? c.fullUnitTwd : c.unitTwd) * c.qty, 0);
-      return { product: r.product, cells, qty, amount, avg: qty ? Math.round(amount / qty) : 0, min: Math.min(...vals), max: Math.max(...vals), tentative: cells.some((c) => c.estimated || (fullView && !c.feesConfirmed)) };
+      // 平均成本只算到貨＋一定到的；對單還沒確定的另外列
+      const unsure = cells.reduce((a, c) => a + c.unsure, 0);
+      const sureQty = qty - unsure;
+      const amount = cells.reduce((a, c) => a + (fullView ? c.fullUnitTwd : c.unitTwd) * (c.qty - c.unsure), 0);
+      const sureCells = cells.filter((c) => c.qty > c.unsure);
+      return { product: r.product, cells, qty, unsure, sureQty, amount, avg: sureQty ? Math.round(amount / sureQty) : null, min: Math.min(...vals), max: Math.max(...vals), tentative: sureCells.some((c) => c.estimated || (fullView && !c.feesConfirmed)) };
     })
     .filter((r) => r.qty > 0);
   const allQty = summary.reduce((a, r) => a + r.qty, 0);
+  const allSure = summary.reduce((a, r) => a + r.sureQty, 0);
   const allAmount = summary.reduce((a, r) => a + r.amount, 0);
   return (
     <>
@@ -190,8 +195,8 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
               <details key={r.product.id} className="group border-b border-line-2" data-testid="product-summary">
                 <summary role="row" className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_3.5rem_4.75rem_6.5rem] items-baseline gap-2 px-3 py-2.5 hover:bg-[#fafbfd] [&::-webkit-details-marker]:hidden">
                   <span role="cell" className="min-w-0 font-medium"><span className="mr-1 inline-block text-mute transition-transform group-open:rotate-90">▸</span>{r.product.name}</span>
-                  <span role="cell" className="num text-right font-semibold" data-k="qty">{r.qty}</span>
-                  <span role="cell" className="num text-right font-semibold" data-k="avg">{formatTwd(r.avg)}{r.tentative ? <span className="text-warn">*</span> : null}</span>
+                  <span role="cell" className="num text-right font-semibold" data-k="qty">{r.qty}{r.unsure > 0 && <span className="block text-[11px] font-normal text-warn" data-k="unsure">不一定 {r.unsure}</span>}</span>
+                  <span role="cell" className="num text-right font-semibold" data-k="avg">{r.avg == null ? <span className="text-mute">—</span> : <>{formatTwd(r.avg)}{r.tentative ? <span className="text-warn">*</span> : null}</>}</span>
                   <span role="cell" className="num text-right text-[12.5px] text-mute">{r.min === r.max ? formatTwd(r.min) : `${r.min.toLocaleString()}～${r.max.toLocaleString()}`}</span>
                 </summary>
                 <ul className="space-y-1 bg-[#f6f8fc] px-4 py-2 text-[13px]">
@@ -209,6 +214,7 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
                           </Link>
                           <span className="num shrink-0">
                             <span className={v === r.min && r.min !== r.max ? "font-semibold text-good" : ""}>{formatTwd(v)}</span> × {c.qty}
+                            {c.unsure > 0 && <span className="ml-1 rounded bg-warn-soft px-1 text-[11px] text-warn">不一定 {c.unsure}</span>}
                             {tentative && <span className="ml-1 rounded bg-warn-soft px-1 text-[11px] text-warn">價格還沒確定</span>}
                             {c.currency === "JPY" && !fullView && <span className="ml-1 text-[11px] text-mute">（{formatJpy(c.unitCost)}）</span>}
                           </span>
@@ -222,11 +228,11 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
             <div role="row" className="grid grid-cols-[minmax(0,1fr)_3.5rem_4.75rem_6.5rem] gap-2 bg-[#fafbfc] px-3 py-2 font-semibold">
               <span role="cell">合計</span>
               <span role="cell" className="num text-right" data-testid="summary-qty">{allQty}</span>
-              <span role="cell" className="num text-right">{allQty ? formatTwd(Math.round(allAmount / allQty)) : "—"}</span>
+              <span role="cell" className="num text-right">{allSure ? formatTwd(Math.round(allAmount / allSure)) : "—"}</span>
               <span role="cell" />
             </div>
           </div>
-          <p className="px-4 py-2 text-[12px] text-mute">點商品展開看各團價格。{fullView ? "平均成本含攤進去的運費等" : "只看商品單價，不含運費"}；* 表示有價格還沒確定。</p>
+          <p className="px-4 py-2 text-[12px] text-mute">點商品展開看各團價格。平均成本只算已到貨＋一定到的（對單還沒確定的「不一定」不算），{fullView ? "含攤進去的運費、關稅" : "只看商品單價，不含運費"}；* 表示有價格還沒確定。</p>
         </Section>
       )}
     </>

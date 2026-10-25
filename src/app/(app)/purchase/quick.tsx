@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { Button, TextField, inputCls, notify, useIdemKey } from "@/components/client";
 import { BulkAddGrid } from "../inventory/batches/[id]/bulk-add";
-import { createBatchAction } from "@/actions/ops";
+import { createBatchAction, setBatchDutyAction } from "@/actions/ops";
 import { saveSupplierAction, setSupplierFavoriteAction } from "@/actions/series";
 import { SeriesPicker, type SeriesOpt } from "@/components/series-picker";
 import { renameCategoryAction, saveCategoryAction } from "@/actions/catalog";
@@ -52,7 +52,7 @@ export function QuickPurchase(props: {
   const [newCat, setNewCat] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [newSup, setNewSup] = useState<string | null>(null);
-  const [f, setF] = useState({ supplierId: "", name: "", owner: props.me ?? operators[0]?.id ?? "", progress: "ASKED", expectedAt: "", rate: defaultRate, deposit: "", orderNo: "", notes: "" });
+  const [f, setF] = useState({ supplierId: "", name: "", owner: props.me ?? operators[0]?.id ?? "", progress: "ASKED", expectedAt: "", rate: defaultRate, deposit: "", orderNo: "", notes: "", duty: "" });
   const [changingCat, setChangingCat] = useState(false);
   // 合資：一起的比例（百分比）、運費怎麼分、誰付了多少給代購
   const [jointPct, setJointPct] = useState<Record<string, string>>(() => Object.fromEntries(operators.map((o) => [o.id, String(Math.round(100 / Math.max(1, operators.length)))])));
@@ -151,6 +151,7 @@ export function QuickPurchase(props: {
       fees: feeList as never,
       deposit: dep > 0 && f.owner !== JOINT ? { amount: dep, paidById: f.owner || me } : null,
       joint: f.owner === JOINT ? jointInput() : null,
+      dutyPct: dutyPct(),
     });
     if (!r.ok) {
       notify(r.error);
@@ -161,6 +162,7 @@ export function QuickPurchase(props: {
   }
 
 
+  const dutyPct = () => (f.duty.trim() && Number(f.duty) > 0 ? Number(f.duty) : null);
   const jointBox = () => (
     <div className="space-y-3 rounded-xl border border-[#d9c8f2] bg-[#f7f2fd] p-3" data-testid="joint-box">
       <div className="text-[14px] font-semibold text-[#6b3fb0]">合資怎麼分</div>
@@ -475,6 +477,16 @@ export function QuickPurchase(props: {
                     </div>
                   </>
                 )}
+                <div>
+                  <label className="flex items-center justify-between gap-2 text-[14px] font-medium text-ink-2">
+                    關稅／稅金
+                    <span className="flex items-center gap-1.5">
+                      <input className={`${inputCls} num w-20 text-right`} inputMode="decimal" aria-label="關稅 %" value={f.duty} onChange={(e) => setF({ ...f, duty: e.target.value.replace(/[^\d.]/g, "") })} placeholder="0" />
+                      <span>%</span>
+                    </span>
+                  </label>
+                  <p className="mt-1 text-[12px] text-mute">填了會用商品金額自動估出關稅，攤到每件的成本；之後加商品、改價格會自動重算。個別商品不同 % 到團頁面「編輯」另外填。</p>
+                </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <TextField label="團名（可不填，預設用代購名稱）" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder={supplier?.name ?? "例：ANA 第 2 團"} />
                   <TextField label="預計到貨日" type="date" value={f.expectedAt} onChange={(e) => setF({ ...f, expectedAt: e.target.value })} />
@@ -506,6 +518,10 @@ export function QuickPurchase(props: {
             initialTypeId={props.lastTypeId}
             onSaved={async (id, count) => {
               const name = chosen?.label ?? (f.name.trim() || supplier?.name || "新的一團");
+              if (pick === NEW) {
+                const d = await setBatchDutyAction(id, dutyPct());
+                if (!d.ok) notify(d.error);
+              }
               if (pick === NEW && f.owner === JOINT) {
                 const j = jointInput();
                 await saveJointSetupAction(id, { split: j.split, feeSplit: j.feeSplit });
@@ -547,7 +563,7 @@ export function QuickPurchase(props: {
             <span className="flex gap-2">
               {saved.stocked && <Link className="underline" href="/inventory?tab=stock&v=1">看庫存</Link>}
               <Link className="underline" href={`/inventory/batches/${saved.id}`}>看這一團</Link>
-              <button type="button" className="underline" onClick={() => { setPick(NEW); created.current = null; setSaved(null); setFees({}); setCustomFee(null); setF((x) => ({ ...x, name: "", supplierId: "", deposit: "", orderNo: "", notes: "" })); }}>再開新的一團</button>
+              <button type="button" className="underline" onClick={() => { setPick(NEW); created.current = null; setSaved(null); setFees({}); setCustomFee(null); setF((x) => ({ ...x, name: "", supplierId: "", deposit: "", orderNo: "", notes: "", duty: "" })); }}>再開新的一團</button>
             </span>
           </div>
         )}

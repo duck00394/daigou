@@ -21,6 +21,7 @@ import { listOperators } from "@/server/services/operators";
 import { sharePercents } from "@/server/services/ownership";
 import { jointSettlement, jointWeights } from "@/server/services/joint";
 import { JointPanel } from "./joint";
+import { DutyBar, FixDutyButton } from "./duty";
 import { supplierPaymentHistory } from "@/server/services/supplier-payments";
 import { isStoreKind, allocMethod, batchStage, batchStageLabel, costKind, currencyName, dayInput, fmtDate, paymentPurpose, supplierPaymentStatus, toDateTimeInput } from "@/lib/labels";
 import { formatRate, formatTwd, jpyToTwd } from "@/lib/money";
@@ -116,6 +117,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       cancelReason: i.cancelReason,
       seriesId: i.categoryId ?? b.categoryId,
       ownerId: i.ownerId,
+      dutyPct: i.dutyBp == null ? null : i.dutyBp / 100,
     });
   }
   // 這團有哪些系列（團本身的＋品項各自指定的）
@@ -187,6 +189,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
           items={editItems}
           editable={open}
           jointOps={joint ? joint.people.map((p) => ({ id: p.id, name: p.name })) : undefined}
+          batchDutyPct={b.dutyBp == null ? null : b.dutyBp / 100}
           jointPct={joint ? Object.fromEntries(joint.people.map((p) => [p.id, p.percent])) : undefined}
           initialMode={open && (sp.bulk === "1" || b.items.length === 0) ? "add" : "view"}
           supplierId={b.supplierId}
@@ -231,6 +234,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       </div>
 
       <Section id="costs" title="運費・代購費" pad={false} actions={open && <AddCost batchId={b.id} items={b.items.filter((i) => i.qty - i.cancelledQty > 0).map((i) => ({ id: i.id, name: i.product.name }))} operators={ops.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} owner={{ id: b.ownership === "JOINT" ? null : b.orderedById, label: ownerLabel }} presets={shippingPresets} />}>
+        {!isStoreKind(b.supplierRef?.kind) && <DutyBar batchId={b.id} pct={b.dutyBp == null ? null : b.dutyBp / 100} goods={editItems.reduce((a, i) => a + i.goodsTwd, 0)} editable={open} />}
         {b.costs.length === 0 ? (
           <Empty>還沒有記運費。國際運費、國內運費、代購費、關稅都記在這裡。</Empty>
         ) : (
@@ -242,17 +246,17 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
               return (
                 <li key={c.id} className="flex items-start justify-between gap-3 px-4 py-3" data-testid="fee-row">
                   <div className="min-w-0">
-                    <div className="font-medium">{costKind[c.kind]}{c.note ? <span className="ml-1 text-[12px] font-normal text-mute">{c.note}</span> : null}</div>
+                    <div className="font-medium" data-testid={c.autoDuty ? "auto-duty" : undefined}>{costKind[c.kind]}{c.autoDuty ? <span className="ml-1 text-[12px] font-normal text-mute">{b.dutyBp != null ? `${b.dutyBp / 100}%・` : ""}自動算</span> : null}{c.note ? <span className="ml-1 text-[12px] font-normal text-mute">{c.note}</span> : null}</div>
                     <div className="text-[13px] text-ink-2">{payerText(c)}</div>
                     <div className="text-[12px] text-mute">
-                      {c.method === "NONE" ? "不攤進商品成本，單獨記" : `攤進商品成本：${allocMethod[c.method]}${c.method === "BY_QTY" && q ? `（每件約 +${formatTwd(Math.round(twd / q))}）` : ""}`}
+                      {c.autoDuty ? "照每件的關稅 % 攤進商品成本" : c.method === "NONE" ? "不攤進商品成本，單獨記" : `攤進商品成本：${allocMethod[c.method]}${c.method === "BY_QTY" && q ? `（每件約 +${formatTwd(Math.round(twd / q))}）` : ""}`}
                       {c.method !== "NONE" && sum !== twd && q > 0 && <span className="text-bad">・分攤合計 {sum} 和費用不符</span>}
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
                     <div className="num font-semibold">{formatTwd(twd)}</div>
                     {c.currency === "JPY" && <div className="text-[12px] text-mute"><Jpy v={c.amount} /></div>}
-                    {open && <div className="mt-1"><DeleteCost id={c.id} /></div>}
+                    {open && <div className="mt-1 flex justify-end gap-1">{c.autoDuty && <FixDutyButton costId={c.id} amount={twd} />}<DeleteCost id={c.id} /></div>}
                   </div>
                 </li>
               );

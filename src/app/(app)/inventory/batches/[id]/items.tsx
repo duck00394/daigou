@@ -29,6 +29,7 @@ export function ItemsPanel(props: {
   seriesOptions?: SeriesOpt[];
   jointOps?: { id: string; name: string }[];
   jointPct?: Record<string, number>;
+  batchDutyPct?: number | null;
 }) {
   const { items, editable } = props;
   const [mode, setMode] = useState<"view" | "edit" | "add">(props.initialMode);
@@ -75,7 +76,7 @@ export function ItemsPanel(props: {
       )}
 
       {mode === "edit" ? (
-        <BulkEditTable batchId={props.batchId} items={items} editable={editable} jointOps={props.jointOps} />
+        <BulkEditTable batchId={props.batchId} items={items} editable={editable} jointOps={props.jointOps} batchDutyPct={props.batchDutyPct ?? null} />
       ) : live.length === 0 ? (
         mode === "view" && <p className="px-4 py-8 text-center text-sm text-mute">還沒有品項。{editable && <>按「＋ 加商品」開始加入。</>}</p>
       ) : (

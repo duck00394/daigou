@@ -9,7 +9,7 @@ import { ownerTone } from "@/lib/owner-colors";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { inventorySummary } from "@/server/services/inventory";
-import { purchaseDemand } from "@/server/services/purchase";
+import { landedCosts, purchaseDemand } from "@/server/services/purchase";
 import { listOperators } from "@/server/services/operators";
 import { getDefaultRateMicro } from "@/server/services/settings";
 import { PageHeader, Section, TableWrap, Empty, StatusBadge, LinkButton, Badge } from "@/components/ui";
@@ -141,16 +141,39 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
   });
   // 預購（還沒到的）分「一定有貨」（對單買到的）和「不一定有貨」（對單還在待確認的）
   const unsureMap = new Map<string, number>();
+  const sureCost = new Map<string, { qty: number; val: number; tentative: boolean }>();
   {
     const items = await prisma.purchaseBatchItem.findMany({
       where: { productId: { in: ids }, batch: { status: { not: "CANCELLED" }, ...viewBatchWhere(owner || "all") } },
-      select: { productId: true, qty: true, cancelledQty: true, confirmedQty: true, batch: { select: { status: true, supplierRef: { select: { kind: true } } } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
+      select: { id: true, productId: true, qty: true, cancelledQty: true, confirmedQty: true, actualUnitCost: true, batch: { select: { status: true, supplierRef: { select: { kind: true } }, costs: { select: { id: true }, take: 1 } } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
     });
-    for (const i of items) unsureMap.set(i.productId, (unsureMap.get(i.productId) ?? 0) + pendingQty(i, i.movements.reduce((a, m) => a + m.onHandDelta, 0)));
+    const landed = await tx((t) => landedCosts(t, items.map((i) => i.id)));
+    for (const i of items) {
+      const rec = i.movements.reduce((a, m) => a + m.onHandDelta, 0);
+      const pend = pendingQty(i, rec);
+      unsureMap.set(i.productId, (unsureMap.get(i.productId) ?? 0) + pend);
+      // 一定到（對單買到、還沒到）的成本：算預購平均成本用
+      const sure = Math.max(0, i.qty - i.cancelledQty - rec - pend);
+      const l = landed.get(i.id);
+      if (!sure || !l || l.qty <= 0) continue;
+      const v = sureCost.get(i.productId) ?? { qty: 0, val: 0, tentative: false };
+      v.qty += sure;
+      v.val += (l.totalTwd * sure) / l.qty;
+      if (i.actualUnitCost === null || !i.batch.costs.length) v.tentative = true;
+      sureCost.set(i.productId, v);
+    }
   }
+  // 預購平均成本＝（現有＋一定到）的加權平均，不一定的不算
+  const avgOf = (r: { p: { id: string }; s: { onHand: number }; v?: { avgUnitCost: number | null; tentative: boolean } }) => {
+    const sc = sureCost.get(r.p.id);
+    const hq = r.v?.avgUnitCost != null ? Math.max(0, r.s.onHand) : 0;
+    const q = hq + (sc?.qty ?? 0);
+    if (!q) return r.v?.avgUnitCost != null ? { avg: r.v.avgUnitCost, tentative: r.v.tentative } : null;
+    return { avg: Math.round((hq * (r.v?.avgUnitCost ?? 0) + (sc?.val ?? 0)) / q), tentative: !!(sc?.tentative || (hq && r.v?.tentative)) };
+  };
   const unsureOf = (r: { p: { id: string }; s: { incoming: number } }) => Math.min(r.s.incoming, unsureMap.get(r.p.id) ?? 0);
-  // 剩下＝手上現有的 − 客人預訂還沒給的（負的＝不夠，要等到貨）
-  const left = (r: { s: { onHand: number; openDemand: number } }) => r.s.onHand - r.s.openDemand;
+  // 庫存＝現有＋一定到 − 客人預訂還沒給的（負的＝不夠）
+  const left = (r: { p: { id: string }; s: { onHand: number; openDemand: number; incoming: number } }) => r.s.onHand + r.s.incoming - unsureOf(r) - r.s.openDemand;
   if (only === "stock") rows = rows.filter((r) => r.s.available > 0);
   else if (only === "sure") rows = rows.filter((r) => r.s.incoming - unsureOf(r) > 0);
   else if (only === "unsure") rows = rows.filter((r) => unsureOf(r) > 0);
@@ -211,12 +234,12 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
               <tr className="border-b border-line bg-[#fafbfc] text-[12px] text-mute">
                 <th className="px-3 py-2 text-left font-medium">角色</th>
                 <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium">現有</th>
-                <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium text-info">客人訂</th>
-                <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium">剩下</th>
                 <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium text-good">一定到</th>
+                <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium text-info">客人訂</th>
+                <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-semibold text-ink">庫存</th>
                 <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium text-warn">不一定</th>
                 <th className="hidden px-2 py-2 text-right font-medium md:table-cell">自留</th>
-                <th className="hidden px-2 py-2 text-right font-medium md:table-cell">每件成本</th>
+                <th className="hidden px-2 py-2 text-right font-medium md:table-cell">平均成本</th>
                 <th className="px-2 py-2"><span className="sr-only">動作</span></th>
               </tr>
             </thead>
@@ -237,7 +260,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                           <td colSpan={9} className="px-3 py-1.5 text-[14px] font-semibold text-ai" data-testid="stock-series">
                             {sg.key !== "none" ? <Link href={`/categories/${sg.key}`} className="hover:underline">{sg.name}</Link> : sg.name}
                             {!sg.active && <span className="ml-1 text-[12px] font-normal text-mute">已過期</span>}
-                            <span className="ml-2 text-[12px] font-normal">現有 {gs.onHand}・客人訂 {gs.ordered}・一定到 {gs.incoming - gs.unsure}・不一定 {gs.unsure}{gs.cost ? `・成本 ${formatTwd(gs.cost)}` : ""}</span>
+                            <span className="ml-2 text-[12px] font-normal">現有 {gs.onHand}・一定到 {gs.incoming - gs.unsure}・客人訂 {gs.ordered}・庫存 {gs.left}・不一定 {gs.unsure}{gs.cost ? `・成本 ${formatTwd(gs.cost)}` : ""}</span>
                           </td>
                         </tr>
                         {sg.types.map((tg) => (
@@ -255,16 +278,16 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                                     <Link href={`/products/${r.p.id}`} className="font-medium hover:underline" title={r.p.name}>{label(r)}</Link>
                                     {dup && sg.key !== "none" && <Link href={`/categories/${sg.key}#merge`} className="ml-1.5 rounded-full bg-warn-soft px-2 py-0.5 text-[11px] text-warn" data-testid="dup-badge">⚠ 重複了，按這裡合併</Link>}
                                     <div className="text-[11.5px] leading-snug text-mute">
-                                      {[r.v?.avgUnitCost != null ? `成本 ${formatTwd(r.v.avgUnitCost)}${r.v.tentative ? "*" : ""}` : null, r.s.kept ? `自留 ${r.s.kept}` : null, r.s.reserved ? `保留 ${r.s.reserved}` : null, owners.length > 1 ? owners.map((o) => `${o.label} ${o.free}`).join("／") : null].filter(Boolean).join("・")}
+                                      {[avgOf(r) ? `平均成本 ${formatTwd(avgOf(r)!.avg)}${avgOf(r)!.tentative ? "*" : ""}` : null, r.s.kept ? `自留 ${r.s.kept}` : null, r.s.reserved ? `保留 ${r.s.reserved}` : null, owners.length > 1 ? owners.map((o) => `${o.label} ${o.free}`).join("／") : null].filter(Boolean).join("・")}
                                     </div>
                                   </td>
                                   <td className={`num px-1.5 py-2 text-right align-top ${r.s.onHand ? "" : "text-mute"}`} data-k="onhand">{r.s.onHand}</td>
-                                  <td className={`num px-1.5 py-2 text-right align-top ${r.s.openDemand ? "font-semibold text-info" : "text-mute"}`} data-k="ordered">{r.s.openDemand || "–"}</td>
-                                  <td className={`num px-1.5 py-2 text-right align-top ${left(r) < 0 ? "font-semibold text-bad" : left(r) ? "font-semibold" : "text-mute"}`} data-k="free">{left(r) < 0 ? `缺 ${-left(r)}` : left(r)}</td>
                                   <td className={`num px-1.5 py-2 text-right align-top ${r.s.incoming - unsureOf(r) ? "font-semibold text-good" : "text-mute"}`} data-k="sure">{r.s.incoming - unsureOf(r) || "–"}</td>
+                                  <td className={`num px-1.5 py-2 text-right align-top ${r.s.openDemand ? (left(r) < 0 ? "font-semibold text-bad" : "font-semibold text-info") : "text-mute"}`} data-k="ordered">{r.s.openDemand || "–"}</td>
+                                  <td className={`num px-1.5 py-2 text-right align-top ${left(r) < 0 ? "font-semibold text-bad" : left(r) ? "font-semibold" : "text-mute"}`} data-k="free">{left(r)}</td>
                                   <td className={`num px-1.5 py-2 text-right align-top ${unsureOf(r) ? "font-semibold text-warn" : "text-mute"}`} data-k="unsure">{unsureOf(r) || "–"}</td>
                                   <td className="num hidden px-2 py-2 text-right align-top md:table-cell" data-k="kept">{r.s.kept}</td>
-                                  <td className="num hidden px-2 py-2 text-right align-top md:table-cell">{r.v?.avgUnitCost != null ? formatTwd(r.v.avgUnitCost) : "—"}</td>
+                                  <td className="num hidden px-2 py-2 text-right align-top md:table-cell" data-k="avg">{avgOf(r) ? `${formatTwd(avgOf(r)!.avg)}${avgOf(r)!.tentative ? "*" : ""}` : "—"}</td>
                                   <td className="whitespace-nowrap px-2 py-1.5 text-right align-top">
                                     <SellButton small primary={r.s.available > 0} label="賣" me={me} product={product} />
                                     <KeepButton tiny productId={r.p.id} name={r.p.name} available={r.s.available} kept={r.s.kept} owners={owners} me={me} />
@@ -282,9 +305,9 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
               <tr className="border-t border-line bg-[#fafbfc] font-semibold">
                 <td className="px-3 py-2">合計<span className="ml-1 text-[12px] font-normal text-mute">成本 {formatTwd(all.cost)}</span></td>
                 <td className="num px-1.5 py-2 text-right" data-testid="stock-total-onhand">{all.onHand}</td>
+                <td className="num px-1.5 py-2 text-right text-good">{all.incoming - all.unsure}</td>
                 <td className="num px-1.5 py-2 text-right text-info">{all.ordered}</td>
                 <td className={`num px-1.5 py-2 text-right ${all.left < 0 ? "text-bad" : ""}`} data-testid="stock-total-free">{all.left}</td>
-                <td className="num px-1.5 py-2 text-right text-good">{all.incoming - all.unsure}</td>
                 <td className="num px-1.5 py-2 text-right text-warn">{all.unsure}</td>
                 <td className="num hidden px-2 py-2 text-right md:table-cell">{all.kept}</td>
                 <td className="hidden md:table-cell" />
@@ -295,7 +318,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
         </div>
       )}
       <p className="text-[12px] text-mute">
-        現有＝手上實際有的（自留的不算）；客人訂＝客人預訂還沒給的；剩下＝現有 − 客人訂，負的代表不夠、要等到貨。成本已含攤進去的運費等，* 表示還有預估價格。{" "}
+        現有＝手上實際有的（自留的不算）；一定到＝對單確定買到、還沒到的；客人訂＝客人預訂還沒給的；庫存＝現有＋一定到 − 客人訂，負的代表不夠。平均成本算現有＋一定到（不一定的不算），含攤進去的運費、關稅，* 表示還有預估價格。{" "}
         <Link href={allHref} className="text-ai">{only === "all" ? "只看有庫存的" : "也顯示沒庫存的商品"}</Link>
       </p>
     </div>

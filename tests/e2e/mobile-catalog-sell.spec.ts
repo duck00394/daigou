@@ -160,11 +160,11 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await expect(page).toHaveURL(/v=1/);
   await expect(page.getByTestId("stock-series").filter({ hasText: series })).toBeVisible();
   await expect(page.getByTestId("stock-type").first()).toHaveText("吊娃");
-  // 現有、客人訂、剩下：小八沒貨但客人預訂 1 → 缺 1
+  // 庫存＝現有＋一定到 − 客人訂：小八沒貨但客人預訂 1 → -1（不寫「缺」）
   const hachiRow = page.locator(`[data-testid="stock-row"][data-name="${series}小八 吊娃"]`);
   await expect(hachiRow.locator('[data-k="onhand"]')).toHaveText("0");
   await expect(hachiRow.locator('[data-k="ordered"]')).toHaveText("1");
-  await expect(hachiRow.locator('[data-k="free"]')).toHaveText("缺 1");
+  await expect(hachiRow.locator('[data-k="free"]')).toHaveText("-1");
   await page.screenshot({ path: "test-results/mobile_stock_tree.png", fullPage: true });
 
   // 已過期：不在下拉選單，用搜尋找得到

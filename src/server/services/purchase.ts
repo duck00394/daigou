@@ -6,7 +6,7 @@ import { getDefaultRateMicro } from "./settings";
 import { recomputeOrder } from "./recompute";
 import { checkOperator } from "./operators";
 import { refreshBatchStatusById } from "./inventory";
-import type { AllocationMethod, BatchCostKind } from "@prisma/client";
+import { Prisma, type AllocationMethod, type BatchCostKind } from "@prisma/client";
 import { JOINT_PAYER, feeTwd } from "./fees";
 
 export type Currency = "JPY" | "TWD";
@@ -346,12 +346,18 @@ export async function deleteBatchCost(t: Tx, actor: Actor, costId: string) {
   const c = await t.batchCost.findUniqueOrThrow({ where: { id: costId } });
   await lockRows(t, "PurchaseBatch", [c.batchId]);
   await t.batchCost.delete({ where: { id: costId } });
+  // 刪掉自動算的關稅＝不要自動算了
+  if (c.autoDuty) {
+    await t.purchaseBatch.update({ where: { id: c.batchId }, data: { dutyBp: null } });
+    await t.purchaseBatchItem.updateMany({ where: { batchId: c.batchId }, data: { dutyBp: null } });
+  }
   await reallocateBatch(t, c.batchId);
   await audit(t, actor, "batch.deleteCost", "PurchaseBatch", c.batchId, { costId, amount: c.amount, kind: c.kind });
 }
 
 /** 重新計算整個批次的共同費用分攤；每筆費用的分攤總和恰好等於費用台幣金額 */
 export async function reallocateBatch(t: Tx, batchId: string) {
+  await syncAutoDuty(t, batchId);
   const batch = await t.purchaseBatch.findUniqueOrThrow({ where: { id: batchId }, include: { items: true, costs: true } });
   const items = batch.items.filter((i) => i.qty - i.cancelledQty > 0);
   await t.costAllocation.deleteMany({ where: { batchCost: { batchId } } });
@@ -380,6 +386,69 @@ export async function reallocateBatch(t: Tx, batchId: string) {
       await t.costAllocation.create({ data: { batchCostId: cost.id, batchItemId: items[k].id, amountTwd: parts[k] } });
     }
   }
+}
+
+// ── 關稅 %：整團一個預設 %，單件可以另填；自動算出一筆「關稅」費用，照每件的稅額攤 ──
+
+/** 每件的關稅（台幣）：商品金額 × 這件的 %（沒另填就用整團的） */
+export function dutyOfItems(b: { dutyBp: number | null; rateMicro: number; items: { id: string; dutyBp: number | null; qty: number; cancelledQty: number; currency: string; estUnitCost: number; actualUnitCost: number | null }[] }) {
+  return b.items
+    .filter((i) => i.qty - i.cancelledQty > 0)
+    .map((i) => {
+      const bp = i.dutyBp ?? b.dutyBp ?? 0;
+      return { id: i.id, bp, goods: itemGoodsTwd(i, b.rateMicro), duty: Math.round((itemGoodsTwd(i, b.rateMicro) * bp) / 10000) };
+    });
+}
+
+/** 依 % 重算自動的那筆關稅；沒有任何 % 就拿掉 */
+async function syncAutoDuty(t: Tx, batchId: string) {
+  const b = await t.purchaseBatch.findUniqueOrThrow({ where: { id: batchId }, select: { dutyBp: true, rateMicro: true, items: true, costs: { where: { autoDuty: true }, select: { id: true } } } });
+  const anyPct = b.dutyBp !== null || b.items.some((i) => i.dutyBp !== null && i.qty - i.cancelledQty > 0);
+  const rows = anyPct ? dutyOfItems(b) : [];
+  const total = rows.reduce((a, r) => a + r.duty, 0);
+  const [auto, ...extra] = b.costs;
+  if (extra.length) await t.batchCost.deleteMany({ where: { id: { in: extra.map((c) => c.id) } } });
+  if (!total) {
+    if (auto) await t.batchCost.delete({ where: { id: auto.id } });
+    return;
+  }
+  const data = { kind: "DUTY" as const, currency: "TWD", amount: total, method: "MANUAL" as const, manualSplit: Object.fromEntries(rows.filter((r) => r.duty).map((r) => [r.id, r.duty])), autoDuty: true };
+  if (auto) await t.batchCost.update({ where: { id: auto.id }, data });
+  else await t.batchCost.create({ data: { ...data, batchId } });
+}
+
+const toBp = (pct: number | null) => {
+  if (pct === null) return null;
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) throw new BizError("關稅 % 請填 0～100");
+  return Math.round(pct * 100);
+};
+
+/** 設定整團的關稅 %（null＝不自動算） */
+export async function setBatchDuty(t: Tx, actor: Actor, batchId: string, pct: number | null) {
+  await lockRows(t, "PurchaseBatch", [batchId]);
+  await t.purchaseBatch.update({ where: { id: batchId }, data: { dutyBp: toBp(pct) } });
+  await reallocateBatch(t, batchId);
+  await audit(t, actor, "batch.dutyPct", "PurchaseBatch", batchId, { pct });
+}
+
+/** 這件另外的關稅 %（null＝跟著整團） */
+export async function setItemDuty(t: Tx, actor: Actor, itemId: string, pct: number | null) {
+  const i = await t.purchaseBatchItem.update({ where: { id: itemId }, data: { dutyBp: toBp(pct) }, select: { batchId: true } });
+  await reallocateBatch(t, i.batchId);
+  await audit(t, actor, "batch.itemDutyPct", "PurchaseBatchItem", itemId, { pct });
+}
+
+/** 實際繳的關稅不一樣：改成固定金額，之後不再自動算 */
+export async function fixAutoDuty(t: Tx, actor: Actor, costId: string, amount: number) {
+  if (!Number.isInteger(amount) || amount < 0) throw new BizError("金額請填整數");
+  const c = await t.batchCost.findUnique({ where: { id: costId } });
+  if (!c?.autoDuty) throw new BizError("找不到自動算的關稅");
+  await lockRows(t, "PurchaseBatch", [c.batchId]);
+  await t.purchaseBatch.update({ where: { id: c.batchId }, data: { dutyBp: null } });
+  await t.purchaseBatchItem.updateMany({ where: { batchId: c.batchId }, data: { dutyBp: null } });
+  await t.batchCost.update({ where: { id: costId }, data: { autoDuty: false, amount, method: "BY_VALUE", manualSplit: Prisma.DbNull, note: c.note ?? "實際繳的關稅" } });
+  await reallocateBatch(t, c.batchId);
+  await audit(t, actor, "batch.fixDuty", "PurchaseBatch", c.batchId, { costId, amount, before: c.amount });
 }
 
 /** 採購明細的實際總成本（商品日幣成本換算台幣 + 分攤費用） */

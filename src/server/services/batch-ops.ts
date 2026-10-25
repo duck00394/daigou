@@ -263,6 +263,7 @@ export interface PriceCell {
   unitTwd: number; // 商品單價換算台幣（依該團鎖定匯率）
   fullUnitTwd: number; // 含分攤費用的單件完整成本
   feesConfirmed: boolean; // 該團是否已登記任何共同費用
+  unsure: number; // 對單還沒確定有買到的件數（平均成本不算）
 }
 
 /** 一團可以放好幾個系列：品項的系列＝品項自己的，沒填就跟著這團 */
@@ -341,6 +342,7 @@ export async function categoryOverview(t: Tx, categoryId: string) {
         unitTwd: i.currency === "TWD" ? unitCost : jpyToTwd(unitCost, b.rateMicro),
         fullUnitTwd: Math.round((goods + fees) / q),
         feesConfirmed: b.costs.length > 0,
+        unsure: pendingQty({ ...i, batch: b }, rec),
       };
       let row = rows.get(i.productId);
       if (!row) {
