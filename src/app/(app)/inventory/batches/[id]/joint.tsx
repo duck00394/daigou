@@ -6,7 +6,7 @@ import { Choice } from "@/components/choice";
 import { recordJointTransferAction, saveJointSetupAction, setPaidByAction } from "@/actions/batches";
 import { formatTwd } from "@/lib/money";
 
-type Person = { id: string; name: string; goods: number; own: number; owed: number; paid: number; percent: number };
+type Person = { id: string; name: string; goods: number; own: number; toSupplier: number; owed: number; paid: number; percent: number };
 export type JointView = {
   people: Person[];
   total: number;
@@ -78,7 +78,9 @@ export function JointPanel({ batchId, s, editable }: { batchId: string; s: Joint
             </div>
           ))
         )}
-        {!s.fullyPaid && s.paidTotal > 0 && <p className="text-[12px] text-mute">還沒付清，上面是照目前付的比例算，付清後會再更新。</p>}
+        {s.people.filter((p) => p.toSupplier > 0).map((p) => (
+          <p key={p.id} className="text-[13px] text-ink-2" data-testid="joint-to-supplier">{p.name}還要付代購 <b className="num">{formatTwd(p.toSupplier)}</b>（自己那份還沒付完）</p>
+        ))}
       </div>
 
       {editing && (

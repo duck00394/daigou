@@ -109,18 +109,28 @@ export async function jointSettlement(t: Tx, batchId: string) {
   if (b.refundedTwd && paidTotal > 0) for (const [k, v] of paid) paid.set(k, v - (b.refundedTwd * v) / paidTotal);
   const netPaid = paidTotal - b.refundedTwd;
   const total = [...s.owed.values()].reduce((a, x) => a + x, 0);
-  const ratio = total > 0 ? Math.min(1, Math.max(0, netPaid / total)) : 0;
   const transfers = (Array.isArray(b.jointTransfers) ? b.jointTransfers : []) as Transfer[];
+  // 每個人：付的 − 自己該付的。付超過自己那份的，多付的部分由還沒付夠的人還給他；
+  // 還沒付夠的其他部分是要付給代購的，不算兩人之間的帳
   const balance = new Map<string, number>();
-  for (const id of opIds) balance.set(id, (paid.get(id) ?? 0) - (s.owed.get(id) ?? 0) * ratio);
+  for (const id of opIds) balance.set(id, (paid.get(id) ?? 0) - (s.owed.get(id) ?? 0));
   for (const tr of transfers) {
     if (balance.has(tr.from)) balance.set(tr.from, balance.get(tr.from)! + tr.amount);
     if (balance.has(tr.to)) balance.set(tr.to, balance.get(tr.to)! - tr.amount);
   }
-  // 誰要給誰：欠的人給多付的人（金額取整數）
-  const debts: { from: string; to: string; amount: number }[] = [];
   const cred = [...balance.entries()].filter(([, v]) => v > 0.5).map(([k, v]) => ({ k, v })).sort((a, c) => c.v - a.v);
-  const debt = [...balance.entries()].filter(([, v]) => v < -0.5).map(([k, v]) => ({ k, v: -v })).sort((a, c) => c.v - a.v);
+  const short = [...balance.entries()].filter(([, v]) => v < -0.5).map(([k, v]) => ({ k, v: -v })).sort((a, c) => c.v - a.v);
+  const credTotal = cred.reduce((a, x) => a + x.v, 0);
+  const shortTotal = short.reduce((a, x) => a + x.v, 0);
+  const toPartner = shortTotal > 0 ? Math.min(1, credTotal / shortTotal) : 0;
+  const toSupplier = new Map<string, number>();
+  const debt = short.map((d) => {
+    const owe = d.v * toPartner;
+    toSupplier.set(d.k, Math.round(d.v - owe));
+    return { k: d.k, v: owe };
+  });
+  // 誰要給誰（金額取整數）
+  const debts: { from: string; to: string; amount: number }[] = [];
   for (const d of debt) {
     for (const c of cred) {
       if (d.v < 0.5) break;
@@ -131,8 +141,8 @@ export async function jointSettlement(t: Tx, batchId: string) {
       c.v -= x;
     }
   }
-  const people = ops.map((o) => ({ id: o.id, name: o.name, goods: Math.round(s.goods.get(o.id) ?? 0), own: Math.round(s.own.get(o.id) ?? 0), owed: Math.round(s.owed.get(o.id) ?? 0), paid: Math.round(paid.get(o.id) ?? 0), percent: Math.round((s.split.get(o.id) ?? 0) * 10) / 10 }));
-  return { joint: b.ownership === "JOINT", people, total: Math.round(total), paidTotal: Math.round(netPaid), feeSplit: b.feeSplit, fee: Math.round(s.fee), shared: Math.round(s.shared), debts: debts.filter((x) => x.amount > 0), transfers, fullyPaid: ratio >= 1 };
+  const people = ops.map((o) => ({ id: o.id, name: o.name, goods: Math.round(s.goods.get(o.id) ?? 0), own: Math.round(s.own.get(o.id) ?? 0), owed: Math.round(s.owed.get(o.id) ?? 0), paid: Math.round(paid.get(o.id) ?? 0), percent: Math.round((s.split.get(o.id) ?? 0) * 10) / 10, toSupplier: toSupplier.get(o.id) ?? 0 }));
+  return { joint: b.ownership === "JOINT", people, total: Math.round(total), paidTotal: Math.round(netPaid), feeSplit: b.feeSplit, fee: Math.round(s.fee), shared: Math.round(s.shared), debts: debts.filter((x) => x.amount > 0), transfers, fullyPaid: netPaid >= total - 0.5 };
 }
 
 /** 改合資的分法：一起的比例、運費怎麼分 */

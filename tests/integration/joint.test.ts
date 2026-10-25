@@ -66,4 +66,26 @@ describe("合資分帳", () => {
     const list = await tx((t) => listQuickSales(t, {}));
     expect([list.byOwner[A].revenue, list.byOwner[B].revenue]).toEqual([700, 300]);
   });
+
+  it("各付各的：自己那份付完就不欠對方；對方還沒付的是要付給代購", async () => {
+    const b = await tx((t) => createBatch(t, actor, { name: "各付各的", supplier: "代購", ownership: "JOINT" }));
+    const [ia, ib] = await tx(async (t) => [
+      await addBatchItem(t, actor, b.id, { productId: s.p1.id, qty: 1, unitCost: 550, currency: "TWD" }),
+      await addBatchItem(t, actor, b.id, { productId: s.p2.id, qty: 1, unitCost: 1100, currency: "TWD" }),
+    ]);
+    await prisma.purchaseBatchItem.update({ where: { id: ia.id }, data: { ownerId: A } });
+    await prisma.purchaseBatchItem.update({ where: { id: ib.id }, data: { ownerId: B } });
+    await tx((t) => addBatchCost(t, actor, { batchId: b.id, kind: "INTL_SHIPPING", currency: "TWD", amount: 38, method: "NONE" }));
+    // A 付了自己那份 569 → 兩人不用互給，B 還要付代購 1119
+    await tx((t) => setPaidBy(t, actor, b.id, [{ paidById: A, total: 569 }], "each-pay-0001"));
+    let st = await tx((t) => jointSettlement(t, b.id));
+    expect(st.people.map((p) => p.owed)).toEqual([569, 1119]);
+    expect(st.debts).toEqual([]);
+    expect(st.people.map((p) => p.toSupplier)).toEqual([0, 1119]);
+    // A 多付到 1000 → B 要給 A 431，B 還要付代購 688
+    await tx((t) => setPaidBy(t, actor, b.id, [{ paidById: A, total: 1000 }], "each-pay-0002"));
+    st = await tx((t) => jointSettlement(t, b.id));
+    expect(st.debts).toEqual([{ from: B, to: A, amount: 431 }]);
+    expect(st.people.map((p) => p.toSupplier)).toEqual([0, 688]);
+  });
 });
