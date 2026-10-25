@@ -559,6 +559,7 @@ export async function renamePlan(db: Db, categoryId: string) {
     if (p.characters.length !== 1) continue;
     const cats = new Set(p.purchaseItems.map((i) => i.categoryId ?? i.batch.categoryId).filter(Boolean));
     if (cats.size > 1) continue; // 在不同活動都買過：不確定該叫什麼，不動
+    if (cats.size === 1 && !cats.has(categoryId)) continue; // 是別的系列的商品（只是放在這系列開的團裡）：不改成這個系列的名字
     const to = variantName({ category: cat.name, character: p.characters[0].character.name, type: p.productType?.name, spec: p.spec });
     if (to !== p.name) out.push({ productId: p.id, from: p.name, to });
   }

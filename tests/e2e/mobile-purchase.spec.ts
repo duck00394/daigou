@@ -138,7 +138,8 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   await expect(page.getByTestId("batch-due")).toHaveText("NT$0");
   await page.screenshot({ path: "test-results/mobile_batch_paid.png", fullPage: true });
   await openSeriesPage(page, cat);
-  await expect(page.getByTestId("cat-due")).toHaveText("NT$3,760");
+  // 現在看「我的」：我的＋合資的團（跟系列列表一樣），對方的團不算
+  await expect(page.getByTestId("cat-due")).toHaveText("NT$2,440");
   await expect(page.getByTestId("cat-paid")).toHaveText("NT$1,941");
   await page.screenshot({ path: "test-results/mobile_category_pay.png", fullPage: true });
 });

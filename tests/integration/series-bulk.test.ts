@@ -294,4 +294,16 @@ describe("商品名稱：活動＋角色＋種類", () => {
     expect((await prisma.product.findUniqueOrThrow({ where: { id: old.productId } })).name).toBe("ANA兔兔 吊娃");
     expect(await renamePlan(prisma, ana.id)).toEqual([]);
   });
+
+  it("別的系列的商品放在這個系列開的團裡：不會被要求改成這個系列的名字", async () => {
+    const ana = await tx((t) => saveCategory(t, actor, null, { name: "ANA", type: "CUSTOM" }));
+    const bento = await tx((t) => saveCategory(t, actor, null, { name: "便當", type: "CUSTOM" }));
+    // 團是便當開的，但這列指定成 ANA 的
+    await prisma.purchaseBatch.update({ where: { id: ctx.batchId }, data: { categoryId: bento.id } });
+    await add([row("a", { characterId: ctx.usagi, unitCost: 650, qty: 1 })], "m-1");
+    const it0 = await prisma.purchaseBatchItem.findFirstOrThrow({ where: { batchId: ctx.batchId }, include: { product: true } });
+    await prisma.purchaseBatchItem.update({ where: { id: it0.id }, data: { categoryId: ana.id } });
+    await prisma.product.update({ where: { id: it0.productId }, data: { name: "ANA兔兔 吊娃" } });
+    expect(await renamePlan(prisma, bento.id)).toEqual([]);
+  });
 });

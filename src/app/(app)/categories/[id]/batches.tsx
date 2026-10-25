@@ -84,6 +84,18 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
   const charSort = (r: (typeof summary)[number]) => (r.product.characters.length === 1 ? r.product.characters[0].character.sortOrder : 9999);
   for (const g of typeGroups) g.rows.sort((a, b) => charSort(a) - charSort(b));
   const pickItems = summary.map((r) => ({ id: r.product.id, name: r.product.name, cost: r.avg, price: priceOf(r.product), tentative: r.tentative }));
+  // 上面的金額跟系列列表一樣：照「現在看誰的」只算他的團＋合資、未指定的團
+  // 團是這個系列開的、但裡面買的全是別的系列：不算進這個系列
+  const mineLive = o.batches.filter((b) => b.status !== "CANCELLED" && mineKey(b.ownerKey) && (b.qty > 0 || b.totalTwd > 0 || !b.partial));
+  const T = {
+    totalTwd: mineLive.reduce((a, b) => a + b.totalTwd, 0),
+    paidTwd: mineLive.reduce((a, b) => a + b.paidTwd, 0),
+    dueTwd: mineLive.reduce((a, b) => a + b.dueTwd, 0),
+    batches: mineLive.length,
+    qty: mineLive.reduce((a, b) => a + b.qty, 0),
+    received: mineLive.reduce((a, b) => a + b.received, 0),
+    estimated: mineLive.some((b) => b.estimated || !b.feesRecorded),
+  };
   const prof = showItems ? await tx((t) => seriesProfit(t, categoryId)) : null;
   const P = (r: { product: { id: string } }) => prof?.rows.get(r.product.id);
   const allSure = summary.reduce((a, r) => a + r.sureQty, 0);
@@ -92,16 +104,16 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
     <>
       <Section>
         <div data-tour="series-money">
-          <div className="text-[13px] text-ink-2">這個系列總共要付代購</div>
-          <div className="num text-[24px] font-bold" data-testid="cat-total">{formatTwd(o.total.totalTwd)}</div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-line-2" aria-hidden><div className="h-full rounded-full bg-good" style={{ width: `${o.total.totalTwd > 0 ? Math.min(100, Math.round((o.total.paidTwd / o.total.totalTwd) * 100)) : 0}%` }} /></div>
+          <div className="text-[13px] text-ink-2">這個系列總共要付代購{owner ? <span className="text-mute">（{nameOf(owner)}的＋合資的團）</span> : null}</div>
+          <div className="num text-[24px] font-bold" data-testid="cat-total">{formatTwd(T.totalTwd)}</div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-line-2" aria-hidden><div className="h-full rounded-full bg-good" style={{ width: `${T.totalTwd > 0 ? Math.min(100, Math.round((T.paidTwd / T.totalTwd) * 100)) : 0}%` }} /></div>
           <div className="mt-1.5 flex flex-wrap justify-between gap-x-3 text-[14px]">
-            <span>已付 <b className="num text-good" data-testid="cat-paid">{formatTwd(o.total.paidTwd)}</b></span>
-            <span>還沒付 <b className={`num ${o.total.dueTwd ? "text-bad" : ""}`} data-testid="cat-due">{formatTwd(o.total.dueTwd)}</b></span>
+            <span>已付 <b className="num text-good" data-testid="cat-paid">{formatTwd(T.paidTwd)}</b></span>
+            <span>還沒付 <b className={`num ${T.dueTwd ? "text-bad" : ""}`} data-testid="cat-due">{formatTwd(T.dueTwd)}</b></span>
           </div>
           <div className="mt-0.5 flex flex-wrap justify-between gap-x-3 text-[13px] text-mute">
-            <span>{o.total.batches} 團・{o.total.qty} 隻{o.total.estimated ? "・有價格還沒確定" : ""}</span>
-            <span>到貨 {o.total.received}／{o.total.qty}</span>
+            <span>{T.batches} 團・{T.qty} 隻{T.estimated ? "・有價格還沒確定" : ""}</span>
+            <span>到貨 {T.received}／{T.qty}</span>
           </div>
         </div>
 
