@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { PickBox, PickProvider, PickSpacer, PickToggle, SetButton } from "./pick";
-import { seriesProfit } from "@/server/services/preorder";
+import { seriesProfit, seriesTotals } from "@/server/services/preorder";
 import { ProfitCard } from "./profit";
 import { categoryOverview } from "@/server/services/batch-ops";
 import { Section, StatusBadge, Empty, LinkButton } from "@/components/ui";
@@ -83,7 +83,7 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
   for (const r of summary) typeGroups.find((g) => g.key === (r.product.productType?.id ?? "-"))!.rows.push(r);
   const charSort = (r: (typeof summary)[number]) => (r.product.characters.length === 1 ? r.product.characters[0].character.sortOrder : 9999);
   for (const g of typeGroups) g.rows.sort((a, b) => charSort(a) - charSort(b));
-  const pickItems = summary.map((r) => ({ id: r.product.id, name: r.product.name, cost: r.avg, price: priceOf(r.product), tentative: r.tentative }));
+  const pickItemsBase = summary.map((r) => ({ id: r.product.id, name: r.product.name, cost: r.avg, price: priceOf(r.product), tentative: r.tentative }));
   // 上面的金額跟系列列表一樣：照「現在看誰的」只算他的團＋合資、未指定的團
   // 團是這個系列開的、但裡面買的全是別的系列：不算進這個系列
   const mineLive = o.batches.filter((b) => b.status !== "CANCELLED" && mineKey(b.ownerKey) && (b.qty > 0 || b.totalTwd > 0 || !b.partial));
@@ -98,6 +98,13 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
   };
   const prof = showItems ? await tx((t) => seriesProfit(t, categoryId)) : null;
   const P = (r: { product: { id: string } }) => prof?.rows.get(r.product.id);
+  // 掛在這個系列、但不是從這個系列的團買的商品（例：手動入庫、別處買的）：另外列一組，上面的預估可賺也算它們
+  const inMatrix = new Set(o.matrix.map((m) => m.product.id));
+  const extraIds = prof ? [...prof.rows.values()].filter((x) => !inMatrix.has(x.id) && (x.onHand > 0 || x.ordered > 0 || x.sold.qty > 0)).map((x) => x.id) : [];
+  const extra = extraIds.length ? await prisma.product.findMany({ where: { id: { in: extraIds } }, select: { id: true, name: true, characters: { select: { character: { select: { name: true } } } } }, orderBy: { name: "asc" } }) : [];
+  const listed = [...summary.map((r) => r.product.id), ...extra.map((x) => x.id)];
+  const pickItems = [...pickItemsBase, ...extra.map((e) => ({ id: e.id, name: e.name, cost: prof?.rows.get(e.id)?.avg ?? null, price: prof?.rows.get(e.id)?.price ?? null, tentative: false }))];
+  const profShown = prof ? { ...seriesTotals(listed.map((id) => prof.rows.get(id)).filter((x): x is NonNullable<typeof x> => !!x)) } : null;
   // 這個角色算得出可賺嗎（有賣掉的、有成本的客人預訂、或有售價又有成本的剩貨）
   const canProfitOf = (x: ReturnType<typeof P>) => !!x && (x.sold.qty > 0 || (x.pre.qty > 0 && x.pre.cost != null) || (x.free.qty > 0 && x.free.revenue != null && x.free.cost != null));
   const allSure = summary.reduce((a, r) => a + r.sureQty, 0);
@@ -197,9 +204,9 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
       </Section>
 
       )}
-      {showItems && prof && summary.length > 0 && <ProfitCard p={prof} categoryId={categoryId} />}
-      {showItems && summary.length > 0 && (
-        <PickProvider items={pickItems}>
+      {showItems && profShown && summary.length + extra.length > 0 && <ProfitCard p={profShown} categoryId={categoryId} />}
+      {showItems && summary.length + extra.length > 0 && (
+        <PickProvider items={pickItems} categoryId={categoryId}>
           <section className="rounded-xl border border-line bg-card" aria-label="每個角色" data-tour="series-items">
             <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-1">
               <h2 className="text-[16px] font-semibold">每個角色</h2>
@@ -268,13 +275,32 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
                   })}
                 </div>
               ))}
+              {extra.length > 0 && (
+                <div data-testid="extra-group">
+                  <div className="border-b border-line-2 bg-[#f6f7f9] px-4 py-1 text-[13px] font-semibold text-ink-2">其他（不是在這個系列的團買的）</div>
+                  {extra.map((e) => {
+                    const x = prof!.rows.get(e.id)!;
+                    return (
+                      <div key={e.id} className="flex items-start border-b border-line-2">
+                        <PickBox id={e.id} name={e.name} />
+                        <Link href={`/products/${e.id}`} className="grid flex-1 grid-cols-[minmax(0,1fr)_3.25rem_4.25rem_4.5rem] items-baseline gap-2 px-4 py-2.5" data-testid="extra-row">
+                          <span className="min-w-0 truncate" title={e.name}>{e.name}</span>
+                          <span className={`num text-right ${x.left < 0 ? "text-bad" : ""}`}>{x.left}</span>
+                          <span className="num text-right">{x.avg == null ? <span className="text-mute">—</span> : x.avg.toLocaleString()}</span>
+                          <span className={`num text-right ${canProfitOf(x) ? (x.profit < 0 ? "text-bad" : "text-good") : "text-[13px] text-mute"}`}>{canProfitOf(x) ? x.profit.toLocaleString() : x.price == null ? "沒售價" : "—"}</span>
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               <div role="row" className="flex font-semibold">
                 <PickSpacer />
                 <div className="grid flex-1 grid-cols-[minmax(0,1fr)_3.25rem_4.25rem_4.5rem] gap-2 px-4 py-2.5">
                   <span role="cell">合計</span>
-                  <span role="cell" className="num text-right" data-testid="summary-left">{summary.reduce((a, r) => a + (P(r)?.left ?? 0), 0)}</span>
+                  <span role="cell" className="num text-right" data-testid="summary-left">{listed.reduce((a, id) => a + (prof?.rows.get(id)?.left ?? 0), 0)}</span>
                   <span role="cell" className="num text-right">{allSure ? Math.round(allAmount / allSure).toLocaleString() : "—"}</span>
-                  <span role="cell" className="num text-right text-good">{summary.some((r) => canProfitOf(P(r))) ? summary.reduce((a, r) => a + (canProfitOf(P(r)) ? P(r)!.profit : 0), 0).toLocaleString() : <span className="text-mute">—</span>}</span>
+                  <span role="cell" className="num text-right text-good">{listed.some((id) => canProfitOf(prof?.rows.get(id))) ? listed.reduce((a, id) => a + (canProfitOf(prof?.rows.get(id)) ? prof!.rows.get(id)!.profit : 0), 0).toLocaleString() : <span className="text-mute">—</span>}</span>
                 </div>
               </div>
             </div>

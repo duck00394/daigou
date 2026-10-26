@@ -186,6 +186,8 @@ export async function sellSheet(t: Tx, categoryId: string) {
   if (!s) throw new BizError("找不到系列");
   const ids = s.items.flatMap((i) => i.chars.map((c) => c.productId));
   const inv = await inventorySummary(t, ids);
+  const { stockByOwner } = await import("./ownership");
+  const byOwner = await stockByOwner(t, { productIds: ids });
   const prices = await t.product.findMany({ where: { id: { in: ids } }, select: { id: true, salePriceTwd: true } });
   const pp = new Map(prices.map((p) => [p.id, p.salePriceTwd]));
   return {
@@ -195,7 +197,7 @@ export async function sellSheet(t: Tx, categoryId: string) {
       typeId: i.typeId,
       typeName: i.typeName,
       price: i.price,
-      rows: i.chars.map((c) => ({ productId: c.productId, name: c.name, free: Math.max(0, inv.get(c.productId)?.available ?? 0), incoming: inv.get(c.productId)?.incoming ?? 0, price: i.price ?? pp.get(c.productId) ?? null })),
+      rows: i.chars.map((c) => ({ productId: c.productId, name: c.name, free: Math.max(0, inv.get(c.productId)?.available ?? 0), freeBy: Object.fromEntries([...(byOwner.get(c.productId)?.entries() ?? [])].map(([k, v]) => [k, Math.max(0, v.free)])) as Record<string, number>, incoming: inv.get(c.productId)?.incoming ?? 0, price: i.price ?? pp.get(c.productId) ?? null })),
     })),
   };
 }

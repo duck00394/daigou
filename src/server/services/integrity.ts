@@ -115,3 +115,24 @@ export async function recomputeDerived(t: Tx) {
   for (const o of orders) await recomputeOrder(t, o.id);
   return { batches: batches.length, orders: orders.length };
 }
+
+/**
+ * 可能選錯系列的採購團（唯讀提醒，不算錯誤）：團的系列跟裡面每個商品的系列都不一樣。
+ * 一團買好幾個系列是正常的，所以只有「沒有任何一個商品屬於這團的系列」才列出來。
+ */
+export async function seriesMismatch(db: Db): Promise<IntegrityIssue[]> {
+  const t = db as Tx;
+  const batches = await t.purchaseBatch.findMany({
+    where: { status: { not: "CANCELLED" }, categoryId: { not: null } },
+    select: { id: true, name: true, categoryId: true, category: { select: { name: true } }, items: { select: { categoryId: true, category: { select: { name: true } } } } },
+    orderBy: { createdAt: "desc" },
+  });
+  const out: IntegrityIssue[] = [];
+  for (const b of batches) {
+    const cats = b.items.filter((i) => i.categoryId);
+    if (!cats.length || cats.some((i) => i.categoryId === b.categoryId!)) continue;
+    const names = [...new Set(cats.map((i) => i.category?.name).filter(Boolean))].join("、");
+    out.push({ kind: "series", message: `「${b.name}」設在「${b.category?.name}」，但裡面的商品都是「${names}」的，可能系列選錯了`, href: `/inventory/batches/${b.id}` });
+  }
+  return out;
+}

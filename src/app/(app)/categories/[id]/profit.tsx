@@ -1,9 +1,9 @@
 // 這個系列全部賣掉預估可賺：一個大數字，下面幾句白話（數量是 0 的不列）
 import Link from "next/link";
 import { formatTwd } from "@/lib/money";
-import type { seriesProfit } from "@/server/services/preorder";
+import type { seriesTotals } from "@/server/services/preorder";
 
-type P = Awaited<ReturnType<typeof seriesProfit>>;
+type P = ReturnType<typeof seriesTotals>;
 
 function Line({ href, testid, children, profit }: { href: string; testid: string; children: React.ReactNode; profit: number }) {
   return (

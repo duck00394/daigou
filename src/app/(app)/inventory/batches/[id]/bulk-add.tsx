@@ -615,7 +615,7 @@ export function BulkAddGrid({
                     }
                   }}
                 >
-                  <option value="">選擇角色</option>
+                  <option value="">選角色</option>
                   {roster.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   <option value="__new__">＋ 輸入新角色／款式</option>
                 </select>

@@ -7,17 +7,22 @@ import { Button, inputCls, notify, useIdemKey, useRun } from "@/components/clien
 import { SeriesPicker, type SeriesOpt } from "@/components/series-picker";
 import { sellSheetAction, sellToCustomerAction } from "@/actions/catalog-tree";
 import { ChannelPicker } from "@/components/channel-picker";
+import { Choice } from "@/components/choice";
 import { formatTwd } from "@/lib/money";
 
-type Row = { productId: string; name: string; free: number; incoming: number; price: number | null };
+type Row = { productId: string; name: string; free: number; freeBy?: Record<string, number>; incoming: number; price: number | null };
 type Sheet = { id: string; name: string; items: { typeId: string; typeName: string; price: number | null; rows: Row[] }[] };
 
-export function SellForm({ series, buyers, initialCategory, waiting, channels = [], buyerChannels = {} }: { series: SeriesOpt[]; buyers: string[]; initialCategory: string; waiting: number; channels?: string[]; buyerChannels?: Record<string, string> }) {
+export function SellForm({ series, buyers, initialCategory, waiting, channels = [], buyerChannels = {}, operators = [], me = null, initialQty = {} }: { series: SeriesOpt[]; buyers: string[]; initialCategory: string; waiting: number; channels?: string[]; buyerChannels?: Record<string, string>; operators?: { id: string; name: string }[]; me?: string | null; initialQty?: Record<string, string> }) {
+  // 誰賣的：只賣、只扣這個人的現貨，兩個人的庫存才對得上（預設是這支手機的人）
+  const [seller, setSeller] = useState<string>(me ?? "");
+  const sellerName = seller === "joint" ? "合資" : seller === "none" ? "未指定" : (operators.find((o) => o.id === seller)?.name ?? "");
+  const freeOf = (r: Row) => (seller ? (r.freeBy?.[seller] ?? 0) : r.free);
   const [sheets, setSheets] = useState<Sheet[]>([]);
   const [picker, setPicker] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [qty, setQty] = useState<Record<string, string>>({});
+  const [qty, setQty] = useState<Record<string, string>>(initialQty);
   const [price, setPrice] = useState<Record<string, string>>({});
   const [buyer, setBuyer] = useState("");
   // 販售平台：記住上次選的（這台裝置）
@@ -99,8 +104,8 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
     ),
   );
   const total = lines.reduce((s, x) => s + x.q * (Number(x.p) || 0), 0);
-  const now = lines.reduce((s, x) => s + Math.min(x.q, x.r.free), 0);
-  const pre = lines.reduce((s, x) => s + Math.max(0, x.q - x.r.free), 0);
+  const now = lines.reduce((s, x) => s + Math.min(x.q, freeOf(x.r)), 0);
+  const pre = lines.reduce((s, x) => s + Math.max(0, x.q - freeOf(x.r)), 0);
 
   const submit = () => {
     if (!lines.length) return notify("至少填一個數量");
@@ -116,10 +121,10 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
       if (m) m.qty += x.q;
       else merged.set(x.r.productId, { productId: x.r.productId, qty: x.q, unitPrice: Number(x.p), categoryId: x.categoryId });
     }
-    run(() => sellToCustomerAction({ buyerName: buyer.trim() || null, channel: channel || null, idemKey: idem.key, paid, lines: [...merged.values()] }), {
+    run(() => sellToCustomerAction({ buyerName: buyer.trim() || null, channel: channel || null, idemKey: idem.key, paid, owner: seller || null, lines: [...merged.values()] }), {
       success: (d) => `已登記${buyer.trim() ? `「${buyer.trim()}」` : ""}：${[d.sold ? `賣出 ${d.sold} 件` : "", d.preordered ? `預訂 ${d.preordered} 件` : ""].filter(Boolean).join("、")}`,
       onOk: async (d) => {
-        setDone(`${channel ? `${channel}・` : ""}${buyer.trim() || "客人"}：${[d.sold ? `賣出 ${d.sold} 件` : "", d.preordered ? `預訂 ${d.preordered} 件（到貨再給）` : ""].filter(Boolean).join("、")}，共 ${formatTwd(d.total)}`);
+        setDone(`${sellerName && d.sold ? `${sellerName}賣的・` : ""}${channel ? `${channel}・` : ""}${buyer.trim() || "客人"}：${[d.sold ? `賣出 ${d.sold} 件` : "", d.preordered ? `預訂 ${d.preordered} 件（到貨再給）` : ""].filter(Boolean).join("、")}，共 ${formatTwd(d.total)}`);
         idem.renew();
         setQty({});
         setPrice({});
@@ -138,6 +143,14 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
   return (
     <div className="space-y-4">
       <section className="space-y-3 rounded-xl border border-line bg-card p-4">
+        {operators.length > 0 && (
+          <Choice
+            label="誰賣的（扣誰的庫存）"
+            value={seller}
+            onChange={setSeller}
+            options={[...operators.map((o) => ({ value: o.id, label: o.id === me ? `${o.name}（我）` : o.name })), { value: "joint", label: "合資的" }, { value: "none", label: "未指定的" }, { value: "", label: "誰的都可以（先賣先買進的）" }]}
+          />
+        )}
         <div className="grid grid-cols-2 gap-2">
           <ChannelPicker value={channel} onChange={setChannel} extra={channels} />
           <label className="block text-[13px] font-medium text-ink-2">
@@ -195,7 +208,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
                   <thead>
                     <tr className="text-[11.5px] text-mute">
                       <th className="px-3 py-1 text-left font-normal">角色</th>
-                      <th className="px-1 py-1 text-center font-normal whitespace-nowrap">現貨</th>
+                      <th className="px-1 py-1 text-center font-normal whitespace-nowrap">{sellerName ? `${sellerName}的` : "現貨"}</th>
                       <th className="px-1 py-1 text-center font-normal">數量</th>
                       <th className="px-3 py-1 text-right font-normal">單價</th>
                     </tr>
@@ -203,19 +216,21 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
                   <tbody>
                     {it.rows.map((r) => {
                       const q = Number(qty[r.productId] || 0);
-                      const over = q - r.free;
+                      const free = freeOf(r);
+                      const over = q - free;
                       return (
                         <tr key={r.productId} className="border-t border-line-2 align-top" data-testid="sell-row" data-name={`${sheet.name}:${it.typeName}:${r.name}`}>
                           <td className="px-3 py-2">
                             {r.name}
                             {q > 0 && (
                               <div className="mt-0.5 flex flex-wrap gap-1 text-[11px] whitespace-nowrap">
-                                {Math.min(q, r.free) > 0 && <span className="rounded bg-good-soft px-1.5 text-good">現貨 {Math.min(q, r.free)}</span>}
+                                {Math.min(q, free) > 0 && <span className="rounded bg-good-soft px-1.5 text-good">現貨 {Math.min(q, free)}</span>}
                                 {over > 0 && <span className="rounded bg-warn-soft px-1.5 text-warn">預訂 {over}</span>}
+                                {over > 0 && seller && r.free > free && <span className="rounded bg-info-soft px-1.5 text-info" data-testid="other-has">別人還有 {r.free - free}，可改上面「誰賣的」</span>}
                               </div>
                             )}
                           </td>
-                          <td className={`num px-1 py-2 text-center ${r.free ? "" : "text-mute"}`}>{r.free}</td>
+                          <td className={`num px-1 py-2 text-center ${free ? "" : "text-mute"}`} data-k="free">{free}</td>
                           <td className="px-1 py-1.5 text-center">
                             <input className={`${inputCls} num px-1 text-center`} inputMode="numeric" aria-label={`${r.name} 數量`} value={qty[r.productId] ?? ""} onChange={(e) => setQty({ ...qty, [r.productId]: e.target.value })} />
                           </td>

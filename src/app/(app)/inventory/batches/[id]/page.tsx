@@ -21,6 +21,7 @@ import { listOperators } from "@/server/services/operators";
 import { sharePercents } from "@/server/services/ownership";
 import { jointSettlement, jointWeights } from "@/server/services/joint";
 import { JointPanel } from "./joint";
+import { MoreMenu } from "@/components/more-menu";
 import { DutyBar, FixDutyButton } from "./duty";
 import { supplierPaymentHistory } from "@/server/services/supplier-payments";
 import { isStoreKind, allocMethod, batchStage, batchStageLabel, costKind, currencyName, dayInput, fmtDate, paymentPurpose, supplierPaymentStatus, toDateTimeInput } from "@/lib/labels";
@@ -139,7 +140,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         title={b.name}
         back={{ href: "/inventory?tab=batches", label: "採購團" }}
         sub={<span className="flex flex-wrap items-center gap-2"><OwnerBadge k={b.ownership === "JOINT" ? "joint" : b.orderedById} name={b.ownership === "JOINT" ? "合資" : opName(b.orderedById)} ids={ops.map((o) => o.id)} />{isStoreKind(b.supplierRef?.kind) ? <Badge tone="info">實體店購買</Badge> : <StatusBadge map={batchStageLabel} value={batchStage(b)} />}{batchSeries.map((x) => <a key={x.id} href={`/categories/${x.id}`} className="text-ai hover:underline">{x.name}</a>)}{supplierName && supplierName !== b.name && <span>{isStoreKind(b.supplierRef?.kind) ? "店家" : "代購"}：{supplierName}</span>}<span className="text-[12px] text-mute">{b.code}</span></span>}
-        actions={<>{open && <LinkButton href={`/reconcile/${b.id}`}>對單</LinkButton>}<LinkButton href={`/purchase${b.categoryId ? `?categoryId=${b.categoryId}` : ""}`}>同活動再開一團</LinkButton>{open && <CancelBatch id={b.id} />}<DeleteBatchButton batchId={b.id} name={b.name} paid={pay.paidTwd} received={received} items={b.items.length} qty={totalQty} payments={b.supplierPayments.filter((p) => p.status !== "VOIDED").length} fees={b.costs.length} goTo="/inventory?tab=batches" /></>}
+        actions={<>{open && <LinkButton href={`/reconcile/${b.id}`}>對單</LinkButton>}<LinkButton href={`/purchase${b.categoryId ? `?categoryId=${b.categoryId}` : ""}`}>同活動再開一團</LinkButton><MoreMenu>{open && <CancelBatch id={b.id} />}<DeleteBatchButton label="刪除整團" batchId={b.id} name={b.name} paid={pay.paidTwd} received={received} items={b.items.length} qty={totalQty} payments={b.supplierPayments.filter((p) => p.status !== "VOIDED").length} fees={b.costs.length} goTo="/inventory?tab=batches" /></MoreMenu></>}
       />
       {(b.supplierOrderNo || b.notes) && (
         <div className="space-y-1 rounded-xl border border-line bg-card px-4 py-2.5 text-[14px]" data-testid="batch-where">

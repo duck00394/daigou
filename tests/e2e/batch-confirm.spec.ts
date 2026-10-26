@@ -33,10 +33,10 @@ test("對單：買到幾件、砍掉剩下的；庫存分一定／不一定有�
   await expect(page).toHaveURL(/view=items/);
   await expect(page.locator(`[data-testid="summary-row"][data-name="${product.name}"] [data-k="unsure"]`)).toHaveText("4");
 
-  // 庫存：不一定 4
+  // 庫存：還沒確認的在「不一定」篩選看得到；表格只顯示確定的（一定到 –）
   await page.goto(`/inventory?tab=stock&only=unsure&q=${encodeURIComponent(product.name)}`);
   const row = page.locator(`[data-testid="stock-row"][data-name="${product.name}"]`);
-  await expect(row.locator('[data-k="unsure"]')).toHaveText("4");
+  await expect(row).toHaveCount(1);
   await expect(row.locator('[data-k="sure"]')).toHaveText("–");
 
   // 「全部」時待確認排上面
@@ -75,7 +75,8 @@ test("對單：買到幾件、砍掉剩下的；庫存分一定／不一定有�
   await expect(page.getByTestId("batch-card").filter({ hasText: `確認測試團 ${tag}` }).getByTestId("batch-paid")).toContainText("已付 100%");
   await page.goto(`/inventory?tab=stock&only=sure&q=${encodeURIComponent(product.name)}`);
   await expect(row.locator('[data-k="sure"]')).toHaveText("2");
-  await expect(row.locator('[data-k="unsure"]')).toHaveText("–");
+  await page.goto(`/inventory?tab=stock&only=unsure&q=${encodeURIComponent(product.name)}`);
+  await expect(row).toHaveCount(0); // 對完了，不在「不一定」裡
 });
 
 test("對單：這團全部買到，一鍵完成", async ({ page }) => {

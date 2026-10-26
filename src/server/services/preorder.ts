@@ -160,11 +160,6 @@ export async function seriesProfit(t: Tx, categoryId: string) {
     pre.set(o.productId, x);
   }
   const rows = new Map<string, SeriesProduct>();
-  const total = {
-    sold: { qty: 0, revenue: 0, cost: 0 },
-    pre: { qty: 0, revenue: 0, cost: 0, uncosted: 0 },
-    free: { qty: 0, revenue: 0, cost: 0, unpriced: 0, uncosted: 0 },
-  };
   for (const p of products) {
     const c = detail.costs.get(p.id);
     const onHand = Math.max(0, onHandOf.get(p.id) ?? 0);
@@ -181,24 +176,36 @@ export async function seriesProfit(t: Tx, categoryId: string) {
     if (preCost != null) profit += pr.revenue - preCost;
     if (freeCost != null && freeRev != null) profit += freeRev - freeCost;
     rows.set(p.id, { id: p.id, onHand, sure, ordered: pr.qty, left, sold: sd, pre: { ...pr, cost: preCost }, free: { qty: freeQty, revenue: freeRev, cost: freeCost }, price, avg: c?.avg ?? null, profit });
-    total.sold.qty += sd.qty;
-    total.sold.revenue += sd.revenue;
-    total.sold.cost += sd.cost;
-    total.pre.qty += pr.qty;
-    if (preCost == null) total.pre.uncosted += pr.qty;
+  }
+  return { rows, ...seriesTotals([...rows.values()]) };
+}
+
+/** 把幾個角色加總成「預估可賺」卡片的數字（系列頁只加總表格裡列出來的，上下對得起來） */
+export function seriesTotals(list: SeriesProduct[]) {
+  const total = {
+    sold: { qty: 0, revenue: 0, cost: 0 },
+    pre: { qty: 0, revenue: 0, cost: 0, uncosted: 0 },
+    free: { qty: 0, revenue: 0, cost: 0, unpriced: 0, uncosted: 0 },
+  };
+  for (const r of list) {
+    total.sold.qty += r.sold.qty;
+    total.sold.revenue += r.sold.revenue;
+    total.sold.cost += r.sold.cost;
+    total.pre.qty += r.pre.qty;
+    if (r.pre.cost == null) total.pre.uncosted += r.pre.qty;
     else {
-      total.pre.revenue += pr.revenue;
-      total.pre.cost += preCost;
+      total.pre.revenue += r.pre.revenue;
+      total.pre.cost += r.pre.cost;
     }
-    total.free.qty += freeQty;
-    if (freeQty && freeCost == null) total.free.uncosted += freeQty;
-    else if (freeQty && freeRev == null) total.free.unpriced += freeQty;
-    else if (freeQty) {
-      total.free.revenue += freeRev!;
-      total.free.cost += freeCost!;
+    total.free.qty += r.free.qty;
+    if (r.free.qty && r.free.cost == null) total.free.uncosted += r.free.qty;
+    else if (r.free.qty && r.free.revenue == null) total.free.unpriced += r.free.qty;
+    else if (r.free.qty) {
+      total.free.revenue += r.free.revenue!;
+      total.free.cost += r.free.cost!;
     }
   }
   const revenue = total.sold.revenue + total.pre.revenue + total.free.revenue;
   const cost = total.sold.cost + total.pre.cost + total.free.cost;
-  return { rows, ...total, revenue, cost, profit: revenue - cost };
+  return { ...total, revenue, cost, profit: revenue - cost };
 }

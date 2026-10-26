@@ -57,11 +57,11 @@ test("手機：關稅 %、預購平均成本、庫存欄", async ({ page }) => {
   await toast(page, /已登記付款/);
   await expect(page.getByTestId("batch-card").filter({ hasText: `稅代購 ${tag}` })).toHaveCount(0); // 付清了就不在「還沒付清」裡
 
-  // 對單前：不一定 2，庫存 0
-  await page.goto(`/inventory?tab=stock&only=all&q=${encodeURIComponent(cat)}`);
+  // 對單前：還沒確認買到（只在「不一定」篩選看得到），庫存 0；表格不顯示不一定的數量
+  await page.goto(`/inventory?tab=stock&only=unsure&q=${encodeURIComponent(cat)}`);
   const row = page.getByTestId("stock-row").filter({ hasText: "吉伊" });
-  await expect(row.locator('[data-k="unsure"]')).toHaveText("2");
   await expect(row.locator('[data-k="free"]')).toHaveText("0");
+  await expect(row.locator('[data-k="unsure"]')).toHaveCount(0);
 
   // 對單：全部買到 → 一定到 2、庫存 2，平均成本 500＋關稅 25
   await page.goto(batchUrl.replace(/\/inventory\/batches\//, "/reconcile/").replace(/[?#].*$/, ""));
@@ -71,7 +71,8 @@ test("手機：關稅 %、預購平均成本、庫存欄", async ({ page }) => {
   await page.goto(`/inventory?tab=stock&only=all&q=${encodeURIComponent(cat)}`);
   await expect(row.locator('[data-k="sure"]')).toHaveText("2");
   await expect(row.locator('[data-k="free"]')).toHaveText("2");
-  await expect(row).toContainText("平均成本 NT$525");
+  // 手機：平均成本在這一列下面一整行
+  await expect(page.locator('[data-testid="stock-meta"][data-name*="吉伊"]')).toContainText("平均成本 NT$525");
   await page.getByRole("table", { name: "庫存表" }).screenshot({ path: "test-results/mobile_stock_avg.png" });
 
   // 系列頁「買了什麼」：勾選算成本，件數改 3 → 525 × 3
@@ -100,4 +101,14 @@ test("手機：關稅 %、預購平均成本、庫存欄", async ({ page }) => {
   await page.getByTestId("back").click();
   await expect(page).toHaveURL(seriesUrl);
   await expect(page.getByTestId("series-profit")).toBeVisible();
+
+  // 勾好直接賣給客人：帶到「賣給客人」，數量已經填好
+  await page.getByRole("button", { name: "勾選算成本" }).click();
+  await page.getByLabel(/^選 .*吉伊/).check();
+  await page.getByLabel(/吉伊.* 件數$/).fill("2");
+  await page.getByTestId("pick-sell").click();
+  await expect(page).toHaveURL(/\/sell\?.*pick=/);
+  await expect(page.getByLabel(/吉伊.* 數量$/)).toHaveValue("2");
+  await expect(page.getByLabel("誰賣的（扣誰的庫存）")).toBeVisible();
+  await page.screenshot({ path: "test-results/mobile_pick_sell.png", fullPage: true });
 });

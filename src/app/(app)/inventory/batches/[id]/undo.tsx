@@ -21,7 +21,7 @@ export function UndoReceivingButton({ batchId, recordId, qty, label }: { batchId
 }
 
 /** 刪除整團：品項、付款、退款、運費、收貨、自留一起刪（在採購團列表、團頁面都能按） */
-export function DeleteBatchButton({ batchId, name, paid = 0, received = 0, items = 0, qty = 0, payments = 0, fees = 0, goTo }: { batchId: string; name: string; paid?: number; received?: number; items?: number; qty?: number; payments?: number; fees?: number; goTo?: string }) {
+export function DeleteBatchButton({ batchId, name, paid = 0, received = 0, items = 0, qty = 0, payments = 0, fees = 0, goTo, label = "刪除" }: { batchId: string; name: string; paid?: number; received?: number; items?: number; qty?: number; payments?: number; fees?: number; goTo?: string; label?: string }) {
   const { run } = useRun();
   const router = useRouter();
   const parts = [
@@ -35,7 +35,7 @@ export function DeleteBatchButton({ batchId, name, paid = 0, received = 0, items
     <ConfirmButton
       small
       variant="danger"
-      label="刪除"
+      label={label}
       title={`刪除整團「${name}」`}
       message={<Impact lead="會一起刪掉：" items={parts} warn={<>刪了就找不回來。只是沒買到？用「編輯」砍單比較好。已經賣出或留給客人的，要先作廢那筆出售才能刪。</>} />}
       confirmLabel="刪除整團"

@@ -238,7 +238,6 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                 <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium text-good">一定到</th>
                 <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium text-info">客人訂</th>
                 <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-semibold text-ink">庫存</th>
-                <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium text-warn">不一定</th>
                 <th className="hidden px-2 py-2 text-right font-medium md:table-cell">自留</th>
                 <th className="hidden px-2 py-2 text-right font-medium md:table-cell">平均成本</th>
                 <th className="px-2 py-2"><span className="sr-only">動作</span></th>
@@ -249,7 +248,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                 <Fragment key={k.key}>
                   {showKind && (
                     <tr className="bg-ink text-white">
-                      <td colSpan={9} className="px-3 py-1.5 text-[14px] font-semibold" data-testid="stock-kind">{k.label}</td>
+                      <td colSpan={8} className="px-3 py-1.5 text-[14px] font-semibold" data-testid="stock-kind">{k.label}</td>
                     </tr>
                   )}
                   {k.series.map((sg) => {
@@ -258,35 +257,34 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                     return (
                       <Fragment key={sg.key}>
                         <tr className="bg-ai-soft">
-                          <td colSpan={9} className="px-3 py-1.5 text-[14px] font-semibold text-ai" data-testid="stock-series">
+                          <td colSpan={8} className="px-3 py-1.5 text-[14px] font-semibold text-ai" data-testid="stock-series">
                             {sg.key !== "none" ? <Link href={`/categories/${sg.key}`} className="hover:underline">{sg.name}</Link> : sg.name}
                             {!sg.active && <span className="ml-1 text-[12px] font-normal text-mute">已過期</span>}
-                            <span className="ml-2 text-[12px] font-normal">現有 {gs.onHand}・一定到 {gs.incoming - gs.unsure}・客人訂 {gs.ordered}・庫存 {gs.left}・不一定 {gs.unsure}{gs.cost ? `・成本 ${formatTwd(gs.cost)}` : ""}</span>
+                            <span className="ml-2 text-[12px] font-normal">現有 {gs.onHand}・一定到 {gs.incoming - gs.unsure}・客人訂 {gs.ordered}・庫存 {gs.left}{gs.cost ? `・成本 ${formatTwd(gs.cost)}` : ""}</span>
                           </td>
                         </tr>
                         {sg.types.map((tg) => (
                           <Fragment key={tg.key}>
                             <tr className="border-t border-line-2 bg-[#f7f8fa]">
-                              <td colSpan={9} className="py-1 pr-3 pl-5 text-[13px] font-semibold text-ink-2" data-testid="stock-type">{tg.name}</td>
+                              <td colSpan={8} className="py-1 pr-3 pl-5 text-[13px] font-semibold text-ink-2" data-testid="stock-type">{tg.name}</td>
                             </tr>
                             {tg.rows.map((r) => {
                               const dup = tg.rows.filter((x) => label(x) === label(r)).length > 1;
                               const owners = ownersOf(r.p.id);
                               const product = { id: r.p.id, name: r.p.name, salePriceTwd: r.p.salePriceTwd, available: r.s.available, avgCost: r.v?.avgUnitCost ?? null, owners };
+                              const meta = [avgOf(r) ? `平均成本 ${formatTwd(avgOf(r)!.avg)}${avgOf(r)!.tentative ? "*" : ""}` : null, r.s.kept ? `自留 ${r.s.kept}` : null, r.s.reserved ? `保留 ${r.s.reserved}` : null, owners.length > 1 ? owners.map((o) => `${o.label} ${o.free}`).join("／") : null].filter(Boolean).join("・");
                               return (
-                                <tr key={r.p.id} className="border-b border-line-2 last:border-b-0" data-testid="stock-row" data-name={r.p.name} data-incoming={r.s.incoming}>
+                                <Fragment key={r.p.id}>
+                                <tr className={meta ? "max-md:border-0 md:border-b md:border-line-2" : "border-b border-line-2"} data-testid="stock-row" data-name={r.p.name} data-incoming={r.s.incoming}>
                                   <td className="py-2 pr-3 pl-7 align-top">
                                     <Link href={`/products/${r.p.id}`} className="font-medium hover:underline" title={r.p.name}>{label(r)}</Link>
                                     {dup && sg.key !== "none" && <Link href={`/categories/${sg.key}#merge`} className="ml-1.5 rounded-full bg-warn-soft px-2 py-0.5 text-[11px] text-warn" data-testid="dup-badge">⚠ 重複了，按這裡合併</Link>}
-                                    <div className="text-[11.5px] leading-snug text-mute">
-                                      {[avgOf(r) ? `平均成本 ${formatTwd(avgOf(r)!.avg)}${avgOf(r)!.tentative ? "*" : ""}` : null, r.s.kept ? `自留 ${r.s.kept}` : null, r.s.reserved ? `保留 ${r.s.reserved}` : null, owners.length > 1 ? owners.map((o) => `${o.label} ${o.free}`).join("／") : null].filter(Boolean).join("・")}
-                                    </div>
+                                    {meta && <div className="hidden text-[11.5px] leading-snug text-mute md:block">{meta}</div>}
                                   </td>
                                   <td className={`num px-1.5 py-2 text-right align-top ${r.s.onHand ? "" : "text-mute"}`} data-k="onhand">{r.s.onHand}</td>
                                   <td className={`num px-1.5 py-2 text-right align-top ${r.s.incoming - unsureOf(r) ? "font-semibold text-good" : "text-mute"}`} data-k="sure">{r.s.incoming - unsureOf(r) || "–"}</td>
                                   <td className={`num px-1.5 py-2 text-right align-top ${r.s.openDemand ? (left(r) < 0 ? "font-semibold text-bad" : "font-semibold text-info") : "text-mute"}`} data-k="ordered">{r.s.openDemand || "–"}</td>
                                   <td className={`num px-1.5 py-2 text-right align-top ${left(r) < 0 ? "font-semibold text-bad" : left(r) ? "font-semibold" : "text-mute"}`} data-k="free">{left(r)}</td>
-                                  <td className={`num px-1.5 py-2 text-right align-top ${unsureOf(r) ? "font-semibold text-warn" : "text-mute"}`} data-k="unsure">{unsureOf(r) || "–"}</td>
                                   <td className="num hidden px-2 py-2 text-right align-top md:table-cell" data-k="kept">{r.s.kept}</td>
                                   <td className="num hidden px-2 py-2 text-right align-top md:table-cell" data-k="avg">{avgOf(r) ? `${formatTwd(avgOf(r)!.avg)}${avgOf(r)!.tentative ? "*" : ""}` : "—"}</td>
                                   <td className="whitespace-nowrap px-2 py-1.5 text-right align-top">
@@ -294,6 +292,13 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                                     <KeepButton tiny productId={r.p.id} name={r.p.name} available={r.s.available} kept={r.s.kept} owners={owners} me={me} />
                                   </td>
                                 </tr>
+                                {/* 手機：平均成本、自留等放在這一列下面，佔滿寬度，不會擠成好幾行 */}
+                                {meta && (
+                                  <tr className="border-b border-line-2 md:hidden" data-testid="stock-meta" data-name={r.p.name}>
+                                    <td colSpan={8} className="pt-0 pr-3 pb-2 pl-7 text-[12px] leading-snug text-mute">{meta}</td>
+                                  </tr>
+                                )}
+                                </Fragment>
                               );
                             })}
                           </Fragment>
@@ -309,7 +314,6 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                 <td className="num px-1.5 py-2 text-right text-good">{all.incoming - all.unsure}</td>
                 <td className="num px-1.5 py-2 text-right text-info">{all.ordered}</td>
                 <td className={`num px-1.5 py-2 text-right ${all.left < 0 ? "text-bad" : ""}`} data-testid="stock-total-free">{all.left}</td>
-                <td className="num px-1.5 py-2 text-right text-warn">{all.unsure}</td>
                 <td className="num hidden px-2 py-2 text-right md:table-cell">{all.kept}</td>
                 <td className="hidden md:table-cell" />
                 <td />

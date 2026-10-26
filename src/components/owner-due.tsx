@@ -12,7 +12,7 @@ export function OwnerDue({ due, operators, hrefFor, title = "每個人還要付"
   if (compact)
     // 精簡版：一排小標籤，不佔版面
     return (
-      <div aria-label={title} className="flex items-center gap-1.5 overflow-x-auto text-[13px]">
+      <div aria-label={title} className="flex flex-wrap items-center gap-1.5 text-[13px]">
         <span className="shrink-0 whitespace-nowrap text-mute">還要付</span>
         {keys.map((k) => {
           const v = due.get(k);

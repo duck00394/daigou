@@ -2,6 +2,7 @@
 // - 有現貨的部分：直接出售（沿用現貨出售：建單、出貨、收款一次完成）
 // - 超過現貨的部分：記成「預訂」（一般訂單），到貨後在「出貨」交給客人
 import { BizError, lockRows, type Tx } from "@/server/db";
+import { filterLotsByOwner } from "./ownership";
 import { audit, type Actor } from "./common";
 import { quickSale, resolveBuyer } from "./quick-sale";
 import { createOrder } from "./orders";
@@ -14,7 +15,7 @@ export interface SellLine {
   categoryId?: string | null; // 這個商品是哪個系列（一位客人可以一次買好幾個系列）
 }
 
-export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: string | null; channel?: string | null; categoryId?: string | null; lines: SellLine[]; idemKey: string; paid?: boolean }) {
+export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: string | null; channel?: string | null; categoryId?: string | null; lines: SellLine[]; idemKey: string; paid?: boolean; owner?: string | null }) {
   const channel = input.channel?.trim() ? input.channel.trim().slice(0, 40) : null;
   if (!input.idemKey || input.idemKey.length < 8) throw new BizError("缺少送出識別碼");
   const lines = input.lines.filter((l) => l.qty > 0);
@@ -38,7 +39,8 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
   if (again) return again;
   const plan = [];
   for (const l of lines) {
-    const free = (await productLots(t, l.productId)).reduce((s, x) => s + Math.max(0, x.free), 0);
+    // 有選「誰賣的」：只算那個人的現貨（賣掉也只扣他的），庫存才對得上
+    const free = (await filterLotsByOwner(t, await productLots(t, l.productId), input.owner || null)).reduce((s, x) => s + Math.max(0, x.free), 0);
     plan.push({ l, now: Math.min(free, l.qty) });
   }
   if (plan.some((x) => x.l.qty > x.now) && !input.buyerName?.trim()) throw new BizError("有沒現貨要預訂的，請填客人名字（到貨才知道要給誰）");
@@ -50,7 +52,7 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
   if (channel && input.buyerName?.trim() && buyer.salesChannel !== channel) await t.buyer.update({ where: { id: buyer.id }, data: { salesChannel: channel } });
   for (const { l, now } of plan) {
     if (now > 0) {
-      const q = await quickSale(t, actor, { productId: l.productId, qty: now, unitPrice: l.unitPrice, buyerName: input.buyerName ?? null, paid: input.paid !== false, idemKey: `${input.idemKey}:${l.productId}` });
+      const q = await quickSale(t, actor, { productId: l.productId, qty: now, unitPrice: l.unitPrice, buyerName: input.buyerName ?? null, paid: input.paid !== false, idemKey: `${input.idemKey}:${l.productId}`, owner: input.owner || null });
       if (channel) await t.order.update({ where: { id: q.orderId }, data: { salesChannel: channel } });
       sold += now;
     }

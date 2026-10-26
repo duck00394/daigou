@@ -49,6 +49,15 @@ export async function checkIntegrityAction() {
   }, "read");
 }
 
+/** 可能選錯系列的採購團（唯讀提醒） */
+export async function seriesMismatchAction() {
+  return run(async () => {
+    const { seriesMismatch } = await import("@/server/services/integrity");
+    const { prisma } = await import("@/server/db");
+    return seriesMismatch(prisma);
+  }, "read");
+}
+
 /** 重算衍生欄位（採購團狀態、訂單快取），不改動流水；之後再檢查一次 */
 export async function recomputeDerivedAction() {
   return run(async (a) => {

@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Button, ConfirmButton, TextField, SelectField, useRun, useToast, useIdemKey, inputCls, notify as notifyError } from "@/components/client";
 import { setRateAction, addExpenseAction, deleteExpenseAction } from "@/actions/ops";
 import { saveCharacterAction, saveProductTypeAction } from "@/actions/catalog";
-import { verifyBackupAction, restoreBackupAction, logoutAllAction, checkIntegrityAction, recomputeDerivedAction } from "@/actions/system";
+import { verifyBackupAction, restoreBackupAction, logoutAllAction, checkIntegrityAction, seriesMismatchAction, recomputeDerivedAction } from "@/actions/system";
 import { costKind } from "@/lib/labels";
 import { saveOperatorAction, setMeAction } from "@/actions/operators";
 
@@ -199,14 +199,16 @@ export function OperatorList({ items }: { items: { id: string; code: string; nam
 type Issue = { kind: string; message: string; href?: string };
 export function HealthCheck() {
   const [issues, setIssues] = useState<Issue[] | null>(null);
+  const [hints, setHints] = useState<Issue[]>([]);
   const [busy, setBusy] = useState(false);
   const { run, pending } = useRun();
   const check = async () => {
     setBusy(true);
-    const r = await checkIntegrityAction();
+    const [r, h] = await Promise.all([checkIntegrityAction(), seriesMismatchAction()]);
     setBusy(false);
     if (!r.ok) return notifyError(r.error);
     setIssues(r.data);
+    setHints(h.ok ? h.data : []);
   };
   return (
     <div className="space-y-2 text-sm">
@@ -227,6 +229,14 @@ export function HealthCheck() {
           <li className="text-[12px] text-ink-2">「重算」只會依原始紀錄重新計算採購團狀態與訂單金額，不會改動庫存流水、付款或訂單內容；若重算後仍有問題，請把畫面截圖回報。</li>
         </ul>
       ))}
+      {issues && hints.length > 0 && (
+        <div className="rounded-lg border border-line-2 px-3 py-2" data-testid="series-hints">
+          <div className="mb-1 font-medium text-ink-2">提醒：這些採購團可能選錯系列（不是錯誤，確認一下就好）</div>
+          <ul className="space-y-1">
+            {hints.map((i, k) => <li key={k}><a className="underline" href={i.href}>{i.message}</a></li>)}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

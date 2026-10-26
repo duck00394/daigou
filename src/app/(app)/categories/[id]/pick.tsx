@@ -1,13 +1,14 @@
 "use client";
 // 勾選算成本：按「勾選算成本」才出現勾選框；勾商品、改件數，下面顯示成本合計；「選整套」＝這個品項每個角色各 1 件
 import { createContext, useContext, useMemo, useState } from "react";
+import Link from "next/link";
 import { formatTwd } from "@/lib/money";
 
 type Info = { id: string; name: string; cost: number | null; price: number | null; tentative: boolean };
 type Ctx = { on: boolean; setOn: (v: boolean) => void; sel: Record<string, number>; set: (id: string, q: number) => void; setMany: (ids: string[], q: number) => void; clear: () => void; info: Record<string, Info> };
 const PickCtx = createContext<Ctx | null>(null);
 
-export function PickProvider({ items, children }: { items: Info[]; children: React.ReactNode }) {
+export function PickProvider({ items, categoryId, children }: { items: Info[]; categoryId?: string; children: React.ReactNode }) {
   const [sel, setSel] = useState<Record<string, number>>({});
   const [on, setOn] = useState(false);
   const info = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i])), [items]);
@@ -31,7 +32,7 @@ export function PickProvider({ items, children }: { items: Info[]; children: Rea
   return (
     <PickCtx.Provider value={ctx}>
       {children}
-      <PickBar />
+      <PickBar categoryId={categoryId} />
     </PickCtx.Provider>
   );
 }
@@ -76,7 +77,7 @@ export function PickToggle() {
   );
 }
 
-function PickBar() {
+function PickBar({ categoryId }: { categoryId?: string }) {
   const c = useContext(PickCtx)!;
   const ids = Object.keys(c.sel);
   if (!ids.length) return null;
@@ -99,7 +100,10 @@ function PickBar() {
     <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-20 mx-2 mb-2 rounded-2xl bg-ai px-4 py-2.5 text-white shadow-lg md:bottom-3" data-testid="pick-bar" role="status">
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-[13px]">已選 {qty} 隻　成本合計 <b className="num text-[18px]" data-testid="pick-cost">{formatTwd(cost)}</b>{tentative ? "（有預估價）" : ""}</span>
-        <button type="button" className="text-[13px] underline" onClick={c.clear}>清除</button>
+        <span className="flex shrink-0 items-center gap-3">
+          <button type="button" className="text-[13px] underline" onClick={c.clear}>清除</button>
+          {categoryId && <Link href={`/sell?cat=${categoryId}&pick=${ids.map((id) => `${id}:${c.sel[id]}`).join(",")}`} className="rounded-lg bg-white px-2.5 py-1 text-[13px] font-semibold text-ai" data-testid="pick-sell">賣給客人</Link>}
+        </span>
       </div>
       <div className="text-[12.5px] opacity-85">
         {price > 0 ? <span data-testid="pick-profit">照售價賣 {formatTwd(price)}・可賺 {formatTwd(price - priced)}</span> : "還沒填售價，算不出可賺多少"}
