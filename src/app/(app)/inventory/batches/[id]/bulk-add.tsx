@@ -718,7 +718,13 @@ export function BulkAddGrid({
                 const f = row?.getAttribute("data-err");
                 const el = k ? document.getElementById(`${f}-${k}`) : null;
                 (el ?? row)?.scrollIntoView({ block: "center", behavior: "smooth" });
-                el?.focus({ preventScroll: true });
+                if (el instanceof HTMLInputElement) {
+                  // 跳過去時保留原本打的內容（不要被「一點就清空」清掉），全選讓人直接改
+                  el.dataset.keep = "";
+                  el.focus({ preventScroll: true });
+                  el.select();
+                  setTimeout(() => delete el.dataset.keep, 0);
+                } else el?.focus({ preventScroll: true });
               });
             if (stats.valid === 0) {
               jump();

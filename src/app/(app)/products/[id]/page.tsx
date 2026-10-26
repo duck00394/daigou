@@ -160,7 +160,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
         )}
       </Section>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_20rem]">
         <Section title="商品資料">
           <div className="mb-4 flex items-center gap-3">
             <ProductImage src={p.imageUrl} alt={p.name} size={72} />

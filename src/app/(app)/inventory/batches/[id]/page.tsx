@@ -203,7 +203,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         />
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Section id="payments" title={`付款（${payments.filter((p) => p.status !== "VOIDED").length}）`} pad={false}>
           <SupplierPayments
             batchId={b.id}

@@ -225,7 +225,7 @@ export function PaymentForm({ orderId, balance }: { orderId: string; balance: nu
   const idem = useIdemKey();
   return (
     <form
-      className="grid gap-2 sm:grid-cols-2 sm:items-end"
+      className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:items-end"
       onSubmit={(e) => {
         e.preventDefault();
         const amount = int(f.amount);

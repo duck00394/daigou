@@ -83,7 +83,7 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
           </TableWrap>
         )}
       </Section>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Section title="各買家本月訂購金額" pad={false}>
           {r.byBuyer.length === 0 ? <Empty>本月沒有新訂單。</Empty> : (
             <TableWrap maxH="50vh">

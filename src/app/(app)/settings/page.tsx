@@ -46,7 +46,7 @@ export default async function Settings() {
   return (
     <div className="space-y-4">
       <PageHeader title="匯出、備份與設定" />
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Section title="功能">
           <OrdersToggle on={ordersOn} />
         </Section>
@@ -101,7 +101,7 @@ export default async function Settings() {
         <p className="px-4 py-2 text-[12px] text-mute">CSV 已防範試算表公式注入：以 = + - @ 開頭的文字會加上單引號。</p>
       </Section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Section title="完整備份">
           <p className="mb-3 text-sm text-ink-2">下載包含所有商品、買家、訂單、付款、退款、庫存、出貨、匯入與稽核紀錄的 JSON 檔，可在任何安裝本系統的環境還原。檔案含私人資料，請存放在安全的位置。</p>
           <LinkButton href="/api/backup" primary>下載完整備份</LinkButton>

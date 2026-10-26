@@ -6,7 +6,7 @@ import { loadOrderCalc } from "@/server/services/recompute";
 import { inventorySummary } from "@/server/services/inventory";
 import { PageHeader, Section, TableWrap, StatusBadge, Twd, Badge, TagChip, KV, LinkButton, Empty } from "@/components/ui";
 import { CancelOrderButton, ConfirmOrderButton, EditMetaButton, ItemActions, FlagSelect, ReserveButtons, PaymentForm, VoidPaymentButton, RefundForm, RefundRowActions } from "./parts";
-import { fmtDate, orderStatus, paymentStatus, procurementStatus, shipStatus, orderSource, refundStatus } from "@/lib/labels";
+import { fmtDate, orderStatus, paymentStatus, procurementStatus, shipStatus, orderSource, refundStatus, flagLabel } from "@/lib/labels";
 
 const EVENT: Record<string, string> = {
   CREATED: "建立",
@@ -63,7 +63,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
       shipments.set(si.shipmentId, s);
     }
   const history = [
-    ...order.items.flatMap((it) => it.events.map((e) => ({ at: e.createdAt, text: `${it.productNameSnapshot}：${EVENT[e.type] ?? e.type}${e.qtyDelta ? `（${e.qtyDelta > 0 ? "+" : ""}${e.qtyDelta}）` : ""}${e.fromValue || e.toValue ? ` ${e.fromValue ?? ""} → ${e.toValue ?? ""}` : ""}${e.note ? `｜${e.note}` : ""}` }))),
+    ...order.items.flatMap((it) => it.events.map((e) => ({ at: e.createdAt, text: `${it.productNameSnapshot}：${EVENT[e.type] ?? e.type}${e.qtyDelta ? `（${e.qtyDelta > 0 ? "+" : ""}${e.qtyDelta}）` : ""}${e.fromValue || e.toValue ? ` ${flagLabel(e.fromValue)} → ${flagLabel(e.toValue)}` : ""}${e.note ? `｜${e.note}` : ""}` }))),
     ...audits.filter((a) => a.action === "order.update").map((a) => ({ at: a.createdAt, text: `修改訂單：${Object.keys((a.data ?? {}) as object).join("、")}` })),
   ].sort((a, b) => a.at.getTime() - b.at.getTime());
 
@@ -91,7 +91,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         }
       />
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_22rem]">
         <Section title="買家與訂單資料">
           <KV
             items={[
@@ -234,7 +234,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         </TableWrap>
       </Section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Section title="收款紀錄" pad={false}>
           {order.payments.length === 0 ? (
             <Empty>尚未收款。</Empty>
@@ -301,7 +301,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         </Section>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Section title="出貨紀錄" pad={false}>
           {shipments.size === 0 ? (
             <Empty>尚未出貨。</Empty>

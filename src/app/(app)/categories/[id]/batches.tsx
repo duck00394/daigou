@@ -98,6 +98,8 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
   };
   const prof = showItems ? await tx((t) => seriesProfit(t, categoryId)) : null;
   const P = (r: { product: { id: string } }) => prof?.rows.get(r.product.id);
+  // 這個角色算得出可賺嗎（有賣掉的、有成本的客人預訂、或有售價又有成本的剩貨）
+  const canProfitOf = (x: ReturnType<typeof P>) => !!x && (x.sold.qty > 0 || (x.pre.qty > 0 && x.pre.cost != null) || (x.free.qty > 0 && x.free.revenue != null && x.free.cost != null));
   const allSure = summary.reduce((a, r) => a + r.sureQty, 0);
   const allAmount = summary.reduce((a, r) => a + r.amount, 0);
   return (
@@ -221,7 +223,7 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
                   </div>
                   {g.rows.map((r) => {
                     const x = P(r);
-                    const canProfit = !!x && (x.sold.qty > 0 || (x.pre.qty > 0 && x.pre.cost != null) || (x.free.qty > 0 && x.free.revenue != null && x.free.cost != null));
+                    const canProfit = canProfitOf(x);
                     const name = r.product.characters.length === 1 ? r.product.characters[0].character.name : r.product.name;
                     return (
                       <div key={r.product.id} className="flex items-start border-b border-line-2">
@@ -272,7 +274,7 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
                   <span role="cell">合計</span>
                   <span role="cell" className="num text-right" data-testid="summary-left">{summary.reduce((a, r) => a + (P(r)?.left ?? 0), 0)}</span>
                   <span role="cell" className="num text-right">{allSure ? Math.round(allAmount / allSure).toLocaleString() : "—"}</span>
-                  <span role="cell" className="num text-right text-good">{prof && prof.cost > 0 ? summary.reduce((a, r) => a + (P(r)?.profit ?? 0), 0).toLocaleString() : <span className="text-mute">—</span>}</span>
+                  <span role="cell" className="num text-right text-good">{summary.some((r) => canProfitOf(P(r))) ? summary.reduce((a, r) => a + (canProfitOf(P(r)) ? P(r)!.profit : 0), 0).toLocaleString() : <span className="text-mute">—</span>}</span>
                 </div>
               </div>
             </div>

@@ -1,5 +1,6 @@
 "use client";
 import { Choice } from "@/components/choice";
+import { toDateInput } from "@/lib/labels";
 import { useState } from "react";
 import { Button, ConfirmButton, TextField, SelectField, useRun, useToast, useIdemKey, inputCls, notify as notifyError } from "@/components/client";
 import { setRateAction, addExpenseAction, deleteExpenseAction } from "@/actions/ops";
@@ -46,7 +47,7 @@ export function NameList({ kind, items }: { kind: "character" | "type"; items: {
 
 export function ExpenseForm() {
   const expIdem = useIdemKey();
-  const [f, setF] = useState({ date: new Date().toISOString().slice(0, 10), kind: "PACKAGING", amount: "", note: "" });
+  const [f, setF] = useState({ date: toDateInput(new Date()), kind: "PACKAGING", amount: "", note: "" });
   const { run, pending } = useRun();
   return (
     <form className="grid gap-2 sm:grid-cols-[10rem_12rem_8rem_1fr_auto] sm:items-end" onSubmit={(e) => { e.preventDefault(); run(() => addExpenseAction({ date: f.date, kind: f.kind as never, amountTwd: Number(f.amount), note: f.note || null, requestKey: expIdem.key }), { success: "已新增費用", onOk: () => { expIdem.renew(); setF({ ...f, amount: "", note: "" }); } }); }}>

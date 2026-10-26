@@ -114,14 +114,10 @@ export function TableWrap({ children, maxH }: { children: React.ReactNode; maxH?
 }
 
 export function LinkButton({ href, children, primary, small }: { href: string; children: React.ReactNode; primary?: boolean; small?: boolean }) {
-  return (
-    <Link
-      href={href}
-      className={`inline-flex items-center justify-center gap-1 rounded-lg border font-medium whitespace-nowrap ${small ? "px-2.5 py-1 text-[13px]" : "px-3.5 py-2 text-sm"} ${primary ? "border-ai bg-ai text-white hover:bg-ai-2" : "border-line bg-white text-ink hover:border-ai"}`}
-    >
-      {children}
-    </Link>
-  );
+  const cls = `inline-flex items-center justify-center gap-1 rounded-lg border font-medium whitespace-nowrap ${small ? "px-2.5 py-1 text-[13px]" : "px-3.5 py-2 text-sm"} ${primary ? "border-ai bg-ai text-white hover:bg-ai-2" : "border-line bg-white text-ink hover:border-ai"}`;
+  // 匯出、下載（/api/…）用一般連結：不要在打開頁面時就預先載入（會在背景產生整份匯出檔）
+  if (href.startsWith("/api/")) return <a href={href} className={cls}>{children}</a>;
+  return <Link href={href} className={cls}>{children}</Link>;
 }
 
 export function KV({ items }: { items: [string, React.ReactNode][] }) {

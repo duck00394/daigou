@@ -59,13 +59,13 @@ export function JointPanel({ batchId, s, editable }: { batchId: string; s: Joint
                   <div className="text-[12px] text-mute">自己的 {formatTwd(p.own)}・一起的佔 {p.percent}%</div>
                 </td>
                 <td className="num py-1.5 text-right font-semibold" data-k="owed">{formatTwd(p.owed)}</td>
-                <td className="num py-1.5 text-right text-good" data-k="paid">{formatTwd(p.paid)}</td>
+                <td className={`num py-1.5 text-right ${p.paid > 0 ? "text-good" : "text-mute"}`} data-k="paid">{formatTwd(p.paid)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="mt-1 text-[12px] text-mute">一起的商品 {formatTwd(s.shared)}・運費等 {formatTwd(s.fee)}（{s.feeSplit === "GOODS" ? "照各自商品金額比例" : "平均分"}）</p>
+      {(s.shared > 0 || s.fee > 0) && <p className="mt-1 text-[12px] text-mute">一起的商品 {formatTwd(s.shared)}・運費等 {formatTwd(s.fee)}（{s.feeSplit === "GOODS" ? "照各自商品金額比例" : "平均分"}）</p>}
 
       <div className="mt-3 space-y-2" data-testid="joint-debts">
         {s.debts.length === 0 ? (

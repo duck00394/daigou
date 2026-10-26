@@ -4,7 +4,7 @@ import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { PageHeader, Section, TableWrap, Twd, Empty, Stat, StatusBadge, LinkButton, Badge } from "@/components/ui";
 import { BuyerFormView, BuyerAliases, TagManager, IncidentForm, MergeButton } from "../forms";
-import { fmtDate, incidentKind, orderStatus, paymentStatus, shipStatus, procurementStatus, refundStatus } from "@/lib/labels";
+import { fmtDate, incidentKind, orderStatus, paymentStatus, shipStatus, procurementStatus, refundStatus, flagLabel } from "@/lib/labels";
 
 const TABS = [
   ["overview", "總覽"],
@@ -112,7 +112,7 @@ export default async function BuyerPage({ params, searchParams }: { params: Prom
       </nav>
 
       {tab === "overview" && (
-        <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[22rem_1fr]">
           <div className="space-y-4">
             <Section title="標籤（內部提醒）">
               <TagManager buyerId={id} tags={tagRows} available={tagsAll.filter((t) => !activeTagIds.has(t.id))} />
@@ -227,7 +227,7 @@ export default async function BuyerPage({ params, searchParams }: { params: Prom
       )}
 
       {tab === "money" && (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Section title="付款紀錄" pad={false}>
             {payments.length === 0 ? <Empty>沒有付款紀錄。</Empty> : (
               <TableWrap>
@@ -318,7 +318,7 @@ export default async function BuyerPage({ params, searchParams }: { params: Prom
                       <Link href={`/orders/${e.orderItem.order.id}`} className="num text-ai hover:underline">{e.orderItem.order.orderNo}</Link>｜{e.orderItem.productNameSnapshot}｜
                       {{ APPENDED: "追加", QTY_CHANGED: "增加數量", PRICE_CHANGED: "修改單價", DISCOUNT_CHANGED: "修改折扣", CANCELLED: "取消" }[e.type] ?? e.type}
                       {e.qtyDelta ? `（${e.qtyDelta > 0 ? "+" : ""}${e.qtyDelta}）` : ""}
-                      {e.fromValue || e.toValue ? ` ${e.fromValue ?? ""} → ${e.toValue ?? ""}` : ""}
+                      {e.fromValue || e.toValue ? ` ${flagLabel(e.fromValue)} → ${flagLabel(e.toValue)}` : ""}
                     </span>
                   </li>
                 ))}

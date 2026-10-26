@@ -245,3 +245,15 @@ export function batchStage(b: { status: string; progress: string }): BatchStage 
   if (b.status === "PARTIAL_RECEIVED") return "PARTIAL";
   return (b.progress as BatchStage) ?? "ASKED";
 }
+
+/** 紀錄裡的狀態值顯示中文（例：PENDING_PURCHASE → 待採購）；不認得的原樣顯示 */
+export function flagLabel(v: string | null | undefined): string {
+  return v ? (purchaseFlag[v] ?? packFlag[v] ?? v) : "";
+}
+
+/** 台灣時間的「月/日」（例：10/5）；伺服器在別的時區也不會差一天 */
+export function fmtMonthDay(d: Date | null | undefined): string {
+  if (!d) return "";
+  const [, m, day] = toDateInput(d).split("-");
+  return `${Number(m)}/${Number(day)}`;
+}

@@ -2,6 +2,7 @@
 import { getView, inView } from "@/server/view";
 import { refundsOwed } from "@/server/services/batch-ops";
 import { formatTwd } from "@/lib/money";
+import { fmtMonthDay } from "@/lib/labels";
 import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
@@ -11,7 +12,7 @@ import { PageHeader, Empty } from "@/components/ui";
 import { NavSelect } from "@/components/nav-select";
 import { RefundButton, ResetButton } from "./reset";
 
-const day = (d: Date | null) => (d ? `${d.getMonth() + 1}/${d.getDate()}` : "");
+const day = fmtMonthDay; // 台灣時間的月/日
 
 export default async function ReconcilePage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   await requireUser();
