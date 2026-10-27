@@ -1,6 +1,7 @@
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { getMe } from "@/server/me";
+import { getView } from "@/server/view";
 import { listOperators } from "@/server/services/operators";
 import { getDefaultRateMicro } from "@/server/services/settings";
 import { PageHeader } from "@/components/ui";
@@ -43,12 +44,14 @@ export default async function PurchasePage({ searchParams }: { searchParams: Pro
     prisma.purchaseBatchItem.findFirst({ orderBy: { createdAt: "desc" }, select: { product: { select: { seriesId: true, productTypeId: true } } } }),
     listShippingMethods(prisma),
   ]);
+  const view = await getView();
   const lastCategory = batches.find((b) => b.categoryId && categories.some((c) => c.id === b.categoryId && c.active))?.categoryId ?? null;
   return (
     <div className="space-y-4">
       <PageHeader title="新增採購" sub="一個畫面記完：哪個系列 → 跟哪個代購 → 買了哪些角色" />
       <QuickPurchase
         me={me}
+        acting={view.key !== "all" ? view.key : null}
         operators={operators.map((o) => ({ id: o.id, name: o.name, code: o.code }))}
         categories={categories}
         shipping={shipping.map((x) => ({ id: x.id, name: x.name, kind: x.kind, currency: x.currency === "JPY" ? "JPY" : "TWD", amount: x.amount }))}

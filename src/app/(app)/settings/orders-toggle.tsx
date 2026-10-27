@@ -1,5 +1,5 @@
 "use client";
-// 「我有在接單」開關：關掉後，訂單、貼上加單、收款、出貨、買家、開團都從選單藏起來（資料不會刪）
+// 「我有在接單」開關：關掉後，貼上加單、收款、買家、開團、Excel 匯入從選單藏起來（訂單、出貨一直都在）（資料不會刪）
 import { useRun } from "@/components/client";
 import { setOrdersEnabledAction } from "@/actions/ops";
 
@@ -9,7 +9,7 @@ export function OrdersToggle({ on }: { on: boolean }) {
     <div className="flex items-center justify-between gap-3">
       <div>
         <div className="font-medium">我有在接單</div>
-        <p className="text-[13px] text-mute">關掉：訂單、貼上加單、收款、出貨、買家、開團都會從選單藏起來，資料不會刪，之後打開就回來。</p>
+        <p className="text-[13px] text-mute">關掉：貼上加單、收款、買家、開團、Excel 匯入會從選單藏起來（訂單、出貨一直都在），資料不會刪，之後打開就回來。</p>
       </div>
       <button
         type="button"

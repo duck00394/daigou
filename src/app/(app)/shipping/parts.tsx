@@ -6,14 +6,16 @@ import { Choice } from "@/components/choice";
 import { bulkFlagsAction } from "@/actions/orders";
 import { toDateTimeInput } from "@/lib/labels";
 
-export type ShipItem = { id: string; orderNo: string; orderId: string; name: string; spec: string | null; pending: number; reserved: number; packFlag: string; reservedBy?: string };
+export type ShipItem = { id: string; orderNo: string; orderId: string; name: string; spec: string | null; pending: number; reserved: number; packFlag: string; reservedBy?: string; ownerKey?: string | null };
 type Op = { id: string; name: string };
 const ownerOpts = (operators: Op[]) => [...operators.map((o) => ({ value: o.id, label: o.name })), { value: "joint", label: "合資的" }, { value: "none", label: "未指定的" }];
 
 /** 一位買家的待出貨商品：勾選、填數量、建立出貨單（支援部分出貨） */
 export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, available, operators = [] }: { buyerId: string; buyerName: string; defaultMethod: string | null; items: ShipItem[]; available: Record<string, number>; operators?: Op[] }) {
   // 誰出的貨（扣誰的庫存）：空白＝照已保留的，不夠的先扣先買進的
-  const [owner, setOwner] = useState("");
+  // 預訂記了跟誰訂的（而且都一樣）就預設扣他的
+  const keys = [...new Set(items.map((i) => i.ownerKey ?? ""))];
+  const [owner, setOwner] = useState(keys.length === 1 && keys[0] && ownerOpts(operators).some((o) => o.value === keys[0]) ? keys[0] : "");
   const ownerLabel = ownerOpts(operators).find((o) => o.value === owner)?.label.replace(/的$/, "") ?? "";
   const [qty, setQty] = useState<Record<string, string>>(() => Object.fromEntries(items.map((i) => [i.id, i.reserved > 0 ? String(Math.min(i.reserved, i.pending)) : ""])));
   const [open, setOpen] = useState(false);

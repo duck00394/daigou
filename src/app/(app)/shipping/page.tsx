@@ -61,6 +61,7 @@ async function TodoTab({ byOrder, sp }: { byOrder: boolean; sp: Record<string, s
     reserved: i.reservedQtyCache,
     packFlag: i.packFlag,
     reservedBy: ownersText(resBy.get(i.id), ops),
+    ownerKey: i.ownerKey,
   });
   const groups = new Map<string, { key: string; title: string; sub: string; buyer: (typeof items)[number]["order"]["buyer"]; items: typeof items }>();
   for (const i of items) {

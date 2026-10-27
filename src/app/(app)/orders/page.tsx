@@ -86,7 +86,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
           {sp.buyerId && <input type="hidden" name="buyerId" value={sp.buyerId} />}
         </FilterBar>
         <Selection ids={orders.map((o) => o.id)}>
-        <BulkBar />
+        <BulkBar groupBuys={gbs.filter((g) => g.status !== "CANCELLED").map((g) => ({ id: g.id, name: g.name }))} />
         {orders.length === 0 ? (
           <Empty action={<LinkButton href="/orders/new" primary>新增訂單</LinkButton>}>沒有符合條件的訂單。</Empty>
         ) : (

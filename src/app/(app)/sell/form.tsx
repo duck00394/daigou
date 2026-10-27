@@ -8,14 +8,18 @@ import { SeriesPicker, type SeriesOpt } from "@/components/series-picker";
 import { sellSheetAction, sellToCustomerAction } from "@/actions/catalog-tree";
 import { ChannelPicker } from "@/components/channel-picker";
 import { Choice } from "@/components/choice";
+import { ActingChoice } from "@/components/acting";
 import { formatTwd } from "@/lib/money";
 
 type Row = { productId: string; name: string; free: number; freeBy?: Record<string, number>; incoming: number; price: number | null };
 type Sheet = { id: string; name: string; items: { typeId: string; typeName: string; price: number | null; rows: Row[] }[] };
 
-export function SellForm({ series, buyers, initialCategory, waiting, channels = [], buyerChannels = {}, operators = [], me = null, initialQty = {} }: { series: SeriesOpt[]; buyers: string[]; initialCategory: string; waiting: number; channels?: string[]; buyerChannels?: Record<string, string>; operators?: { id: string; name: string }[]; me?: string | null; initialQty?: Record<string, string> }) {
+export function SellForm({ series, buyers, initialCategory, waiting, channels = [], buyerChannels = {}, operators = [], me = null, acting = null, groupBuys = [], initialQty = {} }: { series: SeriesOpt[]; buyers: string[]; initialCategory: string; waiting: number; channels?: string[]; buyerChannels?: Record<string, string>; operators?: { id: string; name: string }[]; me?: string | null; acting?: string | null; groupBuys?: { id: string; name: string; categoryId: string | null }[]; initialQty?: Record<string, string> }) {
   // 誰賣的：只賣、只扣這個人的現貨，兩個人的庫存才對得上（預設是這支手機的人）
-  const [seller, setSeller] = useState<string>(me ?? "");
+  // 預設＝左邊「現在看誰的」選的人（選「全部」時用這支手機的人）
+  const [seller, setSeller] = useState<string>(acting ?? me ?? "");
+  // 代購團（選填）：加了系列、那個系列剛好只有一個代購團時自動帶
+  const [groupBuy, setGroupBuy] = useState("");
   const sellerName = seller === "joint" ? "合資" : seller === "none" ? "未指定" : (operators.find((o) => o.id === seller)?.name ?? "");
   const freeOf = (r: Row) => (seller ? (r.freeBy?.[seller] ?? 0) : r.free);
   const [sheets, setSheets] = useState<Sheet[]>([]);
@@ -69,6 +73,8 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
     try {
       const s = await fetchSheet(id);
       setSheets((l) => (l.some((x) => x.id === s.id) ? l : [...l, s]));
+      const gbs = groupBuys.filter((g) => g.categoryId === s.id);
+      if (gbs.length === 1) setGroupBuy((v) => v || gbs[0].id);
       setDone(null);
     } catch (e) {
       setLoadError((e as Error).message);
@@ -121,7 +127,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
       if (m) m.qty += x.q;
       else merged.set(x.r.productId, { productId: x.r.productId, qty: x.q, unitPrice: Number(x.p), categoryId: x.categoryId });
     }
-    run(() => sellToCustomerAction({ buyerName: buyer.trim() || null, channel: channel || null, idemKey: idem.key, paid, owner: seller || null, lines: [...merged.values()] }), {
+    run(() => sellToCustomerAction({ buyerName: buyer.trim() || null, channel: channel || null, idemKey: idem.key, paid, owner: seller || null, groupBuyId: groupBuy || null, lines: [...merged.values()] }), {
       success: (d) => `已登記${buyer.trim() ? `「${buyer.trim()}」` : ""}：${[d.sold ? `賣出 ${d.sold} 件` : "", d.preordered ? `預訂 ${d.preordered} 件` : ""].filter(Boolean).join("、")}`,
       onOk: async (d) => {
         setDone(`${sellerName && d.sold ? `${sellerName}賣的・` : ""}${channel ? `${channel}・` : ""}${buyer.trim() || "客人"}：${[d.sold ? `賣出 ${d.sold} 件` : "", d.preordered ? `預訂 ${d.preordered} 件（到貨再給）` : ""].filter(Boolean).join("、")}，共 ${formatTwd(d.total)}`);
@@ -144,12 +150,18 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
     <div className="space-y-4">
       <section className="space-y-3 rounded-xl border border-line bg-card p-4">
         {operators.length > 0 && (
-          <Choice
+          <ActingChoice
             label="誰賣的（扣誰的庫存）"
+            noun="訂單（賣的、預訂都算他的）"
+            testid="seller"
+            defaultValue={acting ?? me ?? ""}
             value={seller}
             onChange={setSeller}
             options={[...operators.map((o) => ({ value: o.id, label: o.id === me ? `${o.name}（我）` : o.name })), { value: "joint", label: "合資的" }, { value: "none", label: "未指定的" }, { value: "", label: "誰的都可以（先賣先買進的）" }]}
           />
+        )}
+        {groupBuys.length > 0 && (
+          <Choice label="代購團（選填）" value={groupBuy} onChange={setGroupBuy} placeholder="不指定" options={groupBuys.map((g) => ({ value: g.id, label: g.name }))} hint="選了系列，那個系列只有一個代購團時會自動帶。" />
         )}
         <div className="grid grid-cols-2 gap-2">
           <ChannelPicker value={channel} onChange={setChannel} extra={channels} />

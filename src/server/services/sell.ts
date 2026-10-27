@@ -15,7 +15,7 @@ export interface SellLine {
   categoryId?: string | null; // 這個商品是哪個系列（一位客人可以一次買好幾個系列）
 }
 
-export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: string | null; channel?: string | null; categoryId?: string | null; lines: SellLine[]; idemKey: string; paid?: boolean; owner?: string | null }) {
+export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: string | null; channel?: string | null; categoryId?: string | null; lines: SellLine[]; idemKey: string; paid?: boolean; owner?: string | null; groupBuyId?: string | null }) {
   const channel = input.channel?.trim() ? input.channel.trim().slice(0, 40) : null;
   if (!input.idemKey || input.idemKey.length < 8) throw new BizError("缺少送出識別碼");
   const lines = input.lines.filter((l) => l.qty > 0);
@@ -32,6 +32,11 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
     const dup = await t.auditLog.findFirst({ where: { action: "sell.create", entityId: key } });
     return dup ? { ...(dup.data as { sold: number; preordered: number; total: number }), duplicated: true } : null;
   };
+  const groupBuyId = input.groupBuyId || null;
+  if (groupBuyId) {
+    const gb = await t.groupBuy.findUnique({ where: { id: groupBuyId }, select: { status: true } });
+    if (!gb || gb.status === "CANCELLED") throw new BizError("找不到這個代購團，或已取消");
+  }
   const before = await done();
   if (before) return before;
   await lockRows(t, "Product", lines.map((l) => l.productId));
@@ -53,7 +58,7 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
   for (const { l, now } of plan) {
     if (now > 0) {
       const q = await quickSale(t, actor, { productId: l.productId, qty: now, unitPrice: l.unitPrice, buyerName: input.buyerName ?? null, paid: input.paid !== false, idemKey: `${input.idemKey}:${l.productId}`, owner: input.owner || null });
-      if (channel) await t.order.update({ where: { id: q.orderId }, data: { salesChannel: channel } });
+      if (channel || groupBuyId) await t.order.update({ where: { id: q.orderId }, data: { ...(channel ? { salesChannel: channel } : {}), ...(groupBuyId ? { groupBuyId } : {}) } });
       sold += now;
     }
     if (l.qty > now) preLines.push({ ...l, qty: l.qty - now });
@@ -69,10 +74,13 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
       buyerId: buyer.id,
       source: "MANUAL",
       notes: "預訂（到貨再給）",
+      groupBuyId,
       idempotencyKey: `${key}:pre`,
       items: preLines.map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: l.unitPrice, categoryId: l.categoryId ?? input.categoryId ?? null })),
     });
     if (channel) await t.order.update({ where: { id: pre.id }, data: { salesChannel: channel } });
+    // 預訂記成跟誰訂的（有選「誰賣的」才記），到貨出貨時預設扣他的貨
+    if (input.owner) await t.orderItem.updateMany({ where: { orderId: pre.id }, data: { ownerKey: input.owner } });
     preordered = preLines.reduce((s, l) => s + l.qty, 0);
   }
   const result = { sold, preordered, total };

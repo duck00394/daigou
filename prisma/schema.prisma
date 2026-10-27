@@ -559,6 +559,7 @@ model OrderItem {
   packFlag               PackFlag            @default(NONE)
   addedLater             Boolean             @default(false) // 追加到原訂單的明細
   notes                  String?
+  ownerKey               String? // 客人跟誰訂的（扣誰的庫存）：經營者 id、"joint"、"none"；空白＝還沒分
   // ── 快取 ──
   cancelledQtyCache      Int                 @default(0)
   reservedQtyCache       Int                 @default(0)

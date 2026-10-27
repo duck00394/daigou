@@ -141,3 +141,37 @@ export async function bulkConfirmAction(orderIds: string[]) {
     return n;
   });
 }
+
+/** 多選訂單一次改代購團（groupBuyId 空白＝不屬於任何代購團）；已取消的訂單跳過 */
+export async function bulkGroupBuyAction(orderIds: string[], groupBuyId: string | null) {
+  return run(async (a) => {
+    const ids = z.array(z.string().min(1).max(64)).min(1).max(500).parse(orderIds);
+    const gb = z.string().max(64).nullable().parse(groupBuyId);
+    return tx(async (t) => {
+      if (gb) {
+        const g = await t.groupBuy.findUnique({ where: { id: gb }, select: { status: true } });
+        if (!g || g.status === "CANCELLED") throw new BizError("找不到這個代購團，或已取消");
+      }
+      let changed = 0;
+      let skipped = 0;
+      for (const id of ids) {
+        const ord = await t.order.findUnique({ where: { id }, select: { confirmation: true, groupBuyId: true } });
+        if (!ord || ord.confirmation === "CANCELLED") { skipped++; continue; }
+        if (ord.groupBuyId === gb) continue;
+        await o.updateOrderMeta(t, a, id, { groupBuyId: gb });
+        changed++;
+      }
+      return { changed, skipped };
+    }, { timeout: 60_000 });
+  });
+}
+
+/** 改客人這筆預訂跟誰訂的（owner 空白＝還沒分） */
+export async function setDemandOwnerAction(orderItemId: string, owner: string | null) {
+  return run(async (a) => {
+    const id = z.string().min(1).max(64).parse(orderItemId);
+    const ow = z.string().max(64).nullable().parse(owner || null);
+    const { setDemandOwner } = await import("@/server/services/demand-owner");
+    return tx((t) => setDemandOwner(t, a, id, ow), { timeout: 30_000 });
+  });
+}

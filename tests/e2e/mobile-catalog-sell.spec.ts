@@ -1,6 +1,9 @@
 // 手機：系列目錄（種類 › 系列 › 品項 › 角色、預設售價）→ 實體店買進 → 賣給客人（現貨＋預訂）→ 庫存選了才看
 import { test, expect } from "@playwright/test";
+import { PrismaClient } from "@prisma/client";
 import { login, toast, pickIp, newSupplierPick, openSeries, openMore, choose, chosen } from "./helpers";
+
+const dbUrl = process.env.TEST_DATABASE_URL ?? "postgresql://daigou:daigou_dev@localhost:5432/daigou_test";
 
 test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => {
   const tag = Date.now().toString(36).slice(-4);
@@ -110,6 +113,9 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
 
   // 賣給客人：吉伊 1（現貨）、小八 1（沒貨→預訂），單價帶預設 650
   await page.goto("/sell");
+  // 跟著「現在看誰的」：不用選，只提醒是誰的訂單
+  await expect(page.getByTestId("seller")).toContainText("這是");
+  await expect(page.getByTestId("seller")).toContainText("的訂單");
   await page.getByLabel("種類", { exact: true }).selectOption({ label: kind });
   await page.getByLabel("系列", { exact: true }).selectOption({ label: series });
   const chii = page.locator(`[data-testid="sell-row"][data-name="${series}:吊娃:吉伊"]`);
@@ -172,6 +178,43 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await expect(hachiRow.locator('[data-k="ordered"]')).toHaveText("1");
   await expect(hachiRow.locator('[data-k="free"]')).toHaveText("-1");
   await page.screenshot({ path: "test-results/mobile_stock_tree.png", fullPage: true });
+
+  // 客人訂：點數字看是誰訂的、跟誰訂的；改成「還沒分」→ 看自己時不算進客人訂，上面提醒去分
+  await hachiRow.getByTestId("demand-open").click();
+  const dd = page.getByRole("dialog");
+  const drow = dd.locator(`[data-testid="demand-row"][data-buyer="小美${tag}"]`);
+  await expect(drow).toContainText("× 1");
+  await expect(drow.getByLabel(`小美${tag} 跟誰訂的`)).not.toHaveValue(""); // 賣給客人時預設記成「現在看誰的」那個人
+  await page.screenshot({ path: "test-results/mobile_demand.png" });
+  await drow.getByLabel(`小美${tag} 跟誰訂的`).selectOption({ label: "還沒分" });
+  await toast(page, /改成跟還沒分訂的/);
+  await page.keyboard.press("Escape");
+  await page.reload();
+  await expect(page.getByTestId("demand-unassigned")).toContainText("還沒分是跟誰訂的");
+  await expect(hachiRow.locator('[data-k="free"]')).toHaveText("0");
+  await page.getByTestId("demand-unassigned").getByRole("link", { name: "去分 ›" }).click();
+  await expect(page).toHaveURL(/only=unassigned/);
+  await hachiRow.getByTestId("demand-open").click();
+  const back = page.getByRole("dialog").locator(`[data-testid="demand-row"][data-buyer="小美${tag}"]`).getByLabel(`小美${tag} 跟誰訂的`);
+  const firstOp = await back.locator("option").nth(1).textContent();
+  await back.selectOption({ index: 1 });
+  await toast(page, new RegExp(`改成跟${firstOp}訂的`));
+  await page.keyboard.press("Escape");
+
+  // 訂單：沒開接單也在選單裡；多選一次改代購團
+  const prisma = new PrismaClient({ datasources: { db: { url: dbUrl } } });
+  const gbName = `E2E 代購團 ${tag}`;
+  try {
+    await prisma.groupBuy.create({ data: { code: `E2E-GB-${tag}`, name: gbName, status: "OPEN" } });
+  } finally {
+    await prisma.$disconnect();
+  }
+  await page.goto(`/orders?q=${encodeURIComponent(`小美${tag}`)}`);
+  await page.getByRole("checkbox", { name: "全選本頁" }).check();
+  await page.getByLabel("選好的改成哪個代購團").selectOption({ label: gbName });
+  await page.getByRole("button", { name: "改代購團" }).click();
+  await toast(page, new RegExp(`張訂單改成「${gbName}」`));
+  await expect(page.locator("tbody")).toContainText(gbName);
 
   // 已過期：不在下拉選單，用搜尋找得到
   await page.goto("/catalog");

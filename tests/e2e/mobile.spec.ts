@@ -57,6 +57,9 @@ test("手機版主要頁面沒有整頁橫向捲動，底部導覽可用", async
   }
   await page.getByRole("button", { name: "全部功能" }).click();
   await expect(page.getByRole("link", { name: "貼上加單" })).toHaveCount(0);
+  // 訂單、出貨不管有沒有開接單都在（賣給客人的預訂要在這裡給客人）
+  await expect(page.getByRole("link", { name: /^訂單\s*客人/ }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: /^出貨\s*預訂/ }).first()).toBeVisible();
   await page.keyboard.press("Escape");
   await page.goto("/settings");
   await page.getByRole("switch", { name: "我有在接單" }).click();

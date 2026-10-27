@@ -14,6 +14,7 @@ import { jointSettlementAction, payRemainingAction, receiveAllAction, saveJointS
 import { batchProgress } from "@/lib/labels";
 import { formatJpy, formatTwd, parseRate } from "@/lib/money";
 import { Choice } from "@/components/choice";
+import { ActingChoice } from "@/components/acting";
 
 type Op = { id: string; name: string; code: string };
 type BatchOpt = { id: string; label: string; code: string; categoryId: string | null; owner: string; ownerKey: string; stage: string; supplierId: string | null; supplierName: string | null; currency: "JPY" | "TWD"; rateMicro: number; items: number };
@@ -26,6 +27,7 @@ const pill = (on: boolean) => `min-h-10 rounded-full border px-3.5 text-[15px] $
 
 export function QuickPurchase(props: {
   me: string | null;
+  acting?: string | null; // 左邊「現在看誰的」選的人（選「全部」時是 null）
   operators: Op[];
   categories: SeriesOpt[]; // 所有系列（含已過期，下拉選單只列沒過期的）
   suppliers: Supplier[]; // 最常用的排前面
@@ -52,7 +54,7 @@ export function QuickPurchase(props: {
   const [newCat, setNewCat] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [newSup, setNewSup] = useState<string | null>(null);
-  const [f, setF] = useState({ supplierId: "", name: "", owner: props.me ?? operators[0]?.id ?? "", progress: "ASKED", expectedAt: "", rate: defaultRate, deposit: "", orderNo: "", notes: "", duty: "" });
+  const [f, setF] = useState({ supplierId: "", name: "", owner: props.acting ?? props.me ?? operators[0]?.id ?? "", progress: "ASKED", expectedAt: "", rate: defaultRate, deposit: "", orderNo: "", notes: "", duty: "" });
   const [changingCat, setChangingCat] = useState(false);
   // 合資：一起的比例（百分比）、運費怎麼分、誰付了多少給代購
   const [jointPct, setJointPct] = useState<Record<string, string>>(() => Object.fromEntries(operators.map((o) => [o.id, String(Math.round(100 / Math.max(1, operators.length)))])));
@@ -416,7 +418,7 @@ export function QuickPurchase(props: {
               )}
             </div>
             <div>
-              <Choice label="這團是誰的" value={f.owner} options={owners.map(([v, l]) => ({ value: v, label: l }))} onChange={(v) => setF({ ...f, owner: v })} />
+              <ActingChoice label="這團是誰的" noun="採購" testid="buy-owner" defaultValue={props.acting ?? props.me ?? ""} value={f.owner} options={owners.map(([v, l]) => ({ value: v, label: l }))} onChange={(v) => setF({ ...f, owner: v })} />
             </div>
             {f.owner === JOINT && jointBox()}
             {store && (

@@ -18,6 +18,8 @@ import { ReceiveForm, AdjustForm, CreateBatchFromDemand, KeepButton } from "./pa
 import { SellButton } from "@/components/quick-sale";
 import { getMe } from "@/server/me";
 import { JOINT, NONE, stockByOwner } from "@/server/services/ownership";
+import { openDemandRows } from "@/server/services/demand-owner";
+import { DemandButton } from "./demand";
 import type { OwnerStockOpt } from "@/components/owner-chips";
 import { stockValuation } from "@/server/services/reports";
 import { productSearchWhere } from "@/server/services/catalog";
@@ -25,7 +27,7 @@ import { characterOrder, seriesOptions } from "@/server/services/catalog-tree";
 import { byText } from "@/lib/sort";
 import { formatTwd } from "@/lib/money";
 import { fmtDate, fmtDay, formatRateLabel } from "./util";
-import { batchStage, batchStageLabel, isStoreKind } from "@/lib/labels";
+import { batchStage, batchStageLabel, isStoreKind, fmtMonthDay } from "@/lib/labels";
 import { batchPaySummary, batchesWithSeries, dueByOwner, pendingQty, purchasedSummary } from "@/server/services/batch-ops";
 import { batchReconcile } from "@/server/services/reconcile";
 import { OwnerDue } from "@/components/owner-due";
@@ -140,6 +142,13 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
     const ch = p.characters.length === 1 ? p.characters[0].character : null;
     return { p, s, v: val.get(p.id), series, ch };
   });
+  // 客人訂：看某個人時只算跟他訂的（＋合資、未指定的）；還沒分是誰的另外提醒
+  const demandAll = await tx((t) => openDemandRows(t, ids));
+  const qtyOf = (l: { qty: number }[]) => l.reduce((a, d) => a + d.qty, 0);
+  const unassignedOf = (pid: string) => qtyOf((demandAll.get(pid) ?? []).filter((d) => !d.ownerKey));
+  if (owner) rows = rows.map((r) => ({ ...r, s: { ...r.s, openDemand: qtyOf((demandAll.get(r.p.id) ?? []).filter((d) => d.ownerKey && ownerKeys.includes(d.ownerKey))) } }));
+  const unassignedTotal = ids.reduce((a, id) => a + unassignedOf(id), 0);
+  const activeOps = operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }));
   // 預購（還沒到的）分「一定有貨」（對單買到的）和「不一定有貨」（對單還在待確認的）
   const unsureMap = new Map<string, number>();
   const sureCost = new Map<string, { qty: number; val: number; tentative: boolean }>();
@@ -175,10 +184,11 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
   const unsureOf = (r: { p: { id: string }; s: { incoming: number } }) => Math.min(r.s.incoming, unsureMap.get(r.p.id) ?? 0);
   // 庫存＝現有＋一定到 − 客人預訂還沒給的（負的＝不夠）
   const left = (r: { p: { id: string }; s: { onHand: number; openDemand: number; incoming: number } }) => r.s.onHand + r.s.incoming - unsureOf(r) - r.s.openDemand;
-  if (only === "stock") rows = rows.filter((r) => r.s.available > 0);
+  if (only === "unassigned") rows = rows.filter((r) => unassignedOf(r.p.id) > 0);
+  else if (only === "stock") rows = rows.filter((r) => r.s.available > 0);
   else if (only === "sure") rows = rows.filter((r) => r.s.incoming - unsureOf(r) > 0);
   else if (only === "unsure") rows = rows.filter((r) => unsureOf(r) > 0);
-  else if (only !== "all") rows = rows.filter((r) => r.s.onHand || r.s.incoming || r.s.kept || r.s.reserved || r.s.openDemand);
+  else if (only !== "all") rows = rows.filter((r) => r.s.onHand || r.s.incoming || r.s.kept || r.s.reserved || r.s.openDemand || unassignedOf(r.p.id));
   const label = (r: (typeof rows)[number]) => {
     if (!r.ch) return r.p.name;
     const spec = r.p.spec && r.p.spec !== r.series?.name ? r.p.spec : null;
@@ -220,12 +230,23 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
     if (only !== "all") sp.set("only", "all");
     return `/inventory?${sp.toString()}`;
   })();
+  const unassignedHref = (() => {
+    const sp = new URLSearchParams({ tab: "stock", v: "1", only: "unassigned" });
+    for (const [key, val] of Object.entries({ kind, cat, type, q })) if (val) sp.set(key, val);
+    return `/inventory?${sp.toString()}`;
+  })();
   const buyerNames = await prisma.buyer.findMany({ where: { mergedIntoId: null }, orderBy: { updatedAt: "desc" }, take: 200, select: { name: true } });
   const showKind = tree.length > 1 || !kind;
   return (
     <div className="space-y-3">
       <datalist id="buyer-names">{buyerNames.map((b) => <option key={b.name} value={b.name} />)}</datalist>
       {head}
+      {unassignedTotal > 0 && only !== "unassigned" && (
+        <p className="rounded-xl border border-[#f0dfa8] bg-warn-soft px-3 py-2 text-[14px] text-warn" data-testid="demand-unassigned">
+          還有 {unassignedTotal} 件客人訂還沒分是跟誰訂的（以前記的）。<Link className="font-semibold text-ai underline" href={unassignedHref}>去分 ›</Link>
+        </p>
+      )}
+      {only === "unassigned" && <p className="rounded-xl border border-line bg-white px-3 py-2 text-[14px] text-ink-2">只列還有預訂沒分是跟誰訂的角色。點「客人訂」的數字，每一筆選跟誰訂的。</p>}
       {rows.length === 0 ? (
         <Section><Empty action={only === "all" ? undefined : <LinkButton href="/purchase" primary>＋ 新增採購</LinkButton>}>{only === "all" ? "沒有符合的商品。換個關鍵字或系列試試。" : "這裡目前沒有庫存，也沒有還沒到的貨。新增採購後，買的東西會出現在這裡。"}</Empty></Section>
       ) : (
@@ -283,13 +304,15 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                                   </td>
                                   <td className={`num px-1.5 py-2 text-right align-top ${r.s.onHand ? "" : "text-mute"}`} data-k="onhand">{r.s.onHand}</td>
                                   <td className={`num px-1.5 py-2 text-right align-top ${r.s.incoming - unsureOf(r) ? "font-semibold text-good" : "text-mute"}`} data-k="sure">{r.s.incoming - unsureOf(r) || "–"}</td>
-                                  <td className={`num px-1.5 py-2 text-right align-top ${r.s.openDemand ? (left(r) < 0 ? "font-semibold text-bad" : "font-semibold text-info") : "text-mute"}`} data-k="ordered">{r.s.openDemand || "–"}</td>
+                                  <td className="num px-1.5 py-2 text-right align-top" data-k="ordered">
+                                    <DemandButton name={label(r)} shown={r.s.openDemand} cls={r.s.openDemand ? (left(r) < 0 ? "font-semibold text-bad" : "font-semibold text-info") : "text-mute"} operators={activeOps} rows={(demandAll.get(r.p.id) ?? []).map((d) => ({ ...d, at: fmtMonthDay(d.at) }))} />
+                                  </td>
                                   <td className={`num px-1.5 py-2 text-right align-top ${left(r) < 0 ? "font-semibold text-bad" : left(r) ? "font-semibold" : "text-mute"}`} data-k="free">{left(r)}</td>
                                   <td className="num hidden px-2 py-2 text-right align-top md:table-cell" data-k="kept">{r.s.kept}</td>
                                   <td className="num hidden px-2 py-2 text-right align-top md:table-cell" data-k="avg">{avgOf(r) ? `${formatTwd(avgOf(r)!.avg)}${avgOf(r)!.tentative ? "*" : ""}` : "—"}</td>
                                   <td className="whitespace-nowrap px-2 py-1.5 text-right align-top">
-                                    <SellButton small primary={r.s.available > 0} label="賣" me={me} product={product} />
-                                    <KeepButton tiny productId={r.p.id} name={r.p.name} available={r.s.available} kept={r.s.kept} owners={owners} me={me} />
+                                    <SellButton small primary={r.s.available > 0} label="賣" me={owner || me} product={product} />
+                                    <KeepButton tiny productId={r.p.id} name={r.p.name} available={r.s.available} kept={r.s.kept} owners={owners} me={owner || me} />
                                   </td>
                                 </tr>
                                 {/* 手機：平均成本、自留等放在這一列下面，佔滿寬度，不會擠成好幾行 */}

@@ -47,7 +47,7 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   // 2. 第一團：我的（預設），預設台幣
   await expect(chosen(page, "哪一團")).toHaveText("開新的一團");
   await newSupplier(page, `YUANS ${tag}`);
-  await expect(chosen(page, "這團是誰的")).toContainText("（我）");
+  await expect(page.getByTestId("buy-owner")).toContainText("這是"); // 跟著「現在看誰的」，不用選
   await addRow(page, "兔兔", "647", "3");
   await expect(page.getByText(/已存到「YUANS/)).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

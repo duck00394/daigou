@@ -109,6 +109,6 @@ test("手機：關稅 %、預購平均成本、庫存欄", async ({ page }) => {
   await page.getByTestId("pick-sell").click();
   await expect(page).toHaveURL(/\/sell\?.*pick=/);
   await expect(page.getByLabel(/吉伊.* 數量$/)).toHaveValue("2");
-  await expect(page.getByLabel("誰賣的（扣誰的庫存）")).toBeVisible();
+  await expect(page.getByTestId("seller")).toContainText("這是"); // 誰賣的跟著「現在看誰的」
   await page.screenshot({ path: "test-results/mobile_pick_sell.png", fullPage: true });
 });

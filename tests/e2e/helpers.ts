@@ -4,6 +4,8 @@ export async function login(page: Page) {
   // 偶爾第一次按太快（頁面還沒準備好），沒進去就再按一次
   for (let i = 0; i < 3; i++) {
     await page.goto("/login");
+    // 上一次其實登入成功了、只是跳轉比較慢：已經登入會被帶回首頁，不用再填密碼
+    if (new URL(page.url()).pathname === "/") return;
     await page.waitForLoadState("networkidle");
     await page.getByLabel("密碼").fill("e2e-password-123");
     await page.getByRole("button", { name: "登入" }).click();
@@ -71,6 +73,11 @@ export async function openSeriesPage(page: Page, name: string) {
 export async function choose(scope: Page | import("@playwright/test").Locator, label: string | RegExp, option: string | RegExp | number) {
   // 同一個標籤可能有兩個（例如電腦版側邊欄和手機選單），挑看得到的那個
   const all = scope.getByLabel(label, typeof label === "string" ? { exact: true } : undefined);
+  // 「這團是誰的」「誰賣的」預設跟著「現在看誰的」只顯示一行提醒，要先按「換人」才有選單
+  if ((await all.count()) === 0) {
+    const swap = scope.getByRole("button", { name: "換人" });
+    if (await swap.first().isVisible().catch(() => false)) await swap.first().click();
+  }
   await all.first().waitFor({ state: "attached" });
   let sel = all.first();
   for (let i = 0; i < (await all.count()); i++) if (await all.nth(i).isVisible()) { sel = all.nth(i); break; }

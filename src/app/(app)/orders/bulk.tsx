@@ -1,7 +1,8 @@
 "use client";
 import { createContext, useContext, useState } from "react";
 import { Button, useRun } from "@/components/client";
-import { bulkConfirmAction } from "@/actions/orders";
+import { bulkConfirmAction, bulkGroupBuyAction } from "@/actions/orders";
+import { Choice } from "@/components/choice";
 
 type Ctx = { sel: Set<string>; toggle: (id: string, on: boolean) => void; setAll: (on: boolean) => void; ids: string[]; clear: () => void };
 const SelCtx = createContext<Ctx | null>(null);
@@ -24,9 +25,13 @@ export function Selection({ ids, children }: { ids: string[]; children: React.Re
   return <SelCtx.Provider value={ctx}>{children}</SelCtx.Provider>;
 }
 
-export function BulkBar() {
+const KEEP = "__keep";
+const NONE_GB = "__none";
+
+export function BulkBar({ groupBuys = [] }: { groupBuys?: { id: string; name: string }[] }) {
   const c = useContext(SelCtx)!;
   const { run, pending } = useRun();
+  const [gb, setGb] = useState(KEEP);
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-line-2 px-4 py-2 text-sm">
       <label className="flex items-center gap-1.5">
@@ -37,6 +42,24 @@ export function BulkBar() {
       <Button small disabled={c.sel.size === 0} loading={pending} onClick={() => run(() => bulkConfirmAction([...c.sel]), { success: (n) => `已確認 ${n} 張待確認訂單`, onOk: c.clear })}>
         批次確認待確認訂單
       </Button>
+      {groupBuys.length > 0 && (
+        <span className="flex flex-wrap items-end gap-2" data-testid="bulk-groupbuy">
+          <Choice className="w-48" label="選好的改成哪個代購團" value={gb} onChange={setGb} options={[{ value: KEEP, label: "選代購團" }, ...groupBuys.map((g) => ({ value: g.id, label: g.name })), { value: NONE_GB, label: "不屬於代購團" }]} />
+          <Button
+            small
+            disabled={c.sel.size === 0 || gb === KEEP}
+            loading={pending}
+            onClick={() =>
+              run(() => bulkGroupBuyAction([...c.sel], gb === NONE_GB ? null : gb), {
+                success: (d) => `已把 ${d.changed} 張訂單改成「${gb === NONE_GB ? "不屬於代購團" : (groupBuys.find((g) => g.id === gb)?.name ?? "")}」${d.skipped ? `（${d.skipped} 張已取消的沒改）` : ""}`,
+                onOk: () => { c.clear(); setGb(KEEP); },
+              })
+            }
+          >
+            改代購團
+          </Button>
+        </span>
+      )}
     </div>
   );
 }
