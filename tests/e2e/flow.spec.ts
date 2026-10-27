@@ -140,10 +140,22 @@ test("採購、到貨、分配、部分出貨與報表", async ({ page }) => {
   await page.goto("/shipping");
   const card = page.locator("section").filter({ hasText: "小美" });
   await expect(card.getByRole("button", { name: /出貨 1 件/ })).toBeVisible();
+  await expect(card.getByTestId("reserved-by").first()).toContainText("保留的是：");
   await card.getByRole("button", { name: /出貨 1 件/ }).click();
+  // 出貨時可以選誰出的貨；預設照已保留的
+  await expect(page.getByLabel("誰出的貨（扣誰的庫存）")).toHaveValue("");
   await page.getByLabel("物流單號").fill("TW123456");
   await page.getByRole("button", { name: "確認出貨" }).click();
   await toast(page, "已建立出貨單");
+  // 出貨紀錄：看得到扣的是誰的，可以改出貨人（這裡只打開看，不改）
+  await page.goto("/shipping?tab=done");
+  const shipRow = page.getByRole("row").filter({ hasText: "TW123456" });
+  await expect(shipRow.getByTestId("ship-owner")).toHaveText(/^・.+ 1$/); // 這團沒設是誰的 → 未指定
+  await shipRow.getByRole("button", { name: "改出貨人" }).click();
+  await expect(page.getByRole("dialog")).toContainText("現在扣的是：");
+  await page.getByRole("dialog").screenshot({ path: "test-results/ship_owner.png" });
+  await page.keyboard.press("Escape");
+  await page.goto("/shipping");
   // 小美還有小八 1 件待出貨
   await expect(page.locator("section").filter({ hasText: "小美" })).toContainText("小八 S 娃");
 

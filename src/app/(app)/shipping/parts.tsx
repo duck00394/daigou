@@ -1,14 +1,20 @@
 "use client";
 import { useMemo, useState } from "react";
 import { Button, Modal, TextField, useRun, useIdemKey, inputCls, notify } from "@/components/client";
-import { createShipmentAction, updateShipmentAction } from "@/actions/ops";
+import { createShipmentAction, switchShipmentOwnerAction, updateShipmentAction } from "@/actions/ops";
+import { Choice } from "@/components/choice";
 import { bulkFlagsAction } from "@/actions/orders";
 import { toDateTimeInput } from "@/lib/labels";
 
-export type ShipItem = { id: string; orderNo: string; orderId: string; name: string; spec: string | null; pending: number; reserved: number; packFlag: string };
+export type ShipItem = { id: string; orderNo: string; orderId: string; name: string; spec: string | null; pending: number; reserved: number; packFlag: string; reservedBy?: string };
+type Op = { id: string; name: string };
+const ownerOpts = (operators: Op[]) => [...operators.map((o) => ({ value: o.id, label: o.name })), { value: "joint", label: "合資的" }, { value: "none", label: "未指定的" }];
 
 /** 一位買家的待出貨商品：勾選、填數量、建立出貨單（支援部分出貨） */
-export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, available }: { buyerId: string; buyerName: string; defaultMethod: string | null; items: ShipItem[]; available: Record<string, number> }) {
+export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, available, operators = [] }: { buyerId: string; buyerName: string; defaultMethod: string | null; items: ShipItem[]; available: Record<string, number>; operators?: Op[] }) {
+  // 誰出的貨（扣誰的庫存）：空白＝照已保留的，不夠的先扣先買進的
+  const [owner, setOwner] = useState("");
+  const ownerLabel = ownerOpts(operators).find((o) => o.value === owner)?.label.replace(/的$/, "") ?? "";
   const [qty, setQty] = useState<Record<string, string>>(() => Object.fromEntries(items.map((i) => [i.id, i.reserved > 0 ? String(Math.min(i.reserved, i.pending)) : ""])));
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ method: defaultMethod ?? "", tracking: "", shippedAt: toDateTimeInput(new Date()), note: "" });
@@ -37,6 +43,7 @@ export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, availa
                 {i.name}
                 {i.spec && <span className="text-[12px] text-mute">｜{i.spec}</span>}
                 {i.packFlag !== "NONE" && <span className="ml-1 text-[12px] text-info">（{i.packFlag === "READY" ? "已備妥" : "備貨中"}）</span>}
+                {i.reservedBy && <div className="text-[12px] text-mute" data-testid="reserved-by">保留的是：{i.reservedBy}</div>}
               </td>
               <td className="num text-[13px]"><a href={`/orders/${i.orderId}`} className="text-ai hover:underline">{i.orderNo}</a></td>
               <td className="num text-right">{i.pending}</td>
@@ -68,7 +75,7 @@ export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, availa
                 if (!Number.isInteger(x.q) || x.q > x.i.pending) return notify(`「${x.i.name}」最多只能出貨 ${x.i.pending} 件`);
               }
               run(
-                () => createShipmentAction({ buyerId, method: f.method || null, trackingNo: f.tracking || null, shippedAt: f.shippedAt, note: f.note || null, items: lines.map((x) => ({ orderItemId: x.i.id, qty: x.q })), autoReserve: auto, dedupeKey: idem.key }),
+                () => createShipmentAction({ buyerId, method: f.method || null, trackingNo: f.tracking || null, shippedAt: f.shippedAt, note: f.note || null, items: lines.map((x) => ({ orderItemId: x.i.id, qty: x.q })), autoReserve: auto, dedupeKey: idem.key, owner: owner || null }),
                 { success: (d) => `已建立出貨單 ${d.shipmentNo}`, onOk: () => { idem.renew(); setOpen(false); } },
               );
             }}
@@ -80,12 +87,22 @@ export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, availa
         <ul className="mb-3 space-y-0.5 text-sm">
           {lines.map((x) => <li key={x.i.id}>{x.i.name} × <b className="num">{x.q}</b>（{x.i.orderNo}）</li>)}
         </ul>
+        {operators.length > 0 && (
+          <Choice
+            className="mb-3"
+            label="誰出的貨（扣誰的庫存）"
+            value={owner}
+            onChange={setOwner}
+            options={[{ value: "", label: "照已保留的（不換）" }, ...ownerOpts(operators)]}
+            hint={owner ? `已保留的會換成${ownerLabel}的貨，${ownerLabel}的不夠會擋下來。` : "選了人，就只扣那個人的庫存，兩個人的庫存才對得上。"}
+          />
+        )}
         {needsAuto && (
           <div className="mb-3 rounded-lg bg-warn-soft px-3 py-2 text-sm">
             <p>部分商品的出貨數量超過已到貨保留的數量。</p>
             <label className="mt-1 flex items-center gap-2">
               <input type="checkbox" className="h-4 w-4" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
-              從可用庫存自動保留不足的數量（可用：{lines.filter((x) => x.q > x.i.reserved).map((x) => `${x.i.name} ${available[x.i.id] ?? 0} 件`).join("、")}）
+              從{owner ? `${ownerLabel}的` : ""}可用庫存自動保留不足的數量（可用：{lines.filter((x) => x.q > x.i.reserved).map((x) => `${x.i.name} ${available[x.i.id] ?? 0} 件`).join("、")}）
             </label>
           </div>
         )}
@@ -118,5 +135,28 @@ export function ShipmentEdit({ id, method, tracking, delivered }: { id: string; 
         </div>
       </Modal>
     </div>
+  );
+}
+
+/** 改出貨人：已經出貨的這張，換成扣另一個人的庫存（出貨單件數、收款不變） */
+export function ShipOwnerButton({ id, now, operators }: { id: string; now: string; operators: Op[] }) {
+  const [open, setOpen] = useState(false);
+  const [owner, setOwner] = useState("");
+  const { run, pending } = useRun();
+  if (!operators.length) return null;
+  return (
+    <>
+      <Button small onClick={() => { setOwner(""); setOpen(true); }}>改出貨人</Button>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="改出貨人"
+        footer={<Button variant="primary" loading={pending} disabled={!owner} onClick={() => run(() => switchShipmentOwnerAction(id, owner), { success: (d) => (d.moved ? `已改成${d.name}出貨（換了 ${d.moved} 件）` : `本來就是${d.name}的，不用換`), onOk: () => setOpen(false) })}>確認更改</Button>}
+      >
+        <p className="mb-3 text-[14px]">現在扣的是：<b>{now || "—"}</b></p>
+        <Choice label="改成誰出的貨（扣誰的庫存）" value={owner} onChange={setOwner} placeholder="選一個人" options={ownerOpts(operators)} />
+        <p className="mt-2 text-[12px] text-mute">原本扣到的貨會退回原本那個人的庫存，改扣新選的人。出貨件數、收款不變；成本和「誰賺多少」會跟著重新算。新選的人庫存不夠會擋下來，什麼都不改。</p>
+      </Modal>
+    </>
   );
 }

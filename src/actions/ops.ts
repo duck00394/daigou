@@ -176,9 +176,9 @@ export async function cancelBatchAction(batchId: string) {
   return run((a) => tx((t) => pur.cancelBatch(t, a, batchId)));
 }
 
-export async function createShipmentAction(input: { buyerId: string; method: string | null; trackingNo: string | null; shippedAt: string | null; note: string | null; items: { orderItemId: string; qty: number }[]; autoReserve: boolean; dedupeKey: string }) {
+export async function createShipmentAction(input: { buyerId: string; method: string | null; trackingNo: string | null; shippedAt: string | null; note: string | null; items: { orderItemId: string; qty: number }[]; autoReserve: boolean; dedupeKey: string; owner?: string | null }) {
   return run((a) =>
-    tx((t) => ship.createShipment(t, a, { ...input, shippedAt: parseDateTimeInput(input.shippedAt) ?? undefined }), { timeout: 120_000 }).then((r) => ({ shipmentNo: r.shipment.shipmentNo, duplicated: r.duplicated })),
+    tx((t) => ship.createShipment(t, a, { ...input, owner: input.owner ? z.string().max(64).parse(input.owner) : null, shippedAt: parseDateTimeInput(input.shippedAt) ?? undefined }), { timeout: 120_000 }).then((r) => ({ shipmentNo: r.shipment.shipmentNo, duplicated: r.duplicated })),
   );
 }
 export async function updateShipmentAction(id: string, input: { method?: string | null; trackingNo?: string | null; note?: string | null; delivered?: boolean }) {
@@ -258,4 +258,10 @@ export async function buyerOpenOrdersAction(buyerId: string) {
 export async function setOrdersEnabledAction(on: boolean) {
   const { setOrdersEnabled } = await import("@/server/services/settings");
   return run((a) => tx((t) => setOrdersEnabled(t, a, z.boolean().parse(on))).then(() => null));
+}
+
+/** 改出貨人：已經出貨的這張出貨單，換成扣這個人的庫存 */
+export async function switchShipmentOwnerAction(shipmentId: string, owner: string) {
+  const o = z.string().min(1).max(64).parse(owner);
+  return run((a) => tx(async (t) => (await import("@/server/services/ship-owner")).switchShipmentOwner(t, a, z.string().min(1).parse(shipmentId), o), { timeout: 60_000 }));
 }

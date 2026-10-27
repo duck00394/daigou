@@ -3,6 +3,7 @@ import { BizError, lockRows, type Tx } from "@/server/db";
 import { audit, emptyToNull, nextCode, type Actor } from "./common";
 import { itemReservations, reserveForItem } from "./inventory";
 import { recomputeOrder } from "./recompute";
+import { switchReservedOwner } from "./ship-owner";
 
 export interface ShipInput {
   buyerId: string;
@@ -13,6 +14,7 @@ export interface ShipInput {
   items: { orderItemId: string; qty: number }[];
   autoReserve?: boolean; // 保留不足時，自動從可用庫存保留
   dedupeKey?: string;
+  owner?: string | null; // 誰出的貨（扣誰的庫存）：經營者 id、"joint"、"none"；空白＝照已保留的
 }
 
 export async function createShipment(t: Tx, actor: Actor, input: ShipInput) {
@@ -60,11 +62,12 @@ export async function createShipment(t: Tx, actor: Actor, input: ShipInput) {
     const active = fresh.qty - fresh.cancellations.reduce((s, c) => s + c.qty, 0);
     const shipped = fresh.shipmentItems.reduce((s, x) => s + x.qty, 0);
     if (line.qty > active - shipped) throw new BizError(`「${it.productNameSnapshot}」（${it.order.orderNo}）最多只能再出貨 ${active - shipped} 件`);
+    if (input.owner) await switchReservedOwner(t, actor, it.id, input.owner);
     let groups = await itemReservations(t, it.id);
     let reserved = groups.reduce((s, g) => s + g.qty, 0);
     if (reserved < line.qty) {
       if (!input.autoReserve) throw new BizError(`「${it.productNameSnapshot}」只保留了 ${reserved} 件，請先登記到貨或保留庫存`);
-      await reserveForItem(t, actor, { orderItemId: it.id, qty: line.qty - reserved });
+      await reserveForItem(t, actor, { orderItemId: it.id, qty: line.qty - reserved, owner: input.owner || null });
       groups = await itemReservations(t, it.id);
       reserved = groups.reduce((s, g) => s + g.qty, 0);
     }

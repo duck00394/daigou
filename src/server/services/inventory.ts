@@ -217,7 +217,7 @@ export async function adjustStock(t: Tx, actor: Actor, input: { productId: strin
  * 不會超過明細尚未保留、尚未出貨的需求量，也不會超過可用庫存。
  * 指定 batchItemId 時只從該 lot 保留。
  */
-export async function reserveForItem(t: Tx, actor: Actor, input: { orderItemId: string; qty: number; batchItemId?: string | null }) {
+export async function reserveForItem(t: Tx, actor: Actor, input: { orderItemId: string; qty: number; batchItemId?: string | null; owner?: string | null }) {
   if (!Number.isInteger(input.qty) || input.qty <= 0) throw new BizError("保留數量必須是正整數");
   const { item, need } = await itemNeed(t, input.orderItemId);
   if (item.order.confirmation !== "CONFIRMED") throw new BizError(`訂單 ${item.order.orderNo} 不是已確認狀態，不能保留庫存`);
@@ -225,8 +225,9 @@ export async function reserveForItem(t: Tx, actor: Actor, input: { orderItemId: 
   if (input.qty > need) throw new BizError(`此明細只需要再保留 ${need} 件`);
   let lots = await productLots(t, item.productId);
   if (input.batchItemId !== undefined) lots = lots.filter((l) => l.batchItemId === (input.batchItemId ?? null));
+  if (input.owner) lots = await filterLotsByOwner(t, lots, input.owner);
   const free = lots.reduce((s, l) => s + Math.max(0, l.free), 0);
-  if (free < input.qty) throw new BizError(`可用庫存只有 ${free} 件`);
+  if (free < input.qty) throw new BizError(`「${item.productNameSnapshot}」${input.owner ? `${await ownerName(t, input.owner)}的` : ""}可用庫存只有 ${free} 件`);
   let left = input.qty;
   for (const lot of lots) {
     if (left <= 0) break;
@@ -442,4 +443,11 @@ export async function keepStock(t: Tx, actor: Actor, input: { productId: string;
   }
   await audit(t, actor, input.delta > 0 ? "inventory.keep" : "inventory.unkeep", "Product", input.productId, { qty: Math.abs(input.delta), note: input.note ?? null });
   return { duplicated: false };
+}
+
+/** 歸屬的顯示名稱（經營者名字、合資、未指定） */
+export async function ownerName(t: Tx, key: string) {
+  if (key === "joint") return "合資";
+  if (key === "none") return "未指定";
+  return (await t.operator.findUnique({ where: { id: key }, select: { name: true } }))?.name ?? "未指定";
 }

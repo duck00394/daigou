@@ -3,7 +3,14 @@ import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { inventorySummary } from "@/server/services/inventory";
 import { PageHeader, Section, TableWrap, Empty, LinkButton, TagChip } from "@/components/ui";
-import { BuyerShipCard, ShipmentEdit, type ShipItem } from "./parts";
+import { BuyerShipCard, ShipOwnerButton, ShipmentEdit, type ShipItem } from "./parts";
+import { listOperators } from "@/server/services/operators";
+import { shipOwnerLabels } from "@/server/services/ship-owner";
+
+type Ops = { id: string; name: string }[];
+/** 「JING 1・合資 1」 */
+const ownersText = (m: Map<string, number> | undefined, ops: Ops) =>
+  [...(m ?? new Map<string, number>()).entries()].filter(([, q]) => q > 0).map(([k, q]) => `${k === "joint" ? "合資" : k === "none" ? "未指定" : (ops.find((o) => o.id === k)?.name ?? "未指定")} ${q}`).join("・");
 import { fmtDate } from "@/lib/labels";
 
 export const metadata = { title: "出貨" };
@@ -41,6 +48,9 @@ async function TodoTab({ byOrder, sp }: { byOrder: boolean; sp: Record<string, s
     orderBy: [{ order: { orderedAt: "asc" } }, { createdAt: "asc" }],
   });
   const inv = await tx((t) => inventorySummary(t, [...new Set(items.map((i) => i.productId))]));
+  const ops = await tx((t) => listOperators(t, { includeInactive: true }));
+  const activeOps = ops.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }));
+  const resBy = await tx((t) => shipOwnerLabels(t, { orderItemIds: items.filter((i) => i.reservedQtyCache > 0).map((i) => i.id) }));
   const toView = (i: (typeof items)[number]): ShipItem => ({
     id: i.id,
     orderNo: i.order.orderNo,
@@ -50,6 +60,7 @@ async function TodoTab({ byOrder, sp }: { byOrder: boolean; sp: Record<string, s
     pending: i.qty - i.cancelledQtyCache - i.shippedQtyCache,
     reserved: i.reservedQtyCache,
     packFlag: i.packFlag,
+    reservedBy: ownersText(resBy.get(i.id), ops),
   });
   const groups = new Map<string, { key: string; title: string; sub: string; buyer: (typeof items)[number]["order"]["buyer"]; items: typeof items }>();
   for (const i of items) {
@@ -95,6 +106,7 @@ async function TodoTab({ byOrder, sp }: { byOrder: boolean; sp: Record<string, s
                   defaultMethod={g.buyer.shippingMethod}
                   items={g.items.map(toView)}
                   available={Object.fromEntries(g.items.map((i) => [i.id, Math.max(0, inv.get(i.productId)?.available ?? 0)]))}
+                  operators={activeOps}
                 />
               </Section>
             );
@@ -106,7 +118,11 @@ async function TodoTab({ byOrder, sp }: { byOrder: boolean; sp: Record<string, s
 }
 
 async function DoneTab() {
-  const ships = await prisma.shipment.findMany({ orderBy: { shippedAt: "desc" }, take: 100, include: { buyer: true, items: { include: { orderItem: { include: { order: { select: { id: true, orderNo: true } } } } } } } });
+  const ships = await prisma.shipment.findMany({ orderBy: { shippedAt: "desc" }, take: 100, include: { buyer: true, items: { include: { orderItem: { include: { order: { select: { id: true, orderNo: true, confirmation: true } } } } } } } });
+  const ops = await tx((t) => listOperators(t, { includeInactive: true }));
+  const activeOps = ops.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }));
+  const by = await tx((t) => shipOwnerLabels(t, { shipmentItemIds: ships.flatMap((s) => s.items.map((i) => i.id)) }));
+  const canSwitch = (s: (typeof ships)[number]) => s.items.some((i) => i.qty > 0) && s.items.every((i) => i.qty > 0 && i.orderItem.order.confirmation === "CONFIRMED");
   return (
     <Section pad={false}>
       {ships.length === 0 ? <Empty>還沒有出貨紀錄。</Empty> : (
@@ -119,9 +135,19 @@ async function DoneTab() {
                 <td><Link href={`/buyers/${s.buyerId}`} className="hover:underline">{s.buyer.name}</Link></td>
                 <td>{s.method ?? "—"}</td>
                 <td className="num">{s.trackingNo ?? "—"}</td>
-                <td className="max-w-sm text-[13px]">{s.items.map((i) => `${i.orderItem.productNameSnapshot}×${i.qty}（${i.orderItem.order.orderNo}）`).join("、")}</td>
+                <td className="max-w-sm text-[13px]">
+                  {s.items.map((i) => {
+                    const who = i.qty > 0 ? ownersText(by.get(i.id), ops) : "";
+                    return <div key={i.id} data-testid="ship-line">{i.orderItem.productNameSnapshot}×{i.qty}（{i.orderItem.order.orderNo}）{who && <span className="text-mute" data-testid="ship-owner">・{who}</span>}</div>;
+                  })}
+                </td>
                 <td>{s.status === "DELIVERED" ? "已送達" : "已出貨"}</td>
-                <td><ShipmentEdit id={s.id} method={s.method} tracking={s.trackingNo} delivered={s.status === "DELIVERED"} /></td>
+                <td>
+                  <div className="flex flex-wrap gap-1">
+                    <ShipmentEdit id={s.id} method={s.method} tracking={s.trackingNo} delivered={s.status === "DELIVERED"} />
+                    {canSwitch(s) && <ShipOwnerButton id={s.id} now={[...new Set(s.items.map((i) => ownersText(by.get(i.id), ops)).filter(Boolean))].join("；")} operators={activeOps} />}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
