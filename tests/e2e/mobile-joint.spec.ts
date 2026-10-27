@@ -17,6 +17,7 @@ test("手機：合資團分帳", async ({ page }) => {
 
   await newSupplierPick(page, `合資代購 ${tag}`);
   await choose(page, "這團是誰的", "合資");
+  await page.getByLabel("賣貨便運費").fill("0"); // 這裡看的是商品分帳，運費先填 0
   const box = page.getByTestId("joint-box");
   await expect(box).toBeVisible();
   // 預設各半

@@ -72,6 +72,9 @@ export function QuickPurchase(props: {
   const [fees, setFees] = useState<Record<string, string>>({});
   const [supErr, setSupErr] = useState(false);
   const [customFee, setCustomFee] = useState<string | null>(null);
+  // 賣貨便運費：每一團預設 38，一直顯示在「這一團」裡，可以直接改（不收填 0）
+  const [mainFee, setMainFee] = useState("38");
+  const mainShip = props.shipping.find((x) => x.name.includes("賣貨便"));
   const [saved, setSaved] = useState<{ id: string; name: string; count: number; stocked: boolean; paid: boolean } | null>(null);
   // 跟誰買：代購（要等寄來）或自己去實體店買（買了就拿到、當場付清）
   const [via, setVia] = useState<"AGENT" | "STORE">("AGENT");
@@ -132,7 +135,12 @@ export function QuickPurchase(props: {
         const amount = Number(v);
         return { kind: m?.kind ?? "TW_DOMESTIC_SHIPPING", currency: m?.currency ?? "TWD", amount, note: m?.name ?? null };
       })
-      .concat(!store && customFee && Number(customFee) > 0 ? [{ kind: "TW_DOMESTIC_SHIPPING", currency: "TWD" as const, amount: Number(customFee), note: null }] : []);
+      .concat(!store && customFee && Number(customFee) > 0 ? [{ kind: "TW_DOMESTIC_SHIPPING", currency: "TWD" as const, amount: Number(customFee), note: null }] : [])
+      .concat(!store && Number(mainFee) > 0 ? [{ kind: mainShip?.kind ?? "TW_DOMESTIC_SHIPPING", currency: "TWD" as const, amount: Number(mainFee), note: "賣貨便" }] : []);
+    if (!store && !/^\d+$/.test(mainFee.trim())) {
+      notify("運費請填 0 以上的整數（不收填 0）");
+      return null;
+    }
     if (feeList.some((x) => !Number.isInteger(x.amount) || x.amount < 0)) {
       notify("運費請填整數");
       return null;
@@ -421,6 +429,15 @@ export function QuickPurchase(props: {
               <ActingChoice label="這團是誰的" noun="採購" testid="buy-owner" defaultValue={props.acting ?? props.me ?? ""} value={f.owner} options={owners.map(([v, l]) => ({ value: v, label: l }))} onChange={(v) => setF({ ...f, owner: v })} />
             </div>
             {f.owner === JOINT && jointBox()}
+            {!store && (
+              <label className="flex items-center gap-2 rounded-xl border border-line-2 bg-[#fafbfc] px-3 py-2 text-[14px]" data-testid="buy-ship-fee">
+                <span className="shrink-0 font-medium text-ink-2">運費（賣貨便）</span>
+                <span className="text-mute">NT$</span>
+                <input aria-label="賣貨便運費" data-keep inputMode="numeric" className={`${inputCls} num min-h-10 w-24 text-right`} value={mainFee} onChange={(e) => setMainFee(e.target.value.replace(/\D/g, ""))} />
+                {mainFee !== "38" && <button type="button" className="text-[13px] text-ai" onClick={() => setMainFee("38")}>改回 38</button>}
+                <span className="ml-auto text-[12px] text-mute">不收填 0</span>
+              </label>
+            )}
             {store && (
               <label className="flex items-center gap-2 rounded-xl border border-line-2 bg-[#fafbfc] p-3 text-[15px]">
                 <input type="checkbox" className="h-5 w-5" checked={paidAtStore} onChange={(e) => setPaidAtStore(e.target.checked)} />
@@ -441,9 +458,9 @@ export function QuickPurchase(props: {
                   <>
                     <Choice label="進度" value={f.progress} options={Object.entries(batchProgress).map(([v, l]) => ({ value: v, label: l }))} onChange={(v) => setF({ ...f, progress: v })} />
                     <div className="space-y-2">
-                      <div className="text-[13px] font-medium text-ink-2">運費（點常用的就帶入，可以再改）</div>
+                      <div className="text-[13px] font-medium text-ink-2">其他運費（賣貨便已經在上面了；點常用的就帶入，可以再改）</div>
                       <div className="flex flex-wrap gap-1.5" aria-label="常用運費">
-                        {props.shipping.map((x) => {
+                        {props.shipping.filter((x) => x.id !== mainShip?.id).map((x) => {
                           const on = fees[x.id] !== undefined;
                           return (
                             <button
@@ -571,7 +588,7 @@ export function QuickPurchase(props: {
             <span className="flex gap-2">
               {saved.stocked && <Link className="underline" href="/inventory?tab=stock&v=1">看庫存</Link>}
               <Link className="underline" href={`/inventory/batches/${saved.id}`}>看這一團</Link>
-              <button type="button" className="underline" onClick={() => { setPick(NEW); created.current = null; setSaved(null); setFees({}); setCustomFee(null); setF((x) => ({ ...x, name: "", supplierId: "", deposit: "", orderNo: "", notes: "", duty: "" })); }}>再開新的一團</button>
+              <button type="button" className="underline" onClick={() => { setPick(NEW); created.current = null; setSaved(null); setFees({}); setCustomFee(null); setMainFee("38"); setF((x) => ({ ...x, name: "", supplierId: "", deposit: "", orderNo: "", notes: "", duty: "" })); }}>再開新的一團</button>
             </span>
           </div>
         )}

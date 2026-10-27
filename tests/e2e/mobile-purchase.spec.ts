@@ -16,6 +16,8 @@ async function addRow(page: Page, character: string, price: string, qty: string)
 
 async function newSupplier(page: Page, name: string) {
   await newSupplierPick(page, name);
+  // 這個測試看的是商品金額：賣貨便運費（預設 38）先填 0
+  await page.getByLabel("賣貨便運費").fill("0");
 }
 
 /** 全部功能 → 現在看誰的 */
@@ -175,20 +177,20 @@ test("手機：開團時一起記運費（常用運費方式）和訂金；實�
   await page.getByRole("button", { name: "儲存", exact: true }).click();
   await expect(page.getByLabel("系列", { exact: true }).locator("option:checked")).toHaveText(`E2E 現貨展 ${tag}`);
 
-  await newSupplier(page, `砂糖 ${tag}`);
+  await newSupplierPick(page, `砂糖 ${tag}`);
+  // 賣貨便運費每一團預設 38，直接顯示在「這一團」裡
+  await expect(page.getByLabel("賣貨便運費")).toHaveValue("38");
   // 訂單編號、在哪訂的
   await page.getByLabel("訂單編號").fill(`MHB${tag}`);
   await page.getByLabel("在哪訂的").fill(`IP @sugar${tag}`);
   await openMore(page);
-  await page.getByRole("button", { name: new RegExp(ship) }).click();
-  await expect(page.getByLabel(`${ship} 運費`)).toHaveValue("38");
   await page.getByLabel("已付訂金").fill("500");
   await page.screenshot({ path: "test-results/mobile_purchase_money.png", fullPage: true });
   await addRow(page, "兔兔", "600", "2");
   await page.getByTestId("saved-banner").getByRole("link", { name: "看這一團" }).click();
   await expect(page.getByTestId("batch-total")).toHaveText("NT$1,238"); // 600×2 ＋ 運費 38
   await expect(page.getByTestId("batch-due")).toHaveText("NT$738"); // 扣掉訂金 500
-  await expect(page.getByTestId("fee-row")).toContainText(ship);
+  await expect(page.getByTestId("fee-row")).toContainText("賣貨便");
   await expect(page.getByTestId("batch-order-no")).toHaveText(`MHB${tag}`);
   await expect(page.getByTestId("batch-where")).toContainText(`@sugar${tag}`);
   // 用訂單編號搜尋找到這一團
