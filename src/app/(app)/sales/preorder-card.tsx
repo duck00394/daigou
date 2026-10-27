@@ -1,16 +1,27 @@
 // 客人預訂（還沒給的）預估可賺：預訂金額 − 預購平均成本
 import { formatTwd } from "@/lib/money";
 import type { preorderProfit } from "@/server/services/preorder";
+import { AssignAll } from "./assign";
 
 type P = Awaited<ReturnType<typeof preorderProfit>>;
 
-export function PreorderCard({ p }: { p: P }) {
-  if (!p.qty) return null;
+export function PreorderCard({ p, who = null, operators = [], acting = "" }: { p: P; who?: string | null; operators?: { id: string; name: string }[]; acting?: string }) {
+  if (!p.qty && !p.unassigned) return null;
   const money = (v: number, tone?: boolean) => <span className={`num ${tone ? (v < 0 ? "text-bad" : "text-good") : ""}`}>{formatTwd(v)}</span>;
+  const warn = p.unassigned > 0 && <AssignAll n={p.unassigned} operators={operators} acting={acting} counted={!who} />;
+  if (!p.qty)
+    return (
+      <section id="preorder" className="scroll-mt-24 rounded-xl border border-line bg-card p-4" aria-label="客人預訂預估可賺" data-testid="preorder-card">
+        <h2 className="text-[15px] font-semibold">客人預訂（還沒給的）{who ? `・跟${who}訂的` : ""}</h2>
+        <p className="mt-1 text-[14px] text-mute">{who ? `沒有跟${who}訂的。` : ""}</p>
+        {warn}
+      </section>
+    );
   return (
     <section id="preorder" className="scroll-mt-24 rounded-xl border border-line bg-card" aria-label="客人預訂預估可賺" data-testid="preorder-card">
       <div className="p-4">
-        <h2 className="text-[15px] font-semibold">客人預訂（還沒給的）</h2>
+        <h2 className="text-[15px] font-semibold">客人預訂（還沒給的）{who ? `・跟${who}訂的` : ""}</h2>
+        {warn}
         <div className="mt-2 grid grid-cols-3 gap-2">
           <div><div className="text-[12px] text-mute">預訂金額</div><div className="num text-[18px] font-semibold" data-testid="pre-revenue">{formatTwd(p.revenue)}</div></div>
           <div><div className="text-[12px] text-mute">成本</div><div className="num text-[18px] font-semibold" data-testid="pre-cost">{formatTwd(p.cost)}{p.tentative && <span className="text-warn">*</span>}</div></div>

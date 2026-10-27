@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Modal, inputCls, notify, useIdemKey, useToast } from "@/components/client";
 import {
+  addCategoryCharacterAction,
   bulkAddAction,
   lastUsedRosterAction,
   rowDefaultsAction,
@@ -218,6 +219,29 @@ export function BulkAddGrid({
     const has = rows.some((r) => r.characterId === cid && !r.spec.trim());
     if (has) setRows((rs) => (rs.length > 1 ? rs.filter((r) => !(r.characterId === cid && !r.spec.trim())) : [blankRow(supplierCurrency)]));
     else addCharacters([{ characterId: cid }]);
+  }
+
+  // 「＋ 新角色」：有系列就只加在這個系列（IP 預設名單不變），加好直接加一列
+  const [newChip, setNewChip] = useState<string | null>(null);
+  async function addNewChip() {
+    const name = (newChip ?? "").trim();
+    if (!name) return notify("請輸入角色名字");
+    const has = roster.find((c) => c.name === name);
+    if (has) {
+      setNewChip(null);
+      if (!rows.some((r) => r.characterId === has.id && !r.spec.trim())) addCharacters([{ characterId: has.id }]);
+      return;
+    }
+    if (!cat) {
+      setRows((rs) => [...rs.filter((r) => !isBlank(r)), { ...blankRow(supplierCurrency), characterId: "__new__", newName: name, qty: "1" }]);
+      setNewChip(null);
+      return;
+    }
+    const r = await addCategoryCharacterAction(name, [cat.id]);
+    if (!r.ok) return notify(r.error);
+    setRoster((l) => (l.some((c) => c.id === r.data.id) ? l : [...l, { id: r.data.id, name: r.data.name }]));
+    setNewChip(null);
+    addCharacters([{ characterId: r.data.id }]);
   }
 
   const update = (key: string, patch: Partial<RowState>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch, serverError: undefined } : r)));
@@ -501,7 +525,17 @@ export function BulkAddGrid({
                 </button>
               );
             })}
+            {newChip === null ? (
+              <button type="button" className="rounded-full border border-dashed border-ai px-3 py-1 text-[14px] text-ai" onClick={() => setNewChip("")} data-testid="new-char-chip">＋ 新角色</button>
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <input aria-label="新角色名字" data-keep autoFocus className={`${inputCls} h-9 w-32`} value={newChip} onChange={(e) => setNewChip(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addNewChip(); } }} placeholder="角色名字" />
+                <Button small variant="primary" onClick={addNewChip}>加</Button>
+                <button type="button" className="text-[13px] text-mute" onClick={() => setNewChip(null)}>取消</button>
+              </span>
+            )}
           </div>
+          {cat && <p className="mt-1 text-[12px] text-mute">新角色只加在「{cat.name}」這個系列，IP 的預設角色名單不變。</p>}
           <div className="mt-3 flex flex-wrap gap-2">
             {roster.length > 0 && <Button small onClick={() => addCharacters(roster.map((c) => ({ characterId: c.id })))}>加入全部角色</Button>}
             <Button

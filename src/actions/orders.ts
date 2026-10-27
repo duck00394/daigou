@@ -30,11 +30,24 @@ const orderSchema = z.object({
 });
 export type OrderForm = z.infer<typeof orderSchema>;
 
+/** 「現在看誰的」選的人；選「全部」時用這支手機的人 */
+async function actingOwner() {
+  const { getView } = await import("@/server/view");
+  const v = await getView();
+  return v.key !== "all" ? v.key : v.me;
+}
+
 export async function createOrderAction(form: OrderForm) {
   return run(async (a) => {
     const f = orderSchema.parse(form);
     // 重複送出：同一個識別碼只會建立一次（資料庫唯一性限制）
-    const ord = await tx((t) => o.createOrder(t, a, { ...f, orderedAt: parseDateTimeInput(f.orderedAt) ?? undefined, source: "MANUAL" }));
+    const owner = await actingOwner();
+    const ord = await tx(async (t) => {
+      const r = await o.createOrder(t, a, { ...f, orderedAt: parseDateTimeInput(f.orderedAt) ?? undefined, source: "MANUAL" });
+      // 客人跟誰訂的：預設是「現在看誰的」那個人（到貨出貨時扣他的貨）
+      if (owner) await t.orderItem.updateMany({ where: { orderId: r.id, ownerKey: null }, data: { ownerKey: owner } });
+      return r;
+    });
     return { id: ord.id, orderNo: ord.orderNo };
   });
 }
@@ -57,7 +70,12 @@ export async function appendItemsAction(orderId: string, items: z.infer<typeof i
   return run((a) =>
     tx(async (t) => {
       await claimRequest(t, requestKey, "order.append");
-      return o.appendItems(t, a, orderId, z.array(itemSchema).min(1).parse(items), note ?? undefined);
+      const created = await o.appendItems(t, a, orderId, z.array(itemSchema).min(1).parse(items), note ?? undefined);
+      // 追加的跟原本那張同一個人；原本沒分就用「現在看誰的」
+      const first = await t.orderItem.findFirst({ where: { orderId, ownerKey: { not: null } }, select: { ownerKey: true } });
+      const owner = first?.ownerKey ?? (await actingOwner());
+      if (owner) await t.orderItem.updateMany({ where: { id: { in: created.map((c) => c.id) } }, data: { ownerKey: owner } });
+      return created;
     }).then((r) => r.length),
   );
 }
@@ -167,6 +185,31 @@ export async function bulkGroupBuyAction(orderIds: string[], groupBuyId: string 
 }
 
 /** 改客人這筆預訂跟誰訂的（owner 空白＝還沒分） */
+/** 以前記的客人預訂（還沒分跟誰訂的）一次全部分給一個人；貨不夠換的那幾筆跳過並列出 */
+export async function assignUnassignedDemandAction(owner: string) {
+  return run(async (a) => {
+    const ow = z.string().min(1).max(64).parse(owner);
+    const { setDemandOwner } = await import("@/server/services/demand-owner");
+    const items = await prisma.orderItem.findMany({
+      where: { ownerKey: null, order: { confirmation: "CONFIRMED", statusCache: { not: "CANCELLED" } } },
+      select: { id: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true, productNameSnapshot: true, order: { select: { buyer: { select: { name: true } } } } },
+    });
+    let done = 0;
+    const failed: string[] = [];
+    for (const i of items) {
+      if (i.qty - i.cancelledQtyCache - i.shippedQtyCache <= 0) continue;
+      try {
+        await tx((t) => setDemandOwner(t, a, i.id, ow), { timeout: 30_000 });
+        done++;
+      } catch (e) {
+        if (!(e instanceof BizError)) throw e;
+        failed.push(`${i.order.buyer.name} ${i.productNameSnapshot}`);
+      }
+    }
+    return { done, failed: failed.slice(0, 10) };
+  });
+}
+
 export async function setDemandOwnerAction(orderItemId: string, owner: string | null) {
   return run(async (a) => {
     const id = z.string().min(1).max(64).parse(orderItemId);

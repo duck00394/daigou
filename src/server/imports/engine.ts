@@ -329,7 +329,7 @@ export function groupKey(kind: "LINE" | "EXCEL", r: GroupRow): string {
  *  - 批次以狀態鎖（DRAFT/PARTIAL → COMMITTING）防止同時送出兩次；
  *  - 已完成的列不會再處理。
  */
-export async function commitBatch(actor: Actor, batchId: string): Promise<CommitSummary> {
+export async function commitBatch(actor: Actor, batchId: string, opts: { owner?: string | null } = {}): Promise<CommitSummary> {
   const now = Date.now();
   const lock = await prisma.importBatch.updateMany({
     where: {
@@ -418,6 +418,8 @@ export async function commitBatch(actor: Actor, batchId: string): Promise<Commit
             orderNo = order.orderNo;
             itemIds = order.items.map((i) => i.id);
           }
+          // 客人跟誰訂的：預設是匯入的那個人（「現在看誰的」）
+          if (opts.owner) await t.orderItem.updateMany({ where: { id: { in: itemIds }, ownerKey: null }, data: { ownerKey: opts.owner } });
           // 使用者勾選「記住別名」時才建立對照
           for (const g of grp) {
             if (g.res.saveProductAlias && g.parsed.productText && g.res.productId) {

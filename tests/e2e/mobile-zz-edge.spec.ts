@@ -20,6 +20,14 @@ test("手機：邊界值、連點、重新整理、返回", async ({ page }) => 
   await newSupplierPick(page, `邊界代購 ${tag}`);
   await pickIp(page);
   await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
+  // 點角色那一排可以直接「＋ 新角色」：只加在這個系列，加好就多一個角色按鈕、一列；再點一次拿掉
+  await page.getByTestId("new-char-chip").click();
+  await page.getByLabel("新角色名字").fill(`邊界角色${tag}`);
+  await page.getByRole("button", { name: "加", exact: true }).click();
+  const chip = page.getByRole("button", { name: `✓ 邊界角色${tag}` });
+  await expect(chip).toBeVisible();
+  await chip.click();
+  await expect(page.getByRole("button", { name: `＋ 邊界角色${tag}` })).toBeVisible();
   await page.getByRole("button", { name: "＋ 吉伊" }).click();
   const r1 = page.getByRole("table", { name: "批次新增採購品項" }).getByRole("row").filter({ hasText: "第 1 列" });
   const save = page.getByRole("button", { name: /^儲存 \d+ 項$/ });

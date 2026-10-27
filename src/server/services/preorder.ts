@@ -70,12 +70,16 @@ export type ProfitLine = { productId: string; name: string; qty: number; revenue
 export type ProfitBuyer = { id: string; name: string; channel: string | null; qty: number; revenue: number; cost: number; profit: number; uncosted: number };
 
 /** 客人預訂還沒給的：預訂金額、成本（預購平均成本）、預估可賺；沒有成本的件數另外算 */
-export async function preorderProfit(t: Tx) {
+export async function preorderProfit(t: Tx, opts: { owner?: string | null } = {}) {
   const rows = await t.orderItem.findMany({
     where: { order: { confirmation: "CONFIRMED", statusCache: { not: "CANCELLED" } } },
-    select: { productId: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true, unitPrice: true, product: { select: { name: true } }, order: { select: { salesChannel: true, buyer: { select: { id: true, name: true, salesChannel: true } } } } },
+    select: { ownerKey: true, productId: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true, unitPrice: true, product: { select: { name: true } }, order: { select: { salesChannel: true, buyer: { select: { id: true, name: true, salesChannel: true } } } } },
   });
-  const open = rows.map((r) => ({ ...r, open: Math.max(0, r.qty - r.cancelledQtyCache - r.shippedQtyCache) })).filter((r) => r.open > 0);
+  const openAll = rows.map((r) => ({ ...r, open: Math.max(0, r.qty - r.cancelledQtyCache - r.shippedQtyCache) })).filter((r) => r.open > 0);
+  // 看某個人：只算跟他訂的＋合資、未指定的；還沒分是跟誰訂的另外算件數（提醒去分）
+  const keys = opts.owner ? [opts.owner, "joint", "none"] : null;
+  const open = keys ? openAll.filter((r) => !!r.ownerKey && keys.includes(r.ownerKey)) : openAll;
+  const unassigned = openAll.filter((r) => !r.ownerKey).reduce((a, r) => a + r.open, 0);
   const costs = await preorderCosts(t, open.map((r) => r.productId));
   const buyers = new Map<string, ProfitBuyer>();
   const products = new Map<string, ProfitLine>();
@@ -110,6 +114,7 @@ export async function preorderProfit(t: Tx) {
   }
   return {
     ...total,
+    unassigned,
     profit: total.costedRevenue - total.cost,
     buyers: [...buyers.values()].sort((a, b) => b.revenue - a.revenue),
     products: [...products.values()].sort((a, b) => b.revenue - a.revenue),

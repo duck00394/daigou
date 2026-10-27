@@ -82,7 +82,11 @@ export async function rematchAction(batchId: string) {
   return run(() => rematchBatch(batchId));
 }
 export async function commitAction(batchId: string) {
-  return run((a) => commitBatch(a, batchId));
+  return run(async (a) => {
+    const { getView } = await import("@/server/view");
+    const v = await getView();
+    return commitBatch(a, batchId, { owner: v.key !== "all" ? v.key : v.me });
+  });
 }
 export async function discardAction(batchId: string) {
   return run((a) => discardBatch(a, batchId));

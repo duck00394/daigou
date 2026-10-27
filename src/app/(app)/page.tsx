@@ -36,7 +36,7 @@ export default async function Home() {
     prisma.rushEvent.findFirst({ where: { status: "UPCOMING", startAt: { gte: new Date(Date.now() - 30 * 60000) } }, orderBy: { startAt: "asc" } }),
   ]);
   const pay = await tx((t) => batchPaySummary(t, live.map((b) => b.id)));
-  const pre = await tx((t) => preorderProfit(t));
+  const pre = await tx((t) => preorderProfit(t, { owner: vk === "all" ? null : vk }));
   const liveIds = new Set(live.map((b) => b.id));
   const unsettled = (await tx((t) => unsettledJoint(t))).filter((x) => liveIds.has(x.id));
   const dueBatches = [...pay.values()].filter((p) => p.dueTwd > 0);

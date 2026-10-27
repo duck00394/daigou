@@ -19,6 +19,21 @@ afterEach(async () => {
   expect(await checkIntegrity(prisma)).toEqual([]);
 });
 
+describe("客人預訂分人看", () => {
+  it("看某個人：只算跟他訂的（＋合資）；還沒分的另外算件數；看全部都算", async () => {
+    await tx((t) => sellToCustomer(t, actor, { buyerName: "小美", owner: "op_a", lines: [{ productId: s.p1.id, qty: 2, unitPrice: 500 }], idemKey: "own-0001" }));
+    await tx((t) => sellToCustomer(t, actor, { buyerName: "阿婷", owner: "op_b", lines: [{ productId: s.p2.id, qty: 1, unitPrice: 300 }], idemKey: "own-0002" }));
+    await tx((t) => sellToCustomer(t, actor, { buyerName: "小王", lines: [{ productId: s.p3.id, qty: 3, unitPrice: 150 }], idemKey: "own-0003" }));
+    const a = await tx((t) => preorderProfit(t, { owner: "op_a" }));
+    expect([a.qty, a.revenue, a.unassigned]).toEqual([2, 1000, 3]);
+    expect(a.buyers.map((b) => b.name)).toEqual(["小美"]);
+    const b = await tx((t) => preorderProfit(t, { owner: "op_b" }));
+    expect([b.qty, b.unassigned]).toEqual([1, 3]);
+    const all = await tx((t) => preorderProfit(t));
+    expect(all.qty).toBe(6);
+  });
+});
+
 describe("預購成本與預估可賺", () => {
   it("一定到的算成本、不一定的不算；客人預訂算出預估可賺", async () => {
     const b = await tx((t) => createBatch(t, actor, { name: "預購團", supplier: "代購" }));

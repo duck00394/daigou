@@ -29,14 +29,14 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
   const thisMonth = toDateInput(new Date()).slice(0, 7);
   const ym = sp.ym === "all" ? undefined : (sp.ym ?? thisMonth);
   const { from, to } = monthRange(ym);
+  const view = await getView();
   const [data, buyers, operators, pre] = await Promise.all([
     tx((t) => listQuickSales(t, { q: sp.q, from, toExclusive: to, includeVoided: sp.voided === "1" })),
     prisma.buyer.findMany({ where: { mergedIntoId: null }, orderBy: { updatedAt: "desc" }, take: 200, select: { name: true } }),
     tx((t) => listOperators(t, { includeInactive: true })),
-    tx((t) => preorderProfit(t)),
+    tx((t) => preorderProfit(t, { owner: view.key === "all" ? null : view.key })),
   ]);
   const who = (k: string) => (k === JOINT ? "合資（還沒登記付款）" : k === NONE ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
-  const view = await getView();
   const owner = view.key === "all" ? "" : view.key; // 現在看誰的：他自己的＋合資的（錢算他那一份）
   const keys = owner ? [owner, JOINT, NONE] : [];
   const ids = operators.map((o) => o.id);
@@ -61,7 +61,7 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
     <div className="space-y-4">
       <datalist id="buyer-names">{buyers.map((b) => <option key={b.name} value={b.name} />)}</datalist>
       <PageHeader title="賺多少" sub="賣掉的收入、成本、賺多少；客人預訂預估可賺"  actions={<><LinkButton href="/api/export/sales">匯出</LinkButton><SellButton label="＋ 出售現貨" primary autoOpen={sp.new === "1"} /></>} />
-      <PreorderCard p={pre} />
+      <PreorderCard p={pre} who={view.key === "all" ? null : view.name} operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} acting={view.key === "all" ? (view.me ?? "") : view.key} />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" data-tour="sales-top">
         <Stat label="賣了幾筆／幾件" value={`${total.count} / ${total.qty}`} />
         <Stat label="收入" value={<Twd v={total.revenue} />} />
