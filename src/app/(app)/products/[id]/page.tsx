@@ -7,6 +7,7 @@ import { productBuyers } from "@/server/services/reports";
 import { PageHeader, Section, TableWrap, StatusBadge, Stat, Badge, Empty, Twd, LinkButton } from "@/components/ui";
 import { ProductImage } from "@/components/client";
 import { ProductFormView } from "../form";
+import { characterRosters } from "@/server/services/series";
 import { AliasEditor, ArchiveButton } from "./parts";
 import { formatJpy, formatRate, formatTwd } from "@/lib/money";
 import { dayInput, fmtDate, movementKind, orderStatus, paymentStatus, procurementStatus, shipStatus, productStatus } from "@/lib/labels";
@@ -20,11 +21,12 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
     include: { aliases: { orderBy: { createdAt: "asc" } }, characters: true, categories: { include: { category: true } }, productType: true },
   });
   if (!p) notFound();
-  const [categories, characters, types, seriesList, inv, lots, moves, buyers, batches] = await Promise.all([
+  const [categories, characters, types, seriesList, rosters, inv, lots, moves, buyers, batches] = await Promise.all([
     prisma.category.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.character.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.productType.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.series.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    characterRosters(prisma),
     tx((t) => inventorySummary(t, [id])),
     tx((t) => productLots(t, id)),
     prisma.inventoryMovement.findMany({ where: { productId: id }, orderBy: { createdAt: "desc" }, take: 30, include: { orderItem: { select: { order: { select: { id: true, orderNo: true } } } } } }),
@@ -176,6 +178,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
             characters={characters}
             types={types}
           series={seriesList}
+            rosters={rosters}
             initial={{
               name: p.name,
               status: p.status,

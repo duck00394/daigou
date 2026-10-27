@@ -15,11 +15,14 @@ export const TABLES = [
   "seriesCharacter",
   "seriesTemplate",
   "supplier",
+  "shippingMethod",
   "productType",
   "category",
   "product",
   "productCharacter",
   "productCategory",
+  "categoryCharacter",
+  "categoryTypePrice",
   "productAlias",
   "groupBuy",
   "buyer",
@@ -52,7 +55,7 @@ export const TABLES = [
 ] as const;
 type Table = (typeof TABLES)[number];
 /** 較新版本才加入的資料表：舊備份沒有時視為空白，仍可還原 */
-const ADDED_LATER: Table[] = ["operator", "supplierPayment", "receivingRecord", "receivingLine"];
+const ADDED_LATER: Table[] = ["operator", "supplierPayment", "receivingRecord", "receivingLine", "categoryCharacter", "categoryTypePrice", "shippingMethod"];
 
 type AnyDelegate = {
   findMany: (args?: unknown) => Promise<Record<string, unknown>[]>;
@@ -118,6 +121,8 @@ function orderOf(table: Table): unknown {
   if (table === "productCharacter") return [{ productId: "asc" }, { characterId: "asc" }];
   if (table === "productCategory") return [{ productId: "asc" }, { categoryId: "asc" }];
   if (table === "seriesCharacter") return [{ seriesId: "asc" }, { characterId: "asc" }];
+  if (table === "categoryCharacter") return [{ categoryId: "asc" }, { characterId: "asc" }];
+  if (table === "categoryTypePrice") return [{ categoryId: "asc" }, { productTypeId: "asc" }];
   return { id: "asc" };
 }
 

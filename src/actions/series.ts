@@ -50,14 +50,17 @@ export async function rowDefaultsAction(input: { seriesId: string; productTypeId
 export async function lastUsedRosterAction(seriesId: string, excludeBatchId: string | null) {
   return run(() => sr.lastUsedRoster(prisma, { seriesId, excludeBatchId }), "read");
 }
-export async function seriesRosterAction(seriesId: string) {
+export async function seriesRosterAction(seriesId: string, categoryId?: string | null) {
   return run(async () => {
-    const [roster, templates] = await Promise.all([
+    const [roster, templates, extra] = await Promise.all([
       prisma.seriesCharacter.findMany({ where: { seriesId }, orderBy: [{ sortOrder: "asc" }], include: { character: true } }),
       prisma.seriesTemplate.findMany({ where: { seriesId }, orderBy: { name: "asc" } }),
+      // 這個活動系列另外加的角色（預設名單沒有的）
+      categoryId ? prisma.categoryCharacter.findMany({ where: { categoryId }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], include: { character: true } }) : Promise.resolve([]),
     ]);
+    const inRoster = new Set(roster.map((r) => r.characterId));
     return {
-      characters: roster.map((r) => ({ id: r.character.id, name: r.character.name, active: r.character.active })),
+      characters: [...roster.map((r) => ({ id: r.character.id, name: r.character.name, active: r.character.active })), ...extra.filter((x) => !inRoster.has(x.characterId)).map((x) => ({ id: x.character.id, name: x.character.name, active: x.character.active }))],
       templates: templates.map((t) => ({ id: t.id, name: t.name, productTypeId: t.productTypeId, items: t.items as { characterId: string; spec: string | null }[] })),
     };
   }, "read");
@@ -100,4 +103,9 @@ export async function applyRenameAction(categoryId: string, productIds: string[]
 }
 export async function setSupplierFavoriteAction(id: string, favorite: boolean) {
   return run((a) => tx((t) => sr.setSupplierFavorite(t, a, z.string().parse(id), !!favorite)));
+}
+
+/** 商品頁「＋ 新角色」：只加在選了的活動系列裡，不改 IP 的預設角色名單 */
+export async function addCategoryCharacterAction(name: string, categoryIds: string[]) {
+  return run((a) => tx((t) => sr.addCategoryCharacter(t, a, { name: z.string().max(50).parse(name), categoryIds: z.array(z.string().max(64)).max(50).parse(categoryIds) })));
 }

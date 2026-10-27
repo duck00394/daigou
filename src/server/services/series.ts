@@ -38,6 +38,32 @@ export async function ensureCharacter(t: Tx, actor: Actor, name: string) {
   return { character: created, created: true };
 }
 
+/** 商品表單用：每個 IP 的預設角色、每個活動系列另外加的角色 */
+export async function characterRosters(db: Db) {
+  const [sc, cc] = await Promise.all([
+    db.seriesCharacter.findMany({ select: { seriesId: true, characterId: true } }),
+    db.categoryCharacter.findMany({ select: { categoryId: true, characterId: true } }),
+  ]);
+  const series: Record<string, string[]> = {};
+  const cats: Record<string, string[]> = {};
+  for (const x of sc) (series[x.seriesId] ??= []).push(x.characterId);
+  for (const x of cc) (cats[x.categoryId] ??= []).push(x.characterId);
+  return { series, cats };
+}
+
+/** 只加在這些活動系列的角色（不改 IP 預設名單）；回傳角色 */
+export async function addCategoryCharacter(t: Tx, actor: Actor, input: { name: string; categoryIds: string[] }) {
+  const { character } = await ensureCharacter(t, actor, input.name);
+  for (const categoryId of [...new Set(input.categoryIds)]) {
+    const c = await t.category.findUnique({ where: { id: categoryId }, select: { id: true } });
+    if (!c) throw new BizError("找不到這個系列");
+    const n = await t.categoryCharacter.count({ where: { categoryId } });
+    await t.categoryCharacter.upsert({ where: { categoryId_characterId: { categoryId, characterId: character.id } }, update: {}, create: { categoryId, characterId: character.id, sortOrder: n + 1 } });
+  }
+  if (input.categoryIds.length) await audit(t, actor, "category.addCharacter", "Character", character.id, { categoryIds: input.categoryIds });
+  return { id: character.id, name: character.name };
+}
+
 export async function addCharactersToSeries(t: Tx, actor: Actor, seriesId: string, input: { characterIds?: string[]; newNames?: string[] }) {
   const current = await t.seriesCharacter.findMany({ where: { seriesId } });
   let order = current.reduce((m, c) => Math.max(m, c.sortOrder), 0);
@@ -408,11 +434,19 @@ export async function bulkAddSeriesItems(
           const { character } = await ensureCharacter(t, actor, r.newCharacterName!);
           characterId = character.id;
         }
-        await t.seriesCharacter.upsert({
-          where: { seriesId_characterId: { seriesId: series.id, characterId } },
-          update: {},
-          create: { seriesId: series.id, characterId, sortOrder: (await t.seriesCharacter.count({ where: { seriesId: series.id } })) + 1 },
-        });
+        // 在名單裡的角色不動；新打的角色：有系列就只加在這個系列，不改 IP 的預設名單
+        const inRoster = await t.seriesCharacter.findUnique({ where: { seriesId_characterId: { seriesId: series.id, characterId } } });
+        if (!inRoster) {
+          if (category) {
+            await t.categoryCharacter.upsert({
+              where: { categoryId_characterId: { categoryId: category.id, characterId } },
+              update: {},
+              create: { categoryId: category.id, characterId, sortOrder: (await t.categoryCharacter.count({ where: { categoryId: category.id } })) + 1 },
+            });
+          } else {
+            await t.seriesCharacter.create({ data: { seriesId: series.id, characterId, sortOrder: (await t.seriesCharacter.count({ where: { seriesId: series.id } })) + 1 } });
+          }
+        }
         const character = await t.character.findUniqueOrThrow({ where: { id: characterId } });
         const spec = emptyToNull(r.spec ?? null);
         const key = variantKey(series.id, input.productTypeId, characterId, spec, category?.id);

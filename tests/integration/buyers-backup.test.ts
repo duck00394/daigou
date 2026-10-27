@@ -130,6 +130,11 @@ describe("備份與還原", () => {
     const dup = await tx((t) => createBuyer(t, actor, { name: "重複" }));
     await tx((t) => mergeBuyers(t, actor, dup.id, s.b2.id));
     await tx((t) => addBuyerAlias(t, actor, s.b3.id, "王王"));
+    // 品項預設售價、常用運費、系列另外加的角色也要備份到
+    const ty = await prisma.productType.create({ data: { name: "備份吊娃" } });
+    await prisma.categoryTypePrice.create({ data: { categoryId: s.halloween.id, productTypeId: ty.id, salePriceTwd: 650 } });
+    const ch = await prisma.character.create({ data: { name: "備份角色" } });
+    await prisma.categoryCharacter.create({ data: { categoryId: s.halloween.id, characterId: ch.id } });
 
     const backup = JSON.parse(JSON.stringify(await createBackup()));
     expect(() => verifyBackup(backup)).not.toThrow();
@@ -146,6 +151,8 @@ describe("備份與還原", () => {
     expect(restored.items[0].shippedQtyCache).toBe(1);
     expect((await prisma.buyer.findUniqueOrThrow({ where: { id: dup.id } })).mergedIntoId).toBe(s.b2.id);
     expect(await prisma.inventoryMovement.count()).toBe(backup.counts.inventoryMovement);
+    expect(await prisma.categoryTypePrice.count()).toBe(1);
+    expect(await prisma.categoryCharacter.count()).toBe(1);
     // 還原後流水號繼續遞增，不會撞號
     const next = await tx((t) => createOrder(t, actor, { buyerId: s.b1.id, items: [{ productId: s.p2.id, qty: 1 }] }));
     expect(next.orderNo).not.toBe(o.orderNo);

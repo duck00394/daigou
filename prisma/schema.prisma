@@ -88,14 +88,28 @@ model AuditLog {
 // ───────────────────────── 商品 ─────────────────────────
 
 model Character {
-  id        String             @id @default(cuid())
-  name      String             @unique
-  sortOrder Int                @default(0)
-  active    Boolean            @default(true)
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  products  ProductCharacter[]
-  series    SeriesCharacter[]
+  id         String              @id @default(cuid())
+  name       String              @unique
+  sortOrder  Int                 @default(0)
+  active     Boolean             @default(true)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  products   ProductCharacter[]
+  series     SeriesCharacter[]
+  categories CategoryCharacter[]
+}
+
+// 這個活動系列另外加的角色（不改 IP 的預設角色名單）：選了這個系列，角色清單會多出這些
+model CategoryCharacter {
+  categoryId  String
+  characterId String
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  category    Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, characterId])
+  @@index([characterId])
 }
 
 // IP／系列（例如：吉伊卡哇、排球少年）。角色名單、範本都掛在系列底下
@@ -271,6 +285,7 @@ model Category {
   groupBuys  GroupBuy[]
   batches    PurchaseBatch[]
   typePrices CategoryTypePrice[]
+  characters CategoryCharacter[]
   batchItems PurchaseBatchItem[]
 }
 

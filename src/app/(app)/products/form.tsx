@@ -3,11 +3,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, TextField, SelectField, TextArea, useRun, inputCls, notify } from "@/components/client";
 import { saveProductAction, type ProductForm } from "@/actions/catalog";
+import { addCategoryCharacterAction } from "@/actions/series";
 import { productStatus } from "@/lib/labels";
 
 type Opt = { id: string; name: string; active?: boolean };
 
-export function ProductFormView({ id, initial, categories, characters, types, series, isNew }: { id: string | null; initial: ProductForm; categories: Opt[]; characters: Opt[]; types: Opt[]; series: Opt[]; isNew?: boolean }) {
+export type Rosters = { series: Record<string, string[]>; cats: Record<string, string[]> };
+
+export function ProductFormView({ id, initial, categories, characters: allChars, types, series, isNew, rosters }: { id: string | null; initial: ProductForm; categories: Opt[]; characters: Opt[]; types: Opt[]; series: Opt[]; isNew?: boolean; rosters?: Rosters }) {
   const [f, setF] = useState<ProductForm>(initial);
   const [aliasText, setAliasText] = useState("");
   const { run, pending } = useRun();
@@ -15,6 +18,34 @@ export function ProductFormView({ id, initial, categories, characters, types, se
   const set = <K extends keyof ProductForm>(k: K, v: ProductForm[K]) => setF((x) => ({ ...x, [k]: v }));
   const int = (s: string) => (s.trim() === "" ? null : Number(s.replace(/[,\s]/g, "")));
   const toggle = (k: "categoryIds" | "characterIds", v: string) => set(k, f[k].includes(v) ? f[k].filter((x) => x !== v) : [...f[k], v]);
+  // 角色清單＝這個 IP 的預設角色＋選了的活動系列另外加的角色＋這個商品已經選的
+  const [extraChars, setExtraChars] = useState<Opt[]>([]);
+  const [rs, setRs] = useState<Rosters>(rosters ?? { series: {}, cats: {} });
+  const pool = [...allChars, ...extraChars.filter((x) => !allChars.some((c) => c.id === x.id))];
+  // 只加在某些活動系列的角色（不在任何預設名單）：沒選那個系列就不列
+  const inSeries = new Set(Object.values(rs.series).flat());
+  const catOnly = new Set(Object.values(rs.cats).flat().filter((c) => !inSeries.has(c)));
+  const shownIds = new Set<string>([...(f.seriesId && rs.series[f.seriesId]?.length ? rs.series[f.seriesId] : pool.map((c) => c.id).filter((c) => !catOnly.has(c))), ...f.categoryIds.flatMap((c) => rs.cats[c] ?? []), ...f.characterIds]);
+  const characters = pool.filter((c) => shownIds.has(c.id));
+  const [newChar, setNewChar] = useState<string | null>(null);
+  const addChar = () => {
+    const name = (newChar ?? "").trim();
+    if (!name) return notify("請輸入角色名字");
+    run(() => addCategoryCharacterAction(name, f.categoryIds), {
+      refresh: false,
+      success: (c) => (f.categoryIds.length ? `已加「${c.name}」，只加在選了的系列，預設名單不變` : `已加「${c.name}」到這個商品`),
+      onOk: (c) => {
+        setExtraChars((l) => (l.some((x) => x.id === c.id) ? l : [...l, { id: c.id, name: c.name }]));
+        setRs((r) => {
+          const cats = { ...r.cats };
+          for (const k of f.categoryIds) cats[k] = [...(cats[k] ?? []).filter((x) => x !== c.id), c.id];
+          return { ...r, cats };
+        });
+        setF((x) => ({ ...x, characterIds: x.characterIds.includes(c.id) ? x.characterIds : [...x.characterIds, c.id] }));
+        setNewChar(null);
+      },
+    });
+  };
 
   return (
     <form
@@ -72,8 +103,17 @@ export function ProductFormView({ id, initial, categories, characters, types, se
               {c.name}
             </Chip>
           ))}
-          {characters.length === 0 && <span className="text-sm text-mute">尚未建立角色，可在「設定」新增。</span>}
+          {newChar === null ? (
+            <button type="button" className="rounded-full border border-dashed border-ai px-3 py-1 text-[14px] text-ai" onClick={() => setNewChar("")}>＋ 新角色</button>
+          ) : (
+            <span className="flex items-center gap-1.5">
+              <input aria-label="新角色名字" autoFocus className={`${inputCls} h-9 w-32`} value={newChar} onChange={(e) => setNewChar(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addChar(); } }} placeholder="角色名字" />
+              <Button small variant="primary" loading={pending} onClick={addChar}>加</Button>
+              <button type="button" className="text-[13px] text-mute" onClick={() => setNewChar(null)}>取消</button>
+            </span>
+          )}
         </div>
+        <p className="mt-1 text-[12px] text-mute">{f.categoryIds.length ? `新加的角色只會加在下面選了的系列（${categories.filter((c) => f.categoryIds.includes(c.id)).map((c) => c.name).join("、")}），其他系列和預設名單不變。` : "先在下面選活動系列，新加的角色就會留在那個系列；沒選的話只加在這個商品。"}</p>
       </fieldset>
       <fieldset>
         <legend className="mb-1 text-[13px] font-medium text-ink-2">活動與分類（可複選）</legend>

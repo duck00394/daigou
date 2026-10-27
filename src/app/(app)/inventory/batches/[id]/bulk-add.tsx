@@ -136,18 +136,19 @@ export function BulkAddGrid({
   const router = useRouter();
   const grid = useRef<HTMLDivElement>(null);
 
+  const catId = cat?.id ?? null;
   const loadRoster = useCallback(async (sid: string) => {
     if (!sid) {
       setRoster([]);
       setTemplates([]);
       return;
     }
-    const r = await seriesRosterAction(sid);
+    const r = await seriesRosterAction(sid, catId);
     if (r.ok) {
       setRoster(r.data.characters);
       setTemplates(r.data.templates);
     }
-  }, []);
+  }, [catId]);
   useEffect(() => {
     loadRoster(seriesId);
   }, [seriesId, loadRoster]);

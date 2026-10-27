@@ -8,7 +8,7 @@ import { inventorySummary, receiveStock, reserveForItem } from "@/server/service
 import { createOrder, updateItem } from "@/server/services/orders";
 import { createShipment } from "@/server/services/shipping";
 import { saveCategory, updateProduct, upsertCharacter, upsertProductType } from "@/server/services/catalog";
-import { applyRename, renamePlan } from "@/server/services/series";
+import { addCategoryCharacter, applyRename, characterRosters, renamePlan } from "@/server/services/series";
 
 let s: Awaited<ReturnType<typeof seedBasics>>;
 let ctx: { seriesId: string; typeId: string; chiikawa: string; hachi: string; usagi: string; supplierId: string; batchId: string };
@@ -70,6 +70,21 @@ describe("批次新增系列商品", () => {
     const b2 = await tx((t) => createBatch(t, actor, { name: "第二團", rate: "0.2" }));
     await add([row("x", { newCharacterName: "栗子饅頭", unitCost: 1700, currency: "JPY", qty: 1 })], "sub-2", b2.id);
     expect(await prisma.character.count({ where: { name: "栗子饅頭" } })).toBe(1);
+  });
+
+  it("2b. 有系列時新打的角色只加在這個系列，不改 IP 預設名單；其他系列看不到", async () => {
+    const [x1, x2] = await tx(async (t) => [await saveCategory(t, actor, null, { name: "聖誕官網", type: "FESTIVAL" }), await saveCategory(t, actor, null, { name: "ANA", type: "FESTIVAL" })]);
+    const r = await bulkAddSeriesItems(actor, { batchId: ctx.batchId, seriesId: ctx.seriesId, productTypeId: ctx.typeId, submissionKey: "sub-cat", categoryId: x1.id, rows: [row("n", { newCharacterName: "古本屋", unitCost: 500, qty: 1 })] });
+    expect(r.created).toBe(1);
+    const ch = await prisma.character.findUniqueOrThrow({ where: { name: "古本屋" } });
+    expect(await prisma.seriesCharacter.count({ where: { characterId: ch.id } })).toBe(0);
+    expect(await prisma.categoryCharacter.count({ where: { categoryId: x1.id, characterId: ch.id } })).toBe(1);
+    // 商品頁「＋ 新角色」：也只加在選了的系列
+    const c2 = await tx((t) => addCategoryCharacter(t, actor, { name: "師傅", categoryIds: [x1.id] }));
+    const ro = await characterRosters(prisma);
+    expect(ro.cats[x1.id]).toEqual(expect.arrayContaining([ch.id, c2.id]));
+    expect(ro.cats[x2.id]).toBeUndefined();
+    expect(ro.series[ctx.seriesId]).not.toContain(c2.id);
   });
 
   it("3. 空白列不建立；不合法的數量、單價與重複角色被拒絕", async () => {
