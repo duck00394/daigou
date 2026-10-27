@@ -65,4 +65,25 @@ describe("預購成本與預估可賺", () => {
     expect(p.profit).toBe(1020 - 600 + 220 + 200);
     expect(r.profit).toBe(p.profit);
   });
+
+  it("確定的／預估的：還在等確認的算進預估；客人訂比預估還多 → 不夠", async () => {
+    const cat = s.halloween.id;
+    const b = await tx((t) => createBatch(t, actor, { name: "預估團", supplier: "代購", categoryId: cat }));
+    const i1 = await tx((t) => addBatchItem(t, actor, b.id, { productId: s.p1.id, qty: 3, unitCost: 300, currency: "TWD" }));
+    const i2 = await tx((t) => addBatchItem(t, actor, b.id, { productId: s.p2.id, qty: 1, unitCost: 400, currency: "TWD" }));
+    // p1 確定 1 件、另 2 件還在等確認；p2 還沒確認
+    await prisma.purchaseBatchItem.update({ where: { id: i1.id }, data: { confirmedQty: 1 } });
+    void i2;
+    // 客人訂 p1 2 件、p2 3 件
+    await tx((t) => sellToCustomer(t, actor, { buyerName: "小美", lines: [{ productId: s.p1.id, qty: 2, unitPrice: 500 }, { productId: s.p2.id, qty: 3, unitPrice: 600 }], idemKey: "est-0001" }));
+    const p = await tx((t) => seriesProfit(t, cat));
+    const r1 = p.rows.get(s.p1.id)!;
+    const r2 = p.rows.get(s.p2.id)!;
+    expect([r1.left, r1.est.unsure, r1.est.left]).toEqual([-1, 2, 1]);
+    expect([r2.left, r2.est.unsure, r2.est.left]).toEqual([-3, 1, -2]);
+    expect(r1.est.avg).toBe(300);
+    expect(p.short.map((x) => [x.id, x.n])).toEqual(expect.arrayContaining([[s.p1.id, 1], [s.p2.id, 3]]));
+    expect(p.estShort.map((x) => [x.id, x.n])).toEqual([[s.p2.id, 2]]);
+    expect(p.actual).toBe(0);
+  });
 });

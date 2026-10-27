@@ -19,7 +19,7 @@ import { listCustomCategoryTypes } from "@/server/services/catalog";
 import { renamePlan } from "@/server/services/series";
 import { categoryType, dayInput, fmtDay, productStatus } from "@/lib/labels";
 
-export default async function CategoryPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ q?: string; sort?: string; view?: string; owner?: string; tab?: string }> }) {
+export default async function CategoryPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ q?: string; sort?: string; view?: string; owner?: string; tab?: string; est?: string }> }) {
   await requireUser();
   const { id } = await params;
   const sp = await searchParams;
@@ -79,7 +79,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
       {tab === "catalog" ? (
         treeSeries ? <SeriesCatalogPanel s={treeSeries} types={types} kinds={tree.map((k) => [k.key, k.label] as [string, string])} /> : <Empty>找不到這個系列的目錄。</Empty>
       ) : (
-        <CategoryBatches categoryId={c.id} view={sp.view} owner={vk === "all" ? "" : vk} part={tab} tab={tab === "items" ? undefined : tab} />
+        <CategoryBatches categoryId={c.id} view={sp.view} est={sp.est === "1"} owner={vk === "all" ? "" : vk} part={tab} tab={tab === "items" ? undefined : tab} />
       )}
       {tab === "items" && usesOrders && (d.total.activeQty > 0 || d.total.cancelledQty > 0) && (
         <div>

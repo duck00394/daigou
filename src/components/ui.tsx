@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { BackLink } from "./back";
 import { HeaderTitle } from "./help";
+import { StackTable } from "./stack-table";
 import type { Tone } from "@/lib/labels";
 import { formatJpy, formatTwd } from "@/lib/money";
 
@@ -103,13 +104,12 @@ export function Stat({ label, value, note, href, tone }: { label: string; value:
 }
 
 /** 可橫向捲動、表頭固定的表格容器 */
+/** 表格：電腦版照舊；手機一列一張小卡片（每格前面有欄位名稱），不用往右拉 */
 export function TableWrap({ children, maxH }: { children: React.ReactNode; maxH?: string }) {
   return (
-    <div className="overflow-auto" style={maxH ? { maxHeight: maxH } : undefined}>
-      <table className="w-full min-w-max border-separate border-spacing-0 text-[14px] [&_td]:border-b [&_td]:border-line-2 [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:border-b [&_th]:border-line [&_th]:bg-[#fafbfc] [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-[13px] [&_th]:font-medium [&_th]:whitespace-nowrap [&_th]:text-ink-2 [&_tbody_tr:hover_td]:bg-[#fafbfd]">
-        {children}
-      </table>
-    </div>
+    <StackTable maxH={maxH} className="w-full md:min-w-max border-separate border-spacing-0 text-[14px] [&_td]:border-b [&_td]:border-line-2 [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:border-b [&_th]:border-line [&_th]:bg-[#fafbfc] [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-[13px] [&_th]:font-medium [&_th]:whitespace-nowrap [&_th]:text-ink-2 [&_tbody_tr:hover_td]:bg-[#fafbfd]">
+      {children}
+    </StackTable>
   );
 }
 

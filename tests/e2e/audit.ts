@@ -60,6 +60,24 @@ export async function crawl(page: Page, tag: string) {
     const status = res?.status() ?? 0;
     const body = (await page.locator("body").innerText()).slice(0, 4000);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    // 手機：表格不能要往右拉才看得到（表格外面那層橫向捲動、而且內容比畫面寬）
+    const wide = (page.viewportSize()?.width ?? 1200) < 768
+      ? await page.evaluate(() =>
+          Array.from(document.querySelectorAll("table"))
+            .filter((t) => t.offsetParent !== null)
+            .map((t) => {
+              let el: HTMLElement | null = t.parentElement;
+              while (el && el !== document.body) {
+                const ox = getComputedStyle(el).overflowX;
+                if ((ox === "auto" || ox === "scroll") && el.scrollWidth > el.clientWidth + 4) return (t.getAttribute("aria-label") || t.querySelector("th")?.textContent || "table").slice(0, 20);
+                el = el.parentElement;
+              }
+              return null;
+            })
+            .filter(Boolean),
+        )
+      : [];
+    if (wide.length) errs.push(`表格要往右拉: ${wide.join("、")}`);
     const appErr = /Application error|Internal Server Error|發生錯誤|Unhandled Runtime Error/.test(body);
     const file = r.replace(/[/?=&]/g, "_").replace(/^_/, "") || "home";
     await page.screenshot({ path: `${process.env.AUDIT_DIR ?? "test-results/audit"}/${tag}-${file}.png`, fullPage: true });

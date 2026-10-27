@@ -36,7 +36,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
   };
   const orderBy: Prisma.OrderOrderByWithRelationInput =
     sp.sort === "old" ? { orderedAt: "asc" } : sp.sort === "balance" ? { balanceCache: "desc" } : sp.sort === "amount" ? { receivableCache: "desc" } : { orderedAt: "desc" };
-  const [orders, total, gbs, cats] = await Promise.all([
+  const [orders, total, gbs, cats, unpaidN, pendingN] = await Promise.all([
     prisma.order.findMany({
       where,
       orderBy,
@@ -51,7 +51,15 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
     prisma.order.count({ where }),
     prisma.groupBuy.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.category.findMany({ orderBy: { name: "asc" } }),
+    prisma.order.count({ where: { paymentStatusCache: "UNPAID", confirmation: { not: "CANCELLED" } } }),
+    prisma.order.count({ where: { statusCache: "PENDING_CONFIRM" } }),
   ]);
+  // 手機：搜尋框下面的快捷篩選
+  const quick: [string, string, boolean][] = [
+    ["全部", "/orders", !sp.payment && !sp.status],
+    [`未付款 ${unpaidN}`, "/orders?payment=UNPAID", sp.payment === "UNPAID" && !sp.status],
+    [`待確認 ${pendingN}`, "/orders?status=PENDING_CONFIRM", sp.status === "PENDING_CONFIRM" && !sp.payment],
+  ];
   const base = `/orders${qs({ ...sp, page: undefined })}`;
   return (
     <div>
@@ -85,11 +93,46 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
           <FSelect name="sort" label="排序" value={sp.sort} options={[["old", "日期舊→新"], ["balance", "待收多→少"], ["amount", "金額大→小"]]} />
           {sp.buyerId && <input type="hidden" name="buyerId" value={sp.buyerId} />}
         </FilterBar>
+        <div className="flex gap-1.5 overflow-x-auto px-4 pt-2 md:hidden" data-testid="orders-quick">
+          {quick.map(([l, h, on]) => (
+            <Link key={h} href={h} className={`shrink-0 rounded-full border px-3 py-1 text-[13px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`}>{l}</Link>
+          ))}
+        </div>
         <Selection ids={orders.map((o) => o.id)}>
         <BulkBar groupBuys={gbs.filter((g) => g.status !== "CANCELLED").map((g) => ({ id: g.id, name: g.name }))} />
         {orders.length === 0 ? (
           <Empty action={<LinkButton href="/orders/new" primary>新增訂單</LinkButton>}>沒有符合條件的訂單。</Empty>
         ) : (
+          <>
+          {/* 手機：一筆一張卡片，不用往右拉 */}
+          <ul className="space-y-2 px-3 py-2 md:hidden" data-testid="order-cards">
+            {orders.map((o) => {
+              const active = o.items.reduce((s, i) => s + i.qty - i.cancelledQtyCache, 0);
+              return (
+                <li key={o.id} className="flex gap-2.5 rounded-xl border border-line bg-white p-3" data-testid="order-card">
+                  <span className="pt-0.5"><RowCheck id={o.id} /></span>
+                  <Link href={`/orders/${o.id}`} className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="truncate text-[15.5px] font-semibold">{o.buyer.name}</span>
+                      <span className="shrink-0 text-[15px] font-semibold">
+                        {o.balanceCache > 0 ? <Twd v={o.balanceCache} className="text-bad" /> : o.refundDueCache > 0 ? <span className="text-bad">應退 {o.refundDueCache.toLocaleString()}</span> : o.confirmation === "CANCELLED" ? <span className="text-mute">—</span> : <span className="text-[13px] text-good">已收齊</span>}
+                      </span>
+                    </div>
+                    <div className="text-[12.5px] text-mute">
+                      <span className="num">{o.orderNo}</span>・{fmtDate(o.orderedAt)}・{orderSource[o.source]}{o.groupBuy ? `・${o.groupBuy.name}` : ""}{o.parentOrderId ? "・追加單" : ""}
+                    </div>
+                    <div className="mt-1 line-clamp-2 text-[13.5px] text-ink-2">{o.items.map((i) => `${i.productNameSnapshot}×${i.qty - i.cancelledQtyCache}`).join("、")}（共 {active} 件）</div>
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      <StatusBadge map={orderStatus} value={o.statusCache} />
+                      <StatusBadge map={paymentStatus} value={o.paymentStatusCache} />
+                      <StatusBadge map={shipStatus} value={o.shipStatusCache} />
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="hidden md:block">
           <TableWrap maxH="70vh">
             <thead>
               <tr>
@@ -140,6 +183,8 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
               })}
             </tbody>
           </TableWrap>
+          </div>
+          </>
         )}
         </Selection>
         <Pager page={page} total={total} size={SIZE} base={base} />

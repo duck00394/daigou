@@ -16,7 +16,10 @@ export async function preorderDetail(t: Tx, productIds: string[]) {
   const ids = [...new Set(productIds)];
   const out = new Map<string, PreorderCost>();
   const sureQty = new Map<string, number>();
-  if (!ids.length) return { costs: out, sureQty };
+  // 預估：還在等代購確認的也算買到（件數、平均成本）
+  const unsureQty = new Map<string, number>();
+  const estCosts = new Map<string, PreorderCost>();
+  if (!ids.length) return { costs: out, sureQty, unsureQty, estCosts };
   const [val, items] = await Promise.all([
     stockValuation(t, ids),
     t.purchaseBatchItem.findMany({
@@ -26,10 +29,18 @@ export async function preorderDetail(t: Tx, productIds: string[]) {
   ]);
   const landed = await landedCosts(t, items.map((i) => i.id));
   const sure = new Map<string, { qty: number; val: number; tentative: boolean }>();
+  const unsure = new Map<string, { qty: number; val: number }>();
   for (const i of items) {
     const rec = i.movements.reduce((a, m) => a + m.onHandDelta, 0);
-    const q = Math.max(0, i.qty - i.cancelledQty - rec - pendingQty(i, rec));
+    const pend = pendingQty(i, rec);
+    const q = Math.max(0, i.qty - i.cancelledQty - rec - pend);
     const l = landed.get(i.id);
+    if (pend > 0) {
+      const u = unsure.get(i.productId) ?? { qty: 0, val: 0 };
+      u.qty += pend;
+      if (l && l.qty > 0) u.val += (l.totalTwd * pend) / l.qty;
+      unsure.set(i.productId, u);
+    }
     if (!q || !l || l.qty <= 0) continue;
     const v = sure.get(i.productId) ?? { qty: 0, val: 0, tentative: false };
     v.qty += q;
@@ -45,8 +56,14 @@ export async function preorderDetail(t: Tx, productIds: string[]) {
     if (q > 0) out.set(id, { avg: Math.round((hq * (h?.avgUnitCost ?? 0) + (s?.val ?? 0)) / q), tentative: !!(s?.tentative || (hq && h?.tentative)) });
     else if (h?.avgUnitCost != null) out.set(id, { avg: h.avgUnitCost, tentative: h.tentative });
     if (s?.qty) sureQty.set(id, s.qty);
+    const u = unsure.get(id);
+    if (u?.qty) unsureQty.set(id, u.qty);
+    const eq = q + (u?.qty ?? 0);
+    const c = out.get(id);
+    if (u?.qty && eq > 0) estCosts.set(id, { avg: Math.round((hq * (h?.avgUnitCost ?? 0) + (s?.val ?? 0) + u.val) / eq), tentative: true });
+    else if (c) estCosts.set(id, c);
   }
-  return { costs: out, sureQty };
+  return { costs: out, sureQty, unsureQty, estCosts };
 }
 
 export type ProfitLine = { productId: string; name: string; qty: number; revenue: number; cost: number | null; tentative: boolean };
@@ -111,6 +128,8 @@ export type SeriesProduct = {
   price: number | null;
   avg: number | null;
   profit: number; // 算得出來的部分加總
+  // 預估：還在等代購確認的也全部買到的話
+  est: { unsure: number; left: number; avg: number | null; profit: number; freeQty: number };
 };
 
 /** 一個系列：已經賣掉、客人預訂、還沒人訂的（現有＋一定到），各收多少、成本多少、可賺多少 */
@@ -175,7 +194,14 @@ export async function seriesProfit(t: Tx, categoryId: string) {
     let profit = sd.revenue - sd.cost;
     if (preCost != null) profit += pr.revenue - preCost;
     if (freeCost != null && freeRev != null) profit += freeRev - freeCost;
-    rows.set(p.id, { id: p.id, onHand, sure, ordered: pr.qty, left, sold: sd, pre: { ...pr, cost: preCost }, free: { qty: freeQty, revenue: freeRev, cost: freeCost }, price, avg: c?.avg ?? null, profit });
+    const unsureQ = detail.unsureQty.get(p.id) ?? 0;
+    const ec = detail.estCosts.get(p.id);
+    const eLeft = left + unsureQ;
+    const eFree = Math.max(0, eLeft);
+    let eProfit = sd.revenue - sd.cost;
+    if (ec) eProfit += pr.revenue - ec.avg * pr.qty;
+    if (ec && price != null) eProfit += (price - ec.avg) * eFree;
+    rows.set(p.id, { id: p.id, onHand, sure, ordered: pr.qty, left, sold: sd, pre: { ...pr, cost: preCost }, free: { qty: freeQty, revenue: freeRev, cost: freeCost }, price, avg: c?.avg ?? null, profit, est: { unsure: unsureQ, left: eLeft, avg: ec?.avg ?? null, profit: eProfit, freeQty: eFree } });
   }
   return { rows, ...seriesTotals([...rows.values()]) };
 }
@@ -207,5 +233,10 @@ export function seriesTotals(list: SeriesProduct[]) {
   }
   const revenue = total.sold.revenue + total.pre.revenue + total.free.revenue;
   const cost = total.sold.cost + total.pre.cost + total.free.cost;
-  return { ...total, revenue, cost, profit: revenue - cost };
+  // 預估（還沒確認的也全部買到）、實際已賺（已經賣掉的）、還可以賣幾隻；叫的貨不夠的角色
+  const est = { profit: list.reduce((a, r) => a + r.est.profit, 0), free: list.reduce((a, r) => a + r.est.freeQty, 0) };
+  const actual = total.sold.revenue - total.sold.cost;
+  const short = list.filter((r) => r.left < 0).map((r) => ({ id: r.id, n: -r.left }));
+  const estShort = list.filter((r) => r.est.left < 0).map((r) => ({ id: r.id, n: -r.est.left }));
+  return { ...total, revenue, cost, profit: revenue - cost, est, actual, short, estShort };
 }

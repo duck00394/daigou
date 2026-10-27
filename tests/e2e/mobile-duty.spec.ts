@@ -90,6 +90,14 @@ test("手機：關稅 %、預購平均成本、庫存欄", async ({ page }) => {
   // 同一頁看成本、庫存、可賺：庫存 2、還沒填售價 → 可賺先不算
   await expect(page.getByTestId("series-profit")).toBeVisible();
   await expect(page.getByTestId("profit-unpriced")).toContainText("2 隻沒填售價");
+  // 確定的／預估的：這兩隻都已確定買到，預估跟確定一樣是 2 隻
+  await expect(page.getByTestId("series-free")).toHaveText("2 隻");
+  await page.getByTestId("est-toggle").getByRole("link", { name: "預估的" }).click();
+  await expect(page).toHaveURL(/est=1/);
+  await expect(page.getByTestId("series-free")).toHaveText("2 隻");
+  await page.screenshot({ path: "test-results/mobile_series_est.png", fullPage: true });
+  await page.getByTestId("est-toggle").getByRole("link", { name: "確定的" }).click();
+  await expect(page).not.toHaveURL(/est=1/);
   const prod = page.getByTestId("product-summary").first();
   await expect(prod.locator('[data-k="left"]')).toContainText("2");
   await page.screenshot({ path: "test-results/mobile_series_profit.png", fullPage: true });

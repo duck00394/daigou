@@ -18,7 +18,7 @@ export function FilterToggle({ children, clearHref }: { children: React.ReactNod
       <button type="button" aria-expanded={open} onClick={() => setOpen((x) => !x)} className="rounded-lg border border-line bg-white px-3 py-2 text-sm md:hidden">
         篩選條件{active ? `（${active}）` : ""}
       </button>
-      <div className={`${open ? "flex" : "hidden"} w-full flex-wrap items-end gap-2 md:flex md:w-auto`}>{rest}</div>
+      <div className={`${open ? "grid" : "hidden"} w-full grid-cols-2 items-end gap-2 md:flex md:w-auto md:flex-wrap [&_input]:max-md:w-full [&_select]:max-md:w-full`}>{rest}</div>
       <button className="rounded-lg border border-ai bg-ai px-3.5 py-2 text-sm font-medium text-white hover:bg-ai-2">套用</button>
       <a href={clearHref} className="rounded-lg px-2 py-2 text-sm text-ai hover:underline">清除</a>
     </div>

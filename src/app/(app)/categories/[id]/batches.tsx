@@ -16,7 +16,7 @@ import { ownerTone } from "@/lib/owner-colors";
 const money = (v: number, c: string) => (c === "JPY" ? formatJpy(v) : formatTwd(v));
 const sums = (m: Record<string, number>) => Object.entries(m).map(([c, v]) => money(v, c)).join("、");
 
-export async function CategoryBatches({ categoryId, view, owner = "", part = "all", tab }: { categoryId: string; view?: string; owner?: string; part?: "all" | "items" | "batches"; tab?: string }) {
+export async function CategoryBatches({ categoryId, view, est = false, owner = "", part = "all", tab }: { categoryId: string; view?: string; est?: boolean; owner?: string; part?: "all" | "items" | "batches"; tab?: string }) {
   const showBatches = part !== "items";
   const showItems = part !== "batches";
   const [o, operators] = await Promise.all([tx((t) => categoryOverview(t, categoryId)), tx((t) => listOperators(t, { includeInactive: true }))]);
@@ -52,11 +52,12 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
   const inOwner = (b: { ownerKey: string }) => mineKey(b.ownerKey);
   const cols = o.batches.filter((b) => b.status !== "CANCELLED" && inOwner(b));
   const fullView = view !== "unit"; // 預設看含運費的成本
-  const q = (p: { owner?: string; view?: string }) => {
+  const q = (p: { owner?: string; view?: string; est?: boolean }) => {
     const sp = new URLSearchParams();
     const vw = p.view ?? (view === "unit" ? "unit" : "");
     if (tab) sp.set("tab", tab);
     if (vw) sp.set("view", vw);
+    if (p.est ?? est) sp.set("est", "1");
     const t = sp.toString();
     return t ? `?${t}` : "?";
   };
@@ -73,7 +74,8 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
       const sureQty = qty - unsure;
       const amount = cells.reduce((a, c) => a + (fullView ? c.fullUnitTwd : c.unitTwd) * (c.qty - c.unsure), 0);
       const sureCells = cells.filter((c) => c.qty > c.unsure);
-      return { product: r.product, cells, qty, unsure, sureQty, amount, avg: sureQty ? Math.round(amount / sureQty) : null, min: Math.min(...vals), max: Math.max(...vals), tentative: sureCells.some((c) => c.estimated || (fullView && !c.feesConfirmed)) };
+      const allAmount = cells.reduce((a, c) => a + (fullView ? c.fullUnitTwd : c.unitTwd) * c.qty, 0);
+      return { product: r.product, cells, qty, unsure, sureQty, amount, estAvg: qty ? Math.round(allAmount / qty) : null, avg: sureQty ? Math.round(amount / sureQty) : null, min: Math.min(...vals), max: Math.max(...vals), tentative: sureCells.some((c) => c.estimated || (fullView && !c.feesConfirmed)) };
     })
     .filter((r) => r.qty > 0);
   // 依品項分組（吊娃、S 娃…），組內照角色順序；售價：商品自己的，沒填用這系列這個品項的售價
@@ -109,6 +111,11 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
   const canProfitOf = (x: ReturnType<typeof P>) => !!x && (x.sold.qty > 0 || (x.pre.qty > 0 && x.pre.cost != null) || (x.free.qty > 0 && x.free.revenue != null && x.free.cost != null));
   const allSure = summary.reduce((a, r) => a + r.sureQty, 0);
   const allAmount = summary.reduce((a, r) => a + r.amount, 0);
+  const allQty = summary.reduce((a, r) => a + r.qty, 0);
+  const allEstAmount = summary.reduce((a, r) => a + (r.estAvg ?? 0) * r.qty, 0);
+  // 「確定的」或「預估的」（還在等代購確認的也算買到）
+  const leftOf = (x: ReturnType<typeof P>) => (x ? (est ? x.est.left : x.left) : 0);
+  const profitOf = (x: ReturnType<typeof P>) => (x ? (est ? x.est.profit : x.profit) : 0);
   return (
     <>
       <Section>
@@ -204,7 +211,7 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
       </Section>
 
       )}
-      {showItems && profShown && summary.length + extra.length > 0 && <ProfitCard p={profShown} categoryId={categoryId} />}
+      {showItems && profShown && summary.length + extra.length > 0 && <ProfitCard p={profShown} categoryId={categoryId} est={est} sureHref={q({ est: false })} estHref={q({ est: true })} names={Object.fromEntries([...summary.map((r) => [r.product.id, r.product.characters.length === 1 ? r.product.characters[0].character.name : r.product.name]), ...extra.map((e) => [e.id, e.name])])} />}
       {showItems && summary.length + extra.length > 0 && (
         <PickProvider items={pickItems} categoryId={categoryId}>
           <section className="rounded-xl border border-line bg-card" aria-label="每個角色" data-tour="series-items">
@@ -238,12 +245,12 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
                         <details className="group min-w-0 flex-1" data-testid="product-summary">
                           <summary role="row" className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_3.25rem_4.25rem_4.5rem] items-baseline gap-2 px-4 py-2.5 hover:bg-[#fafbfd] [&::-webkit-details-marker]:hidden">
                             <span role="cell" className="min-w-0 truncate"><span title={r.product.name}>{name}</span></span>
-                            <span role="cell" className={`num text-right ${(x?.left ?? 0) < 0 ? "text-bad" : ""}`} data-k="left">{x?.left ?? 0}</span>
-                            <span role="cell" className="num text-right" data-k="avg">{r.avg == null ? <span className="text-mute">—</span> : r.avg.toLocaleString()}</span>
-                            <span role="cell" className={`num text-right ${canProfit ? ((x?.profit ?? 0) < 0 ? "text-bad" : "text-good") : "text-[13px] text-mute"}`} data-k="profit">{canProfit ? x!.profit.toLocaleString() : x?.price == null ? "沒售價" : "—"}</span>
+                            <span role="cell" className={`num text-right ${leftOf(x) < 0 ? "font-semibold text-bad" : ""}`} data-k="left">{leftOf(x)}</span>
+                            <span role="cell" className="num text-right" data-k="avg">{(est ? r.estAvg : r.avg) == null ? <span className="text-mute">—</span> : (est ? r.estAvg : r.avg)!.toLocaleString()}</span>
+                            <span role="cell" className={`num text-right ${canProfit ? (profitOf(x) < 0 ? "text-bad" : "text-good") : "text-[13px] text-mute"}`} data-k="profit">{canProfit ? profitOf(x).toLocaleString() : x?.price == null ? "沒售價" : "—"}</span>
                           </summary>
                           <div className="space-y-1 border-t border-line-2 bg-[#f8f9fb] px-4 py-2.5 text-[13.5px]" data-testid="product-numbers">
-                            {x && <div>手上 {x.onHand}・確定買到還沒到 {x.sure}・客人訂 {x.ordered}・已賣 {x.sold.qty}</div>}
+                            {x && <div>手上 {x.onHand}・確定買到還沒到 {x.sure}{x.est.unsure ? `・還在等確認 ${x.est.unsure}` : ""}・客人訂 {x.ordered}・已賣 {x.sold.qty}{x.sold.qty ? `（實際已賺 ${formatTwd(x.sold.revenue - x.sold.cost)}）` : ""}</div>}
                             <div className="text-ink-2">售價 {x?.price != null ? formatTwd(x.price) : "還沒填"}・各團{fullView ? "成本" : "買價"} {r.min === r.max ? formatTwd(r.min) : `${r.min.toLocaleString()}～${r.max.toLocaleString()}`}</div>
                             <ul className="space-y-0.5 pt-1">
                               {r.cells
@@ -285,9 +292,9 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
                         <PickBox id={e.id} name={e.name} />
                         <Link href={`/products/${e.id}`} className="grid flex-1 grid-cols-[minmax(0,1fr)_3.25rem_4.25rem_4.5rem] items-baseline gap-2 px-4 py-2.5" data-testid="extra-row">
                           <span className="min-w-0 truncate" title={e.name}>{e.name}</span>
-                          <span className={`num text-right ${x.left < 0 ? "text-bad" : ""}`}>{x.left}</span>
-                          <span className="num text-right">{x.avg == null ? <span className="text-mute">—</span> : x.avg.toLocaleString()}</span>
-                          <span className={`num text-right ${canProfitOf(x) ? (x.profit < 0 ? "text-bad" : "text-good") : "text-[13px] text-mute"}`}>{canProfitOf(x) ? x.profit.toLocaleString() : x.price == null ? "沒售價" : "—"}</span>
+                          <span className={`num text-right ${leftOf(x) < 0 ? "font-semibold text-bad" : ""}`}>{leftOf(x)}</span>
+                          <span className="num text-right">{(est ? x.est.avg : x.avg) == null ? <span className="text-mute">—</span> : (est ? x.est.avg : x.avg)!.toLocaleString()}</span>
+                          <span className={`num text-right ${canProfitOf(x) ? (profitOf(x) < 0 ? "text-bad" : "text-good") : "text-[13px] text-mute"}`}>{canProfitOf(x) ? profitOf(x).toLocaleString() : x.price == null ? "沒售價" : "—"}</span>
                         </Link>
                       </div>
                     );
@@ -298,14 +305,14 @@ export async function CategoryBatches({ categoryId, view, owner = "", part = "al
                 <PickSpacer />
                 <div className="grid flex-1 grid-cols-[minmax(0,1fr)_3.25rem_4.25rem_4.5rem] gap-2 px-4 py-2.5">
                   <span role="cell">合計</span>
-                  <span role="cell" className="num text-right" data-testid="summary-left">{listed.reduce((a, id) => a + (prof?.rows.get(id)?.left ?? 0), 0)}</span>
-                  <span role="cell" className="num text-right">{allSure ? Math.round(allAmount / allSure).toLocaleString() : "—"}</span>
-                  <span role="cell" className="num text-right text-good">{listed.some((id) => canProfitOf(prof?.rows.get(id))) ? listed.reduce((a, id) => a + (canProfitOf(prof?.rows.get(id)) ? prof!.rows.get(id)!.profit : 0), 0).toLocaleString() : <span className="text-mute">—</span>}</span>
+                  <span role="cell" className="num text-right" data-testid="summary-left">{listed.reduce((a, id) => a + leftOf(prof?.rows.get(id)), 0)}</span>
+                  <span role="cell" className="num text-right">{est ? (allQty ? Math.round(allEstAmount / allQty).toLocaleString() : "—") : allSure ? Math.round(allAmount / allSure).toLocaleString() : "—"}</span>
+                  <span role="cell" className="num text-right text-good">{listed.some((id) => canProfitOf(prof?.rows.get(id))) ? listed.reduce((a, id) => a + (canProfitOf(prof?.rows.get(id)) ? profitOf(prof!.rows.get(id)) : 0), 0).toLocaleString() : <span className="text-mute">—</span>}</span>
                 </div>
               </div>
             </div>
             <div className="space-y-0.5 border-t border-line-2 px-4 py-2.5 text-[12.5px] text-ink-2">
-              <div><b className="font-medium">有幾隻</b>＝手上的＋確定買到的，扣掉客人訂的</div>
+              <div><b className="font-medium">有幾隻</b>＝手上的＋確定買到的{est ? "＋還在等確認的" : ""}，扣掉客人訂的；負的＝叫的貨不夠</div>
               <div><b className="font-medium">每隻成本</b>＝{fullView ? "買價＋運費、關稅平均分到每隻" : "只看買價（不含運費、關稅）"}，台幣{summary.some((r) => r.tentative) ? "；有些價格還沒確定，先用預估的" : ""}</div>
               <div className="flex flex-wrap gap-x-4 pt-0.5">
                 <span className="text-mute">點角色看詳細</span>

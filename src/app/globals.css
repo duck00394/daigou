@@ -69,3 +69,17 @@ textarea {
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom);
 }
+
+/* 手機：TableWrap 的表格一列變一張小卡片，兩欄排（欄位名稱由 stack-table.tsx 從表頭抄到 data-label） */
+@media (max-width: 767.98px) {
+  .stack-wrap { max-height: none !important; overflow: visible !important; }
+  .stack-table { display: block; min-width: 0 !important; }
+  .stack-table thead { display: none; }
+  .stack-table tbody { display: block; }
+  .stack-table tr { display: grid; grid-template-columns: 1fr 1fr; column-gap: 14px; row-gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--color-line); }
+  .stack-table td { background: transparent !important; display: block; border: 0 !important; padding: 0 !important; text-align: left !important; font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+  .stack-table td::before { content: attr(data-label); display: block; font-size: 11.5px; line-height: 1.3; color: #6b7280; font-weight: 400; }
+  .stack-table td:first-child, .stack-table td[data-label=""] { grid-column: 1 / -1; font-size: 15px; }
+  .stack-table td:first-child::before, .stack-table td[data-label=""]::before { content: none; }
+  .stack-table td[data-empty], .stack-table td:empty { display: none; }
+}
