@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
+import { viewOwner } from "@/server/view";
 import { PageHeader, Section, TableWrap, Twd, Empty, Stat, StatusBadge, LinkButton, Badge } from "@/components/ui";
 import { BuyerFormView, BuyerAliases, TagManager, IncidentForm, MergeButton } from "../forms";
 import { fmtDate, incidentKind, orderStatus, paymentStatus, shipStatus, procurementStatus, refundStatus, flagLabel } from "@/lib/labels";
@@ -18,6 +19,7 @@ const TABS = [
 export default async function BuyerPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
   await requireUser();
   const { id } = await params;
+  const owner = await viewOwner(); // 看某個人：只列跟他訂的訂單、收款
   const tab = (await searchParams).tab ?? "overview";
   const b = await prisma.buyer.findUnique({
     where: { id },
@@ -31,10 +33,10 @@ export default async function BuyerPage({ params, searchParams }: { params: Prom
   });
   if (!b) notFound();
   const [orders, items, payments, refunds, cancellations, tagsAll, events] = await Promise.all([
-    prisma.order.findMany({ where: { buyerId: id }, orderBy: { orderedAt: "desc" }, include: { groupBuy: { select: { name: true } }, items: { select: { productNameSnapshot: true, qty: true, cancelledQtyCache: true } } } }),
-    prisma.orderItem.findMany({ where: { order: { buyerId: id } }, orderBy: { createdAt: "desc" }, include: { order: { select: { id: true, orderNo: true, orderedAt: true, confirmation: true } } } }),
-    prisma.payment.findMany({ where: { order: { buyerId: id } }, orderBy: { paidAt: "desc" }, include: { order: { select: { id: true, orderNo: true } } } }),
-    prisma.refund.findMany({ where: { order: { buyerId: id } }, orderBy: { requestedAt: "desc" }, include: { order: { select: { id: true, orderNo: true } } } }),
+    prisma.order.findMany({ where: { buyerId: id, ...(owner ? { items: { some: { ownerKey: { in: [owner, "joint", "none"] } } } } : {}) }, orderBy: { orderedAt: "desc" }, include: { groupBuy: { select: { name: true } }, items: { select: { productNameSnapshot: true, qty: true, cancelledQtyCache: true } } } }),
+    prisma.orderItem.findMany({ where: { order: { buyerId: id }, ...(owner ? { ownerKey: { in: [owner, "joint", "none"] } } : {}) }, orderBy: { createdAt: "desc" }, include: { order: { select: { id: true, orderNo: true, orderedAt: true, confirmation: true } } } }),
+    prisma.payment.findMany({ where: { order: { buyerId: id, ...(owner ? { items: { some: { ownerKey: { in: [owner, "joint", "none"] } } } } : {}) } }, orderBy: { paidAt: "desc" }, include: { order: { select: { id: true, orderNo: true } } } }),
+    prisma.refund.findMany({ where: { order: { buyerId: id, ...(owner ? { items: { some: { ownerKey: { in: [owner, "joint", "none"] } } } } : {}) } }, orderBy: { requestedAt: "desc" }, include: { order: { select: { id: true, orderNo: true } } } }),
     prisma.orderCancellation.findMany({ where: { orderItem: { order: { buyerId: id } } }, orderBy: { cancelledAt: "desc" }, include: { orderItem: { include: { order: { select: { id: true, orderNo: true } } } }, refunds: true } }),
     prisma.tag.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     prisma.orderItemEvent.findMany({ where: { orderItem: { order: { buyerId: id } }, type: { in: ["APPENDED", "QTY_CHANGED", "PRICE_CHANGED", "DISCOUNT_CHANGED", "CANCELLED"] } }, orderBy: { createdAt: "desc" }, take: 100, include: { orderItem: { select: { productNameSnapshot: true, order: { select: { id: true, orderNo: true } } } } } }),

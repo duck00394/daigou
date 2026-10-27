@@ -2,7 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
-import { inventorySummary, productLots } from "@/server/services/inventory";
+import { inventoryFor, mineBatchWhere, mineItemWhere, mineKeys } from "@/server/services/mine";
+import { lotOwners, ownerOfLot } from "@/server/services/ownership";
+import { viewOwner } from "@/server/view";
+import { productLots } from "@/server/services/inventory";
 import { productBuyers } from "@/server/services/reports";
 import { PageHeader, Section, TableWrap, StatusBadge, Stat, Badge, Empty, Twd, LinkButton } from "@/components/ui";
 import { ProductImage } from "@/components/client";
@@ -21,17 +24,24 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
     include: { aliases: { orderBy: { createdAt: "asc" } }, characters: true, categories: { include: { category: true } }, productType: true },
   });
   if (!p) notFound();
+  // 看某個人：庫存批次、採購、異動、買家都只列他的（別人的不顯示）
+  const owner = await viewOwner();
   const [categories, characters, types, seriesList, rosters, inv, lots, moves, buyers, batches] = await Promise.all([
     prisma.category.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.character.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.productType.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.series.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     characterRosters(prisma),
-    tx((t) => inventorySummary(t, [id])),
-    tx((t) => productLots(t, id)),
-    prisma.inventoryMovement.findMany({ where: { productId: id }, orderBy: { createdAt: "desc" }, take: 30, include: { orderItem: { select: { order: { select: { id: true, orderNo: true } } } } } }),
-    productBuyers(prisma, id, sp.categoryId),
-    prisma.purchaseBatchItem.findMany({ where: { productId: id, batch: { status: { not: "CANCELLED" } } }, include: { batch: { include: { supplierRef: true } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } }, orderBy: { createdAt: "desc" }, take: 30 }),
+    tx((t) => inventoryFor(t, [id], owner)),
+    tx(async (t) => {
+      const all = await productLots(t, id);
+      if (!owner) return all;
+      const os = await lotOwners(t, all.map((l) => l.batchItemId));
+      return all.filter((l) => mineKeys(owner)!.includes(ownerOfLot(os, l.batchItemId)));
+    }),
+    prisma.inventoryMovement.findMany({ where: { productId: id, ...(owner ? { OR: [{ purchaseBatchItem: { batch: mineBatchWhere(owner) } }, { purchaseBatchItemId: null, orderItem: mineItemWhere(owner) }] } : {}) }, orderBy: { createdAt: "desc" }, take: 30, include: { orderItem: { select: { order: { select: { id: true, orderNo: true } } } } } }),
+    productBuyers(prisma, id, sp.categoryId, owner),
+    prisma.purchaseBatchItem.findMany({ where: { productId: id, batch: { status: { not: "CANCELLED" }, ...mineBatchWhere(owner) } }, include: { batch: { include: { supplierRef: true } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } }, orderBy: { createdAt: "desc" }, take: 30 }),
   ]);
   const s = inv.get(id) ?? { onHand: 0, reserved: 0, available: 0, incoming: 0, shipped: 0, activeOrdered: 0, openDemand: 0, unallocated: 0, shortage: 0 };
   const batchName = new Map(batches.map((b) => [b.id, `${b.batch.code} ${b.batch.name}`]));

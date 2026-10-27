@@ -13,7 +13,7 @@ export async function preorderCosts(t: Tx, productIds: string[]) {
 }
 
 /** 預購成本＋每個商品一定到（對單買到、還沒到）的件數 */
-export async function preorderDetail(t: Tx, productIds: string[], opts: { itemWhere?: Prisma.PurchaseBatchItemWhereInput } = {}) {
+export async function preorderDetail(t: Tx, productIds: string[], opts: { itemWhere?: Prisma.PurchaseBatchItemWhereInput; owner?: string | null } = {}) {
   const ids = [...new Set(productIds)];
   const out = new Map<string, PreorderCost>();
   const sureQty = new Map<string, number>();
@@ -22,7 +22,7 @@ export async function preorderDetail(t: Tx, productIds: string[], opts: { itemWh
   const estCosts = new Map<string, PreorderCost>();
   if (!ids.length) return { costs: out, sureQty, unsureQty, estCosts };
   const [val, items] = await Promise.all([
-    stockValuation(t, ids),
+    stockValuation(t, ids, opts.owner),
     t.purchaseBatchItem.findMany({
       where: { AND: [{ productId: { in: ids }, batch: { status: { not: "CANCELLED" } } }, opts.itemWhere ?? {}] },
       select: { id: true, productId: true, qty: true, cancelledQty: true, confirmedQty: true, actualUnitCost: true, batch: { select: { status: true, supplierRef: { select: { kind: true } }, costs: { select: { id: true }, take: 1 } } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
@@ -81,7 +81,10 @@ export async function preorderProfit(t: Tx, opts: { owner?: string | null } = {}
   const keys = opts.owner ? [opts.owner, "joint", "none"] : null;
   const open = keys ? openAll.filter((r) => !!r.ownerKey && keys.includes(r.ownerKey)) : openAll;
   const unassigned = openAll.filter((r) => !r.ownerKey).reduce((a, r) => a + r.open, 0);
-  const costs = await preorderCosts(t, open.map((r) => r.productId));
+  // 成本也只用這個人的貨、他的團的買價
+  const costs = opts.owner
+    ? (await preorderDetail(t, open.map((r) => r.productId), { owner: opts.owner, itemWhere: { batch: { OR: [{ ownership: "JOINT" }, { orderedById: null }, { ownership: "PERSONAL", orderedById: opts.owner }] } } })).costs
+    : await preorderCosts(t, open.map((r) => r.productId));
   const buyers = new Map<string, ProfitBuyer>();
   const products = new Map<string, ProfitLine>();
   const total = { qty: 0, revenue: 0, cost: 0, costedRevenue: 0, uncosted: 0, tentative: false };
@@ -154,7 +157,7 @@ export async function seriesProfit(t: Tx, categoryId: string, opts: { owner?: st
   const tp = new Map(typePrices.map((x) => [x.productTypeId, x.salePriceTwd]));
   const [products, detail, stock, moves, orderItems] = await Promise.all([
     t.product.findMany({ where: { id: { in: ids } }, select: { id: true, salePriceTwd: true, productTypeId: true } }),
-    preorderDetail(t, ids, { itemWhere }),
+    preorderDetail(t, ids, { itemWhere, owner: opts.owner }),
     t.inventoryMovement.groupBy({ by: ["productId"], where: { productId: { in: ids } }, _sum: { onHandDelta: true } }),
     t.inventoryMovement.findMany({ where: { productId: { in: ids }, kind: "SHIP", orderItemId: { not: null } }, select: { productId: true, onHandDelta: true, purchaseBatchItemId: true, unitCostTwd: true, orderItem: { select: { id: true, unitPrice: true, estUnitCostTwd: true } } } }),
     t.orderItem.findMany({ where: { productId: { in: ids }, order: { confirmation: "CONFIRMED", statusCache: { not: "CANCELLED" } }, ...(keys ? { ownerKey: { in: keys } } : {}) }, select: { productId: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true, unitPrice: true } }),

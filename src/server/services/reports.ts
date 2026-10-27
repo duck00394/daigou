@@ -113,9 +113,10 @@ export async function categoryDetail(db: Db, categoryId: string) {
 }
 
 /** 商品在某分類（或全部）的買家明細 */
-export async function productBuyers(db: Db, productId: string, categoryId?: string | null) {
+export async function productBuyers(db: Db, productId: string, categoryId?: string | null, owner?: string | null) {
   return db.orderItem.findMany({
-    where: { productId, ...(categoryId ? { categoryId } : {}) },
+    // 看某個人：只列跟他訂的
+    where: { productId, ...(categoryId ? { categoryId } : {}), ...(owner ? { ownerKey: { in: [owner, "joint", "none"] } } : {}) },
     include: {
       order: { select: { id: true, orderNo: true, orderedAt: true, confirmation: true, paymentStatusCache: true, statusCache: true, buyer: { select: { id: true, name: true, code: true } } } },
       cancellations: true,
@@ -151,11 +152,16 @@ export function costOfMove(landed: Map<string, { qty: number; totalTwd: number }
 
 // ── 月報 ──
 
-export async function monthlyReport(db: Db, ym: string) {
+/** 看某個人：跟他訂的訂單（任何一個明細跟他訂的） */
+function mineOrder(owner?: string | null) {
+  return owner ? { items: { some: { ownerKey: { in: [owner, "joint", "none"] } } } } : {};
+}
+
+export async function monthlyReport(db: Db, ym: string, owner?: string | null) {
   const { start, end } = monthRange(ym);
-  // 本月有出貨的訂單：已實現營收 = 截至月底認列 − 截至月初認列
+  // 本月有出貨的訂單：已實現營收 = 截至月底認列 − 截至月初認列（看某個人時只算跟他訂的）
   const shipItems = await db.shipmentItem.findMany({
-    where: { shipment: { shippedAt: { gte: start, lt: end } } },
+    where: { shipment: { shippedAt: { gte: start, lt: end } }, orderItem: { order: mineOrder(owner) } },
     select: { orderItem: { select: { orderId: true } } },
   });
   const orderIds = [...new Set(shipItems.map((s) => s.orderItem.orderId))];
@@ -228,7 +234,7 @@ export async function monthlyReport(db: Db, ym: string) {
 
   // 銷貨成本：本月出貨流水
   const sItems = await db.shipmentItem.findMany({
-    where: { shipment: { shippedAt: { gte: start, lt: end } } },
+    where: { shipment: { shippedAt: { gte: start, lt: end } }, orderItem: { order: mineOrder(owner) } },
     select: { id: true },
   });
   const monthMoves = await db.inventoryMovement.findMany({
@@ -256,10 +262,12 @@ export async function monthlyReport(db: Db, ym: string) {
     }
   }
 
-  const expensesAgg = await db.expense.aggregate({ where: { date: { gte: start, lt: end } }, _sum: { amountTwd: true } });
+  // 其他費用：看某個人時只算他記的；以前記的（還沒分是誰的）另外列，不算進去
+  const expensesAgg = await db.expense.aggregate({ where: { date: { gte: start, lt: end }, ...(owner ? { ownerKey: owner } : {}) }, _sum: { amountTwd: true } });
+  const expensesUnassigned = owner ? ((await db.expense.aggregate({ where: { date: { gte: start, lt: end }, ownerKey: null }, _sum: { amountTwd: true } }))._sum.amountTwd ?? 0) : 0;
   // 採購團裡「不攤，單獨記」的運費等費用：以登記日期算進當月其他費用
   const loneFees = await db.batchCost.findMany({
-    where: { method: "NONE", createdAt: { gte: start, lt: end }, batch: { status: { not: "CANCELLED" } } },
+    where: { method: "NONE", createdAt: { gte: start, lt: end }, batch: { status: { not: "CANCELLED" }, ...(owner ? { OR: [{ ownership: "JOINT" as const }, { orderedById: null }, { ownership: "PERSONAL" as const, orderedById: owner }] } : {}) } },
     select: { id: true, currency: true, amount: true, kind: true, note: true, createdAt: true, batch: { select: { id: true, code: true, name: true, rateMicro: true } } },
   });
   const batchFeeItems = loneFees.map((c) => ({ id: c.id, date: c.createdAt, kind: c.kind, note: c.note, batch: c.batch, amountTwd: feeTwd(c, c.batch.rateMicro) }));
@@ -268,13 +276,13 @@ export async function monthlyReport(db: Db, ym: string) {
 
   // 現金流（與營收分開）
   const [payAgg, refundAgg] = await Promise.all([
-    db.payment.aggregate({ where: { paidAt: { gte: start, lt: end }, voidedAt: null }, _sum: { amount: true } }),
-    db.refund.aggregate({ where: { status: "COMPLETED", completedAt: { gte: start, lt: end } }, _sum: { amount: true } }),
+    db.payment.aggregate({ where: { paidAt: { gte: start, lt: end }, voidedAt: null, order: mineOrder(owner) }, _sum: { amount: true } }),
+    db.refund.aggregate({ where: { status: "COMPLETED", completedAt: { gte: start, lt: end }, order: mineOrder(owner) }, _sum: { amount: true } }),
   ]);
 
   // 本月新訂單（以訂單日期計）的有效訂購金額，依買家
   const newOrders = await db.order.findMany({
-    where: { orderedAt: { gte: start, lt: end }, confirmation: "CONFIRMED" },
+    where: { orderedAt: { gte: start, lt: end }, confirmation: "CONFIRMED", ...mineOrder(owner) },
     select: { receivableCache: true, buyer: { select: { id: true, name: true } } },
   });
   const byBuyer = new Map<string, { name: string; amount: number; orders: number }>();
@@ -294,6 +302,7 @@ export async function monthlyReport(db: Db, ym: string) {
     cogs,
     estimatedCostUnits: estimatedUnits,
     expenses,
+    expensesUnassigned,
     batchFeeItems,
     grossProfit: revenue - cogs,
     realizedProfit: revenue - cogs - expenses,
@@ -307,9 +316,9 @@ export async function monthlyReport(db: Db, ym: string) {
 }
 
 /** 預估未實現利潤：已確認、尚未出貨的部分，以建單時的預估成本計算 */
-export async function unrealizedEstimate(db: Db) {
+export async function unrealizedEstimate(db: Db, owner?: string | null) {
   const orders = await db.order.findMany({
-    where: { confirmation: "CONFIRMED", statusCache: { notIn: ["COMPLETED", "CANCELLED"] } },
+    where: { confirmation: "CONFIRMED", statusCache: { notIn: ["COMPLETED", "CANCELLED"] }, ...mineOrder(owner) },
     include: { items: true, payments: { select: { amount: true, voidedAt: true } }, refunds: { select: { amount: true, status: true } } },
   });
   let revenue = 0;
@@ -346,9 +355,9 @@ export async function unrealizedEstimate(db: Db) {
   return { revenue, cost, profit: revenue - cost, unknownCostUnits };
 }
 
-export async function receivablesSnapshot(db: Db) {
+export async function receivablesSnapshot(db: Db, owner?: string | null) {
   const agg = await db.order.aggregate({
-    where: { confirmation: { not: "PENDING" } },
+    where: { confirmation: { not: "PENDING" }, ...mineOrder(owner) },
     _sum: { receivableCache: true, paidCache: true, refundedCache: true, balanceCache: true, refundDueCache: true, refundPendingCache: true },
   });
   return {
@@ -381,8 +390,8 @@ export async function dashboard(db: Db, opts: { owner?: string | null } = {}) {
       where: { order: { confirmation: "CONFIRMED" }, purchaseFlag: { not: "ORDERED" }, ...itemMine },
       select: { productId: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true, reservedQtyCache: true },
     }),
-    monthlyReport(db, ym),
-    receivablesSnapshot(db),
+    monthlyReport(db, ym, opts.owner),
+    receivablesSnapshot(db, opts.owner),
   ]);
   const toShipQty = toShipItems.reduce((s, i) => s + i.reservedQtyCache, 0);
   const toShipBuyers = new Set(toShipItems.map((i) => i.order.buyerId)).size;
@@ -408,14 +417,21 @@ export interface ProductValuation {
  * 依成本批次計算庫存估值：每個批次的單件成本 = 該採購品項的完整成本（商品＋分攤費用）÷ 有效數量；
  * 手動入庫以填寫的成本加權平均。與出貨時的銷貨成本使用同一套口徑。
  */
-export async function stockValuation(db: Db, productIds?: string[]) {
+export async function stockValuation(db: Db, productIds?: string[], owner?: string | null) {
   const t = db as Tx;
   const where = productIds ? { productId: { in: productIds } } : {};
-  const [lots, keeps, manualIn] = await Promise.all([
+  const [lotsAll, keeps, manualIn] = await Promise.all([
     t.inventoryMovement.groupBy({ by: ["productId", "purchaseBatchItemId"], where, _sum: { onHandDelta: true, reservedDelta: true } }),
     t.inventoryMovement.groupBy({ by: ["productId", "purchaseBatchItemId"], where: { ...where, kind: "KEEP" }, _sum: { onHandDelta: true } }),
     t.inventoryMovement.findMany({ where: { ...where, purchaseBatchItemId: null, onHandDelta: { gt: 0 }, unitCostTwd: { not: null }, kind: { in: ["RECEIVE", "ADJUST"] } }, select: { productId: true, onHandDelta: true, unitCostTwd: true } }),
   ]);
+  // 看某個人：只算他的成本批次（＋合資、未指定的），平均成本才不會混到別人的買價
+  let lots = lotsAll;
+  if (owner) {
+    const { lotOwners, ownerOfLot } = await import("./ownership");
+    const os = await lotOwners(t, lotsAll.map((l) => l.purchaseBatchItemId));
+    lots = lotsAll.filter((l) => [owner, "joint", "none"].includes(ownerOfLot(os, l.purchaseBatchItemId)));
+  }
   const lotIds = [...new Set(lots.map((l) => l.purchaseBatchItemId).filter(Boolean) as string[])];
   const landed = await landedCosts(t, lotIds);
   const info = lotIds.length ? await t.purchaseBatchItem.findMany({ where: { id: { in: lotIds } }, select: { id: true, actualUnitCost: true, batch: { select: { costs: { select: { id: true }, take: 1 } } } } }) : [];

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
+import { viewOwner } from "@/server/view";
 import { PageHeader, Section, TableWrap, Twd, Empty, LinkButton, Pager, TagChip } from "@/components/ui";
 import { FilterBar, FSearch, FSelect, FCheck, qs } from "@/components/filters";
 import { fmtDate } from "@/lib/labels";
@@ -12,6 +13,7 @@ const SIZE = 50;
 export default async function Buyers({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   await requireUser();
   const sp = await searchParams;
+  const owner = await viewOwner(); // 看某個人：金額只算跟他訂的
   const page = Math.max(1, Number(sp.page) || 1);
   const where: Prisma.BuyerWhereInput = {
     mergedIntoId: null,
@@ -32,8 +34,8 @@ export default async function Buyers({ searchParams }: { searchParams: Promise<R
   ]);
   const ids = buyers.map((b) => b.id);
   const [agg, last] = await Promise.all([
-    prisma.order.groupBy({ by: ["buyerId"], where: { buyerId: { in: ids }, confirmation: "CONFIRMED" }, _count: true, _sum: { receivableCache: true, balanceCache: true } }),
-    prisma.order.groupBy({ by: ["buyerId"], where: { buyerId: { in: ids } }, _max: { orderedAt: true } }),
+    prisma.order.groupBy({ by: ["buyerId"], where: { buyerId: { in: ids }, confirmation: "CONFIRMED", ...(owner ? { items: { some: { ownerKey: { in: [owner, "joint", "none"] } } } } : {}) }, _count: true, _sum: { receivableCache: true, balanceCache: true } }),
+    prisma.order.groupBy({ by: ["buyerId"], where: { buyerId: { in: ids }, ...(owner ? { items: { some: { ownerKey: { in: [owner, "joint", "none"] } } } } : {}) }, _max: { orderedAt: true } }),
   ]);
   const am = new Map(agg.map((a) => [a.buyerId, a]));
   const lm = new Map(last.map((a) => [a.buyerId, a._max.orderedAt]));

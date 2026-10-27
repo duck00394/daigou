@@ -2,8 +2,9 @@
 import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
+import { inventoryFor } from "@/server/services/mine";
+import { viewOwner } from "@/server/view";
 import { productSearchWhere } from "@/server/services/catalog";
-import { inventorySummary } from "@/server/services/inventory";
 import { stockValuation } from "@/server/services/reports";
 import { listOperators } from "@/server/services/operators";
 import { Empty, PageHeader } from "@/components/ui";
@@ -34,7 +35,8 @@ export default async function Search({ searchParams }: { searchParams: Promise<{
       })
     : [];
   const ids = products.map((p) => p.id);
-  const [inv, val, operators] = await Promise.all([ids.length ? tx((t) => inventorySummary(t, ids)) : new Map(), ids.length ? stockValuation(prisma, ids) : null, tx((t) => listOperators(t, { includeInactive: true }))]);
+  const owner = await viewOwner();
+  const [inv, val, operators] = await Promise.all([ids.length ? tx((t) => inventoryFor(t, ids, owner)) : new Map(), ids.length ? stockValuation(prisma, ids, owner) : null, tx((t) => listOperators(t, { includeInactive: true }))]);
   const opIds = operators.map((o) => o.id);
   const name = (k: string) => (k === "joint" ? "合資" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
   return (

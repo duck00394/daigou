@@ -38,3 +38,9 @@ export function viewBatchWhere(key: string) {
   if (key === "all") return {};
   return { OR: [{ ownership: "JOINT" as const }, { orderedById: null }, { ownership: "PERSONAL" as const, orderedById: key }] };
 }
+
+/** 「現在看誰的」的人；選「全部」時是 null */
+export async function viewOwner() {
+  const v = await getView();
+  return v.key === "all" ? null : v.key;
+}

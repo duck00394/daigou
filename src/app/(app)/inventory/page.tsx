@@ -53,7 +53,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
       <PageHeader title={tab === "batches" ? "採購團・收貨" : "庫存"} sub={tab === "batches" ? "每一次跟代購下單、付款、到貨" : tab === "stock" ? "手上有多少、還會到多少、客人訂了多少" : undefined} actions={<><LinkButton href="/purchase" primary small>＋ 新增採購</LinkButton><LinkButton href="/api/export/inventory" small>匯出</LinkButton></>} />
       <NavSelect label="頁面" hideLabel options={TABS.map(([k, l]) => ({ label: l, href: `/inventory?tab=${k}` }))} current={`/inventory?tab=${tab}`} />
       {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} owner={owner} kind={sp.kind} v={sp.v} hideUnsure={sp.unsure === "0"} />}
-      {tab === "demand" && <DemandTab />}
+      {tab === "demand" && <DemandTab owner={owner} />}
       {tab === "batches" && <BatchesTab cat={sp.cat} open={sp.open} owner={owner} confirm={sp.confirm} view={sp.view} pay={sp.pay} late={sp.late} settle={sp.settle} />}
       {tab === "receive" && <ReceiveTab productId={sp.productId} />}
       {tab === "adjust" && (
@@ -106,7 +106,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
   const ids = products.map((p) => p.id);
   const [inv, valAll, byOwner, me, charOrder] = await Promise.all([
     tx((t) => inventorySummary(t, ids)),
-    stockValuation(prisma, ids),
+    stockValuation(prisma, ids, owner || null),
     tx((t) => stockByOwner(t, { productIds: ids })),
     getMe(),
     characterOrder(prisma),
@@ -369,13 +369,22 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
   );
 }
 
-async function DemandTab() {
-  const [d, rate] = await Promise.all([tx((t) => purchaseDemand(t)), getDefaultRateMicro(prisma)]);
+async function DemandTab({ owner = "" }: { owner?: string }) {
+  const [d, rate] = await Promise.all([tx((t) => purchaseDemand(t, { owner: owner || null })), getDefaultRateMicro(prisma)]);
   const products = await prisma.product.findMany({ where: { id: { in: [...d.keys()] } }, select: { id: true, name: true, code: true, officialPriceJpy: true } });
   const inv = await tx((t) => inventorySummary(t, [...d.keys()]));
+  // 看某個人：可用庫存、已在途只算他的（＋合資、未指定的）
+  const keys = owner ? [owner, JOINT, NONE] : [];
+  const byOwner = owner ? await tx((t) => stockByOwner(t, { productIds: [...d.keys()] })) : null;
+  const incomingMine = new Map<string, number>();
+  if (owner) {
+    const items = await prisma.purchaseBatchItem.findMany({ where: { productId: { in: [...d.keys()] }, batch: { status: { not: "CANCELLED" }, ...viewBatchWhere(owner) } }, select: { productId: true, qty: true, cancelledQty: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } });
+    for (const i of items) incomingMine.set(i.productId, (incomingMine.get(i.productId) ?? 0) + Math.max(0, i.qty - i.cancelledQty - i.movements.reduce((a, m) => a + m.onHandDelta, 0)));
+  }
   const rows = products.map((p) => {
     const x = d.get(p.id)!;
-    const s = inv.get(p.id);
+    const g = inv.get(p.id);
+    const s = owner && g ? { ...g, available: keys.reduce((a, k) => a + (byOwner?.get(p.id)?.get(k)?.free ?? 0), 0), incoming: incomingMine.get(p.id) ?? 0 } : g;
     return { p, x, s, suggest: Math.max(0, x.qty - Math.max(0, s?.available ?? 0) - (s?.incoming ?? 0)) };
   });
   return (

@@ -1,7 +1,8 @@
 import { prisma, tx } from "@/server/db";
 import { currentUser } from "@/server/auth";
 import { sheetResponse } from "@/server/exporter";
-import { inventorySummary } from "@/server/services/inventory";
+import { inventoryFor, mineBatchWhere, mineItemWhere, mineKeys } from "@/server/services/mine";
+import { viewOwner } from "@/server/view";
 import { categoryDetail } from "@/server/services/reports";
 import { formatRate, jpyToTwd } from "@/lib/money";
 import { batchStage, batchStageLabel, paymentPurpose, supplierPaymentStatus } from "@/lib/labels";
@@ -18,6 +19,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
   const url = new URL(req.url);
   const sp = url.searchParams;
   const format = sp.get("format");
+  // 匯出也照「現在看誰的」：看某個人時只匯出他的（別人的不匯出）
+  const owner = await viewOwner();
+  const mineOrder = owner ? { items: { some: mineItemWhere(owner) } } : {};
 
   switch (kind) {
     case "products": {
@@ -26,7 +30,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
         include: { productType: true, seriesRef: true, characters: { include: { character: true } }, categories: { include: { category: true } }, aliases: true },
         orderBy: { code: "asc" },
       });
-      const inv = await tx((t) => inventorySummary(t, ps.map((p) => p.id)));
+      const inv = await tx((t) => inventoryFor(t, ps.map((p) => p.id), owner));
       return sheetResponse("商品", [
         ["商品編號", "商品名稱", "狀態", "類型", "角色", "系列", "規格", "分類", "別名", "日幣官方價", "代購售價", "預估成本", "實際在庫", "已保留", "可用庫存", "待到貨", "有效訂購", "已出貨", "缺貨", "發售日", "預計到貨", "實際到貨", "來源", "網址", "備註"],
         ...ps.map((p) => {
@@ -39,7 +43,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
       // 一般匯出不含收件人、電話、地址；需要時加上 private=1
       const priv = sp.get("private") === "1";
       const bs = await prisma.buyer.findMany({ where: { mergedIntoId: null }, include: { aliases: true, tags: { where: { removedAt: null }, include: { tag: true } } }, orderBy: { code: "asc" } });
-      const totals = await prisma.order.groupBy({ by: ["buyerId"], where: { confirmation: "CONFIRMED" }, _sum: { receivableCache: true, balanceCache: true }, _count: true });
+      const totals = await prisma.order.groupBy({ by: ["buyerId"], where: { confirmation: "CONFIRMED", ...mineOrder }, _sum: { receivableCache: true, balanceCache: true }, _count: true });
       const tm = new Map(totals.map((t) => [t.buyerId, t]));
       const head = ["買家編號", "名稱", "LINE 暱稱", "別名", "標籤", "有效訂單數", "累計應收", "目前待收", "常用配送方式", ...(priv ? ["聯絡方式", "收件人", "電話", "地址"] : [])];
       return sheetResponse(priv ? "買家（含收件資料）" : "買家", [
@@ -58,7 +62,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
         ...(sp.get("payment") ? { paymentStatusCache: sp.get("payment") as never } : {}),
       };
       const items = await prisma.orderItem.findMany({
-        where: { order: where },
+        where: { order: where, ...mineItemWhere(owner) },
         include: { order: { include: { buyer: true, groupBuy: true } }, category: true },
         orderBy: [{ order: { orderedAt: "asc" } }, { createdAt: "asc" }],
       });
@@ -68,8 +72,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
       ], format);
     }
     case "payments": {
-      const ps = await prisma.payment.findMany({ include: { order: { include: { buyer: true } } }, orderBy: { paidAt: "asc" } });
-      const rs = await prisma.refund.findMany({ include: { order: { include: { buyer: true } } }, orderBy: { requestedAt: "asc" } });
+      const ps = await prisma.payment.findMany({ where: { order: mineOrder }, include: { order: { include: { buyer: true } } }, orderBy: { paidAt: "asc" } });
+      const rs = await prisma.refund.findMany({ where: { order: mineOrder }, include: { order: { include: { buyer: true } } }, orderBy: { requestedAt: "asc" } });
       return sheetResponse("收款與退款", [
         ["類型", "日期", "訂單編號", "買家", "金額", "方式", "識別資訊", "狀態", "原因／備註"],
         ...ps.map((p) => ["收款", fmtDate(p.paidAt, true), p.order.orderNo, p.order.buyer.name, p.amount, p.method ?? "", p.reference ?? "", p.voidedAt ? "已作廢" : "有效", [p.note, p.voidReason].filter(Boolean).join("；")]),
@@ -78,6 +82,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
     }
     case "purchases": {
       const items = await prisma.purchaseBatchItem.findMany({
+        where: { batch: mineBatchWhere(owner) },
         include: { batch: { include: { supplierRef: true, category: true, orderedBy: true, paymentResponsibleBy: true, receivingResponsibleBy: true } }, product: { include: { seriesRef: true, productType: true } }, allocations: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
         orderBy: [{ batch: { createdAt: "asc" } }, { createdAt: "asc" }],
       });
@@ -87,7 +92,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
       ], format);
     }
     case "supplier-payments": {
-      const rows = await prisma.supplierPayment.findMany({ include: { paidBy: true, batch: { include: { supplierRef: true } } }, orderBy: [{ paidAt: "asc" }, { createdAt: "asc" }] });
+      const rows = await prisma.supplierPayment.findMany({ where: { batch: mineBatchWhere(owner) }, include: { paidBy: true, batch: { include: { supplierRef: true } } }, orderBy: [{ paidAt: "asc" }, { createdAt: "asc" }] });
       return sheetResponse("供應商付款", [
         ["付款日", "採購團", "採購團名稱", "供應商", "實際付款人代號", "實際付款人", "金額", "幣別", "實際匯率", "依實際匯率換算台幣", "用途", "付款方式", "狀態", "交易參考編號", "備註", "作廢原因"],
         ...rows.map((p) => [
@@ -99,21 +104,23 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
     }
     case "sales": {
       const { listQuickSales } = await import("@/server/services/quick-sale");
-      const data = await tx((t) => listQuickSales(t, { includeVoided: true }));
+      const data0 = await tx((t) => listQuickSales(t, { includeVoided: true }));
+      const keys = mineKeys(owner);
+      const data = keys ? { ...data0, rows: data0.rows.filter((r) => r.owners.some((x) => keys.includes(x.key) && x.qty > 0) || (r.voided && r.owners.some((x) => keys.includes(x.key)))) } : data0;
       return sheetResponse("現貨出售", [
         ["出售日", "訂單編號", "商品", "數量", "每件售價", "收入", "商品成本", "毛利", "成本含暫估", "買家", "已收款", "狀態", "備註／作廢原因"],
         ...data.rows.map((r) => [fmtDate(r.soldAt), r.orderNo, r.productName, r.voided ? r.originalQty : r.qty, r.unitPrice, r.revenue, r.cost, r.profit, r.tentative ? "是" : "", r.buyer.name, r.paid, r.voided ? "已作廢" : "有效", [r.note, r.cancelReason].filter(Boolean).join("｜")]),
       ], format);
     }
     case "receivings": {
-      const rows = await prisma.receivingLine.findMany({ include: { record: { include: { receivedBy: true, batch: true } }, batchItem: { include: { product: true } } }, orderBy: [{ record: { receivedAt: "asc" } }, { id: "asc" }] });
+      const rows = await prisma.receivingLine.findMany({ where: { record: { batch: mineBatchWhere(owner) } }, include: { record: { include: { receivedBy: true, batch: true } }, batchItem: { include: { product: true } } }, orderBy: [{ record: { receivedAt: "asc" } }, { id: "asc" }] });
       return sheetResponse("收貨清點", [
         ["收貨日", "採購團", "採購團名稱", "收貨確認人代號", "收貨確認人", "商品編號", "商品", "實收", "瑕疵", "良品入庫", "缺少", "品項備註", "收貨備註"],
         ...rows.map((l) => [fmtDate(l.record.receivedAt, true), l.record.batch.code, l.record.batch.name, l.record.receivedBy.code, l.record.receivedBy.name, l.batchItem.product.code, l.batchItem.product.name, l.receivedQty, l.defectQty, l.receivedQty - l.defectQty, l.missingQty, l.note ?? "", l.record.note ?? ""]),
       ], format);
     }
     case "inventory": {
-      const ms = await prisma.inventoryMovement.findMany({ include: { product: true, orderItem: { include: { order: true } } }, orderBy: { createdAt: "asc" } });
+      const ms = await prisma.inventoryMovement.findMany({ where: owner ? { OR: [{ purchaseBatchItem: { batch: mineBatchWhere(owner) } }, { purchaseBatchItemId: null, orderItem: mineItemWhere(owner) }] } : {}, include: { product: true, orderItem: { include: { order: true } } }, orderBy: { createdAt: "asc" } });
       return sheetResponse("庫存流水", [
         ["時間", "商品編號", "商品", "類型", "在庫變動", "保留變動", "關聯訂單", "原因"],
         ...ms.map((m) => [fmtDate(m.createdAt, true), m.product.code, m.product.name, m.kind, m.onHandDelta, m.reservedDelta, m.orderItem?.order.orderNo ?? "", m.reason ?? ""]),
@@ -121,7 +128,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
     }
     case "shipments": {
       const priv = sp.get("private") === "1";
-      const ss = await prisma.shipmentItem.findMany({ include: { shipment: { include: { buyer: true } }, orderItem: { include: { order: true } } }, orderBy: { shipment: { shippedAt: "asc" } } });
+      const ss = await prisma.shipmentItem.findMany({ where: { orderItem: mineItemWhere(owner) }, include: { shipment: { include: { buyer: true } }, orderItem: { include: { order: true } } }, orderBy: { shipment: { shippedAt: "asc" } } });
       return sheetResponse("出貨紀錄", [
         ["出貨單號", "出貨日期", "買家", "配送方式", "物流單號", "訂單編號", "商品", "數量", "狀態", ...(priv ? ["收件人", "電話", "地址"] : [])],
         ...ss.map((s) => [s.shipment.shipmentNo, fmtDate(s.shipment.shippedAt, true), s.shipment.buyer.name, s.shipment.method ?? "", s.shipment.trackingNo ?? "", s.orderItem.order.orderNo, s.orderItem.productNameSnapshot, s.qty, s.shipment.status === "DELIVERED" ? "已送達" : "已出貨", ...(priv ? [s.shipment.buyer.recipientName ?? "", s.shipment.buyer.recipientPhone ?? "", s.shipment.buyer.address ?? ""] : [])]),
@@ -130,7 +137,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
     case "to-ship": {
       const priv = sp.get("private") === "1";
       const items = await prisma.orderItem.findMany({
-        where: { order: { confirmation: "CONFIRMED" }, shipStatusCache: { notIn: ["SHIPPED", "DELIVERED", "CANCELLED"] } },
+        where: { order: { confirmation: "CONFIRMED" }, shipStatusCache: { notIn: ["SHIPPED", "DELIVERED", "CANCELLED"] }, ...mineItemWhere(owner) },
         include: { order: { include: { buyer: true } } },
         orderBy: [{ order: { buyer: { name: "asc" } } }, { order: { orderedAt: "asc" } }],
       });

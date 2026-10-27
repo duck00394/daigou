@@ -1,5 +1,6 @@
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
+import { viewOwner } from "@/server/view";
 import { getDefaultRateMicro, getOrdersEnabled } from "@/server/services/settings";
 import { OrdersToggle } from "./orders-toggle";
 import { businessDataCount } from "@/server/services/backup";
@@ -35,7 +36,7 @@ export default async function Settings() {
     getDefaultRateMicro(prisma),
     prisma.character.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.productType.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
-    prisma.expense.findMany({ orderBy: { date: "desc" }, take: 20 }),
+    viewOwner().then((o) => prisma.expense.findMany({ where: o ? { OR: [{ ownerKey: o }, { ownerKey: null }] } : {}, orderBy: { date: "desc" }, take: 20 })),
     businessDataCount(),
     prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 30 }),
     tx((t) => listOperators(t, { includeInactive: true })),

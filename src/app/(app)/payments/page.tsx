@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
+import { viewOwner } from "@/server/view";
 import { receivablesSnapshot } from "@/server/services/reports";
 import { PageHeader, Section, TableWrap, Twd, Empty, Stat, StatusBadge, LinkButton } from "@/components/ui";
 import { FilterBar, FSearch, FSelect } from "@/components/filters";
@@ -15,7 +16,10 @@ export default async function Payments({ searchParams }: { searchParams: Promise
   await requireUser();
   const sp = await searchParams;
   const tab = sp.tab ?? "due";
-  const snap = await receivablesSnapshot(prisma);
+  // 看某個人：只算跟他訂的訂單
+  const owner = await viewOwner();
+  const mine: Prisma.OrderWhereInput = owner ? { items: { some: { ownerKey: { in: [owner, "joint", "none"] } } } } : {};
+  const snap = await receivablesSnapshot(prisma, owner);
   const gbs = await prisma.groupBuy.findMany({ orderBy: { createdAt: "desc" } });
   return (
     <div className="space-y-4">
@@ -32,15 +36,16 @@ export default async function Payments({ searchParams }: { searchParams: Promise
           <Link key={k} href={`/payments?tab=${k}`} aria-current={tab === k ? "page" : undefined} className={`rounded-lg px-3 py-1.5 text-sm ${tab === k ? "bg-ink text-white" : "bg-white text-ink-2 hover:bg-line-2"}`}>{l}</Link>
         ))}
       </nav>
-      {tab === "due" && <DueTab sp={sp} gbs={gbs} />}
-      {tab === "refunds" && <RefundTab />}
-      {tab === "records" && <RecordsTab sp={sp} />}
+      {tab === "due" && <DueTab sp={sp} gbs={gbs} mine={mine} />}
+      {tab === "refunds" && <RefundTab mine={mine} />}
+      {tab === "records" && <RecordsTab sp={sp} mine={mine} />}
     </div>
   );
 }
 
-async function DueTab({ sp, gbs }: { sp: Record<string, string | undefined>; gbs: { id: string; name: string }[] }) {
+async function DueTab({ sp, gbs, mine }: { sp: Record<string, string | undefined>; gbs: { id: string; name: string }[]; mine: Prisma.OrderWhereInput }) {
   const where: Prisma.OrderWhereInput = {
+    ...mine,
     confirmation: "CONFIRMED",
     balanceCache: { gt: 0 },
     ...(sp.groupBuyId ? { groupBuyId: sp.groupBuyId } : {}),
@@ -94,10 +99,10 @@ async function DueTab({ sp, gbs }: { sp: Record<string, string | undefined>; gbs
   );
 }
 
-async function RefundTab() {
+async function RefundTab({ mine }: { mine: Prisma.OrderWhereInput }) {
   const [pending, unscheduled] = await Promise.all([
-    prisma.refund.findMany({ where: { status: "PENDING" }, orderBy: { requestedAt: "asc" }, include: { order: { include: { buyer: true } } } }),
-    prisma.order.findMany({ where: { refundDueCache: { gt: 0 } }, include: { buyer: true }, orderBy: { updatedAt: "desc" } }),
+    prisma.refund.findMany({ where: { status: "PENDING", order: mine }, orderBy: { requestedAt: "asc" }, include: { order: { include: { buyer: true } } } }),
+    prisma.order.findMany({ where: { refundDueCache: { gt: 0 }, ...mine }, include: { buyer: true }, orderBy: { updatedAt: "desc" } }),
   ]);
   const needRecord = unscheduled.filter((o) => o.refundDueCache > o.refundPendingCache);
   return (
@@ -138,12 +143,12 @@ async function RefundTab() {
   );
 }
 
-async function RecordsTab({ sp }: { sp: Record<string, string | undefined> }) {
+async function RecordsTab({ sp, mine }: { sp: Record<string, string | undefined>; mine: Prisma.OrderWhereInput }) {
   const from = sp.from ? new Date(`${sp.from}T00:00:00+08:00`) : new Date(Date.now() - 30 * 86400000);
   const to = sp.to ? new Date(new Date(`${sp.to}T00:00:00+08:00`).getTime() + 86400000) : new Date(Date.now() + 86400000);
   const [pays, refs] = await Promise.all([
-    prisma.payment.findMany({ where: { paidAt: { gte: from, lt: to } }, orderBy: { paidAt: "desc" }, include: { order: { include: { buyer: true } } } }),
-    prisma.refund.findMany({ where: { status: "COMPLETED", completedAt: { gte: from, lt: to } }, orderBy: { completedAt: "desc" }, include: { order: { include: { buyer: true } } } }),
+    prisma.payment.findMany({ where: { paidAt: { gte: from, lt: to }, order: mine }, orderBy: { paidAt: "desc" }, include: { order: { include: { buyer: true } } } }),
+    prisma.refund.findMany({ where: { status: "COMPLETED", completedAt: { gte: from, lt: to }, order: mine }, orderBy: { completedAt: "desc" }, include: { order: { include: { buyer: true } } } }),
   ]);
   const rows = [
     ...pays.map((p) => ({ id: p.id, at: p.paidAt, kind: "收款", orderId: p.orderId, orderNo: p.order.orderNo, buyer: p.order.buyer.name, amount: p.amount, info: [p.method, p.reference, p.note].filter(Boolean).join("｜"), voided: !!p.voidedAt })),

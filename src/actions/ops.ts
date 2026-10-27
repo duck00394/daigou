@@ -189,18 +189,26 @@ export async function setRateAction(rate: string) {
   return run((a) => tx((t) => setDefaultRate(t, a, rate)).then(() => null), "admin");
 }
 
+/** 「現在看誰的」選的人；選「全部」時用這支手機的人 */
+async function actingOwnerKey() {
+  const { getView } = await import("@/server/view");
+  const v = await getView();
+  return v.key !== "all" ? v.key : v.me;
+}
+
 export async function addExpenseAction(input: { date: string; kind: "JP_DOMESTIC_SHIPPING" | "INTL_SHIPPING" | "DUTY" | "PACKAGING" | "PLATFORM_FEE" | "OTHER"; amountTwd: number; note: string | null; requestKey?: string }) {
-  return run((a) =>
-    tx(async (t) => {
+  return run(async (a) => {
+    const owner = await actingOwnerKey();
+    return tx(async (t) => {
       await claimRequest(t, input.requestKey, "expense.add");
       const date = parseDay(input.date);
       if (!date) throw new BizError("請選擇日期");
       if (!Number.isInteger(input.amountTwd) || input.amountTwd <= 0) throw new BizError("金額必須是正整數");
-      const e = await t.expense.create({ data: { date, kind: input.kind, amountTwd: input.amountTwd, note: input.note } });
+      const e = await t.expense.create({ data: { date, kind: input.kind, amountTwd: input.amountTwd, note: input.note, ownerKey: owner } });
       await audit(t, a, "expense.add", "Expense", e.id, input);
       return null;
-    }),
-  );
+    });
+  });
 }
 export async function deleteExpenseAction(id: string) {
   return run((a) =>

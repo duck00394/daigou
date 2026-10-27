@@ -483,9 +483,10 @@ export async function cancelBatch(t: Tx, actor: Actor, batchId: string) {
 }
 
 /** 待下單清單：有效訂單中尚未被庫存或在途採購涵蓋的需求 */
-export async function purchaseDemand(t: Tx) {
+export async function purchaseDemand(t: Tx, opts: { owner?: string | null } = {}) {
   const items = await t.orderItem.findMany({
-    where: { order: { confirmation: "CONFIRMED" }, purchaseFlag: { in: ["PENDING_PURCHASE", "OUT_OF_STOCK", "DELAYED"] } },
+    // 看某個人：只算跟他訂的（別人的不算）
+    where: { order: { confirmation: "CONFIRMED" }, purchaseFlag: { in: ["PENDING_PURCHASE", "OUT_OF_STOCK", "DELAYED"] }, ...(opts.owner ? { ownerKey: { in: [opts.owner, "joint", "none"] } } : {}) },
     select: {
       id: true,
       productId: true,

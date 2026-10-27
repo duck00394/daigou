@@ -2,6 +2,7 @@ import Link from "next/link";
 import { costKind } from "@/lib/labels";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
+import { viewOwner } from "@/server/view";
 import { currentYm, monthlyReport, receivablesSnapshot, unrealizedEstimate } from "@/server/services/reports";
 import { PageHeader, Section, TableWrap, Twd, Stat, Empty } from "@/components/ui";
 
@@ -26,11 +27,12 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
   await requireUser();
   const sp = await searchParams;
   const ym = sp.ym && /^\d{4}-\d{2}$/.test(sp.ym) ? sp.ym : currentYm();
+  const owner = await viewOwner();
   const [r, un, snap, expenses] = await Promise.all([
-    monthlyReport(prisma, ym),
-    unrealizedEstimate(prisma),
-    receivablesSnapshot(prisma),
-    prisma.expense.findMany({ where: { date: { gte: new Date(`${ym}-01T00:00:00Z`), lt: new Date(new Date(`${ym}-01T00:00:00Z`).setUTCMonth(new Date(`${ym}-01T00:00:00Z`).getUTCMonth() + 1)) } }, orderBy: { date: "asc" } }),
+    monthlyReport(prisma, ym, owner),
+    unrealizedEstimate(prisma, owner),
+    receivablesSnapshot(prisma, owner),
+    prisma.expense.findMany({ where: { ...(owner ? { ownerKey: owner } : {}), date: { gte: new Date(`${ym}-01T00:00:00Z`), lt: new Date(new Date(`${ym}-01T00:00:00Z`).setUTCMonth(new Date(`${ym}-01T00:00:00Z`).getUTCMonth() + 1)) } }, orderBy: { date: "asc" } }),
   ]);
   const margin = (rev: number, cost: number) => (rev > 0 ? `${Math.round(((rev - cost) / rev) * 1000) / 10}%` : "—");
   return (
@@ -51,7 +53,7 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <Stat label="收入（已賣出）" value={<Twd v={r.revenue} />} note={`其中運費收入 ${r.shippingIncome.toLocaleString()} 元`} />
         <Stat label="賣掉的東西成本" value={<Twd v={r.cogs} />} note={r.estimatedCostUnits > 0 ? `${r.estimatedCostUnits} 件以預估成本計` : "依採購團實際成本"} tone={r.estimatedCostUnits > 0 ? "warn" : undefined} />
-        <Stat label="其他費用" value={<Twd v={r.expenses} />} note="含採購團裡沒攤進商品的運費等" />
+        <Stat label="其他費用" value={<Twd v={r.expenses} />} note={r.expensesUnassigned ? `另有以前記的 NT$${r.expensesUnassigned.toLocaleString()} 還沒分是誰的，沒算進去（切到「全部」看）` : "含採購團裡沒攤進商品的運費等"} />
         <Stat label="賺多少（已賣出）" value={<Twd v={r.realizedProfit} />} note={`毛利率 ${margin(r.revenue, r.cogs)}`} />
         <Stat label="本月新訂單金額" value={<Twd v={r.bookedSales} />} note="以訂單日期計的有效應收" />
         <Stat label="本月收款" value={<Twd v={r.cashIn} />} note={`本月退款 ${r.cashOut.toLocaleString()} 元`} />

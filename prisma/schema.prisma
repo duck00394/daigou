@@ -913,6 +913,7 @@ model Expense {
   kind      BatchCostKind
   amountTwd Int
   note      String?
+  ownerKey  String? // 誰的費用（經營者 id）；空白＝以前記的、還沒分
   createdAt DateTime      @default(now())
 
   @@index([date])

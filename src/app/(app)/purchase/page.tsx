@@ -16,13 +16,15 @@ export const metadata = { title: "新增採購" };
 export default async function PurchasePage({ searchParams }: { searchParams: Promise<{ categoryId?: string; batchId?: string }> }) {
   await requireUser();
   const sp = await searchParams;
+  const view = await getView();
   const [me, operators, categories, suppliers, batches, series, types, rate] = await Promise.all([
     getMe(),
     tx((t) => listOperators(t)),
     seriesOptions(prisma),
     prisma.supplier.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, defaultCurrency: true, kind: true, favorite: true } }),
     prisma.purchaseBatch.findMany({
-      where: { status: { not: "CANCELLED" } },
+      // 「哪一團」只列自己的團（＋合資、未指定的），別人的不顯示
+      where: { status: { not: "CANCELLED" }, ...(view.key !== "all" ? { OR: [{ ownership: "JOINT" as const }, { orderedById: null }, { ownership: "PERSONAL" as const, orderedById: view.key }] } : {}) },
       orderBy: { createdAt: "desc" },
       take: 200,
       select: { id: true, code: true, name: true, categoryId: true, ownership: true, orderedById: true, status: true, progress: true, rateMicro: true, supplierId: true, supplierRef: { select: { name: true, defaultCurrency: true, kind: true } }, _count: { select: { items: true } } },
@@ -44,7 +46,6 @@ export default async function PurchasePage({ searchParams }: { searchParams: Pro
     prisma.purchaseBatchItem.findFirst({ orderBy: { createdAt: "desc" }, select: { product: { select: { seriesId: true, productTypeId: true } } } }),
     listShippingMethods(prisma),
   ]);
-  const view = await getView();
   const lastCategory = batches.find((b) => b.categoryId && categories.some((c) => c.id === b.categoryId && c.active))?.categoryId ?? null;
   return (
     <div className="space-y-4">

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { productSearchWhere } from "@/server/services/catalog";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
-import { inventorySummary } from "@/server/services/inventory";
+import { inventoryFor } from "@/server/services/mine";
+import { viewOwner } from "@/server/view";
 import { PageHeader, Section, TableWrap, Twd, Jpy, LinkButton, Empty, Pager, Badge } from "@/components/ui";
 import { FilterBar, FSearch, FSelect, FCheck, qs } from "@/components/filters";
 import { ProductImage } from "@/components/client";
@@ -41,7 +42,7 @@ export default async function Products({ searchParams }: { searchParams: Promise
     orderBy: sp.sort === "name" ? { name: "asc" } : { updatedAt: "desc" },
     ...(sortStock ? {} : { skip: (page - 1) * SIZE, take: SIZE }),
   });
-  const inv = await tx((t) => inventorySummary(t, products.map((p) => p.id)));
+  const inv = await viewOwner().then((o) => tx((t) => inventoryFor(t, products.map((p) => p.id), o)));
   if (sortStock) {
     const key = (id: string) => (sp.sort === "stock" ? (inv.get(id)?.available ?? 0) : (inv.get(id)?.shortage ?? 0));
     products = products.sort((a, b) => key(b.id) - key(a.id)).slice((page - 1) * SIZE, page * SIZE);

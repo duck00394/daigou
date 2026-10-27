@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
+import { viewOwner } from "@/server/view";
 import { PageHeader, Section, TableWrap, StatusBadge, Empty, Twd } from "@/components/ui";
 import { GroupBuyEditButton } from "../categories/forms";
 import { fmtDate, groupBuyStatus, toDateTimeInput } from "@/lib/labels";
@@ -10,6 +11,7 @@ export const metadata = { title: "代購團" };
 export default async function GroupBuys({ searchParams }: { searchParams: Promise<{ closing?: string }> }) {
   await requireUser();
   const sp = await searchParams;
+  const owner = await viewOwner(); // 看某個人：金額只算跟他訂的
   const soon = new Date(Date.now() + 7 * 86400000);
   const [gbs, cats, stats] = await Promise.all([
     prisma.groupBuy.findMany({
@@ -18,7 +20,7 @@ export default async function GroupBuys({ searchParams }: { searchParams: Promis
       orderBy: [{ status: "asc" }, { closeAt: "asc" }, { createdAt: "desc" }],
     }),
     prisma.category.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
-    prisma.order.groupBy({ by: ["groupBuyId"], where: { confirmation: "CONFIRMED" }, _count: true, _sum: { receivableCache: true, balanceCache: true } }),
+    prisma.order.groupBy({ by: ["groupBuyId"], where: { confirmation: "CONFIRMED", ...(owner ? { items: { some: { ownerKey: { in: [owner, "joint", "none"] } } } } : {}) }, _count: true, _sum: { receivableCache: true, balanceCache: true } }),
   ]);
   const sm = new Map(stats.map((s) => [s.groupBuyId, s]));
   return (

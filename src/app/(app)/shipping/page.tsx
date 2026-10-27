@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
-import { inventorySummary } from "@/server/services/inventory";
+import { inventoryFor } from "@/server/services/mine";
 import { PageHeader, Section, TableWrap, Empty, LinkButton, TagChip } from "@/components/ui";
 import { BuyerShipCard, ShipOwnerButton, ShipmentEdit, type ShipItem } from "./parts";
 import { listOperators } from "@/server/services/operators";
@@ -52,7 +52,7 @@ async function TodoTab({ byOrder, sp, vk }: { byOrder: boolean; sp: Record<strin
     include: { order: { include: { buyer: { include: { tags: { where: { removedAt: null, tag: { active: true } }, include: { tag: true } } } }, groupBuy: { select: { name: true } } } } },
     orderBy: [{ order: { orderedAt: "asc" } }, { createdAt: "asc" }],
   });
-  const inv = await tx((t) => inventorySummary(t, [...new Set(items.map((i) => i.productId))]));
+  const inv = await tx((t) => inventoryFor(t, [...new Set(items.map((i) => i.productId))], vk));
   const ops = await tx((t) => listOperators(t, { includeInactive: true }));
   const activeOps = ops.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }));
   const resBy = await tx((t) => shipOwnerLabels(t, { orderItemIds: items.filter((i) => i.reservedQtyCache > 0).map((i) => i.id) }));

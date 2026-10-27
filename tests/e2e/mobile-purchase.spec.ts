@@ -76,7 +76,9 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   await expect(page.getByTestId("chosen-series")).toContainText(cat);
   // 預設開新的一團；之前的團收起來，點了才出現
   await expect(chosen(page, "哪一團")).toHaveText("開新的一團");
-  for (const n of [`YUANS ${tag}`, `QQ Shop ${tag}`, `頑皮貓 ${tag}`]) await expect(page.getByLabel("哪一團", { exact: true }).locator("option", { hasText: n })).toHaveCount(1);
+  // 「哪一團」只列自己的團（＋合資的）；對方的團不顯示
+  for (const n of [`YUANS ${tag}`, `頑皮貓 ${tag}`]) await expect(page.getByLabel("哪一團", { exact: true }).locator("option", { hasText: n })).toHaveCount(1);
+  await expect(page.getByLabel("哪一團", { exact: true }).locator("option", { hasText: `QQ Shop ${tag}` })).toHaveCount(0);
 
   // 活動總表：總額與誰買的（切到「全部」看兩個人加起來）
   await switchView(page, /全部/);

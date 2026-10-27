@@ -23,11 +23,12 @@ export default async function SellPage({ searchParams }: { searchParams: Promise
   const [series, buyers, lastOrder, usedChannels] = await Promise.all([
     seriesOptions(prisma),
     prisma.buyer.findMany({ where: { mergedIntoId: null }, orderBy: { updatedAt: "desc" }, take: 300, select: { name: true, salesChannel: true } }),
-    prisma.orderItem.findFirst({ where: { categoryId: { not: null } }, orderBy: { createdAt: "desc" }, select: { categoryId: true } }),
+    prisma.orderItem.findFirst({ where: { categoryId: { not: null }, ...(view.key !== "all" ? { ownerKey: view.key } : {}) }, orderBy: { createdAt: "desc" }, select: { categoryId: true } }),
     prisma.order.groupBy({ by: ["salesChannel"], where: { salesChannel: { not: null } }, _count: true, orderBy: { _count: { salesChannel: "desc" } }, take: 20 }),
   ]);
   // 預訂還沒給的件數
-  const open = await prisma.orderItem.findMany({ where: { order: { source: { not: "QUICK" }, confirmation: "CONFIRMED" } }, select: { qty: true, cancelledQtyCache: true, shippedQtyCache: true } });
+  // 看某個人：只算跟他訂的
+  const open = await prisma.orderItem.findMany({ where: { order: { source: { not: "QUICK" }, confirmation: "CONFIRMED" }, ...(view.key !== "all" ? { ownerKey: { in: [view.key, "joint", "none"] } } : {}) }, select: { qty: true, cancelledQtyCache: true, shippedQtyCache: true } });
   const waiting = open.reduce((s, i) => s + Math.max(0, i.qty - i.cancelledQtyCache - i.shippedQtyCache), 0);
   // 從系列頁「勾好直接賣」帶過來的：pick=商品id:件數,商品id:件數
   const initialQty = Object.fromEntries((sp.pick ?? "").split(",").map((x) => x.split(":")).filter(([id, q]) => id && /^\d{1,3}$/.test(q ?? "") && Number(q) > 0).slice(0, 200).map(([id, q]) => [id, q]));
