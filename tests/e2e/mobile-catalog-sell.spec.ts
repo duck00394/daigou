@@ -184,27 +184,20 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await expect(hachiRow.locator('[data-k="free"]')).toHaveText("-1");
   await page.screenshot({ path: "test-results/mobile_stock_tree.png", fullPage: true });
 
-  // 客人訂：點數字看是誰訂的、跟誰訂的；改成「還沒分」→ 看自己時不算進客人訂，上面提醒去分
+  // 客人訂：點數字只看到自己的；「不是我的」→ 再確認一次才改 → 改給別人後，自己這邊就不顯示
   await hachiRow.getByTestId("demand-open").click();
-  const dd = page.getByRole("dialog");
-  const drow = dd.locator(`[data-testid="demand-row"][data-buyer="小美${tag}"]`);
+  const drow = page.getByRole("dialog").locator(`[data-testid="demand-row"][data-buyer="小美${tag}"]`);
   await expect(drow).toContainText("× 1");
-  await expect(drow.getByLabel(`小美${tag} 跟誰訂的`)).not.toHaveValue(""); // 賣給客人時預設記成「現在看誰的」那個人
+  await expect(drow).not.toHaveAttribute("data-owner", ""); // 賣給客人時預設記成「現在看誰的」那個人
   await page.screenshot({ path: "test-results/mobile_demand.png" });
-  await drow.getByLabel(`小美${tag} 跟誰訂的`).selectOption({ label: "還沒分" });
-  await toast(page, /改成跟還沒分訂的/);
-  await page.keyboard.press("Escape");
+  await drow.getByRole("button", { name: "不是我的" }).click();
+  await expect(page.getByTestId("demand-confirm")).toContainText(`小美${tag}`);
+  await page.getByRole("button", { name: "確定改" }).click();
+  await toast(page, /改成跟.+訂的/);
   await page.reload();
-  await expect(page.getByTestId("demand-unassigned")).toContainText("還沒分是跟誰訂的");
-  await expect(hachiRow.locator('[data-k="free"]')).toHaveText("0");
-  await page.getByTestId("demand-unassigned").getByRole("link", { name: "去分 ›" }).click();
-  await expect(page).toHaveURL(/only=unassigned/);
-  await hachiRow.getByTestId("demand-open").click();
-  const back = page.getByRole("dialog").locator(`[data-testid="demand-row"][data-buyer="小美${tag}"]`).getByLabel(`小美${tag} 跟誰訂的`);
-  const firstOp = await back.locator("option").nth(1).textContent();
-  await back.selectOption({ index: 1 });
-  await toast(page, new RegExp(`改成跟${firstOp}訂的`));
-  await page.keyboard.press("Escape");
+  // 小八沒有自己的貨、也沒有自己的預訂了 → 不列出來（別人的預訂不顯示）
+  await expect(hachiRow).toHaveCount(0);
+  await expect(page.locator(`[data-testid="stock-row"][data-name="${series}吉伊 吊娃"]`)).toBeVisible();
 
   // 訂單：沒開接單也在選單裡；多選一次改代購團
   const prisma = new PrismaClient({ datasources: { db: { url: dbUrl } } });

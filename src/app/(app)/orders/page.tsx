@@ -6,6 +6,8 @@ import { FilterBar, FSearch, FSelect, qs } from "@/components/filters";
 import { BulkBar, RowCheck, Selection } from "./bulk";
 import { fmtDate, orderStatus, paymentStatus, shipStatus, orderSource } from "@/lib/labels";
 import type { Prisma } from "@prisma/client";
+import { getView } from "@/server/view";
+import { AssignAll } from "../sales/assign";
 
 export const metadata = { title: "訂單" };
 const SIZE = 50;
@@ -14,7 +16,12 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
   await requireUser();
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page) || 1);
+  // 看某個人：只列跟他訂的訂單，別人的不顯示（以前記的還沒分的另外提醒）
+  const view = await getView();
+  const vk = view.key === "all" ? null : view.key;
+  const mineWhere: Prisma.OrderWhereInput = vk ? { items: { some: { ownerKey: { in: [vk, "joint", "none"] } } } } : {};
   const where: Prisma.OrderWhereInput = {
+    AND: [mineWhere],
     ...(sp.q
       ? {
           OR: [
@@ -51,9 +58,10 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
     prisma.order.count({ where }),
     prisma.groupBuy.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.category.findMany({ orderBy: { name: "asc" } }),
-    prisma.order.count({ where: { paymentStatusCache: "UNPAID", confirmation: { not: "CANCELLED" } } }),
-    prisma.order.count({ where: { statusCache: "PENDING_CONFIRM" } }),
+    prisma.order.count({ where: { AND: [mineWhere], paymentStatusCache: "UNPAID", confirmation: { not: "CANCELLED" } } }),
+    prisma.order.count({ where: { AND: [mineWhere], statusCache: "PENDING_CONFIRM" } }),
   ]);
+  const unassignedN = vk ? await prisma.order.count({ where: { confirmation: { not: "CANCELLED" }, items: { some: {}, none: { ownerKey: { not: null } } } } }) : 0;
   // 手機：搜尋框下面的快捷篩選
   const quick: [string, string, boolean][] = [
     ["全部", "/orders", !sp.payment && !sp.status],
@@ -73,6 +81,11 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
           </>
         }
       />
+      {unassignedN > 0 && (
+        <div className="mb-3" data-testid="orders-unassigned">
+          <AssignAll n={unassignedN} unit="張以前記的訂單" operators={view.ops} acting={vk ?? ""} counted={false} />
+        </div>
+      )}
       <Section pad={false}>
         <FilterBar action="/orders">
           <FSearch data-search value={sp.q} placeholder="訂單編號、買家、商品" />

@@ -190,16 +190,28 @@ export async function assignUnassignedDemandAction(owner: string) {
   return run(async (a) => {
     const ow = z.string().min(1).max(64).parse(owner);
     const { setDemandOwner } = await import("@/server/services/demand-owner");
+    const { lotOwners, ownerOfLot } = await import("@/server/services/ownership");
     const items = await prisma.orderItem.findMany({
-      where: { ownerKey: null, order: { confirmation: "CONFIRMED", statusCache: { not: "CANCELLED" } } },
-      select: { id: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true, productNameSnapshot: true, order: { select: { buyer: { select: { name: true } } } } },
+      where: { ownerKey: null, order: { confirmation: { not: "CANCELLED" } } },
+      select: { id: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true, productNameSnapshot: true, order: { select: { confirmation: true, buyer: { select: { name: true } } } } },
     });
     let done = 0;
     const failed: string[] = [];
     for (const i of items) {
-      if (i.qty - i.cancelledQtyCache - i.shippedQtyCache <= 0) continue;
+      const open = i.qty - i.cancelledQtyCache - i.shippedQtyCache;
       try {
-        await tx((t) => setDemandOwner(t, a, i.id, ow), { timeout: 30_000 });
+        if (open > 0 && i.order.confirmation === "CONFIRMED") {
+          // 還沒給的：分給選的人（已保留的貨一起換成他的）
+          await tx((t) => setDemandOwner(t, a, i.id, ow), { timeout: 30_000 });
+        } else {
+          // 已經給了的（現貨賣掉的）：照實際扣到誰的貨分；看不出來才分給選的人
+          const moves = await prisma.inventoryMovement.findMany({ where: { kind: "SHIP", orderItemId: i.id }, select: { purchaseBatchItemId: true, onHandDelta: true } });
+          const owners = await tx((t) => lotOwners(t, moves.map((m) => m.purchaseBatchItemId)));
+          const by = new Map<string, number>();
+          for (const m of moves) by.set(ownerOfLot(owners, m.purchaseBatchItemId), (by.get(ownerOfLot(owners, m.purchaseBatchItemId)) ?? 0) - m.onHandDelta);
+          const top = [...by.entries()].filter(([, q]) => q > 0).sort((x, y) => y[1] - x[1])[0]?.[0];
+          await prisma.orderItem.update({ where: { id: i.id }, data: { ownerKey: top && top !== "none" ? top : ow } });
+        }
         done++;
       } catch (e) {
         if (!(e instanceof BizError)) throw e;

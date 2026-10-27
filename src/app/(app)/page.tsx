@@ -26,9 +26,9 @@ export default async function Home() {
   })();
   const usesOrders = await getOrdersEnabled(prisma);
   const [d, sales, unpaidSales, live, refunds, rec, overdue, rush] = await Promise.all([
-    dashboard(prisma),
+    dashboard(prisma, { owner: vk === "all" ? null : vk }),
     tx((t) => listQuickSales(t, { from: monthStart })),
-    prisma.order.aggregate({ where: { source: "QUICK", confirmation: "CONFIRMED", balanceCache: { gt: 0 } }, _count: true }),
+    prisma.order.aggregate({ where: { source: "QUICK", confirmation: "CONFIRMED", balanceCache: { gt: 0 }, ...(vk === "all" ? {} : { items: { some: { ownerKey: { in: [vk, "joint", "none"] } } } }) }, _count: true }),
     prisma.purchaseBatch.findMany({ where: { status: { not: "CANCELLED" }, ...viewBatchWhere(vk) }, select: { id: true } }),
     tx((t) => refundsOwed(t)).then((l) => l.filter((r) => inView(vk, r))),
     tx((t) => reconcileList(t, { view: vk })),

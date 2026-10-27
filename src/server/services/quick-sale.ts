@@ -82,6 +82,7 @@ export async function quickSale(t: Tx, actor: Actor, input: QuickSaleInput) {
   });
   // 指定賣誰的：只從那個人的成本批次依先進先出保留；不指定則由出貨自動保留
   if (input.owner) {
+    await t.orderItem.updateMany({ where: { orderId: order.id }, data: { ownerKey: input.owner } });
     let left = input.qty;
     for (const lot of lots) {
       if (left <= 0) break;

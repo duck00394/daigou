@@ -305,7 +305,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                                   <td className={`num px-1.5 py-2 text-right align-top ${r.s.onHand ? "" : "text-mute"}`} data-k="onhand">{r.s.onHand}</td>
                                   <td className={`num px-1.5 py-2 text-right align-top ${r.s.incoming - unsureOf(r) ? "font-semibold text-good" : "text-mute"}`} data-k="sure">{r.s.incoming - unsureOf(r) || "–"}</td>
                                   <td className="num px-1.5 py-2 text-right align-top" data-k="ordered">
-                                    <DemandButton name={label(r)} shown={r.s.openDemand} cls={r.s.openDemand ? (left(r) < 0 ? "font-semibold text-bad" : "font-semibold text-info") : "text-mute"} operators={activeOps} rows={(demandAll.get(r.p.id) ?? []).map((d) => ({ ...d, at: fmtMonthDay(d.at) }))} />
+                                    <DemandButton name={label(r)} shown={r.s.openDemand} cls={r.s.openDemand ? (left(r) < 0 ? "font-semibold text-bad" : "font-semibold text-info") : "text-mute"} operators={activeOps} viewer={owner} rows={(demandAll.get(r.p.id) ?? []).map((d) => ({ ...d, at: fmtMonthDay(d.at) }))} />
                                   </td>
                                   <td className={`num px-1.5 py-2 text-right align-top ${left(r) < 0 ? "font-semibold text-bad" : left(r) ? "font-semibold" : "text-mute"}`} data-k="free">{left(r)}</td>
                                   <td className="num hidden px-2 py-2 text-right align-top md:table-cell" data-k="kept">{r.s.kept}</td>

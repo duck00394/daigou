@@ -360,21 +360,25 @@ export async function receivablesSnapshot(db: Db) {
   };
 }
 
-export async function dashboard(db: Db) {
+export async function dashboard(db: Db, opts: { owner?: string | null } = {}) {
   const now = new Date();
   const soon = new Date(now.getTime() + 7 * 86400000);
   const ym = currentYm();
+  // 看某個人：訂單類的待辦只算跟他訂的（別人的不算）
+  const keys = opts.owner ? [opts.owner, "joint", "none"] : null;
+  const itemMine = keys ? { ownerKey: { in: keys } } : {};
+  const orderMine = keys ? { items: { some: { ownerKey: { in: keys } } } } : {};
   const [pendingConfirm, unpaidOrders, toShipItems, refundPending, refundUnscheduled, closingGroupBuys, incomingBatches, upcomingProducts, purchaseNeeds, month, snap] = await Promise.all([
-    db.order.count({ where: { confirmation: "PENDING" } }),
-    db.order.count({ where: { confirmation: "CONFIRMED", balanceCache: { gt: 0 } } }),
-    db.orderItem.findMany({ where: { reservedQtyCache: { gt: 0 }, order: { confirmation: "CONFIRMED" } }, select: { reservedQtyCache: true, order: { select: { buyerId: true } } } }),
-    db.refund.count({ where: { status: "PENDING" } }),
-    db.order.count({ where: { refundDueCache: { gt: 0 }, refundPendingCache: 0 } }),
+    db.order.count({ where: { confirmation: "PENDING", ...orderMine } }),
+    db.order.count({ where: { confirmation: "CONFIRMED", balanceCache: { gt: 0 }, ...orderMine } }),
+    db.orderItem.findMany({ where: { reservedQtyCache: { gt: 0 }, order: { confirmation: "CONFIRMED" }, ...itemMine }, select: { reservedQtyCache: true, order: { select: { buyerId: true } } } }),
+    db.refund.count({ where: { status: "PENDING", ...(keys ? { order: orderMine } : {}) } }),
+    db.order.count({ where: { refundDueCache: { gt: 0 }, refundPendingCache: 0, ...orderMine } }),
     db.groupBuy.findMany({ where: { status: "OPEN", closeAt: { not: null, lte: soon } }, orderBy: { closeAt: "asc" }, take: 8 }),
     db.purchaseBatch.findMany({ where: { status: { in: ["ORDERED", "PARTIAL_RECEIVED"] } }, orderBy: { orderedAt: "asc" }, take: 8 }),
     db.product.findMany({ where: { archivedAt: null, actualArrivalDate: null, expectedArrivalDate: { not: null, lte: new Date(now.getTime() + 14 * 86400000) } }, orderBy: { expectedArrivalDate: "asc" }, take: 8 }),
     db.orderItem.findMany({
-      where: { order: { confirmation: "CONFIRMED" }, purchaseFlag: { not: "ORDERED" } },
+      where: { order: { confirmation: "CONFIRMED" }, purchaseFlag: { not: "ORDERED" }, ...itemMine },
       select: { productId: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true, reservedQtyCache: true },
     }),
     monthlyReport(db, ym),

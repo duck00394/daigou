@@ -6,6 +6,7 @@ import { PageHeader, Section, TableWrap, Empty, LinkButton, TagChip } from "@/co
 import { BuyerShipCard, ShipOwnerButton, ShipmentEdit, type ShipItem } from "./parts";
 import { listOperators } from "@/server/services/operators";
 import { shipOwnerLabels } from "@/server/services/ship-owner";
+import { getView } from "@/server/view";
 
 type Ops = { id: string; name: string }[];
 /** 「JING 1・合資 1」 */
@@ -19,6 +20,9 @@ export default async function Shipping({ searchParams }: { searchParams: Promise
   await requireUser();
   const sp = await searchParams;
   const tab = sp.tab ?? "todo";
+  // 看某個人：只列跟他訂的，別人的不顯示
+  const view = await getView();
+  const vk = view.key === "all" ? null : view.key;
   return (
     <div className="space-y-4">
       <PageHeader
@@ -31,15 +35,16 @@ export default async function Shipping({ searchParams }: { searchParams: Promise
           <Link key={k} href={`/shipping?tab=${k}`} aria-current={tab === k ? "page" : undefined} className={`rounded-lg px-3 py-1.5 text-sm ${tab === k ? "bg-ink text-white" : "bg-white text-ink-2 hover:bg-line-2"}`}>{l}</Link>
         ))}
       </nav>
-      {tab === "done" ? <DoneTab /> : <TodoTab byOrder={tab === "order"} sp={sp} />}
+      {tab === "done" ? <DoneTab vk={vk} /> : <TodoTab byOrder={tab === "order"} sp={sp} vk={vk} />}
     </div>
   );
 }
 
-async function TodoTab({ byOrder, sp }: { byOrder: boolean; sp: Record<string, string | undefined> }) {
+async function TodoTab({ byOrder, sp, vk }: { byOrder: boolean; sp: Record<string, string | undefined>; vk: string | null }) {
   const gbs = await prisma.groupBuy.findMany({ orderBy: { createdAt: "desc" } });
   const items = await prisma.orderItem.findMany({
     where: {
+      ...(vk ? { ownerKey: { in: [vk, "joint", "none"] } } : {}),
       order: { confirmation: "CONFIRMED", ...(sp.groupBuyId ? { groupBuyId: sp.groupBuyId } : {}) },
       shipStatusCache: { notIn: ["SHIPPED", "DELIVERED", "CANCELLED"] },
       ...(sp.ready ? { reservedQtyCache: { gt: 0 } } : {}),
@@ -118,8 +123,8 @@ async function TodoTab({ byOrder, sp }: { byOrder: boolean; sp: Record<string, s
   );
 }
 
-async function DoneTab() {
-  const ships = await prisma.shipment.findMany({ orderBy: { shippedAt: "desc" }, take: 100, include: { buyer: true, items: { include: { orderItem: { include: { order: { select: { id: true, orderNo: true, confirmation: true } } } } } } } });
+async function DoneTab({ vk }: { vk: string | null }) {
+  const ships = await prisma.shipment.findMany({ where: vk ? { items: { some: { orderItem: { ownerKey: { in: [vk, "joint", "none"] } } } } } : {}, orderBy: { shippedAt: "desc" }, take: 100, include: { buyer: true, items: { include: { orderItem: { include: { order: { select: { id: true, orderNo: true, confirmation: true } } } } } } } });
   const ops = await tx((t) => listOperators(t, { includeInactive: true }));
   const activeOps = ops.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }));
   const by = await tx((t) => shipOwnerLabels(t, { shipmentItemIds: ships.flatMap((s) => s.items.map((i) => i.id)) }));
