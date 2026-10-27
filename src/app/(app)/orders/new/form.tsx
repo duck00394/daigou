@@ -21,7 +21,7 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
   const [targetOrder, setTargetOrder] = useState("");
   const [groupBuyId, setGroupBuyId] = useState("");
   const [lines, setLines] = useState<Line[]>([newLine()]);
-  const [shipping, setShipping] = useState("38"); // 預設賣貨便運費 38
+  const [shipping, setShipping] = useState("0");
   const [confirming, setConfirming] = useState(false);
   const [discount, setDiscount] = useState("0");
   const [confirmation, setConfirmation] = useState<"CONFIRMED" | "PENDING">("CONFIRMED");
@@ -204,7 +204,7 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
 
       {mode !== "APPEND" && (
         <div className="grid gap-3 sm:grid-cols-4">
-          <TextField label="運費（賣貨便）" inputMode="numeric" value={shipping} onChange={(e) => setShipping(e.target.value.replace(/\D/g, ""))} hint="預設 38，不收填 0" />
+          <TextField label="運費" inputMode="numeric" value={shipping} onChange={(e) => setShipping(e.target.value.replace(/\D/g, ""))} />
           <TextField label="整單折扣" inputMode="numeric" value={discount} onChange={(e) => setDiscount(e.target.value)} hint="負數代表加價" />
           <TextField label="訂單時間" type="datetime-local" value={orderedAt} onChange={(e) => setOrderedAt(e.target.value)} />
           <SelectField label="訂單狀態" value={confirmation} onChange={(e) => setConfirmation(e.target.value as "CONFIRMED" | "PENDING")} options={[["CONFIRMED", "已確認"], ["PENDING", "待確認"]]} hint="待確認的訂單不計入有效統計" />
@@ -246,7 +246,7 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
                 </li>
               );
             })}
-            {mode !== "APPEND" && <li className="flex justify-between px-3 py-1.5"><span>運費（賣貨便）</span><span className="num">{formatTwd(Number(shipping) || 0)}</span></li>}
+            {mode !== "APPEND" && <li className="flex justify-between px-3 py-1.5"><span>運費</span><span className="num">{formatTwd(Number(shipping) || 0)}</span></li>}
             {mode !== "APPEND" && Number(discount) !== 0 && <li className="flex justify-between px-3 py-1.5"><span>整單折扣</span><span className="num">－{formatTwd(Number(discount) || 0)}</span></li>}
           </ul>
           <div className="flex items-baseline justify-between text-[16px] font-semibold"><span>{mode === "APPEND" ? "追加金額" : "應收"}</span><span className="num" data-testid="order-confirm-total">{formatTwd(total)}</span></div>

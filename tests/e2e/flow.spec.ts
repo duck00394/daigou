@@ -211,11 +211,10 @@ test("買家標籤提醒不會阻擋建單；匯出與備份需要登入且可�
   await page.getByLabel("商品 1").click();
   await page.getByLabel("商品 1").fill("吉伊");
   await page.getByRole("button", { name: /吉伊吊娃/ }).first().click();
-  // 運費預設賣貨便 38；按「建立訂單」先出確認清單，按「確認送出」才成立
-  await expect(page.getByLabel("運費（賣貨便）")).toHaveValue("38");
+  // 賣東西不預設運費；按「建立訂單」先出確認清單，按「確認送出」才成立
+  await expect(page.getByLabel("運費", { exact: true })).toHaveValue("0");
   await page.getByRole("button", { name: "建立訂單" }).click();
-  await expect(page.getByTestId("order-confirm")).toContainText("運費（賣貨便）");
-  await expect(page.getByTestId("order-confirm")).toContainText("NT$38");
+  await expect(page.getByTestId("order-confirm")).toContainText("運費");
   await page.getByRole("button", { name: "確認送出" }).click();
   await toast(page, /已建立訂單/);
 

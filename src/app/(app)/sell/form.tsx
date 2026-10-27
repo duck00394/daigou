@@ -14,7 +14,7 @@ import { formatTwd } from "@/lib/money";
 type Row = { productId: string; name: string; free: number; freeBy?: Record<string, number>; incoming: number; price: number | null };
 type Sheet = { id: string; name: string; items: { typeId: string; typeName: string; price: number | null; rows: Row[] }[] };
 
-const DEFAULT_SHIP = 38; // 賣貨便運費
+const DEFAULT_SHIP = 0; // 賣東西預設不加運費，要收再填
 
 export function SellForm({ series, buyers, initialCategory, waiting, channels = [], buyerChannels = {}, operators = [], me = null, acting = null, groupBuys = [], initialQty = {} }: { series: SeriesOpt[]; buyers: string[]; initialCategory: string; waiting: number; channels?: string[]; buyerChannels?: Record<string, string>; operators?: { id: string; name: string }[]; me?: string | null; acting?: string | null; groupBuys?: { id: string; name: string; categoryId: string | null }[]; initialQty?: Record<string, string> }) {
   // 誰賣的：只賣、只扣這個人的現貨，兩個人的庫存才對得上（預設是這支手機的人）
@@ -24,7 +24,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
   const [groupBuy, setGroupBuy] = useState("");
   // 填了代購團：預設加賣貨便運費 38，要改再打開
   const [shipFee, setShipFee] = useState(String(DEFAULT_SHIP));
-  // 每一筆預設加賣貨便運費 38，一直顯示在畫面上，要改直接改（不收填 0）
+  // 運費：預設 0（不加），要收再填
   const fee = Math.max(0, Number(shipFee) || 0);
   // 送出前的確認表
   const [confirming, setConfirming] = useState(false);
@@ -185,11 +185,10 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
           <Choice label="代購團（選填）" value={groupBuy} onChange={setGroupBuy} placeholder="不指定" options={groupBuys.map((g) => ({ value: g.id, label: g.name }))} hint="選了系列，那個系列只有一個代購團時會自動帶。" />
         )}
         <label className="flex items-center gap-2 rounded-lg border border-line-2 bg-[#fafbfc] px-3 py-2 text-[14px]" data-testid="ship-fee">
-          <span className="shrink-0 font-medium text-ink-2">運費（賣貨便）</span>
+          <span className="shrink-0 font-medium text-ink-2">運費</span>
           <span className="text-mute">NT$</span>
           <input aria-label="運費" data-keep inputMode="numeric" className={`${inputCls} num min-h-10 w-24 text-right`} value={shipFee} onChange={(e) => setShipFee(e.target.value.replace(/\D/g, ""))} />
-          {shipFee !== String(DEFAULT_SHIP) && <button type="button" className="text-[13px] text-ai" onClick={() => setShipFee(String(DEFAULT_SHIP))}>改回 {DEFAULT_SHIP}</button>}
-          <span className="ml-auto text-[12px] text-mute">不收填 0</span>
+          <span className="ml-auto text-[12px] text-mute">要收運費再填</span>
         </label>
         <div className="grid grid-cols-2 gap-2">
           <ChannelPicker value={channel} onChange={setChannel} extra={channels} />
@@ -331,7 +330,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
                     </li>
                   );
                 })}
-                {fee > 0 && <li className="flex justify-between px-3 py-1.5"><span>運費（賣貨便）</span><span className="num">{formatTwd(fee)}</span></li>}
+                {fee > 0 && <li className="flex justify-between px-3 py-1.5"><span>運費</span><span className="num">{formatTwd(fee)}</span></li>}
               </ul>
               <div className="flex items-baseline justify-between text-[16px] font-semibold"><span>合計</span><span className="num" data-testid="sell-confirm-total">{formatTwd(total + fee)}</span></div>
               {now > 0 && <p className="text-[13px] text-mute">{paid ? "現貨的錢已經收了" : "現貨的錢還沒收"}{pre ? "；預訂的到貨再收" : ""}</p>}

@@ -136,10 +136,10 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await choose(page, "販售平台", "賣貨便");
   await page.getByLabel("客人", { exact: true }).fill(`小美${tag}`);
   await page.screenshot({ path: "test-results/mobile_sell.png", fullPage: true });
-  await page.getByRole("button", { name: /登記：3 件 NT\$1,638（現貨 2・預訂 1）/ }).click();
+  await page.getByRole("button", { name: /登記：3 件 NT\$1,600（現貨 2・預訂 1）/ }).click();
   // 送出前有確認表：看得到每一項、合計；按「確認送出」才送
   await expect(page.getByTestId("sell-confirm")).toContainText(`小美${tag}`);
-  await expect(page.getByTestId("sell-confirm-total")).toHaveText("NT$1,638");
+  await expect(page.getByTestId("sell-confirm-total")).toHaveText("NT$1,600");
   await page.screenshot({ path: "test-results/mobile_sell_confirm.png" });
   await page.getByRole("button", { name: "確認送出" }).click();
   await expect(page.getByTestId("sell-done")).toContainText("賣出 2 件、預訂 1 件");
@@ -214,17 +214,17 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await toast(page, new RegExp(`張訂單改成「${gbName}」`));
   await expect(page.locator("tbody")).toContainText(gbName);
 
-  // 賣給客人選了代購團：預設加賣貨便運費 38，按「改」才能改；確認表的合計含運費
+  // 賣給客人：運費預設 0，要收再填；確認表的合計含運費
   await page.goto("/sell");
   await page.getByLabel("種類", { exact: true }).selectOption({ label: kind });
   await page.getByLabel("系列", { exact: true }).selectOption({ label: series });
   await page.locator(`[data-testid="sell-row"][data-name="${series}:吊娃:小八"]`).getByLabel("小八 數量").fill("1");
   await page.getByLabel("客人", { exact: true }).fill(`小美${tag}`);
   await choose(page, "代購團（選填）", gbName);
-  await expect(page.getByLabel("運費", { exact: true })).toHaveValue("38");
+  await expect(page.getByLabel("運費", { exact: true })).toHaveValue("0"); // 賣東西不預設運費
   await page.getByLabel("運費", { exact: true }).fill("50");
   await page.getByRole("button", { name: /^登記：/ }).click();
-  await expect(page.getByTestId("sell-confirm")).toContainText("運費（賣貨便）");
+  await expect(page.getByTestId("sell-confirm")).toContainText("運費");
   await expect(page.getByTestId("sell-confirm-total")).toHaveText("NT$700");
   await page.getByRole("button", { name: "返回修改" }).click();
   await expect(page.getByTestId("sell-confirm")).toHaveCount(0);
