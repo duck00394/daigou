@@ -3,7 +3,7 @@
 // 每個角色填數量（單價先帶系列的預設售價，可以改）。超過現貨的部分記成預訂。
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Button, inputCls, notify, useIdemKey, useRun } from "@/components/client";
+import { Button, Modal, inputCls, notify, useIdemKey, useRun } from "@/components/client";
 import { SeriesPicker, type SeriesOpt } from "@/components/series-picker";
 import { sellSheetAction, sellToCustomerAction } from "@/actions/catalog-tree";
 import { ChannelPicker } from "@/components/channel-picker";
@@ -14,12 +14,20 @@ import { formatTwd } from "@/lib/money";
 type Row = { productId: string; name: string; free: number; freeBy?: Record<string, number>; incoming: number; price: number | null };
 type Sheet = { id: string; name: string; items: { typeId: string; typeName: string; price: number | null; rows: Row[] }[] };
 
+const DEFAULT_SHIP = 38; // 賣貨便運費
+
 export function SellForm({ series, buyers, initialCategory, waiting, channels = [], buyerChannels = {}, operators = [], me = null, acting = null, groupBuys = [], initialQty = {} }: { series: SeriesOpt[]; buyers: string[]; initialCategory: string; waiting: number; channels?: string[]; buyerChannels?: Record<string, string>; operators?: { id: string; name: string }[]; me?: string | null; acting?: string | null; groupBuys?: { id: string; name: string; categoryId: string | null }[]; initialQty?: Record<string, string> }) {
   // 誰賣的：只賣、只扣這個人的現貨，兩個人的庫存才對得上（預設是這支手機的人）
   // 預設＝左邊「現在看誰的」選的人（選「全部」時用這支手機的人）
   const [seller, setSeller] = useState<string>(acting ?? me ?? "");
   // 代購團（選填）：加了系列、那個系列剛好只有一個代購團時自動帶
   const [groupBuy, setGroupBuy] = useState("");
+  // 填了代購團：預設加賣貨便運費 38，要改再打開
+  const [shipFee, setShipFee] = useState(String(DEFAULT_SHIP));
+  const [shipOpen, setShipOpen] = useState(false);
+  const fee = groupBuy ? Math.max(0, Number(shipFee) || 0) : 0;
+  // 送出前的確認表
+  const [confirming, setConfirming] = useState(false);
   const sellerName = seller === "joint" ? "合資" : seller === "none" ? "未指定" : (operators.find((o) => o.id === seller)?.name ?? "");
   const freeOf = (r: Row) => (seller ? (r.freeBy?.[seller] ?? 0) : r.free);
   const [sheets, setSheets] = useState<Sheet[]>([]);
@@ -113,6 +121,17 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
   const now = lines.reduce((s, x) => s + Math.min(x.q, freeOf(x.r)), 0);
   const pre = lines.reduce((s, x) => s + Math.max(0, x.q - freeOf(x.r)), 0);
 
+  const check = () => {
+    if (!lines.length) return notify("至少填一個數量");
+    for (const x of lines) {
+      if (!Number.isInteger(x.q) || x.q <= 0) return notify(`「${x.series} ${x.r.name}」數量請填正整數`);
+      if (!/^\d+$/.test(x.p.trim())) return notify(`「${x.series} ${x.r.name}」請填單價`);
+    }
+    if (pre > 0 && !buyer.trim()) return notify("有要預訂的，請填客人名字（到貨才知道要給誰）");
+    if (groupBuy && !/^\d+$/.test(shipFee.trim())) return notify("運費請填 0 以上的整數");
+    setConfirming(true);
+  };
+
   const submit = () => {
     if (!lines.length) return notify("至少填一個數量");
     for (const x of lines) {
@@ -127,9 +146,10 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
       if (m) m.qty += x.q;
       else merged.set(x.r.productId, { productId: x.r.productId, qty: x.q, unitPrice: Number(x.p), categoryId: x.categoryId });
     }
-    run(() => sellToCustomerAction({ buyerName: buyer.trim() || null, channel: channel || null, idemKey: idem.key, paid, owner: seller || null, groupBuyId: groupBuy || null, lines: [...merged.values()] }), {
+    run(() => sellToCustomerAction({ buyerName: buyer.trim() || null, channel: channel || null, idemKey: idem.key, paid, owner: seller || null, groupBuyId: groupBuy || null, shippingFee: fee || null, lines: [...merged.values()] }), {
       success: (d) => `已登記${buyer.trim() ? `「${buyer.trim()}」` : ""}：${[d.sold ? `賣出 ${d.sold} 件` : "", d.preordered ? `預訂 ${d.preordered} 件` : ""].filter(Boolean).join("、")}`,
       onOk: async (d) => {
+        setConfirming(false);
         setDone(`${sellerName && d.sold ? `${sellerName}賣的・` : ""}${channel ? `${channel}・` : ""}${buyer.trim() || "客人"}：${[d.sold ? `賣出 ${d.sold} 件` : "", d.preordered ? `預訂 ${d.preordered} 件（到貨再給）` : ""].filter(Boolean).join("、")}，共 ${formatTwd(d.total)}`);
         idem.renew();
         setQty({});
@@ -162,6 +182,22 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
         )}
         {groupBuys.length > 0 && (
           <Choice label="代購團（選填）" value={groupBuy} onChange={setGroupBuy} placeholder="不指定" options={groupBuys.map((g) => ({ value: g.id, label: g.name }))} hint="選了系列，那個系列只有一個代購團時會自動帶。" />
+        )}
+        {groupBuy && (
+          <div className="rounded-lg border border-line-2 bg-[#fafbfc] px-3 py-2" data-testid="ship-fee">
+            {shipOpen ? (
+              <label className="flex items-center gap-2 text-[14px]">
+                <span className="shrink-0">運費（台幣）</span>
+                <input aria-label="運費" data-keep inputMode="numeric" className={`${inputCls} num min-h-10 w-24 text-right`} value={shipFee} onChange={(e) => setShipFee(e.target.value.replace(/\D/g, ""))} />
+                <button type="button" className="text-[13px] text-ai" onClick={() => { setShipFee(String(DEFAULT_SHIP)); setShipOpen(false); }}>改回 {DEFAULT_SHIP}</button>
+              </label>
+            ) : (
+              <div className="flex items-center justify-between gap-2 text-[14px]">
+                <span>運費（賣貨便）<b className="num">{formatTwd(fee)}</b><span className="ml-1 text-[12px] text-mute">會加在這筆</span></span>
+                <button type="button" className="rounded-lg border border-line bg-white px-2.5 py-1 text-[13px] text-ai" onClick={() => setShipOpen(true)}>改</button>
+              </div>
+            )}
+          </div>
         )}
         <div className="grid grid-cols-2 gap-2">
           <ChannelPicker value={channel} onChange={setChannel} extra={channels} />
@@ -269,9 +305,46 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
               現貨的錢已經收了
             </label>
           )}
-          <Button variant="primary" className="w-full" loading={pending} disabled={!lines.length} onClick={submit}>
-            {lines.length ? `登記：${now + pre} 件 ${formatTwd(total)}${pre ? `（現貨 ${now}・預訂 ${pre}）` : ""}` : "填數量後登記"}
+          <Button variant="primary" className="w-full" loading={pending} disabled={!lines.length} onClick={check}>
+            {lines.length ? `登記：${now + pre} 件 ${formatTwd(total + fee)}${pre ? `（現貨 ${now}・預訂 ${pre}）` : ""}` : "填數量後登記"}
           </Button>
+          <Modal
+            open={confirming}
+            onClose={() => setConfirming(false)}
+            title="確認這筆"
+            footer={
+              <div className="flex w-full gap-2">
+                <Button className="flex-1" onClick={() => setConfirming(false)}>返回修改</Button>
+                <Button variant="primary" className="flex-[2]" loading={pending} onClick={submit}>確認送出</Button>
+              </div>
+            }
+          >
+            <div className="space-y-2 text-[14.5px]" data-testid="sell-confirm">
+              <dl className="grid grid-cols-[5.5rem_1fr] gap-x-2 gap-y-1">
+                {sellerName && <><dt className="text-mute">誰賣的</dt><dd>{sellerName}</dd></>}
+                <dt className="text-mute">客人</dt><dd>{buyer.trim() || "散客"}</dd>
+                {channel && <><dt className="text-mute">平台</dt><dd>{channel}</dd></>}
+                {groupBuy && <><dt className="text-mute">代購團</dt><dd>{groupBuys.find((g) => g.id === groupBuy)?.name}</dd></>}
+              </dl>
+              <ul className="divide-y divide-line-2 rounded-lg border border-line-2">
+                {lines.map((x) => {
+                  const nowQ = Math.min(x.q, freeOf(x.r));
+                  return (
+                    <li key={`${x.categoryId}:${x.r.productId}`} className="flex items-baseline justify-between gap-2 px-3 py-1.5">
+                      <span className="min-w-0">
+                        <span className="text-[12px] text-mute">{x.series}</span> {x.r.name} × {x.q}
+                        <span className="ml-1 text-[12px] text-mute">{[nowQ ? `現貨 ${nowQ}` : "", x.q > nowQ ? `預訂 ${x.q - nowQ}` : ""].filter(Boolean).join("・")}</span>
+                      </span>
+                      <span className="num shrink-0">{formatTwd(x.q * Number(x.p))}</span>
+                    </li>
+                  );
+                })}
+                {fee > 0 && <li className="flex justify-between px-3 py-1.5"><span>運費（賣貨便）</span><span className="num">{formatTwd(fee)}</span></li>}
+              </ul>
+              <div className="flex items-baseline justify-between text-[16px] font-semibold"><span>合計</span><span className="num" data-testid="sell-confirm-total">{formatTwd(total + fee)}</span></div>
+              {now > 0 && <p className="text-[13px] text-mute">{paid ? "現貨的錢已經收了" : "現貨的錢還沒收"}{pre ? "；預訂的到貨再收" : ""}</p>}
+            </div>
+          </Modal>
         </div>
       )}
       {waiting > 0 && (

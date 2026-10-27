@@ -102,4 +102,16 @@ describe("賣給客人分誰賣的", () => {
     expect(by.get(B)?.free).toBe(1);
     expect((await prisma.orderItem.findUniqueOrThrow({ where: { id: pre[0].id } })).ownerKey).toBe(A);
   });
+
+  it("運費：只收一次。全部現貨＋已收款 → 記在第一張現貨單、也算收了；有預訂 → 記在預訂那張", async () => {
+    await stockOf(A, 1);
+    const r1 = await tx((t) => sellToCustomer(t, actor, { buyerName: "阿明", owner: A, groupBuyId: s.gb.id, shippingFee: 38, lines: [{ productId: s.p1.id, qty: 1, unitPrice: 500 }], idemKey: "ship-0001" }));
+    expect(r1.total).toBe(538);
+    const o1 = await prisma.order.findMany({ where: { buyer: { name: "阿明" } }, select: { shippingFee: true, balanceCache: true, receivableCache: true } });
+    expect(o1).toEqual([{ shippingFee: 38, balanceCache: 0, receivableCache: 538 }]);
+    const r2 = await tx((t) => sellToCustomer(t, actor, { buyerName: "阿婷", owner: A, shippingFee: 38, lines: [{ productId: s.p2.id, qty: 2, unitPrice: 300 }], idemKey: "ship-0002" }));
+    expect([r2.preordered, r2.total]).toEqual([2, 638]);
+    const o2 = await prisma.order.findMany({ where: { buyer: { name: "阿婷" } }, select: { shippingFee: true, balanceCache: true } });
+    expect(o2).toEqual([{ shippingFee: 38, balanceCache: 638 }]);
+  });
 });

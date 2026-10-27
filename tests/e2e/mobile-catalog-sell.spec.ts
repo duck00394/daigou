@@ -137,6 +137,11 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await page.getByLabel("客人", { exact: true }).fill(`小美${tag}`);
   await page.screenshot({ path: "test-results/mobile_sell.png", fullPage: true });
   await page.getByRole("button", { name: /登記：3 件 NT\$1,600（現貨 2・預訂 1）/ }).click();
+  // 送出前有確認表：看得到每一項、合計；按「確認送出」才送
+  await expect(page.getByTestId("sell-confirm")).toContainText(`小美${tag}`);
+  await expect(page.getByTestId("sell-confirm-total")).toHaveText("NT$1,600");
+  await page.screenshot({ path: "test-results/mobile_sell_confirm.png" });
+  await page.getByRole("button", { name: "確認送出" }).click();
   await expect(page.getByTestId("sell-done")).toContainText("賣出 2 件、預訂 1 件");
   await expect(page.getByTestId("sell-done")).toContainText(`賣貨便・小美${tag}`);
   // 平台記住了；賺多少看得到是哪個平台賣的，也可以用平台搜尋
@@ -215,6 +220,22 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await page.getByRole("button", { name: "改代購團" }).click();
   await toast(page, new RegExp(`張訂單改成「${gbName}」`));
   await expect(page.locator("tbody")).toContainText(gbName);
+
+  // 賣給客人選了代購團：預設加賣貨便運費 38，按「改」才能改；確認表的合計含運費
+  await page.goto("/sell");
+  await page.getByLabel("種類", { exact: true }).selectOption({ label: kind });
+  await page.getByLabel("系列", { exact: true }).selectOption({ label: series });
+  await page.locator(`[data-testid="sell-row"][data-name="${series}:吊娃:小八"]`).getByLabel("小八 數量").fill("1");
+  await page.getByLabel("客人", { exact: true }).fill(`小美${tag}`);
+  await choose(page, "代購團（選填）", gbName);
+  await expect(page.getByTestId("ship-fee")).toContainText("NT$38");
+  await page.getByTestId("ship-fee").getByRole("button", { name: "改" }).click();
+  await page.getByLabel("運費").fill("50");
+  await page.getByRole("button", { name: /^登記：/ }).click();
+  await expect(page.getByTestId("sell-confirm")).toContainText("運費（賣貨便）");
+  await expect(page.getByTestId("sell-confirm-total")).toHaveText("NT$700");
+  await page.getByRole("button", { name: "返回修改" }).click();
+  await expect(page.getByTestId("sell-confirm")).toHaveCount(0);
 
   // 已過期：不在下拉選單，用搜尋找得到
   await page.goto("/catalog");

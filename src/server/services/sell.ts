@@ -5,7 +5,8 @@ import { BizError, lockRows, type Tx } from "@/server/db";
 import { filterLotsByOwner } from "./ownership";
 import { audit, type Actor } from "./common";
 import { quickSale, resolveBuyer } from "./quick-sale";
-import { createOrder } from "./orders";
+import { createOrder, updateOrderMeta } from "./orders";
+import { addPayment } from "./payments";
 import { productLots } from "./inventory";
 
 export interface SellLine {
@@ -15,7 +16,7 @@ export interface SellLine {
   categoryId?: string | null; // 這個商品是哪個系列（一位客人可以一次買好幾個系列）
 }
 
-export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: string | null; channel?: string | null; categoryId?: string | null; lines: SellLine[]; idemKey: string; paid?: boolean; owner?: string | null; groupBuyId?: string | null }) {
+export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: string | null; channel?: string | null; categoryId?: string | null; lines: SellLine[]; idemKey: string; paid?: boolean; owner?: string | null; groupBuyId?: string | null; shippingFee?: number | null }) {
   const channel = input.channel?.trim() ? input.channel.trim().slice(0, 40) : null;
   if (!input.idemKey || input.idemKey.length < 8) throw new BizError("缺少送出識別碼");
   const lines = input.lines.filter((l) => l.qty > 0);
@@ -33,6 +34,9 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
     return dup ? { ...(dup.data as { sold: number; preordered: number; total: number }), duplicated: true } : null;
   };
   const groupBuyId = input.groupBuyId || null;
+  // 運費（例：賣貨便 38）：整筆只收一次，記在預訂那張；沒有預訂就記在第一張現貨單
+  const shippingFee = input.shippingFee ?? 0;
+  if (!Number.isInteger(shippingFee) || shippingFee < 0 || shippingFee > 99999) throw new BizError("運費請填 0 以上的整數");
   if (groupBuyId) {
     const gb = await t.groupBuy.findUnique({ where: { id: groupBuyId }, select: { status: true } });
     if (!gb || gb.status === "CANCELLED") throw new BizError("找不到這個代購團，或已取消");
@@ -51,6 +55,7 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
   if (plan.some((x) => x.l.qty > x.now) && !input.buyerName?.trim()) throw new BizError("有沒現貨要預訂的，請填客人名字（到貨才知道要給誰）");
   let sold = 0;
   let total = 0;
+  const quickOrders: string[] = [];
   const preLines: SellLine[] = [];
   const buyer = await resolveBuyer(t, actor, input.buyerName);
   // 記住這位客人的平台（還沒記過、或這次換了）
@@ -60,11 +65,13 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
       const q = await quickSale(t, actor, { productId: l.productId, qty: now, unitPrice: l.unitPrice, buyerName: input.buyerName ?? null, paid: input.paid !== false, idemKey: `${input.idemKey}:${l.productId}`, owner: input.owner || null });
       if (channel || groupBuyId) await t.order.update({ where: { id: q.orderId }, data: { ...(channel ? { salesChannel: channel } : {}), ...(groupBuyId ? { groupBuyId } : {}) } });
       sold += now;
+      quickOrders.push(q.orderId);
     }
     if (l.qty > now) preLines.push({ ...l, qty: l.qty - now });
     total += l.qty * l.unitPrice;
   }
   let preordered = 0;
+  let preOrderId: string | null = null;
   if (preLines.length) {
     for (const l of preLines) {
       const cid = l.categoryId ?? input.categoryId;
@@ -82,6 +89,14 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
     // 預訂記成跟誰訂的（有選「誰賣的」才記），到貨出貨時預設扣他的貨
     if (input.owner) await t.orderItem.updateMany({ where: { orderId: pre.id }, data: { ownerKey: input.owner } });
     preordered = preLines.reduce((s, l) => s + l.qty, 0);
+    preOrderId = pre.id;
+  }
+  if (shippingFee > 0) {
+    const target = preOrderId ?? quickOrders[0];
+    await updateOrderMeta(t, actor, target, { shippingFee });
+    // 現貨單已收款的：運費一起算收了；預訂那張照舊等收款
+    if (!preOrderId && input.paid !== false) await addPayment(t, actor, { orderId: target, amount: shippingFee, paidAt: new Date(), method: null, note: "運費", dedupeKey: `${key}:ship` });
+    total += shippingFee;
   }
   const result = { sold, preordered, total };
   await audit(t, actor, "sell.create", "Sell", key, result);
