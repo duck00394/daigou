@@ -24,8 +24,8 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
   const [groupBuy, setGroupBuy] = useState("");
   // 填了代購團：預設加賣貨便運費 38，要改再打開
   const [shipFee, setShipFee] = useState(String(DEFAULT_SHIP));
-  const [shipOpen, setShipOpen] = useState(false);
-  const fee = groupBuy ? Math.max(0, Number(shipFee) || 0) : 0;
+  // 每一筆預設加賣貨便運費 38，一直顯示在畫面上，要改直接改（不收填 0）
+  const fee = Math.max(0, Number(shipFee) || 0);
   // 送出前的確認表
   const [confirming, setConfirming] = useState(false);
   const sellerName = seller === "joint" ? "合資" : seller === "none" ? "未指定" : (operators.find((o) => o.id === seller)?.name ?? "");
@@ -128,7 +128,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
       if (!/^\d+$/.test(x.p.trim())) return notify(`「${x.series} ${x.r.name}」請填單價`);
     }
     if (pre > 0 && !buyer.trim()) return notify("有要預訂的，請填客人名字（到貨才知道要給誰）");
-    if (groupBuy && !/^\d+$/.test(shipFee.trim())) return notify("運費請填 0 以上的整數");
+    if (!/^\d+$/.test(shipFee.trim())) return notify("運費請填 0 以上的整數（不收填 0）");
     setConfirming(true);
   };
 
@@ -155,6 +155,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
         setQty({});
         setPrice({});
         setBuyer("");
+        setShipFee(String(DEFAULT_SHIP));
         // 重新整理現貨數字（系列保留，方便記下一位）
         try {
           const fresh = await Promise.all(sheets.map((s) => fetchSheet(s.id)));
@@ -183,22 +184,13 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
         {groupBuys.length > 0 && (
           <Choice label="代購團（選填）" value={groupBuy} onChange={setGroupBuy} placeholder="不指定" options={groupBuys.map((g) => ({ value: g.id, label: g.name }))} hint="選了系列，那個系列只有一個代購團時會自動帶。" />
         )}
-        {groupBuy && (
-          <div className="rounded-lg border border-line-2 bg-[#fafbfc] px-3 py-2" data-testid="ship-fee">
-            {shipOpen ? (
-              <label className="flex items-center gap-2 text-[14px]">
-                <span className="shrink-0">運費（台幣）</span>
-                <input aria-label="運費" data-keep inputMode="numeric" className={`${inputCls} num min-h-10 w-24 text-right`} value={shipFee} onChange={(e) => setShipFee(e.target.value.replace(/\D/g, ""))} />
-                <button type="button" className="text-[13px] text-ai" onClick={() => { setShipFee(String(DEFAULT_SHIP)); setShipOpen(false); }}>改回 {DEFAULT_SHIP}</button>
-              </label>
-            ) : (
-              <div className="flex items-center justify-between gap-2 text-[14px]">
-                <span>運費（賣貨便）<b className="num">{formatTwd(fee)}</b><span className="ml-1 text-[12px] text-mute">會加在這筆</span></span>
-                <button type="button" className="rounded-lg border border-line bg-white px-2.5 py-1 text-[13px] text-ai" onClick={() => setShipOpen(true)}>改</button>
-              </div>
-            )}
-          </div>
-        )}
+        <label className="flex items-center gap-2 rounded-lg border border-line-2 bg-[#fafbfc] px-3 py-2 text-[14px]" data-testid="ship-fee">
+          <span className="shrink-0 font-medium text-ink-2">運費（賣貨便）</span>
+          <span className="text-mute">NT$</span>
+          <input aria-label="運費" data-keep inputMode="numeric" className={`${inputCls} num min-h-10 w-24 text-right`} value={shipFee} onChange={(e) => setShipFee(e.target.value.replace(/\D/g, ""))} />
+          {shipFee !== String(DEFAULT_SHIP) && <button type="button" className="text-[13px] text-ai" onClick={() => setShipFee(String(DEFAULT_SHIP))}>改回 {DEFAULT_SHIP}</button>}
+          <span className="ml-auto text-[12px] text-mute">不收填 0</span>
+        </label>
         <div className="grid grid-cols-2 gap-2">
           <ChannelPicker value={channel} onChange={setChannel} extra={channels} />
           <label className="block text-[13px] font-medium text-ink-2">

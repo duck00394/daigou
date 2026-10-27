@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, TextField, SelectField, TextArea, useRun, useIdemKey, inputCls, notify } from "@/components/client";
+import { Button, Modal, TextField, SelectField, TextArea, useRun, useIdemKey, inputCls, notify } from "@/components/client";
 import { BuyerPicker, ProductPicker, type BuyerOpt, type ProductOpt } from "@/components/pickers";
 import { createOrderAction, appendItemsAction, buyerWarningsAction } from "@/actions/orders";
 import { saveBuyerAction } from "@/actions/buyers";
@@ -21,7 +21,8 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
   const [targetOrder, setTargetOrder] = useState("");
   const [groupBuyId, setGroupBuyId] = useState("");
   const [lines, setLines] = useState<Line[]>([newLine()]);
-  const [shipping, setShipping] = useState("0");
+  const [shipping, setShipping] = useState("38"); // 預設賣貨便運費 38
+  const [confirming, setConfirming] = useState(false);
   const [discount, setDiscount] = useState("0");
   const [confirmation, setConfirmation] = useState<"CONFIRMED" | "PENDING">("CONFIRMED");
   const [orderedAt, setOrderedAt] = useState(toDateTimeInput(new Date()));
@@ -49,7 +50,7 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
 
   const upd = (key: number, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
-  async function submit() {
+  async function submit(go = false) {
     if (!buyer) return notify("請選擇買家");
     const items: { productId: string; qty: number; unitPrice: number | null; lineDiscount: number; specNote: string | null; categoryId: string | null }[] = [];
     for (const l of lines) {
@@ -61,12 +62,15 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
       if (price === null && l.product.salePriceTwd === null) return notify(`「${l.product.name}」沒有預設售價，請填寫單價`);
       items.push({ productId: l.product.id, qty, unitPrice: price, lineDiscount: Number(l.discount) || 0, specNote: l.spec || null, categoryId: l.categoryId || null });
     }
+    if (mode === "APPEND" && !targetOrder) return notify("請選擇要追加的原訂單");
+    if (mode === "NEW_LINKED" && !targetOrder) return notify("請選擇原訂單");
+    if (mode !== "APPEND" && !/^\d+$/.test(shipping.trim())) return notify("運費請填 0 以上的整數（不收填 0）");
+    // 送出前先看確認清單，按「確認送出」才成立
+    if (!go) return setConfirming(true);
     if (mode === "APPEND") {
-      if (!targetOrder) return notify("請選擇要追加的原訂單");
       await run(() => appendItemsAction(targetOrder, items, notes || null, idem.key), { success: "已追加到原訂單", onOk: () => { idem.renew(); router.push(`/orders/${targetOrder}`); } });
       return;
     }
-    if (mode === "NEW_LINKED" && !targetOrder) return notify("請選擇原訂單");
     await run(
       () =>
         createOrderAction({
@@ -81,7 +85,7 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
           items,
           idempotencyKey: idem.key,
         }),
-      { success: (d) => `已建立訂單 ${d.orderNo}`, onOk: (d) => router.push(`/orders/${d.id}`) },
+      { success: (d) => `已建立訂單 ${d.orderNo}`, onOk: (d) => { setConfirming(false); router.push(`/orders/${d.id}`); } },
     );
   }
 
@@ -200,7 +204,7 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
 
       {mode !== "APPEND" && (
         <div className="grid gap-3 sm:grid-cols-4">
-          <TextField label="運費" inputMode="numeric" value={shipping} onChange={(e) => setShipping(e.target.value)} />
+          <TextField label="運費（賣貨便）" inputMode="numeric" value={shipping} onChange={(e) => setShipping(e.target.value.replace(/\D/g, ""))} hint="預設 38，不收填 0" />
           <TextField label="整單折扣" inputMode="numeric" value={discount} onChange={(e) => setDiscount(e.target.value)} hint="負數代表加價" />
           <TextField label="訂單時間" type="datetime-local" value={orderedAt} onChange={(e) => setOrderedAt(e.target.value)} />
           <SelectField label="訂單狀態" value={confirmation} onChange={(e) => setConfirmation(e.target.value as "CONFIRMED" | "PENDING")} options={[["CONFIRMED", "已確認"], ["PENDING", "待確認"]]} hint="待確認的訂單不計入有效統計" />
@@ -211,10 +215,43 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
         <span className="text-sm">
           {mode === "APPEND" ? "追加金額" : "應收"}：<b className="num text-[17px]">{formatTwd(total)}</b>
         </span>
-        <Button variant="primary" loading={pending} onClick={submit}>
+        <Button variant="primary" loading={pending} onClick={() => submit()}>
           {mode === "APPEND" ? "追加到原訂單" : "建立訂單"}
         </Button>
       </div>
+      <Modal
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        title="確認這張訂單"
+        footer={
+          <div className="flex w-full gap-2">
+            <Button className="flex-1" onClick={() => setConfirming(false)}>返回修改</Button>
+            <Button className="flex-[2]" variant="primary" loading={pending} onClick={() => submit(true)}>確認送出</Button>
+          </div>
+        }
+      >
+        <div className="space-y-2 text-[14.5px]" data-testid="order-confirm">
+          <dl className="grid grid-cols-[5rem_1fr] gap-x-2 gap-y-1">
+            <dt className="text-mute">客人</dt><dd>{buyer?.name}</dd>
+            {mode === "APPEND" && <><dt className="text-mute">追加到</dt><dd>{openOrders.find((o) => o.id === targetOrder)?.orderNo ?? ""}</dd></>}
+          </dl>
+          <ul className="divide-y divide-line-2 rounded-lg border border-line-2">
+            {lines.filter((l) => l.product).map((l) => {
+              const q = Number(l.qty) || 0;
+              const pr = l.price === "" ? (l.product?.salePriceTwd ?? 0) : Number(l.price) || 0;
+              return (
+                <li key={l.key} className="flex items-baseline justify-between gap-2 px-3 py-1.5">
+                  <span className="min-w-0">{l.product!.name} × {q}{l.spec ? <span className="ml-1 text-[12px] text-mute">{l.spec}</span> : null}</span>
+                  <span className="num shrink-0">{formatTwd(q * pr - (Number(l.discount) || 0))}</span>
+                </li>
+              );
+            })}
+            {mode !== "APPEND" && <li className="flex justify-between px-3 py-1.5"><span>運費（賣貨便）</span><span className="num">{formatTwd(Number(shipping) || 0)}</span></li>}
+            {mode !== "APPEND" && Number(discount) !== 0 && <li className="flex justify-between px-3 py-1.5"><span>整單折扣</span><span className="num">－{formatTwd(Number(discount) || 0)}</span></li>}
+          </ul>
+          <div className="flex items-baseline justify-between text-[16px] font-semibold"><span>{mode === "APPEND" ? "追加金額" : "應收"}</span><span className="num" data-testid="order-confirm-total">{formatTwd(total)}</span></div>
+        </div>
+      </Modal>
     </div>
   );
 }
