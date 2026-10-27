@@ -7,11 +7,12 @@ import { correctQuickSaleAction, quickSaleAction } from "@/actions/sales";
 import { formatTwd } from "@/lib/money";
 import { toDateInput } from "@/lib/labels";
 import { OwnerChips, defaultOwner, type OwnerStockOpt } from "./owner-chips";
+import { Choice } from "./choice";
 
 type Fixed = { id: string; name: string; salePriceTwd: number | null; available?: number; avgCost?: number | null; owners?: OwnerStockOpt[] };
-export type CorrectFrom = { orderId: string; productId: string; productName: string; qty: number; unitPrice: number; buyerName: string | null; soldAt: string; note: string | null };
+export type CorrectFrom = { orderId: string; productId: string; productName: string; qty: number; unitPrice: number; buyerName: string | null; soldAt: string; note: string | null; owner?: string | null; ownerNow?: string };
 
-export function SellButton({ product, small, label = "出售", primary, autoOpen, correct, me }: { product?: Fixed; small?: boolean; label?: string; primary?: boolean; autoOpen?: boolean; correct?: CorrectFrom; me?: string | null }) {
+export function SellButton({ product, small, label = "出售", primary, autoOpen, correct, me, operators = [] }: { product?: Fixed; small?: boolean; label?: string; primary?: boolean; autoOpen?: boolean; correct?: CorrectFrom; me?: string | null; operators?: { id: string; name: string }[] }) {
   const [open, setOpen] = useState(!!autoOpen);
   const [picked, setPicked] = useState<ProductOpt | null>(null);
   const init = () => ({
@@ -26,6 +27,11 @@ export function SellButton({ product, small, label = "出售", primary, autoOpen
   const [f, setF] = useState(init);
   const freeOf = (o: OwnerStockOpt) => o.free;
   const [owner, setOwner] = useState<string | null>(null);
+  // 更正時可以改「誰賣的」：改扣那個人的庫存，原本扣到的會退回去
+  const sellerOpts = [...operators.map((o) => ({ value: o.id, label: o.name })), { value: "joint", label: "合資的" }, { value: "none", label: "未指定的" }, { value: "", label: "誰的都可以（先賣先買進的）" }];
+  const [seller, setSeller] = useState(correct?.owner ?? "");
+  const sellerChanged = !!correct && seller !== (correct.owner ?? "");
+  const sellerName = sellerOpts.find((o) => o.value === seller)?.label ?? "";
   const [done, setDone] = useState<{ revenue: number; cost: number; profit: number; tentative: boolean; duplicated: boolean } | null>(null);
   const idem = useIdemKey();
   const { run, pending } = useRun();
@@ -33,7 +39,7 @@ export function SellButton({ product, small, label = "出售", primary, autoOpen
   const productName = correct?.productName ?? product?.name ?? picked?.name ?? "";
   const qty = Number(f.qty);
   const price = Number(f.price);
-  const valid = !!productId && Number.isInteger(qty) && qty > 0 && /^\d+$/.test(f.price.trim()) && (!correct || f.reason.trim());
+  const valid = !!productId && Number.isInteger(qty) && qty > 0 && /^\d+$/.test(f.price.trim()) && (!correct || !!f.reason.trim() || sellerChanged);
   const ownerOpt = product?.owners?.find((o) => o.key === owner);
   const max = ownerOpt ? ownerOpt.free : product?.available;
   const close = () => { setOpen(false); setDone(null); };
@@ -42,8 +48,9 @@ export function SellButton({ product, small, label = "出售", primary, autoOpen
     if (!productId) return notify("請選擇商品");
     if (!valid) return notify(correct && !f.reason.trim() ? "請填寫更正原因" : "請確認數量與售價");
     if (max !== undefined && qty > max) return notify(`可售庫存只有 ${max} 件`);
-    const payload = { productId, qty, unitPrice: price, buyerName: f.buyer || null, soldAt: f.date || null, note: f.note || null, paid: f.paid, owner: correct ? null : owner, idemKey: idem.key };
-    run(() => (correct ? correctQuickSaleAction(correct.orderId, { ...payload, reason: f.reason }) : quickSaleAction(payload)), {
+    const payload = { productId, qty, unitPrice: price, buyerName: f.buyer || null, soldAt: f.date || null, note: f.note || null, paid: f.paid, owner: correct ? seller || null : owner, idemKey: idem.key };
+    const reason = f.reason.trim() || (sellerChanged ? `改成${seller ? sellerName : "誰的都可以"}賣的` : "");
+    run(() => (correct ? correctQuickSaleAction(correct.orderId, { ...payload, reason }) : quickSaleAction(payload)), {
       success: (d) => (d.duplicated ? "這筆出售已經登記過，沒有重複扣庫存" : correct ? `已更正：收入 ${formatTwd(d.revenue)}、毛利 ${formatTwd(d.profit)}${d.tentative ? "（成本價格還沒確定）" : ""}` : `已出售 ${qty} 件`),
       // 更正後舊紀錄會變成已作廢、這一列重新整理，所以直接關閉並以提示訊息顯示結果
       onOk: (d) => { idem.renew(); if (correct) setOpen(false); else setDone(d); },
@@ -52,7 +59,7 @@ export function SellButton({ product, small, label = "出售", primary, autoOpen
 
   return (
     <>
-      <Button small={small} variant={primary ? "primary" : "default"} disabled={!correct && max !== undefined && max <= 0} title={!correct && max !== undefined && max <= 0 ? "沒有可售庫存" : undefined} onClick={() => { setF(init()); setDone(null); setOwner(defaultOwner(product?.owners, me, freeOf)); setOpen(true); }}>{label}</Button>
+      <Button small={small} variant={primary ? "primary" : "default"} disabled={!correct && max !== undefined && max <= 0} title={!correct && max !== undefined && max <= 0 ? "沒有可售庫存" : undefined} onClick={() => { setF(init()); setDone(null); setSeller(correct?.owner ?? ""); setOwner(defaultOwner(product?.owners, me, freeOf)); setOpen(true); }}>{label}</Button>
       <Modal
         open={open}
         onClose={close}
@@ -72,6 +79,15 @@ export function SellButton({ product, small, label = "出售", primary, autoOpen
         ) : (
           <div className="space-y-3">
             {!product && !correct && <ProductPicker value={picked} onPick={(p) => { setPicked(p); if (p?.salePriceTwd != null && !f.price) setF((x) => ({ ...x, price: String(p.salePriceTwd) })); }} />}
+            {correct && operators.length > 0 && (
+              <Choice
+                label="誰賣的（扣誰的庫存）"
+                value={seller}
+                onChange={setSeller}
+                options={sellerOpts}
+                hint={`${correct.ownerNow ? `現在扣的是：${correct.ownerNow}。` : ""}改了之後會改扣這個人的貨，原本扣到的會退回去。`}
+              />
+            )}
             {!correct && <OwnerChips label="賣誰的" owners={product?.owners ?? []} value={owner} onChange={setOwner} count={freeOf} />}
             {max !== undefined && <p className="text-[13px] text-mute">可售庫存 {max} 件（留給買家、自留的不會被賣掉）</p>}
             {product?.avgCost != null && (
@@ -107,7 +123,7 @@ export function SellButton({ product, small, label = "出售", primary, autoOpen
               <input type="checkbox" className="h-5 w-5" checked={f.paid} onChange={(e) => setF({ ...f, paid: e.target.checked })} />
               已收到款項
             </label>
-            {correct && <TextField label="更正原因（必填）" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} hint="原紀錄會作廢並保留，商品先退回庫存，再依新內容出售" />}
+            {correct && <TextField label={sellerChanged ? "更正原因（可不填）" : "更正原因（必填）"} value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} hint="原紀錄會作廢並保留，商品先退回庫存，再依新內容出售" />}
           </div>
         )}
       </Modal>

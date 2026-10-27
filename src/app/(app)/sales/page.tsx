@@ -44,6 +44,12 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
   const rows = owner ? data.rows.filter((r) => r.owners.some((x) => keys.includes(x.key) && x.qty > 0)) : data.rows;
   const mine = owner ? (data.byOwner[owner] ?? { qty: 0, revenue: 0, cost: 0 }) : null;
   const total = mine ? { count: rows.filter((r) => !r.voided).length, qty: mine.qty, revenue: mine.revenue, cost: mine.cost, profit: mine.revenue - mine.cost, tentative: data.total.tentative } : data.total;
+  // 更正時預設的「誰賣的」：這筆扣最多的那個人；另外列出現在實際扣到誰各幾件
+  const ownerOfSale = (os: { key: string; qty: number }[]) => {
+    const list = os.filter((x) => x.qty > 0).sort((a, b) => b.qty - a.qty);
+    const name = (k: string) => (k === JOINT ? "合資" : k === NONE ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
+    return { owner: list[0]?.key ?? null, ownerNow: list.map((x) => `${name(x.key)} ${x.qty} 件`).join("、") };
+  };
   const chip = (on: boolean) => `shrink-0 rounded-full border px-3 py-1.5 text-sm ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
   const href = (o: Record<string, string | undefined>) => {
     const u = new URLSearchParams();
@@ -119,7 +125,7 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
                 </div>
                 {!r.voided && r.productId && (
                   <div className="mt-2 flex gap-2">
-                    <SellButton small label="更正" correct={{ orderId: r.id, productId: r.productId, productName: r.productName, qty: r.qty, unitPrice: r.unitPrice, buyerName: r.buyer.name === "散客" ? null : r.buyer.name, soldAt: toDateInput(r.soldAt), note: r.note }} />
+                    <SellButton small label="更正" correct={{ orderId: r.id, productId: r.productId, productName: r.productName, qty: r.qty, unitPrice: r.unitPrice, buyerName: r.buyer.name === "散客" ? null : r.buyer.name, soldAt: toDateInput(r.soldAt), note: r.note, ...ownerOfSale(r.owners) }} operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} />
                     <VoidSaleButton orderId={r.id} label={`${r.productName} × ${r.qty}`} />
                   </div>
                 )}

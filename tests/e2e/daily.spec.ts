@@ -127,6 +127,10 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
   await expect(sale).toContainText("散客");
   await expect(sale).toContainText("已收款");
   await sale.getByRole("button", { name: "更正" }).click();
+  // 更正可以改誰賣的，並顯示現在實際扣到誰的貨
+  await expect(dlg.getByLabel("誰賣的（扣誰的庫存）")).toBeVisible();
+  await expect(dlg).toContainText("現在扣的是：");
+  await dlg.screenshot({ path: "test-results/correct_seller.png" });
   await dlg.getByLabel("每件售價（台幣）").fill("550");
   await dlg.getByLabel("更正原因（必填）").fill("少算 30");
   await dlg.getByRole("button", { name: "作廢舊紀錄並儲存" }).click();
