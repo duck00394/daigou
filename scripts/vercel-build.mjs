@@ -10,4 +10,5 @@ const run = (cmd) => execSync(cmd, { stdio: "inherit", env });
 run("npx prisma generate");
 run("npx prisma migrate deploy");
 run("npx tsx prisma/seed.ts");
+run("node scripts/patch-react-hydration.mjs");
 run("npx next build");

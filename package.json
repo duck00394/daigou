@@ -16,7 +16,7 @@
     "db:test:prepare": "node scripts/test-db.mjs",
     "hash-password": "node scripts/hash-password.mjs",
     "backup:db": "node scripts/backup-db.mjs",
-    "postinstall": "prisma generate",
+    "postinstall": "prisma generate && node scripts/patch-react-hydration.mjs",
     "vercel-build": "node scripts/vercel-build.mjs"
   },
   "dependencies": {
