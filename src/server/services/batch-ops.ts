@@ -354,7 +354,7 @@ export async function categoryOverview(t: Tx, categoryId: string) {
       arr.push(cell);
       row.cells.set(b.id, arr);
     }
-    const fullFee = summarizeFees(b.costs, b.rateMicro);
+    const fullFee = summarizeFees(b.costs, b.rateMicro, b.items);
     // 一團有好幾個系列時，不攤的運費、指定付款人的費用也照比例分
     const fee = { unallocTwd: Math.round(fullFee.unallocTwd * ratio), overrideTwd: Math.round(fullFee.overrideTwd * ratio), byPayer: new Map([...fullFee.byPayer].map(([k, v]) => [k, Math.round(v * ratio)])) };
     feesTwd += fee.unallocTwd; // 不攤的費用也算在這團總額
@@ -512,7 +512,7 @@ export async function categoriesSummary(t: Tx) {
   const out = new Map<string, { batches: number; totalTwd: number; outstanding: number; byOwner: Record<string, number> }>();
   for (const b of batches) {
     // 一團有好幾個系列：每個系列照商品金額比例分這團的錢
-    const fullFee = summarizeFees(b.costs, b.rateMicro);
+    const fullFee = summarizeFees(b.costs, b.rateMicro, b.items);
     let full = fullFee.unallocTwd;
     for (const i of b.items) full += itemGoodsTwd(i, b.rateMicro) + i.allocations.reduce((s, a) => s + a.amountTwd, 0);
     const seriesIds = new Set(b.items.map((i) => itemSeries(i, b)).filter((x): x is string => !!x));
@@ -556,7 +556,7 @@ export async function batchPaySummary(t: Tx, batchIds: string[]) {
     },
   });
   for (const b of batches) {
-    const total = b.items.reduce((s, i) => s + itemGoodsTwd(i, b.rateMicro) + i.allocations.reduce((a, x) => a + x.amountTwd, 0), 0) + summarizeFees(b.costs, b.rateMicro).unallocTwd;
+    const total = b.items.reduce((s, i) => s + itemGoodsTwd(i, b.rateMicro) + i.allocations.reduce((a, x) => a + x.amountTwd, 0), 0) + summarizeFees(b.costs, b.rateMicro, b.items).unallocTwd;
     // 已付＝付出去的 − 代購退回來的
     const paid = b.supplierPayments.reduce((s, p) => s + (p.currency === "TWD" ? p.amount : jpyToTwd(p.amount, p.rateMicro ?? b.rateMicro)), 0) - b.refundedTwd;
     out.set(b.id, { totalTwd: total, paidTwd: paid, dueTwd: Math.max(0, total - paid) });

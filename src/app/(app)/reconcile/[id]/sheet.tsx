@@ -36,7 +36,9 @@ export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchH
   const changed = open.filter((i) => d[i.id].cut || d[i.id].bought !== i.bought);
   // 砍掉的會從總額扣掉（約略：商品金額；運費等分攤存檔後重算）
   const cutTwd = open.reduce((a, i) => a + (d[i.id].cut ? (i.active - d[i.id].bought) * i.unitTwd : 0), 0);
-  const newTotal = Math.max(0, pay.totalTwd - cutTwd);
+  // 全部砍掉、一件都沒買到：運費也不用付（要搶到、收貨才付），總額 0
+  const allCut = open.length > 0 && sum.bought === 0 && sum.wait === 0;
+  const newTotal = allCut ? 0 : Math.max(0, pay.totalTwd - cutTwd);
   const paidNum = paid.trim() === "" ? pay.paidTwd : Number(paid.replace(/[^\d]/g, ""));
   const payChanged = paidNum !== pay.paidTwd;
   const anyCut = changed.some((i) => d[i.id].cut && i.active - d[i.id].bought > 0);
@@ -148,7 +150,7 @@ export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchH
       )}
       <div className="rounded-xl border border-line bg-card p-3" data-testid="reconcile-pay">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-[14px]">
-          <span>總額 <b className="num">{formatTwd(newTotal)}</b>{cutTwd > 0 && <span className="ml-1 text-[12px] text-mute">（砍單後，原本 {formatTwd(pay.totalTwd)}）</span>}</span>
+          <span>總額 <b className="num">{formatTwd(newTotal)}</b>{cutTwd > 0 && <span className="ml-1 text-[12px] text-mute">（砍單後，原本 {formatTwd(pay.totalTwd)}{allCut ? "；全部沒買到，運費也不用付" : ""}）</span>}</span>
           <span className="text-[13px] text-mute">已登記付了 {formatTwd(pay.paidTwd)}</span>
         </div>
         <label className="mt-2 block text-[13px] font-medium text-ink-2">

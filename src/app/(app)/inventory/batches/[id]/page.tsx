@@ -239,6 +239,10 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         {b.costs.length === 0 ? (
           <Empty>還沒有記運費。國際運費、國內運費、代購費、關稅都記在這裡。</Empty>
         ) : (
+          <>
+          {b.items.length > 0 && b.items.every((i) => i.qty - i.cancelledQty <= 0) && (
+            <p className="mx-4 mt-3 rounded-lg bg-good-soft px-3 py-2 text-[14px] text-good" data-testid="fees-waived">這團全部沒買到，下面的運費不用付，不算進總額。</p>
+          )}
           <ul className="divide-y divide-line-2" aria-label="運費與其他費用">
             {b.costs.map((c) => {
               const twd = c.currency === "JPY" ? jpyToTwd(c.amount, b.rateMicro) : c.amount;
@@ -263,6 +267,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
               );
             })}
           </ul>
+          </>
         )}
       </Section>
       <details className="group rounded-xl border border-line bg-card" id="more">

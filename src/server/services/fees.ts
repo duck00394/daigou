@@ -20,8 +20,14 @@ export interface BatchFeeInfo {
   byPayer: Map<string, number>;
 }
 
-export function summarizeFees(costs: FeeRow[], rateMicro: number): BatchFeeInfo {
+/** 這團全部砍單、一件都沒買到：運費等費用不用付（要搶到、收貨才付） */
+export function allCancelled(items?: { qty: number; cancelledQty: number }[] | null) {
+  return !!items && items.length > 0 && items.every((i) => i.qty - i.cancelledQty <= 0);
+}
+
+export function summarizeFees(costs: FeeRow[], rateMicro: number, items?: { qty: number; cancelledQty: number }[] | null): BatchFeeInfo {
   const out: BatchFeeInfo = { unallocTwd: 0, overrideTwd: 0, byPayer: new Map() };
+  if (allCancelled(items)) return out;
   for (const c of costs) {
     const twd = feeTwd(c, rateMicro);
     if (c.method === "NONE") out.unallocTwd += twd;
@@ -40,8 +46,8 @@ export async function batchFees(t: Tx, batchIds: string[]) {
   if (!ids.length) return out;
   const rows = await t.purchaseBatch.findMany({
     where: { id: { in: ids } },
-    select: { id: true, rateMicro: true, costs: { select: { currency: true, amount: true, method: true, payer: true, shareSplit: true } } },
+    select: { id: true, rateMicro: true, items: { select: { qty: true, cancelledQty: true } }, costs: { select: { currency: true, amount: true, method: true, payer: true, shareSplit: true } } },
   });
-  for (const b of rows) out.set(b.id, summarizeFees(b.costs, b.rateMicro));
+  for (const b of rows) out.set(b.id, summarizeFees(b.costs, b.rateMicro, b.items));
   return out;
 }

@@ -56,7 +56,7 @@ export function shareOf(b: BatchForShare, opIds: string[]) {
   }
   const own = new Map(goods);
   for (const [k, p] of split) goods.set(k, (goods.get(k) ?? 0) + (shared * p) / 100);
-  const fee = summarizeFees(b.costs as never, b.rateMicro).unallocTwd;
+  const fee = summarizeFees(b.costs as never, b.rateMicro, b.items).unallocTwd;
   const goodsTotal = [...goods.values()].reduce((a, x) => a + x, 0);
   const owed = new Map<string, number>();
   for (const id of opIds) {
