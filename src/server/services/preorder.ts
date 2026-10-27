@@ -1,6 +1,7 @@
 // 預購成本與客人預訂預估可賺
 // 預購平均成本＝（現有＋一定到）的加權平均，含攤進去的運費、關稅；對單還沒確定的「不一定」不算
 import type { Tx } from "@/server/db";
+import type { Prisma } from "@prisma/client";
 import { stockValuation } from "./reports";
 import { landedCosts } from "./purchase";
 import { pendingQty } from "./batch-ops";
@@ -12,7 +13,7 @@ export async function preorderCosts(t: Tx, productIds: string[]) {
 }
 
 /** 預購成本＋每個商品一定到（對單買到、還沒到）的件數 */
-export async function preorderDetail(t: Tx, productIds: string[]) {
+export async function preorderDetail(t: Tx, productIds: string[], opts: { itemWhere?: Prisma.PurchaseBatchItemWhereInput } = {}) {
   const ids = [...new Set(productIds)];
   const out = new Map<string, PreorderCost>();
   const sureQty = new Map<string, number>();
@@ -23,7 +24,7 @@ export async function preorderDetail(t: Tx, productIds: string[]) {
   const [val, items] = await Promise.all([
     stockValuation(t, ids),
     t.purchaseBatchItem.findMany({
-      where: { productId: { in: ids }, batch: { status: { not: "CANCELLED" } } },
+      where: { AND: [{ productId: { in: ids }, batch: { status: { not: "CANCELLED" } } }, opts.itemWhere ?? {}] },
       select: { id: true, productId: true, qty: true, cancelledQty: true, confirmedQty: true, actualUnitCost: true, batch: { select: { status: true, supplierRef: { select: { kind: true } }, costs: { select: { id: true }, take: 1 } } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
     }),
   ]);
@@ -138,7 +139,12 @@ export type SeriesProduct = {
 };
 
 /** 一個系列：已經賣掉、客人預訂、還沒人訂的（現有＋一定到），各收多少、成本多少、可賺多少 */
-export async function seriesProfit(t: Tx, categoryId: string) {
+export async function seriesProfit(t: Tx, categoryId: string, opts: { owner?: string | null } = {}) {
+  // 看某個人：只算他的團（＋合資、未指定的團）、他的貨、跟他訂的、他賣的；別人的不算
+  const keys = opts.owner ? [opts.owner, "joint", "none"] : null;
+  const viewBatch: Prisma.PurchaseBatchWhereInput = opts.owner ? { OR: [{ ownership: "JOINT" }, { orderedById: null }, { ownership: "PERSONAL", orderedById: opts.owner }] } : {};
+  // 確定買到／還在等確認的件數：只算這個系列的團（跟下面列的各團一致）
+  const itemWhere: Prisma.PurchaseBatchItemWhereInput = { AND: [{ OR: [{ categoryId }, { categoryId: null, batch: { categoryId } }] }, { batch: viewBatch }] };
   const [linked, bought, typePrices] = await Promise.all([
     t.productCategory.findMany({ where: { categoryId }, select: { productId: true } }),
     t.purchaseBatchItem.findMany({ where: { OR: [{ categoryId }, { categoryId: null, batch: { categoryId } }] }, select: { productId: true } }),
@@ -148,11 +154,22 @@ export async function seriesProfit(t: Tx, categoryId: string) {
   const tp = new Map(typePrices.map((x) => [x.productTypeId, x.salePriceTwd]));
   const [products, detail, stock, moves, orderItems] = await Promise.all([
     t.product.findMany({ where: { id: { in: ids } }, select: { id: true, salePriceTwd: true, productTypeId: true } }),
-    preorderDetail(t, ids),
+    preorderDetail(t, ids, { itemWhere }),
     t.inventoryMovement.groupBy({ by: ["productId"], where: { productId: { in: ids } }, _sum: { onHandDelta: true } }),
     t.inventoryMovement.findMany({ where: { productId: { in: ids }, kind: "SHIP", orderItemId: { not: null } }, select: { productId: true, onHandDelta: true, purchaseBatchItemId: true, unitCostTwd: true, orderItem: { select: { id: true, unitPrice: true, estUnitCostTwd: true } } } }),
-    t.orderItem.findMany({ where: { productId: { in: ids }, order: { confirmation: "CONFIRMED", statusCache: { not: "CANCELLED" } } }, select: { productId: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true, unitPrice: true } }),
+    t.orderItem.findMany({ where: { productId: { in: ids }, order: { confirmation: "CONFIRMED", statusCache: { not: "CANCELLED" } }, ...(keys ? { ownerKey: { in: keys } } : {}) }, select: { productId: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true, unitPrice: true } }),
   ]);
+  if (keys) {
+    // 他的貨：照成本批次是誰的；他賣的：照出貨扣到的批次是誰的
+    const { stockByOwner, lotOwners, ownerOfLot } = await import("./ownership");
+    const by = await stockByOwner(t, { productIds: ids });
+    stock.length = 0;
+    for (const id of ids) stock.push({ productId: id, _sum: { onHandDelta: keys.reduce((a, k) => a + (by.get(id)?.get(k)?.onHand ?? 0), 0) } } as (typeof stock)[number]);
+    const owners = await lotOwners(t, moves.map((m) => m.purchaseBatchItemId));
+    const keep = moves.filter((m) => keys.includes(ownerOfLot(owners, m.purchaseBatchItemId)));
+    moves.length = 0;
+    moves.push(...keep);
+  }
   // 已經賣掉：出貨流水（作廢退回的會抵掉）× 成交價；成本照出貨批次
   const lots = [...new Set(moves.map((m) => m.purchaseBatchItemId).filter((x): x is string => !!x))];
   const landed = await landedCosts(t, lots);

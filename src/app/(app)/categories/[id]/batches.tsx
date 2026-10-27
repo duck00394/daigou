@@ -98,7 +98,7 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
     received: mineLive.reduce((a, b) => a + b.received, 0),
     estimated: mineLive.some((b) => b.estimated || !b.feesRecorded),
   };
-  const prof = showItems ? await tx((t) => seriesProfit(t, categoryId)) : null;
+  const prof = showItems ? await tx((t) => seriesProfit(t, categoryId, { owner: owner || null })) : null;
   const P = (r: { product: { id: string } }) => prof?.rows.get(r.product.id);
   // 掛在這個系列、但不是從這個系列的團買的商品（例：手動入庫、別處買的）：另外列一組，上面的預估可賺也算它們
   const inMatrix = new Set(o.matrix.map((m) => m.product.id));

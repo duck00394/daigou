@@ -52,7 +52,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
     <div className="space-y-4">
       <PageHeader title={tab === "batches" ? "採購團・收貨" : "庫存"} sub={tab === "batches" ? "每一次跟代購下單、付款、到貨" : tab === "stock" ? "手上有多少、還會到多少、客人訂了多少" : undefined} actions={<><LinkButton href="/purchase" primary small>＋ 新增採購</LinkButton><LinkButton href="/api/export/inventory" small>匯出</LinkButton></>} />
       <NavSelect label="頁面" hideLabel options={TABS.map(([k, l]) => ({ label: l, href: `/inventory?tab=${k}` }))} current={`/inventory?tab=${tab}`} />
-      {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} owner={owner} kind={sp.kind} v={sp.v} />}
+      {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} owner={owner} kind={sp.kind} v={sp.v} hideUnsure={sp.unsure === "0"} />}
       {tab === "demand" && <DemandTab />}
       {tab === "batches" && <BatchesTab cat={sp.cat} open={sp.open} owner={owner} confirm={sp.confirm} view={sp.view} pay={sp.pay} late={sp.late} settle={sp.settle} />}
       {tab === "receive" && <ReceiveTab productId={sp.productId} />}
@@ -65,7 +65,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
   );
 }
 
-async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v }: { q?: string; only?: string; cat?: string; type?: string; owner?: string; kind?: string; v?: string }) {
+async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v, hideUnsure = false }: { q?: string; only?: string; cat?: string; type?: string; owner?: string; kind?: string; v?: string; hideUnsure?: boolean }) {
   const [seriesOpts, types, operators] = await Promise.all([
     seriesOptions(prisma),
     prisma.productType.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
@@ -235,6 +235,14 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
     for (const [key, val] of Object.entries({ kind, cat, type, q })) if (val) sp.set(key, val);
     return `/inventory?${sp.toString()}`;
   })();
+  // 「不一定」欄（還在等代購確認的）：預設顯示，按一下可以藏起來（只在這次網址有效）
+  const COLS = hideUnsure ? 8 : 9;
+  const unsureHref = (() => {
+    const sp = new URLSearchParams({ tab: "stock", v: "1" });
+    for (const [key, val] of Object.entries({ kind, cat, type, q, only })) if (val) sp.set(key, val);
+    if (!hideUnsure) sp.set("unsure", "0");
+    return `/inventory?${sp.toString()}`;
+  })();
   const buyerNames = await prisma.buyer.findMany({ where: { mergedIntoId: null }, orderBy: { updatedAt: "desc" }, take: 200, select: { name: true } });
   const showKind = tree.length > 1 || !kind;
   return (
@@ -247,6 +255,11 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
         </p>
       )}
       {only === "unassigned" && <p className="rounded-xl border border-line bg-white px-3 py-2 text-[14px] text-ink-2">只列還有預訂沒分是跟誰訂的角色。點「客人訂」的數字，每一筆選跟誰訂的。</p>}
+      {rows.length > 0 && (
+        <div className="flex justify-end">
+          <Link href={unsureHref} scroll={false} className="rounded-lg border border-line bg-white px-3 py-1.5 text-[13px] text-ai" data-testid="unsure-toggle">{hideUnsure ? "顯示「不一定」" : "隱藏「不一定」"}</Link>
+        </div>
+      )}
       {rows.length === 0 ? (
         <Section><Empty action={only === "all" ? undefined : <LinkButton href="/purchase" primary>＋ 新增採購</LinkButton>}>{only === "all" ? "沒有符合的商品。換個關鍵字或系列試試。" : "這裡目前沒有庫存，也沒有還沒到的貨。新增採購後，買的東西會出現在這裡。"}</Empty></Section>
       ) : (
@@ -257,6 +270,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                 <th className="px-3 py-2 text-left font-medium">角色</th>
                 <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium">現有</th>
                 <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium text-good">一定到</th>
+                {!hideUnsure && <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium text-warn">不一定</th>}
                 <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium text-info">客人訂</th>
                 <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-semibold text-ink">庫存</th>
                 <th className="hidden px-2 py-2 text-right font-medium md:table-cell">自留</th>
@@ -269,7 +283,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                 <Fragment key={k.key}>
                   {showKind && (
                     <tr className="bg-ink text-white">
-                      <td colSpan={8} className="px-3 py-1.5 text-[14px] font-semibold" data-testid="stock-kind">{k.label}</td>
+                      <td colSpan={COLS} className="px-3 py-1.5 text-[14px] font-semibold" data-testid="stock-kind">{k.label}</td>
                     </tr>
                   )}
                   {k.series.map((sg) => {
@@ -278,16 +292,16 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                     return (
                       <Fragment key={sg.key}>
                         <tr className="bg-ai-soft">
-                          <td colSpan={8} className="px-3 py-1.5 text-[14px] font-semibold text-ai" data-testid="stock-series">
+                          <td colSpan={COLS} className="px-3 py-1.5 text-[14px] font-semibold text-ai" data-testid="stock-series">
                             {sg.key !== "none" ? <Link href={`/categories/${sg.key}`} className="hover:underline">{sg.name}</Link> : sg.name}
                             {!sg.active && <span className="ml-1 text-[12px] font-normal text-mute">已過期</span>}
-                            <span className="ml-2 text-[12px] font-normal">現有 {gs.onHand}・一定到 {gs.incoming - gs.unsure}・客人訂 {gs.ordered}・庫存 {gs.left}{gs.cost ? `・成本 ${formatTwd(gs.cost)}` : ""}</span>
+                            <span className="ml-2 text-[12px] font-normal">現有 {gs.onHand}・一定到 {gs.incoming - gs.unsure}{!hideUnsure && gs.unsure ? `・不一定 ${gs.unsure}` : ""}・客人訂 {gs.ordered}・庫存 {gs.left}{gs.cost ? `・成本 ${formatTwd(gs.cost)}` : ""}</span>
                           </td>
                         </tr>
                         {sg.types.map((tg) => (
                           <Fragment key={tg.key}>
                             <tr className="border-t border-line-2 bg-[#f7f8fa]">
-                              <td colSpan={8} className="py-1 pr-3 pl-5 text-[13px] font-semibold text-ink-2" data-testid="stock-type">{tg.name}</td>
+                              <td colSpan={COLS} className="py-1 pr-3 pl-5 text-[13px] font-semibold text-ink-2" data-testid="stock-type">{tg.name}</td>
                             </tr>
                             {tg.rows.map((r) => {
                               const dup = tg.rows.filter((x) => label(x) === label(r)).length > 1;
@@ -304,6 +318,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                                   </td>
                                   <td className={`num px-1.5 py-2 text-right align-top ${r.s.onHand ? "" : "text-mute"}`} data-k="onhand">{r.s.onHand}</td>
                                   <td className={`num px-1.5 py-2 text-right align-top ${r.s.incoming - unsureOf(r) ? "font-semibold text-good" : "text-mute"}`} data-k="sure">{r.s.incoming - unsureOf(r) || "–"}</td>
+                                  {!hideUnsure && <td className={`num px-1.5 py-2 text-right align-top ${unsureOf(r) ? "text-warn" : "text-mute"}`} data-k="unsure">{unsureOf(r) || "–"}</td>}
                                   <td className="num px-1.5 py-2 text-right align-top" data-k="ordered">
                                     <DemandButton name={label(r)} shown={r.s.openDemand} cls={r.s.openDemand ? (left(r) < 0 ? "font-semibold text-bad" : "font-semibold text-info") : "text-mute"} operators={activeOps} viewer={owner} rows={(demandAll.get(r.p.id) ?? []).map((d) => ({ ...d, at: fmtMonthDay(d.at) }))} />
                                   </td>
@@ -318,7 +333,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                                 {/* 手機：平均成本、自留等放在這一列下面，佔滿寬度，不會擠成好幾行 */}
                                 {meta && (
                                   <tr className="border-b border-line-2 md:hidden" data-testid="stock-meta" data-name={r.p.name}>
-                                    <td colSpan={8} className="pt-0 pr-3 pb-2 pl-7 text-[12px] leading-snug text-mute">{meta}</td>
+                                    <td colSpan={COLS} className="pt-0 pr-3 pb-2 pl-7 text-[12px] leading-snug text-mute">{meta}</td>
                                   </tr>
                                 )}
                                 </Fragment>
@@ -335,6 +350,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                 <td className="px-3 py-2">合計<span className="ml-1 text-[12px] font-normal text-mute">成本 {formatTwd(all.cost)}</span></td>
                 <td className="num px-1.5 py-2 text-right" data-testid="stock-total-onhand">{all.onHand}</td>
                 <td className="num px-1.5 py-2 text-right text-good">{all.incoming - all.unsure}</td>
+                {!hideUnsure && <td className="num px-1.5 py-2 text-right text-warn">{all.unsure}</td>}
                 <td className="num px-1.5 py-2 text-right text-info">{all.ordered}</td>
                 <td className={`num px-1.5 py-2 text-right ${all.left < 0 ? "text-bad" : ""}`} data-testid="stock-total-free">{all.left}</td>
                 <td className="num hidden px-2 py-2 text-right md:table-cell">{all.kept}</td>

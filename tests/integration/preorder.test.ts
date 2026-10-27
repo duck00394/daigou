@@ -19,6 +19,24 @@ afterEach(async () => {
   expect(await checkIntegrity(prisma)).toEqual([]);
 });
 
+describe("系列頁分人看", () => {
+  it("看 A：只算 A 的團（確定、還在等確認）；B 的團不算；看全部都算；別的系列的團也不算", async () => {
+    const cat = s.halloween.id;
+    const mk = async (owner: string, categoryId: string, qty: number, confirmed: number) => {
+      const b = await tx((t) => createBatch(t, actor, { name: `${owner} 團`, supplier: "代購", categoryId, orderedById: owner }));
+      const it = await tx((t) => addBatchItem(t, actor, b.id, { productId: s.p1.id, qty, unitCost: 300, currency: "TWD" }));
+      await prisma.purchaseBatchItem.update({ where: { id: it.id }, data: { confirmedQty: confirmed } });
+    };
+    await mk("op_a", cat, 3, 2); // A：確定 2、等確認 1
+    await mk("op_b", cat, 5, 5); // B：確定 5
+    await mk("op_a", s.shanghai.id, 4, 4); // A 在別的系列：不算
+    const a = (await tx((t) => seriesProfit(t, cat, { owner: "op_a" }))).rows.get(s.p1.id)!;
+    expect([a.sure, a.est.unsure, a.left, a.est.left]).toEqual([2, 1, 2, 3]);
+    const all = (await tx((t) => seriesProfit(t, cat))).rows.get(s.p1.id)!;
+    expect([all.sure, all.est.unsure]).toEqual([7, 1]);
+  });
+});
+
 describe("客人預訂分人看", () => {
   it("看某個人：只算跟他訂的（＋合資）；還沒分的另外算件數；看全部都算", async () => {
     await tx((t) => sellToCustomer(t, actor, { buyerName: "小美", owner: "op_a", lines: [{ productId: s.p1.id, qty: 2, unitPrice: 500 }], idemKey: "own-0001" }));

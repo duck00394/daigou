@@ -57,11 +57,15 @@ test("手機：關稅 %、預購平均成本、庫存欄", async ({ page }) => {
   await toast(page, /已登記付款/);
   await expect(page.getByTestId("batch-card").filter({ hasText: `稅代購 ${tag}` })).toHaveCount(0); // 付清了就不在「還沒付清」裡
 
-  // 對單前：還沒確認買到（只在「不一定」篩選看得到），庫存 0；表格不顯示不一定的數量
+  // 對單前：還沒確認買到 → 「不一定」欄 2，庫存 0（不一定的不算）；按一下可以把「不一定」藏起來
   await page.goto(`/inventory?tab=stock&only=unsure&q=${encodeURIComponent(cat)}`);
   const row = page.getByTestId("stock-row").filter({ hasText: "吉伊" });
   await expect(row.locator('[data-k="free"]')).toHaveText("0");
+  await expect(row.locator('[data-k="unsure"]')).toHaveText("2");
+  await page.getByTestId("unsure-toggle").click();
   await expect(row.locator('[data-k="unsure"]')).toHaveCount(0);
+  await page.getByTestId("unsure-toggle").click();
+  await expect(row.locator('[data-k="unsure"]')).toHaveText("2");
 
   // 對單：全部買到 → 一定到 2、庫存 2，平均成本 500＋關稅 25
   await page.goto(batchUrl.replace(/\/inventory\/batches\//, "/reconcile/").replace(/[?#].*$/, ""));
