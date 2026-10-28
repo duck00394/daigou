@@ -186,13 +186,14 @@ export async function bulkGroupBuyAction(orderIds: string[], groupBuyId: string 
 
 /** 改客人這筆預訂跟誰訂的（owner 空白＝還沒分） */
 /** 以前記的客人預訂（還沒分跟誰訂的）一次全部分給一個人；貨不夠換的那幾筆跳過並列出 */
-export async function assignUnassignedDemandAction(owner: string) {
+export async function assignUnassignedDemandAction(owner: string, orderIds?: string[]) {
   return run(async (a) => {
     const ow = z.string().min(1).max(64).parse(owner);
+    const only = orderIds ? z.array(z.string().min(1).max(64)).min(1).max(500).parse(orderIds) : null;
     const { setDemandOwner } = await import("@/server/services/demand-owner");
     const { lotOwners, ownerOfLot } = await import("@/server/services/ownership");
     const items = await prisma.orderItem.findMany({
-      where: { ownerKey: null, order: { confirmation: { not: "CANCELLED" } } },
+      where: { ownerKey: null, order: { confirmation: { not: "CANCELLED" }, ...(only ? { id: { in: only } } : {}) } },
       select: { id: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true, productNameSnapshot: true, order: { select: { confirmation: true, buyer: { select: { name: true } } } } },
     });
     let done = 0;

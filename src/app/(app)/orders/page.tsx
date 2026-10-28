@@ -19,7 +19,10 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
   // 看某個人：只列跟他訂的訂單，別人的不顯示（以前記的還沒分的另外提醒）
   const view = await getView();
   const vk = view.key === "all" ? null : view.key;
-  const mineWhere: Prisma.OrderWhereInput = vk ? { items: { some: { ownerKey: { in: [vk, "joint", "none"] } } } } : {};
+  // 還沒分是跟誰訂的（以前記的）：只列這些，勾選後分給某人
+  const unassignedWhere: Prisma.OrderWhereInput = { confirmation: { not: "CANCELLED" }, items: { some: {}, none: { ownerKey: { not: null } } } };
+  const onlyUnassigned = sp.unassigned === "1";
+  const mineWhere: Prisma.OrderWhereInput = onlyUnassigned ? unassignedWhere : vk ? { items: { some: { ownerKey: { in: [vk, "joint", "none"] } } } } : {};
   const where: Prisma.OrderWhereInput = {
     AND: [mineWhere],
     ...(sp.q
@@ -61,7 +64,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
     prisma.order.count({ where: { AND: [mineWhere], paymentStatusCache: "UNPAID", confirmation: { not: "CANCELLED" } } }),
     prisma.order.count({ where: { AND: [mineWhere], statusCache: "PENDING_CONFIRM" } }),
   ]);
-  const unassignedN = vk ? await prisma.order.count({ where: { confirmation: { not: "CANCELLED" }, items: { some: {}, none: { ownerKey: { not: null } } } } }) : 0;
+  const unassignedN = vk || onlyUnassigned ? await prisma.order.count({ where: unassignedWhere }) : 0;
   // 手機：搜尋框下面的快捷篩選
   const quick: [string, string, boolean][] = [
     ["全部", "/orders", !sp.payment && !sp.status],
@@ -81,11 +84,16 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
           </>
         }
       />
-      {unassignedN > 0 && (
-        <div className="mb-3" data-testid="orders-unassigned">
-          <AssignAll n={unassignedN} unit="張以前記的訂單" operators={view.ops} acting={vk ?? ""} counted={false} />
+      {onlyUnassigned ? (
+        <div className="mb-3 rounded-xl border border-[#f0dfa8] bg-warn-soft px-3 py-2 text-[14px] text-warn" data-testid="orders-unassigned-list">
+          只列還沒分是跟誰訂的 {unassignedN} 張（含待確認、已經給了的）。勾選後在下面選「分給誰」。已經給了的會照扣到誰的貨自動分。
+          <Link href="/orders" className="ml-1 font-semibold text-ai underline">看全部訂單 ›</Link>
         </div>
-      )}
+      ) : unassignedN > 0 ? (
+        <div className="mb-3" data-testid="orders-unassigned">
+          <AssignAll n={unassignedN} unit="張以前記的訂單" operators={view.ops} acting={vk ?? ""} counted={false} moreHref="/orders?unassigned=1" />
+        </div>
+      ) : null}
       <Section pad={false}>
         <FilterBar action="/orders">
           <FSearch data-search value={sp.q} placeholder="訂單編號、買家、商品" />
@@ -112,7 +120,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
           ))}
         </div>
         <Selection ids={orders.map((o) => o.id)}>
-        <BulkBar groupBuys={gbs.filter((g) => g.status !== "CANCELLED").map((g) => ({ id: g.id, name: g.name }))} />
+        <BulkBar groupBuys={gbs.filter((g) => g.status !== "CANCELLED").map((g) => ({ id: g.id, name: g.name }))} owners={onlyUnassigned ? view.ops : undefined} acting={vk ?? ""} />
         {orders.length === 0 ? (
           <Empty action={<LinkButton href="/orders/new" primary>新增訂單</LinkButton>}>沒有符合條件的訂單。</Empty>
         ) : (

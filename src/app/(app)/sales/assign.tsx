@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button, useRun } from "@/components/client";
 import { assignUnassignedDemandAction } from "@/actions/orders";
 
-export function AssignAll({ n, operators, acting, counted, unit = "件以前記的預訂" }: { n: number; operators: { id: string; name: string }[]; acting: string; counted: boolean; unit?: string }) {
+export function AssignAll({ n, operators, acting, counted, unit = "件以前記的預訂", moreHref = "/inventory?tab=stock&only=unassigned&v=1" }: { n: number; operators: { id: string; name: string }[]; acting: string; counted: boolean; unit?: string; moreHref?: string }) {
   const [who, setWho] = useState(operators.some((o) => o.id === acting) ? acting : (operators[0]?.id ?? ""));
   const { run, pending } = useRun();
   const name = operators.find((o) => o.id === who)?.name ?? "";
@@ -32,7 +32,7 @@ export function AssignAll({ n, operators, acting, counted, unit = "件以前記�
         >
           全部分給{who === "joint" ? "合資" : name}
         </Button>
-        <Link href="/inventory?tab=stock&only=unassigned&v=1" className="text-[13px] text-ai underline">一筆一筆分 ›</Link>
+        <Link href={moreHref} className="text-[13px] text-ai underline">一筆一筆分 ›</Link>
       </div>
     </div>
   );

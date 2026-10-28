@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useContext, useState } from "react";
 import { Button, useRun } from "@/components/client";
-import { bulkConfirmAction, bulkGroupBuyAction } from "@/actions/orders";
+import { assignUnassignedDemandAction, bulkConfirmAction, bulkGroupBuyAction } from "@/actions/orders";
 import { Choice } from "@/components/choice";
 
 type Ctx = { sel: Set<string>; toggle: (id: string, on: boolean) => void; setAll: (on: boolean) => void; ids: string[]; clear: () => void };
@@ -28,10 +28,12 @@ export function Selection({ ids, children }: { ids: string[]; children: React.Re
 const KEEP = "__keep";
 const NONE_GB = "__none";
 
-export function BulkBar({ groupBuys = [] }: { groupBuys?: { id: string; name: string }[] }) {
+export function BulkBar({ groupBuys = [], owners, acting = "" }: { groupBuys?: { id: string; name: string }[]; owners?: { id: string; name: string }[]; acting?: string }) {
   const c = useContext(SelCtx)!;
   const { run, pending } = useRun();
   const [gb, setGb] = useState(KEEP);
+  const [who, setWho] = useState(owners?.some((o) => o.id === acting) ? acting : (owners?.[0]?.id ?? ""));
+  const whoName = who === "joint" ? "合資" : (owners?.find((o) => o.id === who)?.name ?? "");
   const n = c.sel.size;
   return (
     <div className="md:flex md:flex-wrap md:items-end md:gap-3 md:border-b md:border-line-2 md:px-4 md:py-2">
@@ -48,7 +50,25 @@ export function BulkBar({ groupBuys = [] }: { groupBuys?: { id: string; name: st
         data-testid="bulk-actions"
       >
         <div className="w-full text-[13.5px] font-semibold md:hidden">已選 {n} 筆，一次改：</div>
-        {groupBuys.length > 0 && (
+        {owners && (
+          <span className="flex flex-1 flex-wrap items-end gap-2" data-testid="bulk-owner">
+            <Choice className="min-w-[8rem] flex-1 md:w-40 md:flex-none" label="選好的分給誰" value={who} onChange={setWho} options={[...owners.map((o) => ({ value: o.id, label: o.name })), { value: "joint", label: "合資的" }]} />
+            <Button
+              variant="primary"
+              disabled={n === 0 || !who}
+              loading={pending}
+              onClick={() =>
+                run(() => assignUnassignedDemandAction(who, [...c.sel]), {
+                  success: (d) => `已分給${whoName}（${d.done} 項商品）${d.failed.length ? `；${d.failed.length} 筆他的貨不夠沒換：${d.failed.join("、")}` : ""}`,
+                  onOk: c.clear,
+                })
+              }
+            >
+              分給{whoName}
+            </Button>
+          </span>
+        )}
+        {groupBuys.length > 0 && !owners && (
           <span className="flex flex-1 flex-wrap items-end gap-2" data-testid="bulk-groupbuy">
             <Choice className="min-w-[10rem] flex-1 md:w-48 md:flex-none" label="選好的改成哪個代購團" value={gb} onChange={setGb} options={[{ value: KEEP, label: "選代購團" }, ...groupBuys.map((g) => ({ value: g.id, label: g.name })), { value: NONE_GB, label: "不屬於代購團" }]} />
             <Button
