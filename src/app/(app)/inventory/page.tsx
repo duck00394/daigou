@@ -18,7 +18,6 @@ import { ReceiveForm, AdjustForm, CreateBatchFromDemand, KeepButton } from "./pa
 import { SellButton } from "@/components/quick-sale";
 import { getMe } from "@/server/me";
 import { JOINT, NONE, stockByOwner } from "@/server/services/ownership";
-import { openDemandRows } from "@/server/services/demand-owner";
 import { DemandButton } from "./demand";
 import type { OwnerStockOpt } from "@/components/owner-chips";
 import { stockValuation } from "@/server/services/reports";
@@ -32,6 +31,7 @@ import { batchPaySummary, batchesWithSeries, dueByOwner, pendingQty, purchasedSu
 import { batchReconcile } from "@/server/services/reconcile";
 import { OwnerDue } from "@/components/owner-due";
 import { countSets } from "@/lib/sets";
+import { stockLeft } from "@/server/services/stock-left";
 
 export const metadata = { title: "庫存與採購" };
 
@@ -105,13 +105,14 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
     },
   });
   const ids = products.map((p) => p.id);
-  const [inv, valAll, byOwner, me, charOrder] = await Promise.all([
-    tx((t) => inventorySummary(t, ids)),
+  // 現有、一定到、不一定、客人訂、庫存：跟首頁「庫存不夠」待辦用同一套算法
+  const [stock, valAll, me, charOrder] = await Promise.all([
+    tx((t) => stockLeft(t, ids, owner || null)),
     stockValuation(prisma, ids, owner || null),
-    tx((t) => stockByOwner(t, { productIds: ids })),
     getMe(),
     characterOrder(prisma),
   ]);
+  const { byOwner, demandAll } = stock;
   const val = valAll.byProduct;
   const ownerName = (k: string) => (k === JOINT ? "合資" : k === NONE ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
   const ownersOf = (pid: string): OwnerStockOpt[] =>
@@ -119,39 +120,21 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
       .filter(([, x]) => x.free > 0 || x.kept > 0)
       .map(([k, x]) => ({ key: k, label: k === me ? `${ownerName(k)}（我）` : ownerName(k), free: x.free, kept: x.kept }))
       .sort((a, b) => (a.key === me ? -1 : b.key === me ? 1 : 0));
-  const zero = { onHand: 0, reserved: 0, available: 0, incoming: 0, shipped: 0, kept: 0, activeOrdered: 0, openDemand: 0, unallocated: 0, shortage: 0 };
-  // 看某個人：庫存、自留、未到貨只算他的團＋合資的團
-  const ownerKeys = owner ? [owner, JOINT, NONE] : [];
-  const ownerIncoming = new Map<string, number>();
-  if (owner) {
-    const items = await prisma.purchaseBatchItem.findMany({
-      where: { productId: { in: ids }, batch: { status: { not: "CANCELLED" }, ...viewBatchWhere(owner) } },
-      select: { productId: true, qty: true, cancelledQty: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
-    });
-    for (const i of items) ownerIncoming.set(i.productId, (ownerIncoming.get(i.productId) ?? 0) + Math.max(0, i.qty - i.cancelledQty - i.movements.reduce((a, m) => a + m.onHandDelta, 0)));
-  }
   const seriesById = new Map(seriesOpts.map((s) => [s.id, s]));
   let rows = products.map((p) => {
     const cands = [...p.categories.map((c) => c.categoryId), ...p.purchaseItems.map((i) => i.categoryId ?? i.batch.categoryId).filter((x): x is string => !!x)];
     const cid = (catIds ? cands.find((c) => catIds.includes(c)) : null) ?? cands[0] ?? null;
     const series = cid ? (seriesById.get(cid) ?? null) : null;
-    const all = inv.get(p.id) ?? zero;
-    const mine = owner
-      ? ownerKeys.map((k) => byOwner.get(p.id)?.get(k)).reduce<{ onHand: number; free: number; reserved: number; kept: number }>((a, x) => ({ onHand: a.onHand + (x?.onHand ?? 0), free: a.free + (x?.free ?? 0), reserved: a.reserved + (x?.reserved ?? 0), kept: a.kept + (x?.kept ?? 0) }), { onHand: 0, free: 0, reserved: 0, kept: 0 })
-      : null;
-    const s = owner ? { ...all, onHand: mine?.onHand ?? 0, available: mine?.free ?? 0, reserved: mine?.reserved ?? 0, kept: mine?.kept ?? 0, incoming: ownerIncoming.get(p.id) ?? 0 } : all;
+    const s = stock.byProduct.get(p.id)!.s;
     const ch = p.characters.length === 1 ? p.characters[0].character : null;
     return { p, s, v: val.get(p.id), series, ch };
   });
   // 客人訂：看某個人時只算跟他訂的（＋合資、未指定的）；還沒分是誰的另外提醒
-  const demandAll = await tx((t) => openDemandRows(t, ids));
   const qtyOf = (l: { qty: number }[]) => l.reduce((a, d) => a + d.qty, 0);
   const unassignedOf = (pid: string) => qtyOf((demandAll.get(pid) ?? []).filter((d) => !d.ownerKey));
-  if (owner) rows = rows.map((r) => ({ ...r, s: { ...r.s, openDemand: qtyOf((demandAll.get(r.p.id) ?? []).filter((d) => d.ownerKey && ownerKeys.includes(d.ownerKey))) } }));
   const unassignedTotal = ids.reduce((a, id) => a + unassignedOf(id), 0);
   const activeOps = operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }));
   // 預購（還沒到的）分「一定有貨」（對單買到的）和「不一定有貨」（對單還在待確認的）
-  const unsureMap = new Map<string, number>();
   const sureCost = new Map<string, { qty: number; val: number; tentative: boolean }>();
   {
     const items = await prisma.purchaseBatchItem.findMany({
@@ -162,7 +145,6 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
     for (const i of items) {
       const rec = i.movements.reduce((a, m) => a + m.onHandDelta, 0);
       const pend = pendingQty(i, rec);
-      unsureMap.set(i.productId, (unsureMap.get(i.productId) ?? 0) + pend);
       // 一定到（對單買到、還沒到）的成本：算預購平均成本用
       const sure = Math.max(0, i.qty - i.cancelledQty - rec - pend);
       const l = landed.get(i.id);
@@ -182,9 +164,9 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
     if (!q) return r.v?.avgUnitCost != null ? { avg: r.v.avgUnitCost, tentative: r.v.tentative } : null;
     return { avg: Math.round((hq * (r.v?.avgUnitCost ?? 0) + (sc?.val ?? 0)) / q), tentative: !!(sc?.tentative || (hq && r.v?.tentative)) };
   };
-  const unsureOf = (r: { p: { id: string }; s: { incoming: number } }) => Math.min(r.s.incoming, unsureMap.get(r.p.id) ?? 0);
+  const unsureOf = (r: { p: { id: string } }) => stock.byProduct.get(r.p.id)?.unsure ?? 0;
   // 庫存＝現有＋一定到 − 客人預訂還沒給的（負的＝不夠）
-  const left = (r: { p: { id: string }; s: { onHand: number; openDemand: number; incoming: number } }) => r.s.onHand + r.s.incoming - unsureOf(r) - r.s.openDemand;
+  const left = (r: { p: { id: string } }) => stock.byProduct.get(r.p.id)?.left ?? 0;
   // 一整套：每個「系列＋品項」可湊幾套、多出哪幾隻（用「庫存」欄；沒設定一整套就用這個系列這個品項有的角色）
   const setInfo = new Map<string, { sets: number; extras: { name: string; qty: number }[] }>();
   if (!q) {
@@ -205,14 +187,16 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
     const setChars = await prisma.character.findMany({ where: { id: { in: defs.flatMap((d) => d.setCharacterIds) } }, select: { id: true, name: true } });
     const charName = new Map(setChars.map((c) => [c.id, c.name]));
     for (const [key, g] of groups) {
-      const def = defOf.get(key) ?? [];
+      // 設定裡的角色後來被刪掉或合併了：不算（不然永遠「不成套」）
+      const def = (defOf.get(key) ?? []).filter((id) => charName.has(id));
       const members = def.length ? def : [...g.order].sort((a, b) => (charOrder.get(a) ?? 1e9) - (charOrder.get(b) ?? 1e9));
       if (members.length < 2) continue;
       const res = countSets(members, g.qty);
       setInfo.set(key, { sets: res.sets, extras: res.extras.map((x) => ({ name: g.names.get(x.id) ?? charName.get(x.id) ?? "", qty: x.qty })) });
     }
   }
-  if (only === "unassigned") rows = rows.filter((r) => unassignedOf(r.p.id) > 0);
+  if (only === "short") rows = rows.filter((r) => left(r) < 0);
+  else if (only === "unassigned") rows = rows.filter((r) => unassignedOf(r.p.id) > 0);
   else if (only === "stock") rows = rows.filter((r) => r.s.available > 0);
   else if (only === "sure") rows = rows.filter((r) => r.s.incoming - unsureOf(r) > 0);
   else if (only === "unsure") rows = rows.filter((r) => unsureOf(r) > 0);
@@ -282,6 +266,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
           還有 {unassignedTotal} 件客人訂還沒分是跟誰訂的（以前記的）。<Link className="font-semibold text-ai underline" href={unassignedHref}>去分 ›</Link>
         </p>
       )}
+      {only === "short" && <p className="rounded-xl border border-[#f5c2bd] bg-bad-soft px-3 py-2 text-[14px] text-bad" data-testid="stock-short-note">只列客人訂的比庫存多的（庫存是負的）：要再買，或跟客人說少了。補貨或取消預訂後就會自動消失。</p>}
       {only === "unassigned" && <p className="rounded-xl border border-line bg-white px-3 py-2 text-[14px] text-ink-2">只列還有預訂沒分是跟誰訂的角色。點「客人訂」的數字，每一筆選跟誰訂的。</p>}
       {rows.length > 0 && (
         <div className="flex justify-end">

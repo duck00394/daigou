@@ -9,6 +9,7 @@ import { batchPaySummary, refundsOwed } from "@/server/services/batch-ops";
 import { unsettledJoint } from "@/server/services/joint";
 import { preorderProfit } from "@/server/services/preorder";
 import { reconcileList } from "@/server/services/reconcile";
+import { shortProducts } from "@/server/services/stock-left";
 import { getOrdersEnabled } from "@/server/services/settings";
 import { formatTwd } from "@/lib/money";
 import { PushStatusChip } from "@/components/push-setup";
@@ -37,6 +38,8 @@ export default async function Home() {
   ]);
   const pay = await tx((t) => batchPaySummary(t, live.map((b) => b.id)));
   const pre = await tx((t) => preorderProfit(t, { owner: vk === "all" ? null : vk }));
+  // 客人訂的比庫存多：跟庫存頁「庫存」欄同一套算法
+  const short = await tx((t) => shortProducts(t, vk === "all" ? null : vk));
   const liveIds = new Set(live.map((b) => b.id));
   const unsettled = (await tx((t) => unsettledJoint(t))).filter((x) => liveIds.has(x.id));
   const dueBatches = [...pay.values()].filter((p) => p.dueTwd > 0);
@@ -51,6 +54,7 @@ export default async function Home() {
     { n: unsettled.length, text: "團合資還沒結清", href: unsettled.length === 1 ? `/inventory/batches/${unsettled[0].id}` : "/inventory?tab=batches&settle=1" },
     { n: overdue, text: "團超過預計到貨日", href: "/inventory?tab=batches&late=1" },
     { n: d.toShipQty, text: "件客人預訂到貨了，還沒給", href: "/shipping" },
+    { n: short.length, text: "項商品客人訂的比庫存多", href: "/inventory?tab=stock&v=1&only=short" },
     { n: pre.unassigned, text: "件客人預訂還沒分是跟誰訂的", href: "/inventory?tab=stock&v=1&only=unassigned" },
     { n: unpaidSales._count, text: "筆賣出還沒收到錢", href: "/sales" },
     ...(usesOrders

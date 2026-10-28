@@ -266,32 +266,67 @@ export function useIdemKey() {
 }
 
 /** 還有沒儲存的內容：重新整理、關掉分頁、點站內連結離開前先問一聲（存好或清空後自動不問） */
-export function useLeaveGuard(dirty: boolean, message = "還有沒儲存的內容，確定要離開？") {
+// 同一頁有好幾個表單沒存時只註冊一次、只問一次
+const LEAVE_MSG = "還有沒儲存的內容，確定要離開？";
+const dirtyForms = new Set<symbol>();
+type NavEvent = Event & { navigationType?: string; cancelable: boolean; userInitiated?: boolean };
+type NavApi = EventTarget;
+const leaveHandlers = {
+  unload(e: BeforeUnloadEvent) {
+    e.preventDefault();
+    e.returnValue = "";
+  },
+  click(e: MouseEvent) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+    if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
+    const url = new URL(a.href, location.href);
+    if (url.origin !== location.origin) return;
+    if (url.pathname === location.pathname && url.search === location.search) return; // 同一頁（例如 #錨點）
+    if (!window.confirm(LEAVE_MSG)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  },
+  // 瀏覽器上一頁／下一頁：只有支援 Navigation API 而且瀏覽器允許取消時才問（不改歷史紀錄、不硬擋）
+  navigate(e: Event) {
+    const n = e as NavEvent;
+    if (n.navigationType !== "traverse" || !n.cancelable) return;
+    if (!window.confirm(LEAVE_MSG)) n.preventDefault();
+  },
+};
+function navApi(): NavApi | null {
+  return typeof window !== "undefined" && "navigation" in window ? ((window as unknown as { navigation: NavApi }).navigation ?? null) : null;
+}
+function syncLeaveListeners(had: boolean) {
+  const has = dirtyForms.size > 0;
+  if (has === had) return;
+  const nav = navApi();
+  if (has) {
+    window.addEventListener("beforeunload", leaveHandlers.unload);
+    document.addEventListener("click", leaveHandlers.click, true);
+    nav?.addEventListener("navigate", leaveHandlers.navigate);
+  } else {
+    window.removeEventListener("beforeunload", leaveHandlers.unload);
+    document.removeEventListener("click", leaveHandlers.click, true);
+    nav?.removeEventListener("navigate", leaveHandlers.navigate);
+  }
+}
+
+/** 還有沒儲存的內容：重新整理、關掉分頁、點站內連結、（支援的瀏覽器）按上一頁前先問；存好或清空後自動不問 */
+export function useLeaveGuard(dirty: boolean) {
+  const [id] = useState(() => Symbol("form"));
   useEffect(() => {
     if (!dirty) return;
-    const onUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    const onClick = (e: MouseEvent) => {
-      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-      const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
-      if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
-      const url = new URL(a.href, location.href);
-      if (url.origin !== location.origin) return;
-      if (url.pathname === location.pathname && url.search === location.search) return; // 同一頁（例如 #錨點）
-      if (!window.confirm(message)) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    };
-    window.addEventListener("beforeunload", onUnload);
-    document.addEventListener("click", onClick, true);
+    const had = dirtyForms.size > 0;
+    dirtyForms.add(id);
+    syncLeaveListeners(had);
     return () => {
-      window.removeEventListener("beforeunload", onUnload);
-      document.removeEventListener("click", onClick, true);
+      const before = dirtyForms.size > 0;
+      dirtyForms.delete(id);
+      syncLeaveListeners(before);
     };
-  }, [dirty, message]);
+  }, [dirty, id]);
 }
 
 /** 商品圖片：載入失敗時顯示替代區塊，不破壞版面 */

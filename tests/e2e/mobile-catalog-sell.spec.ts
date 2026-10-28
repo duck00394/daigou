@@ -183,6 +183,17 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await expect(hachiRow.locator('[data-k="ordered"]')).toHaveText("1");
   await expect(hachiRow.locator('[data-k="free"]')).toHaveText("-1");
   await page.screenshot({ path: "test-results/mobile_stock_tree.png", fullPage: true });
+  // 首頁待辦「客人訂的比庫存多」→ 點進去只列庫存是負的
+  const stockUrl = page.url();
+  await page.goto("/");
+  const shortTodo = page.getByTestId("home-todo").getByRole("link", { name: /項商品客人訂的比庫存多/ });
+  await expect(shortTodo).toBeVisible();
+  await shortTodo.click();
+  await expect(page).toHaveURL(/only=short/);
+  await expect(page.getByTestId("stock-short-note")).toBeVisible();
+  await expect(hachiRow.locator('[data-k="free"]')).toHaveText("-1");
+  for (const v of await page.locator('[data-testid="stock-row"] [data-k="free"]').allTextContents()) expect(Number(v)).toBeLessThan(0);
+  await page.goto(stockUrl);
 
   // 客人訂：點數字只看到自己的；「不是我的」→ 再確認一次才改 → 改給別人後，自己這邊就不顯示
   await hachiRow.getByTestId("demand-open").click();

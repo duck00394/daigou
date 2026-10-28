@@ -21,6 +21,11 @@ describe("一整套設定", () => {
     expect(await typeSet(prisma, s.shanghai.id, ty.id)).toEqual([]);
     await expect(tx((t) => setTypeSet(t, actor, { categoryId: s.halloween.id, typeId: ty.id, characterIds: [a.id] }))).rejects.toThrow("至少要 2 個角色");
     await expect(tx((t) => setTypeSet(t, actor, { categoryId: s.halloween.id, typeId: ty.id, characterIds: [a.id, "nope"] }))).rejects.toThrow("找不到");
+    // 角色後來被刪掉：讀回時略過，不會出錯
+    const c = (await tx((t) => ensureCharacter(t, actor, "套C"))).character;
+    await tx((t) => setTypeSet(t, actor, { categoryId: s.halloween.id, typeId: ty.id, characterIds: [a.id, b.id, c.id] }));
+    await prisma.character.delete({ where: { id: c.id } });
+    expect((await typeSet(prisma, s.halloween.id, ty.id)).map((x) => x.name)).toEqual(["套A", "套B"]);
     await tx((t) => setTypeSet(t, actor, { categoryId: s.halloween.id, typeId: ty.id, characterIds: [] }));
     expect(await typeSet(prisma, s.halloween.id, ty.id)).toEqual([]);
   });

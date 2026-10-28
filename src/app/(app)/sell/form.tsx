@@ -35,10 +35,13 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
   const [loading, setLoading] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [qty, setQty] = useState<Record<string, string>>(initialQty);
-  // 填了數量還沒送出：離開前先問
-  useLeaveGuard(Object.values(qty).some((v) => Number(v) > 0));
   const [price, setPrice] = useState<Record<string, string>>({});
   const [buyer, setBuyer] = useState("");
+  // 填了數量還沒送出：離開前先問
+  // 只有從系列頁帶過來的數量（還沒改過）不算「沒存的內容」
+  const qtyKey = (q: Record<string, string>) => JSON.stringify(Object.entries(q).filter(([, v]) => Number(v) > 0).sort(([a], [b]) => (a < b ? -1 : 1)));
+  const [initialKey] = useState(() => qtyKey(initialQty));
+  useLeaveGuard(Object.values(qty).some((v) => Number(v) > 0) && (qtyKey(qty) !== initialKey || !!buyer.trim() || Object.values(price).some((v) => v.trim() !== "")));
   // 販售平台：記住上次選的（這台裝置）
   const [channel, setChannelState] = useState("");
   useEffect(() => {

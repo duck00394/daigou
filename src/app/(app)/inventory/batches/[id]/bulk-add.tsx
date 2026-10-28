@@ -45,6 +45,10 @@ type Col = (typeof COLS)[number];
 
 let seq = 0;
 const newKey = () => `r${Date.now().toString(36)}${(seq++).toString(36)}`;
+const fmtAgo = (at: number) => {
+  const m = Math.max(0, Math.round((Date.now() - at) / 60000));
+  return m < 1 ? "剛剛" : m < 60 ? `${m} 分鐘前` : m < 1440 ? `${Math.round(m / 60)} 小時前` : `${Math.round(m / 1440)} 天前`;
+};
 const blankRow = (currency: Currency): RowState => ({ key: newKey(), characterId: "", newName: "", spec: "", unitCost: "", currency, qty: "", salePrice: "", hint: "" });
 
 const toInt = (s: string): number | null => {
@@ -139,6 +143,51 @@ export function BulkAddGrid({
   const toast = useToast();
   const router = useRouter();
   const grid = useRef<HTMLDivElement>(null);
+
+  // 草稿：只存在這台裝置（瀏覽器），不會進帳、不影響庫存和成本。
+  // 同一團（或「新增採購」）才會問要不要帶回來；帶回來時連「這批商品的系列」、IP、品項一起還原，畫面上寫清楚是哪個系列哪個品項。
+  // 按「帶回來」才會套用；存好或清空就刪掉，3 天沒用自動丟掉
+  type Draft = { at: number; rows: RowState[]; cat: { id: string; name: string } | null; seriesId: string; typeId: string; typeName: string };
+  const draftKey = `daigou:bulk-draft:${batchId ?? "new"}`;
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const draftReady = useRef<string | null>(null);
+  useEffect(() => {
+    draftReady.current = null;
+    setDraft(null);
+    try {
+      const raw = localStorage.getItem(draftKey);
+      const d = raw ? (JSON.parse(raw) as Draft) : null;
+      if (d && Array.isArray(d.rows) && d.rows.length && Date.now() - d.at < 3 * 86400_000) setDraft(d);
+      else if (raw) localStorage.removeItem(draftKey);
+    } catch {}
+    draftReady.current = draftKey;
+  }, [draftKey]);
+  useEffect(() => {
+    if (draftReady.current !== draftKey || draft) return; // 還沒決定要不要帶回舊草稿前，不覆蓋它
+    const keep = rows.filter((r) => !isBlank(r)).map(({ key, characterId, newName, spec, unitCost, currency, qty, salePrice, ownerId }) => ({ key, characterId, newName, spec, unitCost, currency, qty, salePrice, ownerId, hint: "" }));
+    const typeName = types.find((x) => x.id === typeId)?.name ?? "";
+    const t = setTimeout(() => {
+      try {
+        if (keep.length) localStorage.setItem(draftKey, JSON.stringify({ at: Date.now(), rows: keep, cat: cat ?? null, seriesId, typeId, typeName } satisfies Draft));
+        else localStorage.removeItem(draftKey);
+      } catch {}
+    }, 400);
+    return () => clearTimeout(t);
+  }, [rows, draftKey, draft, cat, seriesId, typeId, types]);
+  const restoreDraft = () => {
+    if (!draft) return;
+    setCat(draft.cat);
+    if (seriesList.some((x) => x.id === draft.seriesId)) setSeriesId(draft.seriesId);
+    setTypeId(types.some((x) => x.id === draft.typeId) ? draft.typeId : "");
+    setRows(draft.rows.map((r) => ({ ...r, key: newKey(), touched: true })));
+    setDraft(null);
+  };
+  const dropDraft = () => {
+    try {
+      localStorage.removeItem(draftKey);
+    } catch {}
+    setDraft(null);
+  };
 
   const catId = cat?.id ?? null;
   const loadRoster = useCallback(async (sid: string) => {
@@ -418,6 +467,12 @@ export function BulkAddGrid({
         const left = rs.filter((r) => !okKeys.has(r.key) && !isBlank(r)).map((r) => ({ ...r, serverError: errs.get(r.key) }));
         return left.length ? left : [blankRow(supplierCurrency)];
       });
+      // 存成功的列不能再被當成草稿帶回來（開新團時團號會變，舊的鍵也一起清）
+      // （沒成功的列還在畫面上，等一下會自動再存成草稿）
+      try {
+        localStorage.removeItem(draftKey);
+        localStorage.removeItem(`daigou:bulk-draft:${targetId}`);
+      } catch {}
       onSaved?.(targetId, d.created + d.already);
       if (d.failed === 0) onClosed?.(true);
       if (d.failed === 0) {
@@ -511,6 +566,15 @@ export function BulkAddGrid({
         </div>
       </div>
 
+      {draft && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#f0dfa8] bg-warn-soft px-3 py-2 text-[14px] text-warn" data-testid="bulk-draft">
+          <span>上次{draft.cat || draft.typeName ? `在「${[draft.cat?.name, draft.typeName].filter(Boolean).join("・")}」` : ""}有 {draft.rows.length} 列還沒存（{fmtAgo(draft.at)}），要帶回來嗎？</span>
+          <span className="flex gap-2">
+            <Button small onClick={dropDraft}>不要了</Button>
+            <Button small variant="primary" onClick={restoreDraft}>帶回來</Button>
+          </span>
+        </div>
+      )}
       {/* 4：快速加入角色 */}
       {seriesId && (
         <div className="rounded-xl border border-line bg-[#fbfcfd] p-3">
