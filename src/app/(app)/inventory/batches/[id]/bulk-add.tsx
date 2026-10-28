@@ -5,7 +5,7 @@ import type { RowDefault } from "@/server/services/series";
 // 桌面：可鍵盤移動、貼上多格（從 Excel 複製）；手機：每列顯示為一張卡片。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Modal, inputCls, notify, useIdemKey, useToast } from "@/components/client";
+import { Button, Modal, inputCls, notify, useIdemKey, useLeaveGuard, useToast } from "@/components/client";
 import {
   addCategoryCharacterAction,
   bulkAddAction,
@@ -134,6 +134,8 @@ export function BulkAddGrid({
   const [showIp, setShowIp] = useState(false);
   const [newType, setNewType] = useState<string | null>(null);
   const idem = useIdemKey();
+  // 還有沒存的採購列：離開前先問
+  useLeaveGuard(rows.some((r) => !isBlank(r)) && !busy);
   const toast = useToast();
   const router = useRouter();
   const grid = useRef<HTMLDivElement>(null);

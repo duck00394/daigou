@@ -265,6 +265,35 @@ export function useIdemKey() {
   return { key, renew: () => setKey(crypto.randomUUID()) };
 }
 
+/** 還有沒儲存的內容：重新整理、關掉分頁、點站內連結離開前先問一聲（存好或清空後自動不問） */
+export function useLeaveGuard(dirty: boolean, message = "還有沒儲存的內容，確定要離開？") {
+  useEffect(() => {
+    if (!dirty) return;
+    const onUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
+      const url = new URL(a.href, location.href);
+      if (url.origin !== location.origin) return;
+      if (url.pathname === location.pathname && url.search === location.search) return; // 同一頁（例如 #錨點）
+      if (!window.confirm(message)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener("beforeunload", onUnload);
+    document.addEventListener("click", onClick, true);
+    return () => {
+      window.removeEventListener("beforeunload", onUnload);
+      document.removeEventListener("click", onClick, true);
+    };
+  }, [dirty, message]);
+}
+
 /** 商品圖片：載入失敗時顯示替代區塊，不破壞版面 */
 export function ProductImage({ src, alt, size = 40 }: { src: string | null; alt: string; size?: number }) {
   const [failed, setFailed] = useState(false);

@@ -3,7 +3,7 @@
 // 每個角色填數量（單價先帶系列的預設售價，可以改）。超過現貨的部分記成預訂。
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Button, Modal, inputCls, notify, useIdemKey, useRun } from "@/components/client";
+import { Button, Modal, inputCls, notify, useIdemKey, useLeaveGuard, useRun } from "@/components/client";
 import { SeriesPicker, type SeriesOpt } from "@/components/series-picker";
 import { sellSheetAction, sellToCustomerAction } from "@/actions/catalog-tree";
 import { ChannelPicker } from "@/components/channel-picker";
@@ -35,6 +35,8 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
   const [loading, setLoading] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [qty, setQty] = useState<Record<string, string>>(initialQty);
+  // 填了數量還沒送出：離開前先問
+  useLeaveGuard(Object.values(qty).some((v) => Number(v) > 0));
   const [price, setPrice] = useState<Record<string, string>>({});
   const [buyer, setBuyer] = useState("");
   // 販售平台：記住上次選的（這台裝置）

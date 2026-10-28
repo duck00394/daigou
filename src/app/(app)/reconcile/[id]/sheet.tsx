@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button, useRun } from "@/components/client";
+import { Button, useLeaveGuard, useRun } from "@/components/client";
 import { formatTwd } from "@/lib/money";
 import { saveReconcileAction } from "@/actions/reconcile";
 
@@ -43,6 +43,8 @@ export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchH
   const payChanged = paidNum !== pay.paidTwd;
   const anyCut = changed.some((i) => d[i.id].cut && i.active - d[i.id].bought > 0);
   const go = () => router.push(nextHref ?? listHref);
+  // 對到一半還沒儲存：離開前先問
+  useLeaveGuard((changed.length > 0 || payChanged) && !affected && !pending);
 
   const save = () => {
     if (!changed.length && !payChanged) return go();

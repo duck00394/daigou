@@ -1,6 +1,16 @@
 import { expect, type Page } from "@playwright/test";
 
+const dialogPages = new WeakSet<Page>();
+/** 測試自己要處理「確定要離開？」對話框時設成 true；預設一律按確定（還有沒儲存的內容時離開頁面會問） */
+export const manualDialogs = new WeakSet<Page>();
+
 export async function login(page: Page) {
+  if (!dialogPages.has(page)) {
+    dialogPages.add(page);
+    page.on("dialog", (d) => {
+      if (!manualDialogs.has(page)) d.accept().catch(() => {});
+    });
+  }
   // 偶爾第一次按太快（頁面還沒準備好），沒進去就再按一次
   for (let i = 0; i < 3; i++) {
     await page.goto("/login");

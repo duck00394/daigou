@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Modal, TextField, SelectField, TextArea, useRun, useIdemKey, inputCls, notify } from "@/components/client";
+import { Button, Modal, TextField, SelectField, TextArea, useRun, useIdemKey, useLeaveGuard, inputCls, notify } from "@/components/client";
 import { BuyerPicker, ProductPicker, type BuyerOpt, type ProductOpt } from "@/components/pickers";
 import { createOrderAction, appendItemsAction, buyerWarningsAction } from "@/actions/orders";
 import { saveBuyerAction } from "@/actions/buyers";
@@ -21,6 +21,7 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
   const [targetOrder, setTargetOrder] = useState("");
   const [groupBuyId, setGroupBuyId] = useState("");
   const [lines, setLines] = useState<Line[]>([newLine()]);
+  useLeaveGuard(lines.some((l) => l.product));
   const [shipping, setShipping] = useState("0");
   const [confirming, setConfirming] = useState(false);
   const [discount, setDiscount] = useState("0");

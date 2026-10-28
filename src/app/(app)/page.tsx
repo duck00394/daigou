@@ -51,6 +51,7 @@ export default async function Home() {
     { n: unsettled.length, text: "團合資還沒結清", href: unsettled.length === 1 ? `/inventory/batches/${unsettled[0].id}` : "/inventory?tab=batches&settle=1" },
     { n: overdue, text: "團超過預計到貨日", href: "/inventory?tab=batches&late=1" },
     { n: d.toShipQty, text: "件客人預訂到貨了，還沒給", href: "/shipping" },
+    { n: pre.unassigned, text: "件客人預訂還沒分是跟誰訂的", href: "/inventory?tab=stock&v=1&only=unassigned" },
     { n: unpaidSales._count, text: "筆賣出還沒收到錢", href: "/sales" },
     ...(usesOrders
       ? [
