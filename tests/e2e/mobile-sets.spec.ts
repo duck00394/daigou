@@ -33,6 +33,15 @@ test("手機：一整套設定與庫存套數", async ({ page }) => {
   await newSupplierPick(page, `套代購 ${tag}`);
   await page.getByRole("button", { name: "儲存 2 項" }).click();
   await toast(page, /已新增 2 個採購品項/);
+  // 存好後這個系列的吊娃有了吉伊、小八 → 只列這兩隻，其他角色收起來
+  const chips = page.getByTestId("char-chips");
+  await expect(chips.getByRole("button", { name: "＋ 吉伊" })).toBeVisible();
+  await expect(chips.getByRole("button", { name: "＋ 小八" })).toBeVisible();
+  await expect(chips.getByRole("button", { name: "＋ 兔兔" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "加入 吊娃 全部角色（2）" })).toBeVisible();
+  await page.getByTestId("other-chars-toggle").click();
+  await expect(page.getByTestId("other-chars").getByRole("button", { name: "＋ 兔兔" })).toBeVisible();
+  await page.screenshot({ path: "test-results/mobile_item_chars.png" });
   await page.getByRole("link", { name: "看這一團" }).click();
   await expect(page).toHaveURL(/\/inventory\/batches\//);
   await page.goto(page.url().replace(/\/inventory\/batches\//, "/reconcile/").replace(/[?#].*$/, ""));

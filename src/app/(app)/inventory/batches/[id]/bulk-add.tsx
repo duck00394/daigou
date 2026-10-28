@@ -15,6 +15,7 @@ import {
   saveSeriesAction,
   saveTemplateAction,
   seriesRosterAction,
+  itemCharactersAction,
 } from "@/actions/series";
 import { formatJpy, formatTwd, jpyToTwd } from "@/lib/money";
 import { TypeSetLine } from "./type-set";
@@ -182,6 +183,24 @@ export function BulkAddGrid({
     setRows(draft.rows.map((r) => ({ ...r, key: newKey(), touched: true })));
     setDraft(null);
   };
+  // 系列目錄裡這個品項設的角色（例：D賞 → 咻咻、拉麵）：有設就只列這些，其他角色收起來
+  const [itemChars, setItemChars] = useState<Opt[] | null>(null);
+  const [showOthers, setShowOthers] = useState(false);
+  const [itemRev, setItemRev] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setShowOthers(false);
+    if (!cat?.id || !typeId) {
+      setItemChars(null);
+      return;
+    }
+    itemCharactersAction(cat.id, typeId).then((r) => live && setItemChars(r.ok ? r.data : null));
+    return () => {
+      live = false;
+    };
+  }, [cat?.id, typeId, itemRev]);
+  // 角色清單（IP＋這個系列加的）再加上系列目錄這個品項有的（萬一有不在清單裡的）
+  const rosterAll = useMemo(() => [...roster, ...(itemChars ?? []).filter((c) => !roster.some((x) => x.id === c.id))], [roster, itemChars]);
   const dropDraft = () => {
     try {
       localStorage.removeItem(draftKey);
@@ -206,7 +225,7 @@ export function BulkAddGrid({
     loadRoster(seriesId);
   }, [seriesId, loadRoster]);
 
-  const nameOf = (cid: string) => roster.find((c) => c.id === cid)?.name ?? "";
+  const nameOf = (cid: string) => rosterAll.find((c) => c.id === cid)?.name ?? "";
 
   /**
    * 依角色清單新增列，並帶入參考價格（逐角色不同，可再修改）。
@@ -278,7 +297,7 @@ export function BulkAddGrid({
   async function addNewChip() {
     const name = (newChip ?? "").trim();
     if (!name) return notify("請輸入角色名字");
-    const has = roster.find((c) => c.name === name);
+    const has = rosterAll.find((c) => c.name === name);
     if (has) {
       setNewChip(null);
       if (!rows.some((r) => r.characterId === has.id && !r.spec.trim())) addCharacters([{ characterId: has.id }]);
@@ -292,6 +311,8 @@ export function BulkAddGrid({
     const r = await addCategoryCharacterAction(name, [cat.id]);
     if (!r.ok) return notify(r.error);
     setRoster((l) => (l.some((c) => c.id === r.data.id) ? l : [...l, { id: r.data.id, name: r.data.name }]));
+    // 這個品項有設角色的話，新角色也列在上面（存好後就會記到這個品項底下）
+    setItemChars((l) => (l && l.length && !l.some((c) => c.id === r.data.id) ? [...l, { id: r.data.id, name: r.data.name }] : l));
     setNewChip(null);
     addCharacters([{ characterId: r.data.id }]);
   }
@@ -346,7 +367,7 @@ export function BulkAddGrid({
           const v = raw.trim();
           if (!c) return;
           if (c === "character") {
-            const hit = roster.find((x) => x.name === v);
+            const hit = rosterAll.find((x) => x.name === v);
             r = hit ? { ...r, characterId: hit.id, newName: "" } : v ? { ...r, characterId: "__new__", newName: v } : r;
           } else if (c === "currency") {
             const u = v.toUpperCase();
@@ -432,7 +453,7 @@ export function BulkAddGrid({
     });
     return dup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, roster]);
+  }, [rows, rosterAll]);
 
   async function submit() {
     setBusy(true);
@@ -474,6 +495,7 @@ export function BulkAddGrid({
         localStorage.removeItem(`daigou:bulk-draft:${targetId}`);
       } catch {}
       onSaved?.(targetId, d.created + d.already);
+      setItemRev((n) => n + 1);
       if (d.failed === 0) onClosed?.(true);
       if (d.failed === 0) {
         idem.renew();
@@ -491,6 +513,11 @@ export function BulkAddGrid({
   }
 
   const rosterSelected = new Set(rows.filter((r) => !r.spec.trim()).map((r) => r.characterId));
+  const hasItemChars = !!itemChars && itemChars.length > 0;
+  const typeName = types.find((x) => x.id === typeId)?.name ?? "";
+  // 上面：這個品項的角色＋已經點了的其他角色；下面「其他角色」：其餘的
+  const mainChips: Opt[] = hasItemChars ? [...itemChars!, ...rosterAll.filter((c) => rosterSelected.has(c.id) && !itemChars!.some((x) => x.id === c.id))] : roster;
+  const otherChips: Opt[] = hasItemChars ? rosterAll.filter((c) => !mainChips.some((x) => x.id === c.id)) : [];
 
   return (
     <div className="space-y-4">
@@ -582,8 +609,8 @@ export function BulkAddGrid({
             <span className="font-medium text-ink-2">點角色加一列（再點一次拿掉）</span>
             {roster.length === 0 && <span className="text-mute">這個系列還沒有角色，直接在下方表格輸入新角色即可。</span>}
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {roster.map((c) => {
+          <div className="flex flex-wrap gap-1.5" data-testid="char-chips">
+            {mainChips.map((c) => {
               const on = rosterSelected.has(c.id);
               return (
                 <button key={c.id} type="button" aria-pressed={on} onClick={() => toggleCharacter(c.id)} className={`rounded-full border px-3 py-1 text-[14px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2 hover:border-ai"}`}>
@@ -602,12 +629,32 @@ export function BulkAddGrid({
               </span>
             )}
           </div>
+          {otherChips.length > 0 && (
+            <div className="mt-2">
+              <button type="button" className="text-[13px] text-ai" aria-expanded={showOthers} onClick={() => setShowOthers((x) => !x)} data-testid="other-chars-toggle">
+                其他角色{showOthers ? " ▾" : `（${otherChips.length}）▸`}
+              </button>
+              {showOthers && (
+                <div className="mt-1.5 flex flex-wrap gap-1.5" data-testid="other-chars">
+                  {otherChips.map((c) => (
+                    <button key={c.id} type="button" aria-pressed={false} onClick={() => toggleCharacter(c.id)} className="rounded-full border border-line bg-white px-3 py-1 text-[14px] text-ink-2 hover:border-ai">
+                      ＋ {c.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {cat && <p className="mt-1 text-[12px] text-mute">新角色只加在「{cat.name}」這個系列，IP 的預設角色名單不變。</p>}
           {cat && typeId && types.some((x) => x.id === typeId) && (
-            <TypeSetLine categoryId={cat.id} catName={cat.name} typeId={typeId} typeName={types.find((x) => x.id === typeId)!.name} roster={roster} selected={[...rosterSelected]} />
+            <TypeSetLine categoryId={cat.id} catName={cat.name} typeId={typeId} typeName={types.find((x) => x.id === typeId)!.name} roster={rosterAll} selected={[...rosterSelected]} itemChars={itemChars ?? []} />
           )}
           <div className="mt-3 flex flex-wrap gap-2">
-            {roster.length > 0 && <Button small onClick={() => addCharacters(roster.map((c) => ({ characterId: c.id })))}>加入全部角色</Button>}
+            {hasItemChars ? (
+              <Button small onClick={() => addCharacters(itemChars!.map((c) => ({ characterId: c.id })))}>加入 {typeName} 全部角色（{itemChars!.length}）</Button>
+            ) : (
+              roster.length > 0 && <Button small onClick={() => addCharacters(roster.map((c) => ({ characterId: c.id })))}>加入全部角色</Button>
+            )}
             <Button
               small
               onClick={async () => {
@@ -721,7 +768,7 @@ export function BulkAddGrid({
                   }}
                 >
                   <option value="">選角色</option>
-                  {roster.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {rosterAll.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   <option value="__new__">＋ 輸入新角色／款式</option>
                 </select>
                 {r.characterId === "__new__" && (

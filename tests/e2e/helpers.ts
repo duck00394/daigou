@@ -106,3 +106,12 @@ export async function choose(scope: Page | import("@playwright/test").Locator, l
 export function chosen(scope: Page | import("@playwright/test").Locator, label: string | RegExp) {
   return scope.getByLabel(label, typeof label === "string" ? { exact: true } : undefined).first().locator("option:checked");
 }
+
+/** 新增採購：點角色加一列；這個品項有設角色時，別的角色收在「其他角色」裡，先打開 */
+export async function pickChar(page: Page, name: string) {
+  const btn = page.getByRole("button", { name: `＋ ${name}`, exact: true });
+  const toggle = page.getByTestId("other-chars-toggle");
+  await expect(btn.or(toggle).first()).toBeVisible();
+  if (!(await btn.isVisible()) && (await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+  await btn.click();
+}

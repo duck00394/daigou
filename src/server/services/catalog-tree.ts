@@ -413,3 +413,15 @@ export async function setTypeSet(t: Tx, actor: Actor, input: { categoryId: strin
   await audit(t, actor, "catalog.setTypeSet", "Category", cat.id, { typeId: ty.id, characterIds: ids });
   return ids.length;
 }
+
+/** 系列目錄裡「這個系列＋品項」設的角色（例：獅薩一番賞 D賞 → 咻咻、拉麵），照角色順序；沒有就空陣列 */
+export async function itemCharacters(db: Db, categoryId: string, typeId: string) {
+  const rows = await db.productCategory.findMany({
+    where: { categoryId, product: { productTypeId: typeId, archivedAt: null, mergedIntoId: null } },
+    select: { product: { select: { characters: { select: { character: { select: { id: true, name: true } } } } } } },
+  });
+  const order = await characterOrder(db);
+  const seen = new Map<string, { id: string; name: string }>();
+  for (const r of rows) if (r.product.characters.length === 1) seen.set(r.product.characters[0].character.id, r.product.characters[0].character);
+  return [...seen.values()].sort((a, b) => (order.get(a.id) ?? 1e9) - (order.get(b.id) ?? 1e9) || byText(a.name, b.name));
+}

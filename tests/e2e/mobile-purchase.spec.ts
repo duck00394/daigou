@@ -1,11 +1,11 @@
 // 手機：一個畫面新增採購（活動 → 哪一團 → 買了什麼），三團分別是我的、對方的、合資；活動總表看總額、各團與誰買的
 import { test, expect, type Page } from "@playwright/test";
-import { login, toast, pickIp, newSupplierPick, openSeries, openMore, pickSupplier, openSeriesPage, choose, chosen } from "./helpers";
+import { login, toast, pickIp, newSupplierPick, openSeries, openMore, pickSupplier, openSeriesPage, choose, chosen, pickChar } from "./helpers";
 
 async function addRow(page: Page, character: string, price: string, qty: string) {
   await pickIp(page);
   await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
-  await page.getByRole("button", { name: `＋ ${character}` }).click();
+  await pickChar(page, character);
   const r1 = page.getByRole("table", { name: "批次新增採購品項" }).getByRole("row").filter({ hasText: "第 1 列" });
   await expect(r1.getByLabel("數量")).toHaveValue("1"); // 選了角色數量先帶 1
   await r1.getByLabel("單價").fill(price);

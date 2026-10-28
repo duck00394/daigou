@@ -6,7 +6,7 @@ import { saveTypeSetAction, typeSetAction } from "@/actions/series";
 
 type Opt = { id: string; name: string };
 
-export function TypeSetLine({ categoryId, typeId, typeName, catName, roster, selected }: { categoryId: string; typeId: string; typeName: string; catName: string; roster: Opt[]; selected: string[] }) {
+export function TypeSetLine({ categoryId, typeId, typeName, catName, roster, selected, itemChars = [] }: { categoryId: string; typeId: string; typeName: string; catName: string; roster: Opt[]; selected: string[]; itemChars?: Opt[] }) {
   const toast = useToast();
   const [set, setSet] = useState<Opt[] | null>(null);
   const [edit, setEdit] = useState<string[] | null>(null);
@@ -61,15 +61,18 @@ export function TypeSetLine({ categoryId, typeId, typeName, catName, roster, sel
   }
 
   if (!set.length) {
-    const pick = roster.filter((c) => selected.includes(c.id));
+    const picked = roster.filter((c) => selected.includes(c.id));
+    // 沒勾或只勾 1 隻：先拿系列目錄裡這個品項的角色
+    const fromItem = picked.length < 2 && itemChars.length >= 2;
+    const pick = fromItem ? itemChars : picked;
     return (
       <div className={`${box} flex items-center justify-between gap-2`} data-testid="type-set">
         <span>
           {typeName}一整套
-          <span className="block text-[12.5px] text-mute">還沒設定（庫存頁會先用買過的角色算）</span>
+          <span className="block text-[12.5px] text-mute">還沒設定（庫存頁先用{itemChars.length >= 2 ? `系列目錄裡${typeName}的 ${itemChars.length} 隻` : "買過的角色"}算）</span>
         </span>
         {pick.length >= 2 ? (
-          <Button small variant="primary" loading={busy} onClick={() => save(pick.map((c) => c.id))}>勾的 {pick.length} 隻＝一整套</Button>
+          <Button small variant="primary" loading={busy} onClick={() => save(pick.map((c) => c.id))}>{fromItem ? `${typeName}的` : "勾的"} {pick.length} 隻＝一整套</Button>
         ) : (
           <Button small onClick={() => setEdit([])}>設定</Button>
         )}
