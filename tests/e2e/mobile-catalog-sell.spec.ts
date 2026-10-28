@@ -176,7 +176,7 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await page.getByRole("button", { name: "查看" }).click();
   await expect(page).toHaveURL(/v=1/);
   await expect(page.getByTestId("stock-series").filter({ hasText: series })).toBeVisible();
-  await expect(page.getByTestId("stock-type").first()).toHaveText("吊娃");
+  await expect(page.getByTestId("stock-type").first()).toHaveText(/^吊娃/);
   // 庫存＝現有＋一定到 − 客人訂：小八沒貨但客人預訂 1 → -1（不寫「缺」）
   const hachiRow = page.locator(`[data-testid="stock-row"][data-name="${series}小八 吊娃"]`);
   await expect(hachiRow.locator('[data-k="onhand"]')).toHaveText("0");

@@ -179,14 +179,16 @@ model ProductType {
 
 // 系列（活動）底下出的品項（例：肉包 的 吊娃），以及預設售價（同一系列同一品項所有角色同價）
 model CategoryTypePrice {
-  categoryId    String
-  productTypeId String
-  salePriceTwd  Int?
-  sortOrder     Int         @default(0)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  category      Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  productType   ProductType @relation(fields: [productTypeId], references: [id], onDelete: Cascade)
+  categoryId      String
+  productTypeId   String
+  salePriceTwd    Int?
+  // 一整套有哪些角色（角色 id）；空的＝沒設定，改用這個系列這個品項有的角色
+  setCharacterIds String[]    @default([])
+  sortOrder       Int         @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  category        Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  productType     ProductType @relation(fields: [productTypeId], references: [id], onDelete: Cascade)
 
   @@id([categoryId, productTypeId])
 }

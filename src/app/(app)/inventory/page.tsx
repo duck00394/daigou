@@ -31,6 +31,7 @@ import { batchStage, batchStageLabel, isStoreKind, fmtMonthDay } from "@/lib/lab
 import { batchPaySummary, batchesWithSeries, dueByOwner, pendingQty, purchasedSummary } from "@/server/services/batch-ops";
 import { batchReconcile } from "@/server/services/reconcile";
 import { OwnerDue } from "@/components/owner-due";
+import { countSets } from "@/lib/sets";
 
 export const metadata = { title: "庫存與採購" };
 
@@ -184,6 +185,33 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
   const unsureOf = (r: { p: { id: string }; s: { incoming: number } }) => Math.min(r.s.incoming, unsureMap.get(r.p.id) ?? 0);
   // 庫存＝現有＋一定到 − 客人預訂還沒給的（負的＝不夠）
   const left = (r: { p: { id: string }; s: { onHand: number; openDemand: number; incoming: number } }) => r.s.onHand + r.s.incoming - unsureOf(r) - r.s.openDemand;
+  // 一整套：每個「系列＋品項」可湊幾套、多出哪幾隻（用「庫存」欄；沒設定一整套就用這個系列這個品項有的角色）
+  const setInfo = new Map<string, { sets: number; extras: { name: string; qty: number }[] }>();
+  if (!q) {
+    const groups = new Map<string, { cid: string; tid: string; qty: Map<string, number>; names: Map<string, string>; order: string[] }>();
+    for (const r of rows) {
+      if (!r.series || !r.p.productType || !r.ch || (r.p.spec && r.p.spec !== r.series.name)) continue;
+      const key = `${r.series.id}|${r.p.productType.id}`;
+      const g = groups.get(key) ?? { cid: r.series.id, tid: r.p.productType.id, qty: new Map<string, number>(), names: new Map<string, string>(), order: [] as string[] };
+      if (!g.names.has(r.ch.id)) g.order.push(r.ch.id);
+      g.names.set(r.ch.id, r.ch.name);
+      g.qty.set(r.ch.id, (g.qty.get(r.ch.id) ?? 0) + left(r));
+      groups.set(key, g);
+    }
+    const defs = groups.size
+      ? await prisma.categoryTypePrice.findMany({ where: { OR: [...groups.values()].map((g) => ({ categoryId: g.cid, productTypeId: g.tid })) }, select: { categoryId: true, productTypeId: true, setCharacterIds: true } })
+      : [];
+    const defOf = new Map(defs.map((d) => [`${d.categoryId}|${d.productTypeId}`, d.setCharacterIds]));
+    const setChars = await prisma.character.findMany({ where: { id: { in: defs.flatMap((d) => d.setCharacterIds) } }, select: { id: true, name: true } });
+    const charName = new Map(setChars.map((c) => [c.id, c.name]));
+    for (const [key, g] of groups) {
+      const def = defOf.get(key) ?? [];
+      const members = def.length ? def : [...g.order].sort((a, b) => (charOrder.get(a) ?? 1e9) - (charOrder.get(b) ?? 1e9));
+      if (members.length < 2) continue;
+      const res = countSets(members, g.qty);
+      setInfo.set(key, { sets: res.sets, extras: res.extras.map((x) => ({ name: g.names.get(x.id) ?? charName.get(x.id) ?? "", qty: x.qty })) });
+    }
+  }
   if (only === "unassigned") rows = rows.filter((r) => unassignedOf(r.p.id) > 0);
   else if (only === "stock") rows = rows.filter((r) => r.s.available > 0);
   else if (only === "sure") rows = rows.filter((r) => r.s.incoming - unsureOf(r) > 0);
@@ -301,7 +329,19 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                         {sg.types.map((tg) => (
                           <Fragment key={tg.key}>
                             <tr className="border-t border-line-2 bg-[#f7f8fa]">
-                              <td colSpan={COLS} className="py-1 pr-3 pl-5 text-[13px] font-semibold text-ink-2" data-testid="stock-type">{tg.name}</td>
+                              <td colSpan={COLS} className="py-1 pr-3 pl-5 text-[13px] font-semibold text-ink-2" data-testid="stock-type">
+                                {tg.name}
+                                {(() => {
+                                  const si = setInfo.get(`${sg.key}|${tg.key}`);
+                                  if (!si) return null;
+                                  const extra = si.extras.map((x) => `${x.name} ${x.qty}`).join("・");
+                                  return (
+                                    <span className="font-normal text-mute max-md:block md:ml-2" data-testid="stock-sets">
+                                      {si.sets ? <><b className="text-good">{si.sets} 套</b>{extra ? `，多 ${extra}` : ""}</> : "不成套"}
+                                    </span>
+                                  );
+                                })()}
+                              </td>
                             </tr>
                             {tg.rows.map((r) => {
                               const dup = tg.rows.filter((x) => label(x) === label(r)).length > 1;

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { run } from "@/server/action";
 import { prisma, tx } from "@/server/db";
 import * as sr from "@/server/services/series";
+import * as ct from "@/server/services/catalog-tree";
 
 const currency = z.enum(["JPY", "TWD"]);
 
@@ -108,4 +109,11 @@ export async function setSupplierFavoriteAction(id: string, favorite: boolean) {
 /** 商品頁「＋ 新角色」：只加在選了的活動系列裡，不改 IP 的預設角色名單 */
 export async function addCategoryCharacterAction(name: string, categoryIds: string[]) {
   return run((a) => tx((t) => sr.addCategoryCharacter(t, a, { name: z.string().max(50).parse(name), categoryIds: z.array(z.string().max(64)).max(50).parse(categoryIds) })));
+}
+
+export async function typeSetAction(categoryId: string, typeId: string) {
+  return run(() => ct.typeSet(prisma, z.string().min(1).parse(categoryId), z.string().min(1).parse(typeId)), "read");
+}
+export async function saveTypeSetAction(categoryId: string, typeId: string, characterIds: string[]) {
+  return run((a) => tx((t) => ct.setTypeSet(t, a, { categoryId: z.string().min(1).parse(categoryId), typeId: z.string().min(1).parse(typeId), characterIds: z.array(z.string()).max(100).parse(characterIds) })));
 }

@@ -381,3 +381,35 @@ export async function moveSeriesOrder(t: Tx, actor: Actor, categoryId: string, d
   for (let i = 0; i < next.length; i++) await t.category.update({ where: { id: next[i].id }, data: { sortOrder: (i + 1) * 10 } });
   await audit(t, actor, "catalog.reorderSeries", "Category", categoryId, { dir });
 }
+
+/** 一整套：這個系列這個品項設定的角色（沒設＝空陣列） */
+export async function typeSet(db: Db, categoryId: string, typeId: string) {
+  const row = await db.categoryTypePrice.findUnique({ where: { categoryId_productTypeId: { categoryId, productTypeId: typeId } }, select: { setCharacterIds: true } });
+  const ids = row?.setCharacterIds ?? [];
+  if (!ids.length) return [];
+  const chars = await db.character.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } });
+  const byId = new Map(chars.map((c) => [c.id, c]));
+  return ids.map((id) => byId.get(id)).filter((c): c is { id: string; name: string } => !!c);
+}
+
+/** 設定一整套有哪些角色（只影響這個系列這個品項；空陣列＝取消設定） */
+export async function setTypeSet(t: Tx, actor: Actor, input: { categoryId: string; typeId: string; characterIds: string[] }) {
+  const ids = [...new Set(input.characterIds)];
+  if (ids.length === 1) throw new BizError("一整套至少要 2 個角色");
+  const [cat, ty, n] = await Promise.all([
+    t.category.findUnique({ where: { id: input.categoryId }, select: { id: true } }),
+    t.productType.findUnique({ where: { id: input.typeId }, select: { id: true } }),
+    t.character.count({ where: { id: { in: ids } } }),
+  ]);
+  if (!cat) throw new BizError("找不到系列");
+  if (!ty) throw new BizError("找不到品項");
+  if (n !== ids.length) throw new BizError("有角色找不到，請重新整理再試");
+  const count = await t.categoryTypePrice.count({ where: { categoryId: cat.id } });
+  await t.categoryTypePrice.upsert({
+    where: { categoryId_productTypeId: { categoryId: cat.id, productTypeId: ty.id } },
+    update: { setCharacterIds: ids },
+    create: { categoryId: cat.id, productTypeId: ty.id, setCharacterIds: ids, sortOrder: count },
+  });
+  await audit(t, actor, "catalog.setTypeSet", "Category", cat.id, { typeId: ty.id, characterIds: ids });
+  return ids.length;
+}

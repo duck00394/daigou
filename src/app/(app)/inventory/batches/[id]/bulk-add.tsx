@@ -17,6 +17,7 @@ import {
   seriesRosterAction,
 } from "@/actions/series";
 import { formatJpy, formatTwd, jpyToTwd } from "@/lib/money";
+import { TypeSetLine } from "./type-set";
 
 type Currency = "JPY" | "TWD";
 type Opt = { id: string; name: string };
@@ -536,6 +537,9 @@ export function BulkAddGrid({
             )}
           </div>
           {cat && <p className="mt-1 text-[12px] text-mute">新角色只加在「{cat.name}」這個系列，IP 的預設角色名單不變。</p>}
+          {cat && typeId && types.some((x) => x.id === typeId) && (
+            <TypeSetLine categoryId={cat.id} catName={cat.name} typeId={typeId} typeName={types.find((x) => x.id === typeId)!.name} roster={roster} selected={[...rosterSelected]} />
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
             {roster.length > 0 && <Button small onClick={() => addCharacters(roster.map((c) => ({ characterId: c.id })))}>加入全部角色</Button>}
             <Button
