@@ -170,7 +170,9 @@ export function BulkAddGrid({
   // 草稿：只存在這台裝置（瀏覽器），不會進帳、不影響庫存和成本。
   // 同一團（或「新增採購」）才會問要不要帶回來；帶回來時連「這批商品的系列」、IP、品項一起還原，畫面上寫清楚是哪個系列哪個品項。
   // 按「帶回來」才會套用；存好或清空就刪掉，3 天沒用自動丟掉
-  type Draft = { at: number; rows: RowState[]; cat: { id: string; name: string } | null; seriesId: string; typeId: string; typeName: string };
+  // sent：按過儲存但沒收到結果（網路斷了）→ 可能其實已經存好，帶回來前要先提醒去看那一團
+  type Draft = { at: number; rows: RowState[]; cat: { id: string; name: string } | null; seriesId: string; typeId: string; typeName: string; sent?: { at: number; batchId: string } };
+  const sentRef = useRef<Draft["sent"]>(undefined);
   const draftKey = `daigou:bulk-draft:${batchId ?? "new"}`;
   const [draft, setDraft] = useState<Draft | null>(null);
   const draftReady = useRef<string | null>(null);
@@ -191,7 +193,7 @@ export function BulkAddGrid({
     const typeName = types.find((x) => x.id === typeId)?.name ?? "";
     const t = setTimeout(() => {
       try {
-        if (keep.length) localStorage.setItem(draftKey, JSON.stringify({ at: Date.now(), rows: keep, cat: cat ?? null, seriesId, typeId, typeName } satisfies Draft));
+        if (keep.length) localStorage.setItem(draftKey, JSON.stringify({ at: Date.now(), rows: keep, cat: cat ?? null, seriesId, typeId, typeName, sent: sentRef.current } satisfies Draft));
         else localStorage.removeItem(draftKey);
       } catch {}
     }, 400);
@@ -552,6 +554,14 @@ export function BulkAddGrid({
           ...(joint ? { ownerId: ownerOf(r) || null } : {}),
         }));
       const targetId = batchId ?? (ensureBatch ? await ensureBatch() : null);
+      // 先在草稿記一筆「送出了」：萬一收不到結果、之後重新整理，帶回草稿前會提醒先去看這一團
+      if (targetId) {
+        sentRef.current = { at: Date.now(), batchId: targetId };
+        try {
+          const raw = localStorage.getItem(draftKey);
+          if (raw) localStorage.setItem(draftKey, JSON.stringify({ ...(JSON.parse(raw) as Draft), sent: sentRef.current }));
+        } catch {}
+      }
       if (!targetId) return;
       // 照品項分開送（吊娃一次、S 娃一次）；每個品項有自己的重送鍵，重按不會重複
       const tids = [...new Set(payload.map((x) => x.tid))];
@@ -589,6 +599,8 @@ export function BulkAddGrid({
       });
       // 存成功的列不能再被當成草稿帶回來（開新團時團號會變，舊的鍵也一起清）
       // （沒成功的列還在畫面上，等一下會自動再存成草稿）
+      // 收到結果了：不用再提醒「可能已經存好」（有失敗的列還在畫面上，等一下會照常存成草稿）
+      sentRef.current = undefined;
       try {
         localStorage.removeItem(draftKey);
         localStorage.removeItem(`daigou:bulk-draft:${targetId}`);
@@ -700,7 +712,14 @@ export function BulkAddGrid({
 
       {draft && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#f0dfa8] bg-warn-soft px-3 py-2 text-[14px] text-warn" data-testid="bulk-draft">
-          <span>上次{draft.cat || draft.typeName ? `在「${[draft.cat?.name, draft.typeName].filter(Boolean).join("・")}」` : ""}有 {draft.rows.length} 列還沒存（{fmtAgo(draft.at)}），要帶回來嗎？</span>
+          <span>
+            上次{draft.cat || draft.typeName ? `在「${[draft.cat?.name, draft.typeName].filter(Boolean).join("・")}」` : ""}有 {draft.rows.length} 列還沒存（{fmtAgo(draft.at)}），要帶回來嗎？
+            {draft.sent && (
+              <span className="mt-1 block font-semibold text-bad" data-testid="bulk-draft-sent">
+                上次按過儲存但沒收到結果，可能已經存好了：先<Link href={`/inventory/batches/${draft.sent.batchId}`} className="underline">看那一團</Link>，確定沒有再帶回來，免得重複。
+              </span>
+            )}
+          </span>
           <span className="flex gap-2">
             <Button small onClick={dropDraft}>不要了</Button>
             <Button small variant="primary" onClick={restoreDraft}>帶回來</Button>
@@ -869,8 +888,10 @@ export function BulkAddGrid({
                   value={r.characterId}
                   onChange={async (e) => {
                     const v = e.target.value;
-                    update(r.key, { characterId: v, newName: v === "__new__" ? r.newName : "", qty: r.qty || (v ? "1" : "") });
-                    if (v && v !== "__new__" && !r.unitCost && seriesId) {
+                    // 單價、想賣價是上一個角色帶入的參考價（使用者沒動過）：換角色就清掉重抓，不能留著別的角色的價格
+                    const auto = !r.touched && !!r.unitCost && r.hint.startsWith("參考");
+                    update(r.key, { characterId: v, newName: v === "__new__" ? r.newName : "", qty: r.qty || (v ? "1" : ""), ...(auto ? { unitCost: "", salePrice: "", hint: "" } : {}) });
+                    if (v && v !== "__new__" && (!r.unitCost || auto) && seriesId) {
                       update(r.key, { characterId: v, newName: "", loading: true });
                       const d = await rowDefaultsAction({ seriesId, productTypeId: (r.typeId ?? typeId) || null, supplierId, categoryId: cat?.id ?? null, characterIds: [v], specs: { [v]: r.spec || null } });
                       const df = d.ok ? d.data[0] : null;

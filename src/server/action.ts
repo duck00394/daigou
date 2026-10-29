@@ -1,6 +1,7 @@
 // Server Action 共用包裝：驗證登入、統一錯誤格式、不把內部錯誤細節回傳到前端
 import "server-only";
 import { Prisma } from "@prisma/client";
+import { ZodError } from "zod";
 import { BizError } from "@/server/db";
 import { AuthError, can, requireActionUser, type Permission } from "@/server/auth";
 import type { Actor } from "@/server/services/common";
@@ -16,6 +17,8 @@ export async function run<T>(fn: (actor: Actor) => Promise<T>, perm: Permission 
   } catch (e) {
     if (e instanceof AuthError) return { ok: false, error: e.message, auth: true };
     if (e instanceof BizError) return { ok: false, error: e.message };
+    // 輸入格式不對（例如數字欄位填了文字、超過長度）：說清楚，不要只顯示「系統發生錯誤」
+    if (e instanceof ZodError) return { ok: false, error: "輸入的資料格式不對（例如數量要整數、文字太長），請檢查後再試" };
     if (e instanceof Prisma.PrismaClientKnownRequestError) {
       if (e.code === "P2002") return { ok: false, error: "資料重複，可能已經建立過了" };
       if (e.code === "P2025") return { ok: false, error: "找不到資料，可能已被刪除，請重新整理" };

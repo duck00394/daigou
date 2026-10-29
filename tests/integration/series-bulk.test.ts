@@ -40,6 +40,30 @@ afterEach(async () => {
 });
 
 describe("批次新增系列商品", () => {
+  it("B1 回歸：伺服器已存好但前端沒收到 → 再加另一個品項的一列重送：已存的不重複、新的照常新增；部分失敗修正後重送只補失敗的", async () => {
+    const s2 = await tx((t) => upsertProductType(t, actor, { name: "S娃" }));
+    const sub = (tid: string) => `K1:${tid}`; // 前端：同一次送出、每個品項固定一個鍵
+    const addAs = (tid: string, rows: BulkRow[]) => bulkAddSeriesItems(actor, { batchId: ctx.batchId, seriesId: ctx.seriesId, productTypeId: tid, submissionKey: sub(tid), rows });
+    // 第一次：吊娃 a、b 存好了（前端沒收到）
+    await addAs(ctx.typeId, [row("a", { characterId: ctx.chiikawa, unitCost: 650, qty: 1 }), row("b", { characterId: ctx.hachi, unitCost: 600, qty: 1 })]);
+    // 重送：吊娃 a、b 照舊＋S 娃 c 新的
+    const r1 = await addAs(ctx.typeId, [row("a", { characterId: ctx.chiikawa, unitCost: 650, qty: 1 }), row("b", { characterId: ctx.hachi, unitCost: 600, qty: 1 })]);
+    const r2 = await addAs(s2.id, [row("c", { characterId: ctx.chiikawa, unitCost: 380, qty: 1 })]);
+    expect([r1.created, r1.already, r1.failed, r2.created, r2.already, r2.failed]).toEqual([0, 2, 0, 1, 0, 0]);
+    expect(await prisma.purchaseBatchItem.count({ where: { batchId: ctx.batchId } })).toBe(3);
+    // 部分失敗：d 沒填單價失敗、e 成功；修好 d 用同一個鍵重送 → 只補 d，e 不重複
+    const r3 = await addAs(ctx.typeId, [row("d", { characterId: ctx.usagi, unitCost: null, qty: 1 }), row("e", { newCharacterName: "獅薩", unitCost: 500, qty: 1 })]);
+    expect([r3.created, r3.failed]).toEqual([1, 1]);
+    const r4 = await addAs(ctx.typeId, [row("d", { characterId: ctx.usagi, unitCost: 450, qty: 1 }), row("e", { newCharacterName: "獅薩", unitCost: 500, qty: 1 })]);
+    expect([r4.created, r4.already, r4.failed]).toEqual([1, 1, 0]);
+    expect(await prisma.purchaseBatchItem.count({ where: { batchId: ctx.batchId } })).toBe(5);
+    // 同一個請求同時送兩次（併發）→ 只建一次
+    const [x, y] = await Promise.all([addAs(s2.id, [row("f", { characterId: ctx.hachi, unitCost: 380, qty: 2 })]), addAs(s2.id, [row("f", { characterId: ctx.hachi, unitCost: 380, qty: 2 })])]);
+    expect(x.created + y.created).toBe(1);
+    expect(x.already + y.already).toBe(1);
+    expect(await prisma.purchaseBatchItem.count({ where: { batchId: ctx.batchId } })).toBe(6);
+  });
+
   it("1. 一次建立 3 個角色，各自不同單價與數量", async () => {
     const r = await add([
       row("a", { characterId: ctx.chiikawa, unitCost: 350, qty: 3 }),
