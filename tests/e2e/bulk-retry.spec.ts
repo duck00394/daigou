@@ -153,6 +153,8 @@ test("批次採購：送出後沒收到結果、重新整理 → 帶回草稿前
     await page.getByLabel(/新系列名稱/).fill(`E2E 重整 ${tag}`);
     await page.getByRole("button", { name: "建立", exact: true }).click();
     await newSupplierPick(page, sup);
+    // 報表測試看的是整月的賺多少：這裡不收運費，免得影響別的測試
+    await page.getByLabel("賣貨便運費").fill("0");
     await pickIp(page);
     await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
     await page.getByRole("button", { name: "＋ 吉伊" }).click();
