@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { Button, Modal, TextField, useRun, useIdemKey, inputCls, notify } from "@/components/client";
+import { Button, Modal, TextField, useRun, useIdemKey, inputCls, notify, DateTimeField } from "@/components/client";
 import { createShipmentAction, switchShipmentOwnerAction, updateShipmentAction } from "@/actions/ops";
 import { Choice } from "@/components/choice";
 import { bulkFlagsAction } from "@/actions/orders";
@@ -111,7 +111,7 @@ export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, availa
         <div className="grid gap-3 sm:grid-cols-2">
           <TextField label="配送方式" value={f.method} onChange={(e) => setF({ ...f, method: e.target.value })} placeholder="例：7-11 店到店" />
           <TextField label="物流單號" value={f.tracking} onChange={(e) => setF({ ...f, tracking: e.target.value })} />
-          <TextField label="出貨時間" type="datetime-local" value={f.shippedAt} onChange={(e) => setF({ ...f, shippedAt: e.target.value })} />
+          <DateTimeField label="出貨時間" value={f.shippedAt} onChange={(v) => setF({ ...f, shippedAt: v })} />
           <TextField label="備註" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} />
         </div>
         <p className="mt-3 text-[12px] text-mute">只會出貨上面列出的數量，其餘商品維持待出貨。重複送出不會重複扣庫存。</p>

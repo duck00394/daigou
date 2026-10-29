@@ -149,7 +149,7 @@ export function fmtDate(d: Date | string | null | undefined, withTime = false): 
   const date = typeof d === "string" ? new Date(d) : d;
   if (Number.isNaN(date.getTime())) return "—";
   const opts: Intl.DateTimeFormatOptions = { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" };
-  if (withTime) Object.assign(opts, { hour: "2-digit", minute: "2-digit", hour12: false });
+  if (withTime) Object.assign(opts, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
   return new Intl.DateTimeFormat("zh-TW", opts).format(date);
 }
 

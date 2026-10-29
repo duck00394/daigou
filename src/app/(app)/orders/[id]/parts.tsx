@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Button, ConfirmButton, Modal, TextField, SelectField, TextArea, useRun, useIdemKey, notify } from "@/components/client";
+import { Button, ConfirmButton, Modal, TextField, SelectField, TextArea, useRun, useIdemKey, notify, DateTimeField } from "@/components/client";
 import {
   addPaymentAction,
   cancelItemAction,
@@ -240,7 +240,7 @@ export function PaymentForm({ orderId, balance }: { orderId: string; balance: nu
       }}
     >
       <TextField label="金額" inputMode="numeric" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} />
-      <TextField label="付款時間" type="datetime-local" value={f.paidAt} onChange={(e) => setF({ ...f, paidAt: e.target.value })} />
+      <DateTimeField label="付款時間" value={f.paidAt} onChange={(v) => setF({ ...f, paidAt: v })} />
       <SelectField label="方式" value={f.method} onChange={(e) => setF({ ...f, method: e.target.value })} options={[["轉帳", "轉帳"], ["現金", "現金"], ["LINE Pay", "LINE Pay"], ["街口", "街口"], ["其他", "其他"]]} />
       <TextField label="識別資訊／備註" value={f.reference} placeholder="例：末五碼 12345" onChange={(e) => setF({ ...f, reference: e.target.value })} />
       <Button type="submit" variant="primary" loading={pending} className="sm:col-span-2 sm:justify-self-start">

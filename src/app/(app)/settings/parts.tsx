@@ -129,7 +129,7 @@ export function RestoreForm({ hasData }: { hasData: boolean }) {
       {busy && <p className="text-sm text-mute">檢查中…</p>}
       {info && (
         <div className="rounded-lg bg-good-soft px-3 py-2 text-sm">
-          備份檔檢查通過：建立於 {new Date(info.createdAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}，共 {total} 筆資料（訂單 {info.counts.order ?? 0}、買家 {info.counts.buyer ?? 0}、商品 {info.counts.product ?? 0}）。
+          備份檔檢查通過：建立於 {new Date(info.createdAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", hourCycle: "h23" })}，共 {total} 筆資料（訂單 {info.counts.order ?? 0}、買家 {info.counts.buyer ?? 0}、商品 {info.counts.product ?? 0}）。
         </div>
       )}
       {info && hasData && (

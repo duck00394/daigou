@@ -3,7 +3,7 @@ import { Choice } from "@/components/choice";
 // 採購團詳情：三種負責人、供應商付款紀錄、收貨清點紀錄
 import { UndoReceivingButton } from "./undo";
 import { useState } from "react";
-import { Button, Modal, TextField, useIdemKey, useRun, inputCls, notify } from "@/components/client";
+import { Button, Modal, TextField, useIdemKey, useRun, inputCls, notify, DateTimeField } from "@/components/client";
 import { OperatorPicker, operatorName, type OperatorOption } from "@/components/operator-picker";
 import { addSupplierPaymentAction, createReceivingAction, updateBatchProgressAction, updateResponsibilityAction, updateSupplierPaymentAction, voidSupplierPaymentAction } from "@/actions/operators";
 import { currencyName, fmtDate, paymentPurpose, supplierPaymentStatus, toDateTimeInput } from "@/lib/labels";
@@ -141,7 +141,7 @@ function PaymentFields({ d, set, operators, edit }: { d: PayDraft; set: (p: Part
         <div className="mt-2 space-y-3">
           <Choice label="幣別" value={d.currency} options={(["TWD", "JPY"] as const).map((c) => ({ value: c, label: currencyName[c] }))} onChange={(c) => set({ currency: c as "TWD" | "JPY" })} />
           <div className="grid gap-2 sm:grid-cols-2">
-            <TextField label="付款日期" type="datetime-local" value={d.paidAt} onChange={(e) => set({ paidAt: e.target.value })} />
+            <DateTimeField label="付款日期" value={d.paidAt} onChange={(v) => set({ paidAt: v })} />
             <div>
               <label className="mb-1 block text-[13px] font-medium text-ink-2" htmlFor="pay-method">付款方式</label>
               <input id="pay-method" list="pay-methods" className={inputCls} value={d.method} onChange={(e) => set({ method: e.target.value })} placeholder="例：信用卡" />
@@ -391,7 +391,7 @@ export function Receiving({ batchId, operators, items, records, editable, defaul
             <form aria-label="登記收貨" className="space-y-3" onSubmit={(e) => { e.preventDefault(); submit(); }}>
               <OperatorPicker label="收貨確認人" required allowNone={false} operators={operators.filter((o) => o.active)} value={who} onChange={setWho} hint="實際清點這次到貨的人" />
               <div className="grid gap-2 sm:grid-cols-2">
-                <TextField label="收貨日期" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} />
+                <DateTimeField label="收貨日期" value={at} onChange={setAt} />
                 <TextField label="備註" value={note} onChange={(e) => setNote(e.target.value)} />
               </div>
               <div className="flex justify-end">

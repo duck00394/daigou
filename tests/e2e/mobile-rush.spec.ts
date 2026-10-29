@@ -9,7 +9,9 @@ async function add(page: Page, supplier: string, series: string, time: string) {
   await page.getByRole("link", { name: "＋ 新增搶購提醒" }).click();
   await page.getByLabel("代購團").fill(supplier);
   await page.getByLabel("日期").fill(tomorrow());
-  await page.getByLabel("開始時間").fill(time);
+  // 24 小時制：時、分兩個下拉
+  await page.getByLabel("開始時間 時").selectOption(time.slice(0, 2));
+  await page.getByLabel("開始時間 分").selectOption(time.slice(3, 5));
   await page.getByLabel("系列／商品").fill(series);
 }
 
@@ -41,7 +43,10 @@ test("手機：新增、衝突、編輯、取消、刪除搶購提醒", async ({
   // 編輯時間：衝突消失
   await page.goto(firstUrl);
   await page.getByRole("link", { name: "✎ 編輯" }).click();
-  await page.getByLabel("開始時間").fill("21:00");
+  await page.getByLabel("開始時間 時").selectOption("21");
+  await page.getByLabel("開始時間 分").selectOption("00");
+  // 時間選單是 24 小時制，不會出現上午／下午
+  await expect(page.getByLabel("開始時間 時").locator("option")).toHaveCount(24);
   await expect(page.getByTestId("notify-preview")).toContainText("20:55 通知");
   await page.getByRole("button", { name: "儲存" }).click();
   await expect(page.getByTestId("rush-when")).toContainText("21:00");

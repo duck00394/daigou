@@ -239,6 +239,46 @@ export function TextField({ label, hint, className, ...rest }: React.InputHTMLAt
   return <Field label={label} hint={hint} className={className}>{(id) => <input id={id} className={inputCls} {...rest} />}</Field>;
 }
 
+// ── 24 小時制時間：不用手機內建的時間選擇（iPhone 會顯示上午／下午），改成「時」「分」兩個下拉 ──
+const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
+
+/** value／onChange 用 "HH:MM"（00:00～23:59）；空字串＝還沒選 */
+export function TimeInput24({ value, onChange, label, required = true }: { value: string; onChange: (v: string) => void; label: string; required?: boolean }) {
+  const [h, m] = /^\d{2}:\d{2}$/.test(value) ? value.split(":") : ["", ""];
+  const set = (nh: string, nm: string) => onChange(nh === "" && nm === "" ? "" : `${nh || "00"}:${nm || "00"}`);
+  const sel = "min-h-11 w-full rounded-lg border border-line bg-white px-2 text-[15px] num";
+  return (
+    <span className="flex items-center gap-1" data-testid="time24">
+      <select aria-label={`${label} 時`} className={sel} value={h} onChange={(e) => set(e.target.value, m)}>
+        {!required || !h ? <option value="">時</option> : null}
+        {HOURS.map((x) => <option key={x} value={x}>{x}</option>)}
+      </select>
+      <span className="text-ink-2">:</span>
+      <select aria-label={`${label} 分`} className={sel} value={m} onChange={(e) => set(h, e.target.value)}>
+        {!required || !m ? <option value="">分</option> : null}
+        {MINUTES.map((x) => <option key={x} value={x}>{x}</option>)}
+      </select>
+    </span>
+  );
+}
+
+/** value／onChange 用 "YYYY-MM-DDTHH:MM"（跟原本 datetime-local 一樣），時間是 24 小時制 */
+export function DateTimeField({ label, value, onChange, hint, className, clearable = false }: { label: string; value: string; onChange: (v: string) => void; hint?: React.ReactNode; className?: string; clearable?: boolean }) {
+  const [d, t] = value ? value.split("T") : ["", ""];
+  const join = (nd: string, nt: string) => onChange(nd ? `${nd}T${nt || "00:00"}` : "");
+  return (
+    <Field label={label} hint={hint} className={className}>
+      {(id) => (
+        <span className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-1.5">
+          <input id={id} type="date" aria-label={`${label} 日期`} className={inputCls} value={d ?? ""} onChange={(e) => join(e.target.value, t ?? "")} required={!clearable} />
+          <TimeInput24 label={label} value={(t ?? "").slice(0, 5)} onChange={(nt) => join(d || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date()), nt)} required={!clearable} />
+        </span>
+      )}
+    </Field>
+  );
+}
+
 export function SelectField({ label, hint, className, options, ...rest }: React.SelectHTMLAttributes<HTMLSelectElement> & { label: string; hint?: React.ReactNode; options: [string, string][] }) {
   return (
     <Field label={label} hint={hint} className={className}>

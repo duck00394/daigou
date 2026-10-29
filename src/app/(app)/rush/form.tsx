@@ -2,7 +2,7 @@
 // 新增／編輯搶購提醒：代購團、系列可以選既有的或直接打字；日期時間是台灣時間
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, inputCls, notify, useRun } from "@/components/client";
+import { Button, inputCls, notify, useRun, TimeInput24 } from "@/components/client";
 import { rushConflictsAction, saveRushAction } from "@/actions/rush";
 import { taipeiDayLabel, taipeiParts, taipeiToUtc } from "@/lib/taipei";
 
@@ -56,7 +56,7 @@ export function RushFormView({ id, initial, suppliers, series }: { id: string | 
         </label>
         <label className="block">
           <span className={lab}>開始時間</span>
-          <input type="time" className={inputCls} aria-label="開始時間" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} />
+          <TimeInput24 label="開始時間" value={f.time} onChange={(v) => setF({ ...f, time: v })} />
         </label>
       </div>
       <label className="block">

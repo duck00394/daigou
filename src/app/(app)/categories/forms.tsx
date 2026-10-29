@@ -2,7 +2,7 @@
 import { Choice } from "@/components/choice";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Modal, TextField, SelectField, TextArea, useRun, ConfirmButton } from "@/components/client";
+import { Button, Modal, TextField, SelectField, TextArea, useRun, ConfirmButton, DateTimeField } from "@/components/client";
 import { saveCategoryAction, setCategoryActiveAction, saveGroupBuyAction } from "@/actions/catalog";
 import { categoryType, groupBuyStatus } from "@/lib/labels";
 
@@ -105,8 +105,8 @@ export function GroupBuyEditButton({ gb, categories }: { gb?: GB; categories: { 
           <TextField label="代購團名稱" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className="sm:col-span-2" placeholder="例：2026 萬聖節第一團" />
           <SelectField label="主要活動分類" hint="建單時預設的銷售歸屬" value={f.categoryId ?? ""} onChange={(e) => setF({ ...f, categoryId: e.target.value || null })} options={[["", "不指定"], ...categories.map((c) => [c.id, c.name] as [string, string])]} />
           <SelectField label="狀態" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} options={Object.entries(groupBuyStatus).map(([k, v]) => [k, v[0]])} />
-          <TextField label="開團時間" type="datetime-local" value={f.openAt ?? ""} onChange={(e) => setF({ ...f, openAt: e.target.value || null })} />
-          <TextField label="收單截止" type="datetime-local" value={f.closeAt ?? ""} onChange={(e) => setF({ ...f, closeAt: e.target.value || null })} />
+          <DateTimeField label="開團時間" clearable value={f.openAt ?? ""} onChange={(v) => setF({ ...f, openAt: v || null })} />
+          <DateTimeField label="收單截止" clearable value={f.closeAt ?? ""} onChange={(v) => setF({ ...f, closeAt: v || null })} />
           <TextArea label="備註" rows={3} value={f.notes ?? ""} onChange={(e) => setF({ ...f, notes: e.target.value })} className="sm:col-span-2" />
         </div>
       </Modal>

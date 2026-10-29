@@ -2,7 +2,7 @@
 import { SeriesPicker, type SeriesOpt } from "@/components/series-picker";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, TextField, SelectField, TextArea, useRun, inputCls, notify } from "@/components/client";
+import { Button, TextField, SelectField, TextArea, useRun, inputCls, notify, DateTimeField } from "@/components/client";
 import { OperatorPicker, type OperatorOption } from "@/components/operator-picker";
 import { createBatchAction } from "@/actions/ops";
 import { saveSupplierAction } from "@/actions/series";
@@ -107,7 +107,7 @@ export function NewBatchForm({
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <TextField label="匯率（1 日圓 = ? 台幣）" value={f.rate} onChange={(e) => setF({ ...f, rate: e.target.value })} hint="建立後鎖定，之後修改預設匯率不影響這一團" inputMode="decimal" />
-        <TextField label="下單時間" type="datetime-local" value={f.orderedAt} onChange={(e) => setF({ ...f, orderedAt: e.target.value })} />
+        <DateTimeField label="下單時間" value={f.orderedAt} onChange={(v) => setF({ ...f, orderedAt: v })} />
         <TextField label="預計到貨日（選填）" type="date" value={f.expectedAt} onChange={(e) => setF({ ...f, expectedAt: e.target.value })} />
       </div>
       <details className="rounded-lg border border-line-2 px-3 py-2">

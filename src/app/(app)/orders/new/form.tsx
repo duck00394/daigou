@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Modal, TextField, SelectField, TextArea, useRun, useIdemKey, useLeaveGuard, inputCls, notify } from "@/components/client";
+import { Button, Modal, TextField, SelectField, TextArea, useRun, useIdemKey, useLeaveGuard, inputCls, notify, DateTimeField } from "@/components/client";
 import { BuyerPicker, ProductPicker, type BuyerOpt, type ProductOpt } from "@/components/pickers";
 import { createOrderAction, appendItemsAction, buyerWarningsAction } from "@/actions/orders";
 import { saveBuyerAction } from "@/actions/buyers";
@@ -207,7 +207,7 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
         <div className="grid gap-3 sm:grid-cols-4">
           <TextField label="運費" inputMode="numeric" value={shipping} onChange={(e) => setShipping(e.target.value.replace(/\D/g, ""))} />
           <TextField label="整單折扣" inputMode="numeric" value={discount} onChange={(e) => setDiscount(e.target.value)} hint="負數代表加價" />
-          <TextField label="訂單時間" type="datetime-local" value={orderedAt} onChange={(e) => setOrderedAt(e.target.value)} />
+          <DateTimeField label="訂單時間" value={orderedAt} onChange={setOrderedAt} />
           <SelectField label="訂單狀態" value={confirmation} onChange={(e) => setConfirmation(e.target.value as "CONFIRMED" | "PENDING")} options={[["CONFIRMED", "已確認"], ["PENDING", "待確認"]]} hint="待確認的訂單不計入有效統計" />
         </div>
       )}
