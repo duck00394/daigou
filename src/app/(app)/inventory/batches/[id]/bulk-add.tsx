@@ -51,6 +51,15 @@ type Col = (typeof COLS)[number];
 
 let seq = 0;
 const newKey = () => `r${Date.now().toString(36)}${(seq++).toString(36)}`;
+/** 同一個品項的列排在一起（照品項第一次出現的順序），畫面分組才不會斷成兩段 */
+function regroup(rs: RowState[]) {
+  const first = new Map<string, number>();
+  rs.forEach((r, i) => {
+    const k = r.typeId ?? "\u0000";
+    if (!first.has(k)) first.set(k, i);
+  });
+  return rs.map((r, i) => ({ r, i })).sort((a, b) => first.get(a.r.typeId ?? "\u0000")! - first.get(b.r.typeId ?? "\u0000")! || a.i - b.i).map((x) => x.r);
+}
 const fmtAgo = (at: number) => {
   const m = Math.max(0, Math.round((Date.now() - at) / 60000));
   return m < 1 ? "剛剛" : m < 60 ? `${m} 分鐘前` : m < 1440 ? `${Math.round(m / 60)} 小時前` : `${Math.round(m / 1440)} 天前`;
@@ -366,7 +375,12 @@ export function BulkAddGrid({
   }
 
   // 改了某列：這列就固定在現在選的品項（之後換品項也不會跑掉）
-  const update = (key: string, patch: Partial<RowState>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, typeId: r.typeId ?? typeId, ...patch, serverError: undefined } : r)));
+  const update = (key: string, patch: Partial<RowState>) =>
+    setRows((rs) => {
+      const pinning = rs.some((r) => r.key === key && r.typeId === undefined);
+      const next = rs.map((r) => (r.key === key ? { ...r, typeId: r.typeId ?? typeId, ...patch, serverError: undefined } : r));
+      return pinning ? regroup(next) : next;
+    });
   const addRow = () => setRows((rs) => [...rs, blankRow(rs[rs.length - 1]?.currency ?? supplierCurrency)]);
   const removeRow = (key: string) => setRows((rs) => (rs.length > 1 ? rs.filter((r) => r.key !== key) : [blankRow(supplierCurrency)]));
   const duplicateRow = (key: string) =>
@@ -544,7 +558,7 @@ export function BulkAddGrid({
       const d = { created: 0, already: 0, failed: 0, results: [] as Result[] };
       for (const tid of tids) {
         const part = payload.filter((x) => x.tid === tid).map(({ tid: _t, ...x }) => x); // eslint-disable-line @typescript-eslint/no-unused-vars
-        const res = await bulkAddAction({ batchId: targetId, seriesId, productTypeId: tid || null, submissionKey: tids.length > 1 ? `${idem.key}:${tid || "none"}` : idem.key, rows: part, categoryId: cat?.id ?? null });
+        const res = await bulkAddAction({ batchId: targetId, seriesId, productTypeId: tid || null, submissionKey: `${idem.key}:${tid || "none"}`, rows: part, categoryId: cat?.id ?? null });
         if (!res.ok) {
           notify(res.error);
           if (!d.results.length) return;
@@ -858,7 +872,7 @@ export function BulkAddGrid({
                     update(r.key, { characterId: v, newName: v === "__new__" ? r.newName : "", qty: r.qty || (v ? "1" : "") });
                     if (v && v !== "__new__" && !r.unitCost && seriesId) {
                       update(r.key, { characterId: v, newName: "", loading: true });
-                      const d = await rowDefaultsAction({ seriesId, productTypeId: typeId || null, supplierId, categoryId: cat?.id ?? null, characterIds: [v], specs: { [v]: r.spec || null } });
+                      const d = await rowDefaultsAction({ seriesId, productTypeId: (r.typeId ?? typeId) || null, supplierId, categoryId: cat?.id ?? null, characterIds: [v], specs: { [v]: r.spec || null } });
                       const df = d.ok ? d.data[0] : null;
                       setRows((rs) => rs.map((x) => (x.key === r.key ? { ...x, loading: false } : x)));
                       // 參考價回來時，只補在使用者還沒動過、也還沒填的欄位
@@ -1026,7 +1040,8 @@ export function BulkAddGrid({
           className="flex flex-wrap items-end gap-2"
           onSubmit={async (e) => {
             e.preventDefault();
-            const items = rows.filter((r) => r.characterId && r.characterId !== "__new__").map((r) => ({ characterId: r.characterId, spec: r.spec.trim() || null }));
+            // 範本只存現在選的品項那一組（一次買好幾個品項時不混在一起）
+            const items = rows.filter((r) => r.characterId && r.characterId !== "__new__" && inCurrentType(r)).map((r) => ({ characterId: r.characterId, spec: r.spec.trim() || null }));
             if (!items.length) return notify("表格中沒有已存在的角色可以存成範本（新角色請先建立）");
             const r = await saveTemplateAction({ seriesId, name: tplName, productTypeId: typeId || null, items });
             if (!r.ok) return notify(r.error);

@@ -49,7 +49,8 @@ export async function stockLeft(t: Tx, ids: string[], owner: string | null) {
 /** 首頁待辦：客人預訂超過庫存（庫存欄變負的）的商品；只看有客人預訂還沒給的商品 */
 export async function shortProducts(t: Tx, owner: string | null) {
   const items = await t.orderItem.findMany({
-    where: { order: { confirmation: "CONFIRMED" } },
+    // 已完成（全部出貨、收齊）和已取消的訂單不會有還沒給的，先在資料庫篩掉
+    where: { order: { confirmation: "CONFIRMED", statusCache: { notIn: ["COMPLETED", "CANCELLED"] } } },
     select: { productId: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true },
   });
   const ids = [...new Set(items.filter((i) => i.qty - i.cancelledQtyCache - i.shippedQtyCache > 0).map((i) => i.productId))];

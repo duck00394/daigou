@@ -44,6 +44,14 @@ test("手機：一次買兩個品項＋已付", async ({ page }) => {
     await expect(groups.nth(0)).toContainText("2 列・3 件");
     await expect(groups.nth(1)).toContainText(`S娃 ${tag}`);
     await page.screenshot({ path: "test-results/mobile_multi_type.png", fullPage: true });
+    // 切回吊娃、按「新增一列」再填：這一列會排進吊娃那一組，不會在 S 娃後面另起一段
+    await typeSel.selectOption({ label: "吊娃" });
+    await page.getByRole("button", { name: "新增一列" }).click();
+    await row(4).getByLabel("單價").fill("650");
+    await expect(groups).toHaveCount(2);
+    await expect(groups.nth(0)).toContainText("3 列");
+    await page.getByRole("button", { name: "刪除第 3 列" }).click(); // 剛剛那一列（排進吊娃後是第 3 列）
+    await expect(groups.nth(0)).toContainText("2 列・3 件");
 
     await newSupplierPick(page, `多品項代購 ${tag}`);
     // 總額＝650×3＋380＋運費 38＝2,368；已付打太多會提醒

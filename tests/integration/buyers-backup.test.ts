@@ -131,9 +131,13 @@ describe("備份與還原", () => {
     await tx((t) => mergeBuyers(t, actor, dup.id, s.b2.id));
     await tx((t) => addBuyerAlias(t, actor, s.b3.id, "王王"));
     // 品項預設售價、常用運費、系列另外加的角色也要備份到
-    const ty = await prisma.productType.create({ data: { name: "備份吊娃" } });
-    await prisma.categoryTypePrice.create({ data: { categoryId: s.halloween.id, productTypeId: ty.id, salePriceTwd: 650 } });
+    // 後來加的欄位：系列專屬品項、一整套、採購時不列共用品項、對單問過的日期
+    const ty = await prisma.productType.create({ data: { name: "備份吊娃", seriesOnly: true } });
     const ch = await prisma.character.create({ data: { name: "備份角色" } });
+    await prisma.categoryTypePrice.create({ data: { categoryId: s.halloween.id, productTypeId: ty.id, salePriceTwd: 650, setCharacterIds: [ch.id] } });
+    await prisma.category.update({ where: { id: s.halloween.id }, data: { hideSharedTypes: true } });
+    const askedAt = new Date("2026-10-22T03:00:00Z");
+    const askedBatch = await prisma.purchaseBatch.create({ data: { code: "B-BACKUP-1", name: "備份團", rateMicro: 210000, askedAt } });
     await prisma.categoryCharacter.create({ data: { categoryId: s.halloween.id, characterId: ch.id } });
 
     const backup = JSON.parse(JSON.stringify(await createBackup()));
@@ -153,6 +157,10 @@ describe("備份與還原", () => {
     expect(await prisma.inventoryMovement.count()).toBe(backup.counts.inventoryMovement);
     expect(await prisma.categoryTypePrice.count()).toBe(1);
     expect(await prisma.categoryCharacter.count()).toBe(1);
+    expect((await prisma.productType.findUniqueOrThrow({ where: { id: ty.id } })).seriesOnly).toBe(true);
+    expect((await prisma.categoryTypePrice.findFirstOrThrow()).setCharacterIds).toEqual([ch.id]);
+    expect((await prisma.category.findUniqueOrThrow({ where: { id: s.halloween.id } })).hideSharedTypes).toBe(true);
+    expect((await prisma.purchaseBatch.findUniqueOrThrow({ where: { id: askedBatch.id } })).askedAt?.toISOString()).toBe(askedAt.toISOString());
     // 還原後流水號繼續遞增，不會撞號
     const next = await tx((t) => createOrder(t, actor, { buyerId: s.b1.id, items: [{ productId: s.p2.id, qty: 1 }] }));
     expect(next.orderNo).not.toBe(o.orderNo);
