@@ -5,6 +5,7 @@ import type { RowDefault } from "@/server/services/series";
 // 桌面：可鍵盤移動、貼上多格（從 Excel 複製）；手機：每列顯示為一張卡片。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button, Modal, inputCls, notify, useIdemKey, useLeaveGuard, useToast } from "@/components/client";
 import {
   addCategoryCharacterAction,
@@ -185,6 +186,7 @@ export function BulkAddGrid({
   };
   // 系列目錄裡這個品項設的角色（例：D賞 → 咻咻、拉麵）：有設就只列這些，其他角色收起來
   const [itemChars, setItemChars] = useState<Opt[] | null>(null);
+  const [seriesChars, setSeriesChars] = useState<Opt[]>([]);
   const [showOthers, setShowOthers] = useState(false);
   const [itemRev, setItemRev] = useState(0);
   useEffect(() => {
@@ -192,15 +194,20 @@ export function BulkAddGrid({
     setShowOthers(false);
     if (!cat?.id || !typeId) {
       setItemChars(null);
+      setSeriesChars([]);
       return;
     }
-    itemCharactersAction(cat.id, typeId).then((r) => live && setItemChars(r.ok ? r.data : null));
+    itemCharactersAction(cat.id, typeId).then((r) => {
+      if (!live) return;
+      setItemChars(r.ok ? r.data.item : null);
+      setSeriesChars(r.ok ? r.data.series : []);
+    });
     return () => {
       live = false;
     };
   }, [cat?.id, typeId, itemRev]);
   // 角色清單（IP＋這個系列加的）再加上系列目錄這個品項有的（萬一有不在清單裡的）
-  const rosterAll = useMemo(() => [...roster, ...(itemChars ?? []).filter((c) => !roster.some((x) => x.id === c.id))], [roster, itemChars]);
+  const rosterAll = useMemo(() => [...roster, ...[...(itemChars ?? []), ...seriesChars].filter((c, i, l) => !roster.some((x) => x.id === c.id) && l.findIndex((y) => y.id === c.id) === i)], [roster, itemChars, seriesChars]);
   const dropDraft = () => {
     try {
       localStorage.removeItem(draftKey);
@@ -515,9 +522,11 @@ export function BulkAddGrid({
   const rosterSelected = new Set(rows.filter((r) => !r.spec.trim()).map((r) => r.characterId));
   const hasItemChars = !!itemChars && itemChars.length > 0;
   const typeName = types.find((x) => x.id === typeId)?.name ?? "";
-  // 上面：這個品項的角色＋已經點了的其他角色；下面「其他角色」：其餘的
-  const mainChips: Opt[] = hasItemChars ? [...itemChars!, ...rosterAll.filter((c) => rosterSelected.has(c.id) && !itemChars!.some((x) => x.id === c.id))] : roster;
-  const otherChips: Opt[] = hasItemChars ? rosterAll.filter((c) => !mainChips.some((x) => x.id === c.id)) : [];
+  // 上面先列：這個品項設的角色；品項還沒設就列這個系列（其他品項）用到的角色；都沒有才列全部
+  const focus: Opt[] | null = hasItemChars ? itemChars! : seriesChars.length ? seriesChars : null;
+  // 上面：focus＋已經點了的其他角色；下面「其他角色」：其餘的
+  const mainChips: Opt[] = focus ? [...focus, ...rosterAll.filter((c) => rosterSelected.has(c.id) && !focus.some((x) => x.id === c.id))] : roster;
+  const otherChips: Opt[] = focus ? rosterAll.filter((c) => !mainChips.some((x) => x.id === c.id)) : [];
 
   return (
     <div className="space-y-4">
@@ -629,6 +638,11 @@ export function BulkAddGrid({
               </span>
             )}
           </div>
+          {cat && typeId && !hasItemChars && (
+            <p className="mt-1.5 text-[12.5px] text-mute" data-testid="item-chars-hint">
+              {typeName}還沒設角色{seriesChars.length ? "，先列這個系列用到的角色" : ""}。<Link href={`/catalog?open=${cat.id}`} className="text-ai underline">到系列目錄設定 ›</Link>
+            </p>
+          )}
           {otherChips.length > 0 && (
             <div className="mt-2">
               <button type="button" className="text-[13px] text-ai" aria-expanded={showOthers} onClick={() => setShowOthers((x) => !x)} data-testid="other-chars-toggle">
@@ -650,8 +664,8 @@ export function BulkAddGrid({
             <TypeSetLine categoryId={cat.id} catName={cat.name} typeId={typeId} typeName={types.find((x) => x.id === typeId)!.name} roster={rosterAll} selected={[...rosterSelected]} itemChars={itemChars ?? []} />
           )}
           <div className="mt-3 flex flex-wrap gap-2">
-            {hasItemChars ? (
-              <Button small onClick={() => addCharacters(itemChars!.map((c) => ({ characterId: c.id })))}>加入 {typeName} 全部角色（{itemChars!.length}）</Button>
+            {focus ? (
+              <Button small onClick={() => addCharacters(focus.map((c) => ({ characterId: c.id })))}>{hasItemChars ? `加入 ${typeName} 全部角色（${focus.length}）` : `加入這個系列的角色（${focus.length}）`}</Button>
             ) : (
               roster.length > 0 && <Button small onClick={() => addCharacters(roster.map((c) => ({ characterId: c.id })))}>加入全部角色</Button>
             )}

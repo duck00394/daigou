@@ -42,6 +42,18 @@ test("手機：一整套設定與庫存套數", async ({ page }) => {
   await page.getByTestId("other-chars-toggle").click();
   await expect(page.getByTestId("other-chars").getByRole("button", { name: "＋ 兔兔" })).toBeVisible();
   await page.screenshot({ path: "test-results/mobile_item_chars.png" });
+  // 換一個這個系列還沒設角色的品項：先列這個系列用到的角色（吉伊、小八），其他收起來，並提示去哪裡設
+  const typeSel = page.getByLabel("品項", { exact: true });
+  await typeSel.selectOption("__new__");
+  await page.getByLabel("新品項名稱").fill(`E2E 品項 ${tag}`);
+  await page.getByRole("button", { name: "建立", exact: true }).click();
+  await expect(typeSel).toHaveValue(/.+/);
+  await expect(page.getByTestId("item-chars-hint")).toContainText("先列這個系列用到的角色");
+  await expect(page.getByTestId("item-chars-hint").getByRole("link", { name: "到系列目錄設定 ›" })).toHaveAttribute("href", /\/catalog\?open=/);
+  await expect(chips.getByRole("button", { name: "＋ 吉伊" })).toBeVisible();
+  await expect(chips.getByRole("button", { name: "＋ 兔兔" })).toHaveCount(0);
+  await page.screenshot({ path: "test-results/mobile_series_chars.png" });
+  await typeSel.selectOption({ label: "吊娃" });
   await page.getByRole("link", { name: "看這一團" }).click();
   await expect(page).toHaveURL(/\/inventory\/batches\//);
   await page.goto(page.url().replace(/\/inventory\/batches\//, "/reconcile/").replace(/[?#].*$/, ""));
