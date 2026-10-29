@@ -74,7 +74,7 @@ export type ProfitBuyer = { id: string; name: string; channel: string | null; qt
 export async function preorderProfit(t: Tx, opts: { owner?: string | null } = {}) {
   const rows = await t.orderItem.findMany({
     where: { order: { confirmation: "CONFIRMED", statusCache: { not: "CANCELLED" } } },
-    select: { ownerKey: true, productId: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true, unitPrice: true, product: { select: { name: true } }, order: { select: { salesChannel: true, buyer: { select: { id: true, name: true, salesChannel: true } } } } },
+    select: { ownerKey: true, productId: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true, unitPrice: true, category: { select: { id: true, name: true } }, product: { select: { name: true, categories: { select: { category: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" }, take: 1 } } }, order: { select: { salesChannel: true, buyer: { select: { id: true, name: true, salesChannel: true } } } } },
   });
   const openAll = rows.map((r) => ({ ...r, open: Math.max(0, r.qty - r.cancelledQtyCache - r.shippedQtyCache) })).filter((r) => r.open > 0);
   // 看某個人：只算跟他訂的＋合資、未指定的；還沒分是跟誰訂的另外算件數（提醒去分）
@@ -87,6 +87,8 @@ export async function preorderProfit(t: Tx, opts: { owner?: string | null } = {}
     : await preorderCosts(t, open.map((r) => r.productId));
   const buyers = new Map<string, ProfitBuyer>();
   const products = new Map<string, ProfitLine>();
+  // 依系列：明細有記銷售歸屬的系列就用它，沒有就用商品的第一個系列
+  const series = new Map<string, { id: string | null; name: string; qty: number; revenue: number; cost: number; profit: number; uncosted: number; tentative: boolean }>();
   const total = { qty: 0, revenue: 0, cost: 0, costedRevenue: 0, uncosted: 0, tentative: false };
   for (const r of open) {
     const c = costs.get(r.productId);
@@ -115,6 +117,18 @@ export async function preorderProfit(t: Tx, opts: { owner?: string | null } = {}
     p.revenue += revenue;
     if (p.cost !== null && cost !== null) p.cost += cost;
     products.set(r.productId, p);
+    const sc = r.category ?? r.product.categories[0]?.category ?? null;
+    const sk = sc?.id ?? "-";
+    const sg = series.get(sk) ?? { id: sc?.id ?? null, name: sc?.name ?? "沒分系列", qty: 0, revenue: 0, cost: 0, profit: 0, uncosted: 0, tentative: false };
+    sg.qty += r.open;
+    sg.revenue += revenue;
+    if (cost === null) sg.uncosted += r.open;
+    else {
+      sg.cost += cost;
+      sg.profit += revenue - cost;
+      if (c!.tentative) sg.tentative = true;
+    }
+    series.set(sk, sg);
   }
   return {
     ...total,
@@ -122,6 +136,7 @@ export async function preorderProfit(t: Tx, opts: { owner?: string | null } = {}
     profit: total.costedRevenue - total.cost,
     buyers: [...buyers.values()].sort((a, b) => b.revenue - a.revenue),
     products: [...products.values()].sort((a, b) => b.revenue - a.revenue),
+    series: [...series.values()].sort((a, b) => b.profit - a.profit || b.revenue - a.revenue),
   };
 }
 

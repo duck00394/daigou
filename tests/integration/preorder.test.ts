@@ -75,6 +75,13 @@ describe("預購成本與預估可賺", () => {
     expect(p.profit).toBe(400); // 只算有成本的：1000 − 600
     expect(p.uncosted).toBe(2);
     expect(p.buyers.map((x) => [x.name, x.profit, x.uncosted])).toEqual([["小美", 400, 2]]);
+    // 依系列看：p1、p2 算萬聖節（p1 兩個系列，沒指定就用第一個）、p3 算上海限定；加起來等於總數
+    expect(p.series.map((x) => [x.name, x.qty, x.revenue, x.cost, x.profit, x.uncosted])).toEqual([
+      ["萬聖節", 3, 1600, 600, 400, 1],
+      ["上海限定", 1, 450, 0, 0, 1],
+    ]);
+    expect(p.series.reduce((a, x) => a + x.profit, 0)).toBe(p.profit);
+    expect(p.series.reduce((a, x) => a + x.revenue, 0)).toBe(p.revenue);
   });
 
   it("系列預估可賺：已賣、客人預訂、還沒人訂的（照售價）", async () => {

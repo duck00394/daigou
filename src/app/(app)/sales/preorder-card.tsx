@@ -1,4 +1,5 @@
 // 客人預訂（還沒給的）預估可賺：預訂金額 − 預購平均成本
+import Link from "next/link";
 import { formatTwd } from "@/lib/money";
 import type { preorderProfit } from "@/server/services/preorder";
 import { AssignAll } from "./assign";
@@ -51,6 +52,40 @@ export function PreorderCard({ p, who = null, operators = [], acting = "" }: { p
             </li>
           ))}
         </ul>
+      </details>
+      <details className="group border-t border-line-2" data-testid="pre-series-box">
+        <summary className="cursor-pointer list-none px-4 py-2.5 text-[14px] text-ai [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition-transform group-open:rotate-90">▸</span>依系列看</summary>
+        <div className="border-t border-line-2 overflow-x-auto">
+          <table className="w-full text-[14px]" data-testid="pre-series">
+            <thead>
+              <tr className="text-[12px] text-mute">
+                <th className="px-4 py-2 text-left font-medium">系列</th>
+                <th className="hidden px-2 py-2 text-right font-medium md:table-cell">件數</th>
+                <th className="px-2 py-2 text-right font-medium">預訂金額</th>
+                <th className="hidden px-2 py-2 text-right font-medium md:table-cell">成本</th>
+                <th className="px-4 py-2 text-right font-medium">預估可賺</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line-2 border-t border-line-2">
+              {p.series.map((x) => (
+                <tr key={x.id ?? "-"} data-name={x.name}>
+                  <td className="px-4 py-2">{x.id ? <Link href={`/categories/${x.id}`} className="hover:underline">{x.name}</Link> : x.name}<span className="text-[12px] text-mute md:hidden">・{x.qty} 件</span>{x.uncosted > 0 && <span className="block text-[11px] text-warn">{x.uncosted} 件沒成本</span>}</td>
+                  <td className="num hidden px-2 py-2 text-right md:table-cell">{x.qty}</td>
+                  <td className="num px-2 py-2 text-right">{formatTwd(x.revenue)}</td>
+                  <td className="num hidden px-2 py-2 text-right md:table-cell">{formatTwd(x.cost)}{x.tentative && <span className="text-warn">*</span>}</td>
+                  <td className="px-4 py-2 text-right" data-k="profit">{money(x.profit, true)}</td>
+                </tr>
+              ))}
+              <tr className="bg-[#fafbfc] font-semibold">
+                <td className="px-4 py-2">合計</td>
+                <td className="num hidden px-2 py-2 text-right md:table-cell">{p.qty}</td>
+                <td className="num px-2 py-2 text-right">{formatTwd(p.revenue)}</td>
+                <td className="num hidden px-2 py-2 text-right md:table-cell">{formatTwd(p.cost)}{p.tentative && <span className="text-warn">*</span>}</td>
+                <td className="px-4 py-2 text-right" data-testid="pre-series-total">{money(p.profit, true)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </details>
     </section>
   );

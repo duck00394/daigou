@@ -168,6 +168,11 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await expect(pre).toBeVisible();
   await pre.getByText("看每位客人").click();
   await expect(pre.getByTestId("pre-buyers").locator(`[data-name="小美${tag}"]`)).toContainText("1 件");
+  // 依系列看：這個系列有一列，合計等於上面的預估可賺
+  await pre.getByText("依系列看").click();
+  await expect(pre.getByTestId("pre-series").locator(`tr[data-name="${series}"]`)).toContainText("1 件");
+  await expect(pre.getByTestId("pre-series-total")).toHaveText((await pre.getByTestId("pre-profit").textContent()) ?? "");
+  await pre.screenshot({ path: "test-results/mobile_pre_series.png" });
 
   // 庫存：一打開不列，選好按查看才列；種類 › 系列 › 品項 › 角色
   await page.goto("/inventory?tab=stock");
