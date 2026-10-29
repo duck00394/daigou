@@ -3,7 +3,7 @@ import { SeriesPicker, type SeriesOpt } from "@/components/series-picker";
 import type { RowDefault } from "@/server/services/series";
 // 批次新增系列商品：同一張表格填寫多個角色的單價與數量，一次建立。
 // 桌面：可鍵盤移動、貼上多格（從 Excel 複製）；手機：每列顯示為一張卡片。
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button, Modal, inputCls, notify, useIdemKey, useLeaveGuard, useToast } from "@/components/client";
@@ -17,8 +17,11 @@ import {
   saveTemplateAction,
   seriesRosterAction,
   itemCharactersAction,
+  hideSharedAction,
 } from "@/actions/series";
 import { formatJpy, formatTwd, jpyToTwd } from "@/lib/money";
+import { toDateTimeInput } from "@/lib/labels";
+import { addSupplierPaymentAction } from "@/actions/operators";
 import { TypeSetLine } from "./type-set";
 
 type Currency = "JPY" | "TWD";
@@ -39,6 +42,7 @@ type RowState = {
   loading?: boolean; // 正在讀取參考價：價格欄暫停輸入，避免讀到的數字和正在打的字混在一起
   more?: boolean; // 手機：展開規格、幣別、想賣價
   ownerId?: string; // 合資團：這件是誰的（沒設＝跟著「全部設成」）
+  typeId?: string; // 這列是哪個品項（同一團一次買吊娃＋S 娃）；沒設＝跟著上面選的品項
 };
 type Result = { rowKey: string; ok: boolean; already?: boolean; error?: string; productName?: string };
 
@@ -92,7 +96,10 @@ export function BulkAddGrid({
   initialSeriesId = null,
   initialTypeId = null,
   joint = null,
+  pay = null,
 }: {
+  /** 儲存列旁邊填「已付」：存好後一起記成這團的付款（payer＝誰付的；extraTwd＝運費等，算總額用） */
+  pay?: { payer: string | null; extraTwd: number } | null;
   /** 合資團：每一列可以選「誰的」；pct＝一起的怎麼分（用來算各人小計） */
   joint?: { ops: Opt[]; pct: Record<string, number> } | null;
   /** 預設帶上次用的 IP／系列、種類 */
@@ -141,6 +148,10 @@ export function BulkAddGrid({
   const [showIp, setShowIp] = useState(false);
   const [newType, setNewType] = useState<string | null>(null);
   const idem = useIdemKey();
+  // 已付（台幣）：存好後一起記成這團的付款
+  const [paid, setPaid] = useState("");
+  const paidAmount = () => Number(paid.replace(/[^\d]/g, "")) || 0;
+  const nowLocal = () => toDateTimeInput(new Date());
   // 還有沒存的採購列：離開前先問
   useLeaveGuard(rows.some((r) => !isBlank(r)) && !busy);
   const toast = useToast();
@@ -167,7 +178,7 @@ export function BulkAddGrid({
   }, [draftKey]);
   useEffect(() => {
     if (draftReady.current !== draftKey || draft) return; // 還沒決定要不要帶回舊草稿前，不覆蓋它
-    const keep = rows.filter((r) => !isBlank(r)).map(({ key, characterId, newName, spec, unitCost, currency, qty, salePrice, ownerId }) => ({ key, characterId, newName, spec, unitCost, currency, qty, salePrice, ownerId, hint: "" }));
+    const keep = rows.filter((r) => !isBlank(r)).map(({ key, characterId, newName, spec, unitCost, currency, qty, salePrice, ownerId, typeId: t }) => ({ key, characterId, newName, spec, unitCost, currency, qty, salePrice, ownerId, typeId: t ?? typeId, hint: "" }));
     const typeName = types.find((x) => x.id === typeId)?.name ?? "";
     const t = setTimeout(() => {
       try {
@@ -185,12 +196,24 @@ export function BulkAddGrid({
     setRows(draft.rows.map((r) => ({ ...r, key: newKey(), touched: true })));
     setDraft(null);
   };
+  // 這個系列設成「採購時不列共用品項」（例：一番賞只有 A賞、B賞…）
+  const [hideShared, setHideShared] = useState<{ cat: string; hide: boolean } | null>(null);
+  useEffect(() => {
+    let live = true;
+    if (!cat?.id) return setHideShared(null);
+    const id = cat.id;
+    hideSharedAction(id).then((r) => live && setHideShared({ cat: id, hide: r.ok ? r.data : false }));
+    return () => {
+      live = false;
+    };
+  }, [cat?.id]);
+  const hide = !!cat && hideShared?.cat === cat.id && hideShared.hide;
   const typesHere = types.filter((x) => !!x.only && !!cat && x.only.includes(cat.id));
-  const typesShared = types.filter((x) => !x.only);
-  // 換了系列：原本選的是別的系列專屬的品項（例：A賞）就清掉，不要帶到不相干的系列
+  const typesShared = hide ? [] : types.filter((x) => !x.only);
+  // 換了系列：原本選的是別的系列專屬的品項（例：A賞），或這個系列不列的共用品項，就清掉
   useEffect(() => {
     if (typeId && !typesHere.some((x) => x.id === typeId) && !typesShared.some((x) => x.id === typeId)) setTypeId("");
-  }, [cat?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cat?.id, hide]); // eslint-disable-line react-hooks/exhaustive-deps
   // 系列目錄裡這個品項設的角色（例：D賞 → 咻咻、拉麵）：有設就只列這些，其他角色收起來
   const [itemChars, setItemChars] = useState<Opt[] | null>(null);
   const [seriesChars, setSeriesChars] = useState<Opt[]>([]);
@@ -253,22 +276,31 @@ export function BulkAddGrid({
     const specs: Record<string, string | null> = {};
     items.forEach((i) => (specs[i.characterId] = i.spec ?? null));
     // 選了角色，數量先帶 1（買多件再改）
-    const pending = items.map((i) => ({ ...blankRow(supplierCurrency), characterId: i.characterId, spec: i.spec ?? "", qty: "1", hint: "讀取參考價…", loading: true }));
+    const tkey = tid ?? "";
+    const pending = items.map((i) => ({ ...blankRow(supplierCurrency), characterId: i.characterId, spec: i.spec ?? "", qty: "1", hint: "讀取參考價…", loading: true, typeId: tkey }));
     const placed = new Map<string, string>(); // characterId|spec → row key
     setRows((rs) => {
       const kept = replace ? [] : rs.filter((r) => !isBlank(r));
-      const existing = new Set(kept.map((r) => `${r.characterId}|${r.spec.trim()}`));
+      const tOf = (r: RowState) => r.typeId ?? tkey;
+      // 同一個品項裡同一角色不重複；不同品項（吊娃、S 娃）可以各有一列
+      const existing = new Set(kept.map((r) => `${tOf(r)}|${r.characterId}|${r.spec.trim()}`));
       const out = [...kept];
       for (const n of pending) {
-        const k = `${n.characterId}|${n.spec.trim()}`;
+        const k = `${tkey}|${n.characterId}|${n.spec.trim()}`;
         if (existing.has(k)) continue;
         existing.add(k);
         const orphan = out.findIndex((r) => !r.characterId && !r.newName.trim());
         if (orphan >= 0) {
-          out[orphan] = { ...out[orphan], characterId: n.characterId, spec: out[orphan].spec || n.spec, qty: out[orphan].qty || "1", hint: n.hint, loading: !out[orphan].unitCost };
+          out[orphan] = { ...out[orphan], typeId: tkey, characterId: n.characterId, spec: out[orphan].spec || n.spec, qty: out[orphan].qty || "1", hint: n.hint, loading: !out[orphan].unitCost };
           placed.set(k, out[orphan].key);
         } else {
-          out.push(n);
+          // 加在同一個品項那一組的最後面（畫面照品項分組）
+          let at = -1;
+          out.forEach((r, i) => {
+            if (tOf(r) === tkey) at = i;
+          });
+          if (at >= 0) out.splice(at + 1, 0, n);
+          else out.push(n);
           placed.set(k, n.key);
         }
       }
@@ -285,7 +317,7 @@ export function BulkAddGrid({
       rs.map((r) => {
         const isOurs = [...placed.values()].includes(r.key);
         if (!isOurs) return r;
-        const df = defaults.find((x) => x.characterId === r.characterId);
+        const df = defaults.find((x) => x.characterId === r.characterId && (x.spec ?? null) === (r.spec.trim() || null)) ?? defaults.find((x) => x.characterId === r.characterId);
         if (!df || r.touched) return { ...r, loading: false, hint: r.hint === "讀取參考價…" ? "" : r.hint };
         return {
           ...r,
@@ -300,9 +332,11 @@ export function BulkAddGrid({
     );
   }
 
+  const inCurrentType = (r: RowState) => (r.typeId ?? typeId) === typeId;
   function toggleCharacter(cid: string) {
-    const has = rows.some((r) => r.characterId === cid && !r.spec.trim());
-    if (has) setRows((rs) => (rs.length > 1 ? rs.filter((r) => !(r.characterId === cid && !r.spec.trim())) : [blankRow(supplierCurrency)]));
+    const mine = (r: RowState) => r.characterId === cid && !r.spec.trim() && inCurrentType(r);
+    const has = rows.some(mine);
+    if (has) setRows((rs) => (rs.length > 1 ? rs.filter((r) => !mine(r)) : [blankRow(supplierCurrency)]));
     else addCharacters([{ characterId: cid }]);
   }
 
@@ -314,11 +348,11 @@ export function BulkAddGrid({
     const has = rosterAll.find((c) => c.name === name);
     if (has) {
       setNewChip(null);
-      if (!rows.some((r) => r.characterId === has.id && !r.spec.trim())) addCharacters([{ characterId: has.id }]);
+      if (!rows.some((r) => r.characterId === has.id && !r.spec.trim() && inCurrentType(r))) addCharacters([{ characterId: has.id }]);
       return;
     }
     if (!cat) {
-      setRows((rs) => [...rs.filter((r) => !isBlank(r)), { ...blankRow(supplierCurrency), characterId: "__new__", newName: name, qty: "1" }]);
+      setRows((rs) => [...rs.filter((r) => !isBlank(r)), { ...blankRow(supplierCurrency), characterId: "__new__", newName: name, qty: "1", typeId }]);
       setNewChip(null);
       return;
     }
@@ -331,7 +365,8 @@ export function BulkAddGrid({
     addCharacters([{ characterId: r.data.id }]);
   }
 
-  const update = (key: string, patch: Partial<RowState>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch, serverError: undefined } : r)));
+  // 改了某列：這列就固定在現在選的品項（之後換品項也不會跑掉）
+  const update = (key: string, patch: Partial<RowState>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, typeId: r.typeId ?? typeId, ...patch, serverError: undefined } : r)));
   const addRow = () => setRows((rs) => [...rs, blankRow(rs[rs.length - 1]?.currency ?? supplierCurrency)]);
   const removeRow = (key: string) => setRows((rs) => (rs.length > 1 ? rs.filter((r) => r.key !== key) : [blankRow(supplierCurrency)]));
   const duplicateRow = (key: string) =>
@@ -431,6 +466,20 @@ export function BulkAddGrid({
     return joint.ops.map((o) => `${o.name} ${formatTwd(Math.round(by.get(o.id)! + (shared * (joint.pct[o.id] ?? 0)) / tot))}`).join("・") + (shared ? `（含一起的 ${formatTwd(shared)}）` : "");
   }, [eff, joint, ownerAll, rateMicro]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 表格裡有幾個品項：兩個以上才分組顯示
+  const groupInfo = useMemo(() => {
+    const m = new Map<string, { name: string; rows: number; qty: number }>();
+    for (const r of rows) {
+      if (isBlank(r)) continue;
+      const tid = r.typeId ?? typeId;
+      const g = m.get(tid) ?? { name: types.find((x) => x.id === tid)?.name ?? "", rows: 0, qty: 0 };
+      g.rows++;
+      g.qty += Number(toInt(r.qty)) || 0;
+      m.set(tid, g);
+    }
+    return m;
+  }, [rows, typeId, types]);
+  const multiType = groupInfo.size > 1;
   const stats = useMemo(() => {
     let valid = 0;
     let qty = 0;
@@ -452,6 +501,8 @@ export function BulkAddGrid({
     }
     return { valid, invalid, qty, jpy, twd, approxTwd: twd + jpyToTwd(jpy, rateMicro) };
   }, [eff, rateMicro]);
+  const grandTwd = Math.round(stats.approxTwd + (pay?.extraTwd ?? 0));
+  const overpaid = !!pay && paidAmount() > grandTwd && grandTwd > 0;
 
   // 同次送出中的重複角色與規格
   const dupKeys = useMemo(() => {
@@ -461,20 +512,21 @@ export function BulkAddGrid({
       if (isBlank(r)) return;
       const name = r.characterId === "__new__" ? r.newName.trim() : nameOf(r.characterId);
       if (!name) return;
-      const k = `${name}|${r.spec.trim()}`;
+      const k = `${r.typeId ?? typeId}|${name}|${r.spec.trim()}`;
       if (seen.has(k)) dup.add(r.key);
       else seen.set(k, 1);
     });
     return dup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, rosterAll]);
+  }, [rows, rosterAll, typeId]);
 
   async function submit() {
     setBusy(true);
     try {
-      const payload = eff
-        .filter((r) => !isBlank(r))
+      const payloadRows = eff.filter((r) => !isBlank(r));
+      const payload = payloadRows
         .map((r) => ({
+          tid: r.typeId ?? typeId,
           rowKey: r.key,
           characterId: r.characterId && r.characterId !== "__new__" ? r.characterId : null,
           newCharacterName: r.characterId === "__new__" ? r.newName.trim() : null,
@@ -487,12 +539,31 @@ export function BulkAddGrid({
         }));
       const targetId = batchId ?? (ensureBatch ? await ensureBatch() : null);
       if (!targetId) return;
-      const res = await bulkAddAction({ batchId: targetId, seriesId, productTypeId: typeId || null, submissionKey: idem.key, rows: payload, categoryId: cat?.id ?? null });
-      if (!res.ok) {
-        notify(res.error);
-        return;
+      // 照品項分開送（吊娃一次、S 娃一次）；每個品項有自己的重送鍵，重按不會重複
+      const tids = [...new Set(payload.map((x) => x.tid))];
+      const d = { created: 0, already: 0, failed: 0, results: [] as Result[] };
+      for (const tid of tids) {
+        const part = payload.filter((x) => x.tid === tid).map(({ tid: _t, ...x }) => x); // eslint-disable-line @typescript-eslint/no-unused-vars
+        const res = await bulkAddAction({ batchId: targetId, seriesId, productTypeId: tid || null, submissionKey: tids.length > 1 ? `${idem.key}:${tid || "none"}` : idem.key, rows: part, categoryId: cat?.id ?? null });
+        if (!res.ok) {
+          notify(res.error);
+          if (!d.results.length) return;
+          d.failed += part.length;
+          d.results.push(...part.map((x) => ({ rowKey: x.rowKey, ok: false, error: res.error })));
+          continue;
+        }
+        d.created += res.data.created;
+        d.already += res.data.already;
+        d.failed += res.data.failed;
+        d.results.push(...res.data.results);
       }
-      const d = res.data;
+      // 已付：全部存好才記成這團的付款（同一次送出只記一筆）
+      const paidNum = paidAmount();
+      if (pay && paidNum > 0 && d.failed === 0) {
+        const pr = await addSupplierPaymentAction(targetId, { paidById: pay.payer, paidAt: nowLocal(), amount: paidNum, currency: "TWD", status: "PAID", purpose: null, note: null }, `${idem.key}:pay`);
+        if (!pr.ok) notify(`品項已存好，但付款沒記到：${pr.error}`);
+        else setPaid("");
+      }
       setConfirm(false);
       // 全部成功：不用再按「知道了」，直接跳提示；有失敗才列出結果
       if (d.failed > 0) setResults(d.results);
@@ -526,7 +597,8 @@ export function BulkAddGrid({
     }
   }
 
-  const rosterSelected = new Set(rows.filter((r) => !r.spec.trim()).map((r) => r.characterId));
+  // 角色按鈕的 ✓ 只看現在選的品項（切到 S 娃時，吊娃點過的不算）
+  const rosterSelected = new Set(rows.filter((r) => !r.spec.trim() && inCurrentType(r)).map((r) => r.characterId));
   const hasItemChars = !!itemChars && itemChars.length > 0;
   const typeName = types.find((x) => x.id === typeId)?.name ?? "";
   // 上面先列：這個品項設的角色；品項還沒設就列這個系列（其他品項）用到的角色；都沒有才列全部
@@ -752,12 +824,22 @@ export function BulkAddGrid({
           const lblX = "mb-0.5 block text-[12px] text-mute md:sr-only"; // 展開的細項在手機上顯示標籤
           const extra = r.more || r.spec.trim() || r.salePrice.trim() || r.currency !== supplierCurrency ? "" : "hidden md:block";
           const charName = r.characterId === "__new__" ? r.newName.trim() : nameOf(r.characterId);
-          const typeName = types.find((x) => x.id === typeId)?.name ?? "";
+          const rowTid = r.typeId ?? typeId;
+          const typeName = types.find((x) => x.id === rowTid)?.name ?? "";
+          // 照品項分組：品項跟上一列不一樣（而且表格裡有兩個以上品項）就加一個小標題
+          const prevTid = i > 0 ? (rows[i - 1].typeId ?? typeId) : null;
+          const head = multiType && !isBlank(r) && rowTid !== prevTid ? groupInfo.get(rowTid) : null;
           const spec = r.spec.trim() && r.spec.trim() !== cat?.name ? r.spec.trim() : "";
           const preview = charName ? [`${cat?.name ?? ""}${charName}`, typeName, spec].filter(Boolean).join(" ") : "";
           return (
+            <Fragment key={r.key}>
+            {head && (
+              <div className={`flex items-baseline justify-between rounded-md bg-[#f7f8fa] px-2 py-1.5 text-[14px] font-semibold ${i > 0 ? "mt-3 border-t-2 border-dashed border-line pt-2" : ""}`} data-testid="type-group" data-type={head.name}>
+                {head.name || "沒選品項"}
+                <span className="text-[12.5px] font-normal text-mute">{head.rows} 列・{head.qty} 件</span>
+              </div>
+            )}
             <div
-              key={r.key}
               role="row"
               className={`grid grid-cols-[minmax(0,1fr)_4.5rem_6.25rem_1.25rem] items-start gap-x-2 gap-y-1.5 border-b border-line-2 px-1 py-2 last:border-b-0 md:grid-cols-[2rem_minmax(9rem,1.4fr)_minmax(6rem,1fr)_6.5rem_5.5rem_5rem_6.5rem_7rem_5.5rem] md:border-line-2 md:px-0 md:py-1.5 md:last:border-b ${err && !isBlank(r) ? "bg-bad-soft/40 md:bg-bad-soft/30" : ""}`}
               data-err={err && (!isBlank(r) || showErrors) ? (err.includes("單價") ? "u" : err.includes("數量") ? "q" : "c") : undefined}
@@ -853,6 +935,7 @@ export function BulkAddGrid({
               )}
               {err && !isBlank(r) && <p role="alert" className="order-last col-span-4 text-[13px] text-bad md:col-span-9 md:pl-[2.5rem]">{charName ? `${charName}：` : `第 ${i + 1} 列：`}{err}</p>}
             </div>
+            </Fragment>
           );
         })}
       </div>
@@ -880,7 +963,22 @@ export function BulkAddGrid({
           {stats.twd > 0 && <span className="num">{formatTwd(stats.twd)} </span>}
           {stats.jpy > 0 && <span className="text-mute">（約 {formatTwd(stats.approxTwd)}）</span>}
           {stats.invalid > 0 && <span className="ml-2 text-bad">{stats.invalid} 列需要修正</span>}
+          {pay && pay.extraTwd > 0 && <span className="text-mute">＋運費 {formatTwd(pay.extraTwd)}＝<b className="text-ink">{formatTwd(grandTwd)}</b></span>}
         </div>
+        {pay && (
+          <label className="flex items-center gap-1.5 whitespace-nowrap text-sm">
+            <span className="shrink-0">已付</span>
+            <input
+              inputMode="numeric"
+              aria-label="已付多少"
+              className={`${inputCls} num h-10 w-24 text-right ${overpaid ? "border-bad bg-bad-soft" : ""}`}
+              value={paid}
+              onChange={(e) => setPaid(e.target.value.replace(/[^\d]/g, ""))}
+              placeholder="0"
+            />
+            {overpaid && <span className="text-[12px] text-bad" data-testid="overpaid">比總額多</span>}
+          </label>
+        )}
         <Button
           variant="primary"
           disabled={!seriesId}
@@ -909,7 +1007,8 @@ export function BulkAddGrid({
             if (dupKeys.size) return notify("有重複的角色與規格，請修正後再送出");
             // 一般情況直接存；有新角色、單價特別高或有不完整的列，才多確認一次
             const ok = eff.filter((r) => !isBlank(r) && !rowError(r));
-            const risky = stats.invalid > 0 || ok.some((r) => r.characterId === "__new__" || (r.currency === "JPY" ? toInt(r.unitCost)! >= 100000 : toInt(r.unitCost)! >= 20000));
+            // 一次存好幾個品項、或有填已付：也先給確認清單（照品項分組）
+            const risky = stats.invalid > 0 || multiType || paidAmount() > 0 || ok.some((r) => r.characterId === "__new__" || (r.currency === "JPY" ? toInt(r.unitCost)! >= 100000 : toInt(r.unitCost)! >= 20000));
             if (risky) setConfirm(true);
             else submit();
           }}
@@ -967,11 +1066,19 @@ export function BulkAddGrid({
             <tr className="text-left text-mute"><th className="py-1">角色／款式</th><th>規格</th><th className="text-right">單價</th><th className="text-right">數量</th><th className="text-right">小計</th></tr>
           </thead>
           <tbody>
-            {eff.filter((r) => !isBlank(r) && !rowError(r)).map((r) => {
+            {eff.filter((r) => !isBlank(r) && !rowError(r)).map((r, i, all) => {
               const q = toInt(r.qty)!;
               const c = toInt(r.unitCost)!;
+              const tid = r.typeId ?? typeId;
+              const head = multiType && (i === 0 || (all[i - 1].typeId ?? typeId) !== tid);
               return (
-                <tr key={r.key} className="border-t border-line-2">
+                <Fragment key={r.key}>
+                {head && (
+                  <tr className="border-t-2 border-line" data-testid="confirm-group">
+                    <td colSpan={5} className="pt-2 pb-1 font-semibold">{types.find((x) => x.id === tid)?.name || "沒選品項"}</td>
+                  </tr>
+                )}
+                <tr className="border-t border-line-2">
                   <td className="py-1">{r.characterId === "__new__" ? <>{r.newName}<span className="ml-1 text-[12px] text-info">（新角色）</span></> : nameOf(r.characterId)}</td>
                   <td>{r.spec || "—"}</td>
                   <td className="num text-right">
@@ -981,10 +1088,19 @@ export function BulkAddGrid({
                   <td className="num text-right">{q}</td>
                   <td className="num text-right">{r.currency === "JPY" ? formatJpy(q * c) : formatTwd(q * c)}</td>
                 </tr>
+                </Fragment>
               );
             })}
           </tbody>
         </table>
+        {pay && (
+          <div className="mt-3 space-y-1 border-t-2 border-line pt-2 text-sm" data-testid="confirm-pay">
+            {pay.extraTwd > 0 && <p className="flex justify-between"><span>運費</span><span className="num">{formatTwd(pay.extraTwd)}</span></p>}
+            <p className="flex justify-between font-semibold"><span>總額</span><span className="num">{formatTwd(grandTwd)}</span></p>
+            <p className="flex justify-between"><span>已付{paidAmount() > 0 ? "（會記成這團的付款）" : ""}</span><span className="num">{paidAmount() > 0 ? formatTwd(paidAmount()) : "還沒付"}</span></p>
+            {overpaid && <p className="font-medium text-bad">⚠ 已付比總額多 {formatTwd(paidAmount() - grandTwd)}，確定嗎？</p>}
+          </div>
+        )}
       </Modal>
 
       <Modal open={!!results} onClose={closeResults} title="有幾項沒存成功" footer={<Button variant="primary" onClick={closeResults}>知道了</Button>}>

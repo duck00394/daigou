@@ -58,3 +58,7 @@ export async function moveKindAction(kindKey: string, d: "up" | "down" | "top") 
 export async function moveSeriesOrderAction(categoryId: string, d: "up" | "down" | "top") {
   return run((a) => tx((t) => ct.moveSeriesOrder(t, a, z.string().max(64).parse(categoryId), dir.parse(d))).then(() => null));
 }
+
+export async function setHideSharedAction(categoryId: string, hide: boolean) {
+  return run((a) => tx((t) => ct.setHideShared(t, a, z.string().min(1).parse(categoryId), z.boolean().parse(hide))));
+}

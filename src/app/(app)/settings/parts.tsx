@@ -45,6 +45,39 @@ export function NameList({ kind, items }: { kind: "character" | "type"; items: {
   );
 }
 
+/** 共用品項：點名字改名、停用／啟用、新增 */
+export function TypeList({ items }: { items: { id: string; name: string; active: boolean }[] }) {
+  const [v, setV] = useState("");
+  const [edit, setEdit] = useState<{ id: string; name: string } | null>(null);
+  const { run, pending } = useRun();
+  return (
+    <div data-testid="shared-types">
+      <ul className="mb-3 flex flex-wrap gap-1.5">
+        {items.map((i) =>
+          edit?.id === i.id ? (
+            <li key={i.id} className="flex items-center gap-1.5">
+              <input autoFocus aria-label={`「${i.name}」新名稱`} className={`${inputCls} h-9 w-32`} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
+              <Button small variant="primary" loading={pending} onClick={() => run(() => saveProductTypeAction({ id: i.id, name: edit.name, active: i.active }), { success: "已改名", onOk: () => setEdit(null) })}>存</Button>
+              <Button small onClick={() => setEdit(null)}>取消</Button>
+            </li>
+          ) : (
+            <li key={i.id} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-sm ${i.active ? "border-line bg-white" : "border-line bg-line-2 text-mute"}`}>
+              <button type="button" aria-label={`改「${i.name}」名稱`} onClick={() => setEdit({ id: i.id, name: i.name })}>{i.name}</button>
+              <button type="button" className="text-[12px] text-ai" onClick={() => run(() => saveProductTypeAction({ id: i.id, name: i.name, active: !i.active }), { success: i.active ? "已停用" : "已啟用" })}>
+                {i.active ? "停用" : "啟用"}
+              </button>
+            </li>
+          ),
+        )}
+      </ul>
+      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (v.trim()) run(() => saveProductTypeAction({ name: v }), { success: "已新增共用品項", onOk: () => setV("") }); }}>
+        <input className={inputCls} value={v} onChange={(e) => setV(e.target.value)} placeholder="新增共用品項（例：壓克力立牌）" aria-label="新增共用品項" />
+        <Button type="submit" loading={pending}>新增</Button>
+      </form>
+    </div>
+  );
+}
+
 export function ExpenseForm() {
   const expIdem = useIdemKey();
   const [f, setF] = useState({ date: toDateInput(new Date()), kind: "PACKAGING", amount: "", note: "" });

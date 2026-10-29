@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button, Modal, inputCls, notify, useRun } from "@/components/client";
-import { addCatalogCharacterAction, addCatalogItemAction, deleteCatalogCharacterAction, deleteCatalogItemAction, deleteSeriesAction, moveKindAction, moveSeriesKindAction, moveSeriesOrderAction, renameKindAction, setCatalogPriceAction } from "@/actions/catalog-tree";
+import { addCatalogCharacterAction, addCatalogItemAction, deleteCatalogCharacterAction, deleteCatalogItemAction, deleteSeriesAction, moveKindAction, moveSeriesKindAction, moveSeriesOrderAction, renameKindAction, setCatalogPriceAction, setHideSharedAction } from "@/actions/catalog-tree";
 import { renameCategoryAction, saveCategoryAction, setCategoryActiveAction } from "@/actions/catalog";
 import { keepInSeriesAction, seriesLeaksAction } from "@/actions/series";
 import type { TreeKind, TreeSeries, TreeItem } from "@/server/services/catalog-tree";
@@ -176,6 +176,7 @@ function SeriesCard({ s, types, kinds, open, onToggle }: { s: TreeSeries; types:
           ) : (
             <button type="button" className="block w-full border-t border-line-2 px-3 py-2.5 text-left text-[15px] text-ai" onClick={() => setNewItem({ typeId: unused[0]?.id ?? "", typeName: "", price: "" })}>＋ 加品項（吊娃、S娃、徽章…）</button>
           )}
+          <SharedToggle id={s.id} name={s.name} initial={!s.hideShared} />
           <div className="flex items-center gap-2 border-t border-line-2 px-3 py-2 text-[14px]">
             <span className="shrink-0 text-ink-2">放在種類</span>
             {newKind === null ? (
@@ -389,5 +390,32 @@ function LeakBanner({ categoryId, name }: { categoryId: string; name: string }) 
       <span title={[...leaks.chars, ...leaks.types].map((x) => x.name).join("、")}>{what}也跑到別的系列了</span>
       <Button small variant="primary" loading={pending} onClick={() => run(() => keepInSeriesAction(categoryId), { success: `已改成只在「${name}」`, onOk: () => setLeaks(null) })}>只留在這裡</Button>
     </div>
+  );
+}
+
+/** 採購時要不要也列共用品項（吊娃、S 娃…）；一番賞這種只有自己品項的取消勾選 */
+function SharedToggle({ id, name, initial }: { id: string; name: string; initial: boolean }) {
+  const { run } = useRun();
+  const [on, setOn] = useState(initial);
+  return (
+    <label className="flex cursor-pointer items-center justify-between gap-3 border-t border-line-2 px-3 py-2 text-[14px]">
+      <span>
+        採購時也列共用品項
+        <span className="block text-[12px] text-mute">吊娃、S 娃、徽章…；只有自己品項的（例：一番賞）取消勾選</span>
+      </span>
+      <input
+        type="checkbox"
+        className="h-5 w-5 shrink-0"
+        aria-label={`「${name}」採購時也列共用品項`}
+        checked={on}
+        onChange={async (e) => {
+          const v = e.target.checked;
+          setOn(v);
+          let ok = false;
+          await run(() => setHideSharedAction(id, !v), { success: v ? `「${name}」採購時會列共用品項` : `「${name}」採購時只列自己的品項`, onOk: () => { ok = true; } });
+          if (!ok) setOn(!v);
+        }}
+      />
+    </label>
   );
 }

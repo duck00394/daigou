@@ -273,24 +273,26 @@ enum CategoryType {
 }
 
 model Category {
-  id         String              @id @default(cuid())
-  name       String              @unique
-  type       CategoryType        @default(GENERAL)
-  customType String?
-  startDate  DateTime?           @db.Date
-  endDate    DateTime?           @db.Date
-  notes      String?
-  active     Boolean             @default(true)
-  sortOrder  Int                 @default(0)
-  createdAt  DateTime            @default(now())
-  updatedAt  DateTime            @updatedAt
-  products   ProductCategory[]
-  orderItems OrderItem[]
-  groupBuys  GroupBuy[]
-  batches    PurchaseBatch[]
-  typePrices CategoryTypePrice[]
-  characters CategoryCharacter[]
-  batchItems PurchaseBatchItem[]
+  id              String              @id @default(cuid())
+  name            String              @unique
+  type            CategoryType        @default(GENERAL)
+  customType      String?
+  startDate       DateTime?           @db.Date
+  endDate         DateTime?           @db.Date
+  notes           String?
+  active          Boolean             @default(true)
+  // 採購時不列共用品項（吊娃、徽章…）：例如一番賞只有 A賞、B賞…
+  hideSharedTypes Boolean             @default(false)
+  sortOrder       Int                 @default(0)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  products        ProductCategory[]
+  orderItems      OrderItem[]
+  groupBuys       GroupBuy[]
+  batches         PurchaseBatch[]
+  typePrices      CategoryTypePrice[]
+  characters      CategoryCharacter[]
+  batchItems      PurchaseBatchItem[]
 }
 
 model ProductCategory {

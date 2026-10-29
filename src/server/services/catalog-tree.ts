@@ -10,7 +10,7 @@ import { inventorySummary } from "./inventory";
 
 export type TreeChar = { productId: string; characterId: string | null; name: string; order: number };
 export type TreeItem = { typeId: string; typeName: string; price: number | null; chars: TreeChar[] };
-export type TreeSeries = { id: string; name: string; active: boolean; kindKey: string; kindLabel: string; items: TreeItem[] };
+export type TreeSeries = { id: string; name: string; active: boolean; hideShared: boolean; kindKey: string; kindLabel: string; items: TreeItem[] };
 export type TreeKind = { key: string; label: string; series: TreeSeries[] };
 
 const NO_TYPE = "";
@@ -39,6 +39,7 @@ export async function catalogTree(db: Db, opts: { categoryIds?: string[] } = {})
       type: true,
       customType: true,
       active: true,
+      hideSharedTypes: true,
       typePrices: { select: { productTypeId: true, salePriceTwd: true, sortOrder: true, productType: { select: { name: true, sortOrder: true } } } },
       products: {
         where: { product: { archivedAt: null, mergedIntoId: null } },
@@ -62,7 +63,7 @@ export async function catalogTree(db: Db, opts: { categoryIds?: string[] } = {})
     const list = [...items.values()].sort((a, b) => a.sort - b.sort || byText(a.typeName, b.typeName));
     for (const it of list) it.chars.sort((a, b) => a.order - b.order || byText(a.name, b.name));
     const kind = kinds.get(k.key) ?? { key: k.key, label: k.label, series: [] };
-    kind.series.push({ id: c.id, name: c.name, active: c.active, kindKey: k.key, kindLabel: k.label, items: list.map((x) => ({ typeId: x.typeId, typeName: x.typeName, price: x.price, chars: x.chars })) });
+    kind.series.push({ id: c.id, name: c.name, active: c.active, hideShared: c.hideSharedTypes, kindKey: k.key, kindLabel: k.label, items: list.map((x) => ({ typeId: x.typeId, typeName: x.typeName, price: x.price, chars: x.chars })) });
     kinds.set(k.key, kind);
   }
   const ko = kindRank(await getKindOrder(db));
@@ -492,4 +493,13 @@ export async function keepInSeries(t: Tx, actor: Actor, categoryId: string) {
   for (const ty of leaks.types) await t.categoryTypePrice.upsert({ where: { categoryId_productTypeId: { categoryId, productTypeId: ty.id } }, update: {}, create: { categoryId, productTypeId: ty.id } });
   await audit(t, actor, "catalog.keepInSeries", "Category", categoryId, { chars: leaks.chars.map((c) => c.name), types: leaks.types.map((x) => x.name) });
   return { chars: leaks.chars.length, types: leaks.types.length };
+}
+
+/** 這個系列採購時要不要列共用品項（吊娃、徽章…） */
+export async function setHideShared(t: Tx, actor: Actor, categoryId: string, hide: boolean) {
+  await t.category.update({ where: { id: categoryId }, data: { hideSharedTypes: hide } });
+  await audit(t, actor, "category.hideSharedTypes", "Category", categoryId, { hide });
+}
+export async function hideSharedFor(db: Db, categoryId: string) {
+  return (await db.category.findUnique({ where: { id: categoryId }, select: { hideSharedTypes: true } }))?.hideSharedTypes ?? false;
 }

@@ -7,7 +7,7 @@ import { businessDataCount } from "@/server/services/backup";
 import { listOperators } from "@/server/services/operators";
 import { getMe } from "@/server/me";
 import { PageHeader, Section, LinkButton, Twd, Empty } from "@/components/ui";
-import { RateForm, NameList, OperatorList, HealthCheck, MeSelect, ExpenseForm, DeleteExpense, RestoreForm, LogoutAll } from "./parts";
+import { RateForm, NameList, TypeList, OperatorList, HealthCheck, MeSelect, ExpenseForm, DeleteExpense, RestoreForm, LogoutAll } from "./parts";
 import { costKind, fmtDate } from "@/lib/labels";
 import { formatRate } from "@/lib/money";
 import { ShippingMethods } from "./shipping";
@@ -35,7 +35,7 @@ export default async function Settings() {
   const [rate, chars, types, expenses, dataCount, audits, operators] = await Promise.all([
     getDefaultRateMicro(prisma),
     prisma.character.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
-    prisma.productType.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    prisma.productType.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }], include: { catPrices: { select: { category: { select: { name: true } } } } } }),
     viewOwner().then((o) => prisma.expense.findMany({ where: o ? { OR: [{ ownerKey: o }, { ownerKey: null }] } : {}, orderBy: { date: "desc" }, take: 20 })),
     businessDataCount(),
     prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 30 }),
@@ -68,8 +68,14 @@ export default async function Settings() {
         <Section title="角色">
           <NameList kind="character" items={chars} />
         </Section>
-        <Section title="商品類型">
-          <NameList kind="type" items={types} />
+        <Section title="共用品項">
+          <p className="mb-2 text-[13px] text-mute">每個系列都能用的品項（吊娃、S 娃、徽章…）。點名字可以改名；停用後就不會出現在選單（以前的紀錄不動）。</p>
+          <TypeList items={types.filter((t) => !t.seriesOnly).map((t) => ({ id: t.id, name: t.name, active: t.active }))} />
+          {types.some((t) => t.seriesOnly) && (
+            <p className="mt-3 text-[12.5px] text-mute" data-testid="series-only-types">
+              只在某個系列的品項（到系列目錄改）：{types.filter((t) => t.seriesOnly).map((t) => `${t.name}${t.catPrices.length ? `（${t.catPrices.map((c) => c.category.name).join("、")}）` : ""}`).join("・")}
+            </p>
+          )}
         </Section>
       </div>
 

@@ -101,6 +101,16 @@ export function QuickPurchase(props: {
     [JOINT, "合資"],
   ];
   const store = via === "STORE";
+  // 儲存列的「已付」：實體店（存好就記付清）和合資（上面填誰付了多少）不用；新開的團總額含運費
+  const payProp = (() => {
+    if (pick === NEW) {
+      if (store || f.owner === JOINT) return null;
+      const twdFees = Object.entries(fees).reduce((a, [k, v]) => a + ((props.shipping.find((x) => x.id === k)?.currency ?? "TWD") === "TWD" ? Number(v) || 0 : 0), 0);
+      return { payer: f.owner || me || null, extraTwd: twdFees + (Number(customFee) || 0) + (Number(mainFee) || 0) };
+    }
+    if (!chosen || chosen.ownerKey === JOINT || chosen.stage === "實體店購買") return null;
+    return { payer: chosen.ownerKey !== "none" ? chosen.ownerKey : me || null, extraTwd: 0 };
+  })();
   const shown = suppliers.filter((x) => x.store === store);
   // 常用的（設定裡打星號的）直接列出來；沒設過就先列最常用的 3 個；其他用搜尋
   const favs = shown.some((x) => x.favorite) ? shown.filter((x) => x.favorite) : shown.slice(0, 3);
@@ -494,11 +504,7 @@ export function QuickPurchase(props: {
                           <input autoFocus className={`${inputCls} num w-28 text-right`} inputMode="numeric" aria-label="運費金額" value={customFee} onChange={(e) => setCustomFee(e.target.value)} />
                         </label>
                       )}
-                      <label className="flex items-center justify-between gap-2 pt-1 text-[14px] font-medium text-ink-2">
-                        {f.owner === JOINT ? "已付訂金（合資請填上面「誰付了多少」）" : "已付訂金"}
-                        <input disabled={f.owner === JOINT} className={`${inputCls} num w-28 text-right`} inputMode="numeric" aria-label="已付訂金" value={f.deposit} onChange={(e) => setF({ ...f, deposit: e.target.value })} placeholder="0" />
-                      </label>
-                      <p className="text-[12px] text-mute">運費：不攤、算這團主人的。訂金：記成一筆今天的付款。</p>
+                      <p className="text-[12px] text-mute">運費：不攤、算這團主人的。付了多少（訂金或全額）填在最下面儲存旁邊的「已付」。</p>
                     </div>
                   </>
                 )}
@@ -580,6 +586,7 @@ export function QuickPurchase(props: {
             joint={(pick === NEW ? f.owner === JOINT : chosen?.ownerKey === JOINT) ? { ops: operators.map((o) => ({ id: o.id, name: o.name })), pct: Object.fromEntries(operators.map((o) => [o.id, Number(jointPct[o.id]) || 0])) } : null}
             series={series}
             types={types}
+            pay={payProp}
           />
         )}
         {saved && (

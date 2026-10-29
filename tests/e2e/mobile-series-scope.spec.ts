@@ -32,6 +32,14 @@ test("手機：系列專屬角色、品項整理", async ({ page }) => {
     await page.reload();
     await expect(card).toBeVisible();
     await expect(card.getByTestId("series-leak")).toHaveCount(0);
+    // 一番賞不列共用品項：取消勾選
+    await card.getByLabel(`「${cat.name}」採購時也列共用品項`).uncheck();
+    await toast(page, `「${cat.name}」採購時只列自己的品項`);
+    expect((await prisma.category.findUniqueOrThrow({ where: { id: cat.id } })).hideSharedTypes).toBe(true);
+    // 設定：共用品項只列共用的；只在某系列的另外寫出屬於哪個系列
+    await page.goto("/settings");
+    await expect(page.getByTestId("series-only-types")).toContainText(`A賞 ${tag}（${cat.name}）`);
+    await expect(page.getByTestId("shared-types").getByRole("button", { name: `改「A賞 ${tag}」名稱` })).toHaveCount(0);
   } finally {
     await prisma.$disconnect();
   }

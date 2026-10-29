@@ -131,6 +131,9 @@ export async function typeSetAction(categoryId: string, typeId: string) {
 export async function saveTypeSetAction(categoryId: string, typeId: string, characterIds: string[]) {
   return run((a) => tx((t) => ct.setTypeSet(t, a, { categoryId: z.string().min(1).parse(categoryId), typeId: z.string().min(1).parse(typeId), characterIds: z.array(z.string()).max(100).parse(characterIds) })));
 }
+export async function hideSharedAction(categoryId: string) {
+  return run(() => ct.hideSharedFor(prisma, z.string().min(1).parse(categoryId)), "read");
+}
 export async function itemCharactersAction(categoryId: string, typeId: string) {
   return run(() => ct.itemCharacters(prisma, z.string().min(1).parse(categoryId), z.string().min(1).parse(typeId)), "read");
 }
