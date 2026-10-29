@@ -167,14 +167,16 @@ model Supplier {
 }
 
 model ProductType {
-  id        String              @id @default(cuid())
-  name      String              @unique
-  sortOrder Int                 @default(0)
-  active    Boolean             @default(true)
-  createdAt DateTime            @default(now())
-  updatedAt DateTime            @updatedAt
-  products  Product[]
-  catPrices CategoryTypePrice[]
+  id         String              @id @default(cuid())
+  name       String              @unique
+  sortOrder  Int                 @default(0)
+  active     Boolean             @default(true)
+  // 只有某些系列用（例：一番賞的 A賞）：只出現在系列目錄有它的系列；false＝共用（吊娃、徽章…）
+  seriesOnly Boolean             @default(false)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  products   Product[]
+  catPrices  CategoryTypePrice[]
 }
 
 // 系列（活動）底下出的品項（例：肉包 的 吊娃），以及預設售價（同一系列同一品項所有角色同價）

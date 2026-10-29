@@ -36,13 +36,27 @@ export async function saveSupplierAction(id: string | null, input: { name: strin
 export async function saveCharacterQuickAction(name: string) {
   return run((a) => tx((t) => sr.ensureCharacter(t, a, z.string().max(50).parse(name))).then((r) => ({ id: r.character.id, name: r.character.name, created: r.created })));
 }
-export async function saveProductTypeQuickAction(name: string) {
+/** 新增採購時打的新品項：有選系列就只屬於這個系列（跟系列目錄一樣）；名稱已經有的就沿用 */
+export async function saveProductTypeQuickAction(name: string, categoryId?: string | null) {
   return run(async (a) => {
     const n = z.string().min(1).max(50).parse(name.trim());
-    const row = await prisma.productType.upsert({ where: { name: n }, update: {}, create: { name: n } });
-    await prisma.auditLog.create({ data: { actorId: a.userId, action: "productType.save", entity: "ProductType", entityId: row.id, data: { name: n } } });
-    return { id: row.id, name: row.name };
+    const cid = categoryId ? z.string().min(1).max(64).parse(categoryId) : null;
+    return tx(async (t) => {
+      const found = await t.productType.findUnique({ where: { name: n } });
+      const row = found ?? (await t.productType.create({ data: { name: n, seriesOnly: !!cid } }));
+      if (!found) await t.auditLog.create({ data: { actorId: a.userId, action: "productType.save", entity: "ProductType", entityId: row.id, data: { name: n, seriesOnly: !!cid } } });
+      if (cid && row.seriesOnly && (await t.category.findUnique({ where: { id: cid }, select: { id: true } }))) {
+        await t.categoryTypePrice.upsert({ where: { categoryId_productTypeId: { categoryId: cid, productTypeId: row.id } }, update: {}, create: { categoryId: cid, productTypeId: row.id } });
+      }
+      return { id: row.id, name: row.name, only: row.seriesOnly && cid ? [cid] : null };
+    });
   });
+}
+export async function seriesLeaksAction(categoryId: string) {
+  return run(() => ct.seriesLeaks(prisma, z.string().min(1).parse(categoryId)), "read");
+}
+export async function keepInSeriesAction(categoryId: string) {
+  return run((a) => tx((t) => ct.keepInSeries(t, a, z.string().min(1).parse(categoryId))));
 }
 
 export async function rowDefaultsAction(input: { seriesId: string; productTypeId: string | null; supplierId: string | null; characterIds: string[]; specs?: Record<string, string | null>; categoryId?: string | null }) {

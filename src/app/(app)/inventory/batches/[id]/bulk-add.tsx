@@ -111,7 +111,8 @@ export function BulkAddGrid({
   supplierCurrency: Currency;
   rateMicro: number;
   series: Opt[];
-  types: Opt[];
+  /** only：只屬於這些系列的品項（例：A賞）；沒有＝共用 */
+  types: (Opt & { only?: string[] | null })[];
 }) {
   // 這批商品的系列：預設跟著這團（或上面選的系列），可以換
   const [cat, setCat] = useState(category);
@@ -184,6 +185,12 @@ export function BulkAddGrid({
     setRows(draft.rows.map((r) => ({ ...r, key: newKey(), touched: true })));
     setDraft(null);
   };
+  const typesHere = types.filter((x) => !!x.only && !!cat && x.only.includes(cat.id));
+  const typesShared = types.filter((x) => !x.only);
+  // 換了系列：原本選的是別的系列專屬的品項（例：A賞）就清掉，不要帶到不相干的系列
+  useEffect(() => {
+    if (typeId && !typesHere.some((x) => x.id === typeId) && !typesShared.some((x) => x.id === typeId)) setTypeId("");
+  }, [cat?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // 系列目錄裡這個品項設的角色（例：D賞 → 咻咻、拉麵）：有設就只列這些，其他角色收起來
   const [itemChars, setItemChars] = useState<Opt[] | null>(null);
   const [seriesChars, setSeriesChars] = useState<Opt[]>([]);
@@ -582,13 +589,16 @@ export function BulkAddGrid({
           {newType === null ? (
             <select id="bulk-type" aria-label="品項" className={inputCls} value={typeId} onChange={(e) => (e.target.value === "__new__" ? setNewType("") : setTypeId(e.target.value))}>
               <option value="">請選品項</option>
-              {types.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              {/* 這個系列的品項排上面，共用的在下面；別的系列專屬的不列 */}
+              {typesHere.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              {typesHere.length > 0 && typesShared.length > 0 && <option disabled value="__sep">──────</option>}
+              {typesShared.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
               <option value="__new__">＋ 新品項…</option>
             </select>
           ) : (
             <form className="flex gap-2" onSubmit={async (e) => {
               e.preventDefault();
-              const r = await saveProductTypeQuickAction(newType);
+              const r = await saveProductTypeQuickAction(newType, cat?.id ?? null);
               if (!r.ok) return notify(r.error);
               setTypes((l) => (l.some((x) => x.id === r.data.id) ? l : [...l, r.data]));
               setTypeId(r.data.id);

@@ -1,7 +1,7 @@
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { PageHeader } from "@/components/ui";
-import { catalogTree } from "@/server/services/catalog-tree";
+import { catalogTree, typeOptions } from "@/server/services/catalog-tree";
 import { CatalogView } from "./view";
 
 export const metadata = { title: "系列目錄" };
@@ -11,7 +11,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
   const sp = await searchParams;
   const [tree, types] = await Promise.all([
     catalogTree(prisma),
-    prisma.productType.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
+    typeOptions(prisma),
   ]);
   return (
     <div className="space-y-4">

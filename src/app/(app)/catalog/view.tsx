@@ -1,13 +1,14 @@
 "use client";
 // 系列目錄：上面選種類（下拉），下面是這個種類的系列；每個系列列出品項（預設售價）和角色
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button, Modal, inputCls, notify, useRun } from "@/components/client";
 import { addCatalogCharacterAction, addCatalogItemAction, deleteCatalogCharacterAction, deleteCatalogItemAction, deleteSeriesAction, moveKindAction, moveSeriesKindAction, moveSeriesOrderAction, renameKindAction, setCatalogPriceAction } from "@/actions/catalog-tree";
 import { renameCategoryAction, saveCategoryAction, setCategoryActiveAction } from "@/actions/catalog";
+import { keepInSeriesAction, seriesLeaksAction } from "@/actions/series";
 import type { TreeKind, TreeSeries, TreeItem } from "@/server/services/catalog-tree";
 
-type Opt = { id: string; name: string };
+type Opt = { id: string; name: string; only?: string[] | null };
 const NEW_KIND = "__new__";
 const selCls = "min-h-11 w-full rounded-lg border border-line bg-white px-2.5 text-[15px]";
 
@@ -117,7 +118,8 @@ function SeriesCard({ s, types, kinds, open, onToggle }: { s: TreeSeries; types:
   const [newKind, setNewKind] = useState<string | null>(null);
   const [newItem, setNewItem] = useState<{ typeId: string; typeName: string; price: string } | null>(null);
   const chars = s.items.reduce((a, i) => a + i.chars.length, 0);
-  const unused = types.filter((t) => !s.items.some((i) => i.typeId === t.id));
+  // 可以加的品項：共用的（吊娃、徽章…）＋本來就屬於這個系列的；別的系列專屬的（例：別的一番賞的 A賞）不列
+  const unused = types.filter((t) => !s.items.some((i) => i.typeId === t.id) && (!t.only || t.only.includes(s.id)));
   return (
     <section className={`overflow-hidden rounded-xl border border-line bg-white ${s.active ? "" : "opacity-60"}`} data-testid="catalog-series" data-name={s.name}>
       {renaming === null ? (
@@ -137,6 +139,7 @@ function SeriesCard({ s, types, kinds, open, onToggle }: { s: TreeSeries; types:
       )}
       {open && (
         <div>
+          <LeakBanner categoryId={s.id} name={s.name} />
           {s.items.map((i) => <ItemRow key={i.typeId || "none"} categoryId={s.id} item={i} />)}
           {newItem ? (
             <div className="space-y-2 border-t border-line-2 p-3">
@@ -153,7 +156,8 @@ function SeriesCard({ s, types, kinds, open, onToggle }: { s: TreeSeries; types:
                   <input className={`${inputCls} num mt-1 text-right`} inputMode="numeric" aria-label="預設售價" value={newItem.price} onChange={(e) => setNewItem({ ...newItem, price: e.target.value })} placeholder="例：650" />
                 </label>
               </div>
-              {!newItem.typeId && <input autoFocus className={inputCls} aria-label="新品項名稱" placeholder="例：吊娃、S娃、徽章" value={newItem.typeName} onChange={(e) => setNewItem({ ...newItem, typeName: e.target.value })} />}
+              {!newItem.typeId && <input autoFocus className={inputCls} aria-label="新品項名稱" placeholder="例：A賞、限定吊娃" value={newItem.typeName} onChange={(e) => setNewItem({ ...newItem, typeName: e.target.value })} />}
+              {!newItem.typeId && <p className="text-[12.5px] text-mute">這裡新打的品項只在「{s.name}」，別的系列看不到。</p>}
               <div className="flex gap-2">
                 <Button
                   variant="primary"
@@ -364,4 +368,26 @@ function ReorderList({ tree, onDone }: { tree: TreeKind[]; onDone: () => void })
 export function SeriesCatalogPanel({ s, types, kinds }: { s: TreeSeries; types: Opt[]; kinds: [string, string][] }) {
   const [open, setOpen] = useState(true);
   return <SeriesCard s={s} types={types} kinds={kinds} open={open} onToggle={() => setOpen(!open)} />;
+}
+
+/** 以前從系列目錄加的角色、品項跑到別的系列：提醒一次，按「只留在這裡」才整理（商品、庫存、帳都不動） */
+function LeakBanner({ categoryId, name }: { categoryId: string; name: string }) {
+  const { run, pending } = useRun();
+  const [leaks, setLeaks] = useState<{ chars: Opt[]; types: Opt[] } | null>(null);
+  useEffect(() => {
+    let live = true;
+    seriesLeaksAction(categoryId).then((r) => live && r.ok && setLeaks(r.data));
+    return () => {
+      live = false;
+    };
+  }, [categoryId]);
+  if (!leaks || (!leaks.chars.length && !leaks.types.length)) return null;
+  const part = (l: Opt[], unit: string) => (l.length ? `${l[0].name}${l.length > 1 ? `等 ${l.length} 個` : ""}${unit}` : "");
+  const what = [part(leaks.chars, "角色"), part(leaks.types, "品項")].filter(Boolean).join("、");
+  return (
+    <div className="flex items-center justify-between gap-2 border-t border-line-2 bg-warn-soft px-3 py-2 text-[13.5px] text-warn" data-testid="series-leak">
+      <span title={[...leaks.chars, ...leaks.types].map((x) => x.name).join("、")}>{what}也跑到別的系列了</span>
+      <Button small variant="primary" loading={pending} onClick={() => run(() => keepInSeriesAction(categoryId), { success: `已改成只在「${name}」`, onOk: () => setLeaks(null) })}>只留在這裡</Button>
+    </div>
+  );
 }

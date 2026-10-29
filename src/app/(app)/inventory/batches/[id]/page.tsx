@@ -1,7 +1,7 @@
 import { DeleteBatchButton, UndoReceivingButton } from "./undo";
 import { CopyButton } from "@/components/copy-button";
 import { RefundButton } from "../../../reconcile/reset";
-import { seriesOptions } from "@/server/services/catalog-tree";
+import { seriesOptions, typeOptions } from "@/server/services/catalog-tree";
 import { notFound } from "next/navigation";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
@@ -85,7 +85,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
   const [landed, series, types] = await Promise.all([
     tx((t) => landedCosts(t, b.items.map((i) => i.id))),
     prisma.series.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
-    prisma.productType.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
+    typeOptions(prisma),
   ]);
   const editItems: EditItem[] = [];
   for (const i of b.items) {

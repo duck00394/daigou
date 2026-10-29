@@ -10,7 +10,7 @@ import { ProductImage } from "@/components/client";
 import { CategoryEditButton, CategoryActiveButton } from "../forms";
 import { CategoryBatches } from "./batches";
 import { SeriesCatalogPanel } from "../../catalog/view";
-import { catalogTree } from "@/server/services/catalog-tree";
+import { catalogTree, typeOptions } from "@/server/services/catalog-tree";
 import { getOrdersEnabled } from "@/server/services/settings";
 import { RenameNames } from "./rename";
 import { MergeDuplicates } from "./merge";
@@ -37,7 +37,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
   const vk = (await getView()).key; // 現在看誰的
   // 分頁：買了什麼（預設）／採購團／品項售價
   const tab = sp.tab === "batches" || sp.tab === "catalog" ? sp.tab : "items";
-  const [tree, types] = tab === "catalog" ? await Promise.all([catalogTree(prisma), prisma.productType.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } })]) : [[], []];
+  const [tree, types] = tab === "catalog" ? await Promise.all([catalogTree(prisma), typeOptions(prisma)]) : [[], []];
   const treeSeries = tree.flatMap((k) => k.series).find((x) => x.id === c.id);
   const usesOrders = await getOrdersEnabled(prisma);
   const tabCls = (on: boolean) => `flex-1 rounded-lg py-2 text-center text-[14px] ${on ? "bg-white font-semibold shadow-sm" : "text-ink-2"}`;

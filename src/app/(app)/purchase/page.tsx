@@ -9,7 +9,7 @@ import { QuickPurchase } from "./quick";
 import { listShippingMethods } from "@/server/services/shipping-methods";
 import { batchStage, batchStageLabel, isStoreKind } from "@/lib/labels";
 import { formatRate } from "@/lib/money";
-import { seriesOptions } from "@/server/services/catalog-tree";
+import { seriesOptions, typeOptions } from "@/server/services/catalog-tree";
 
 export const metadata = { title: "新增採購" };
 
@@ -30,7 +30,7 @@ export default async function PurchasePage({ searchParams }: { searchParams: Pro
       select: { id: true, code: true, name: true, categoryId: true, ownership: true, orderedById: true, status: true, progress: true, rateMicro: true, supplierId: true, supplierRef: { select: { name: true, defaultCurrency: true, kind: true } }, _count: { select: { items: true } } },
     }),
     prisma.series.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
-    prisma.productType.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
+    typeOptions(prisma),
     getDefaultRateMicro(prisma),
   ]);
   const opName = (id: string | null) => operators.find((o) => o.id === id)?.name ?? "未指定";

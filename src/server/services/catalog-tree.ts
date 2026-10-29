@@ -18,9 +18,10 @@ const NO_TYPE = "";
 /** 角色排序：照 IP 角色名單的順序（吉伊、小八、兔兔…），再照名稱 */
 export async function characterOrder(db: Db) {
   const rows = await db.seriesCharacter.findMany({ select: { characterId: true, sortOrder: true } });
-  const chars = await db.character.findMany({ select: { id: true, sortOrder: true } });
+  // 不在 IP 名單的（只在某個系列加的）：排在後面，照加入的先後
+  const chars = await db.character.findMany({ select: { id: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }] });
   const m = new Map<string, number>();
-  for (const c of chars) m.set(c.id, 1e6 + c.sortOrder);
+  chars.forEach((c, i) => m.set(c.id, 1e6 + i));
   for (const r of rows) m.set(r.characterId, Math.min(m.get(r.characterId) ?? Infinity, r.sortOrder));
   return m;
 }
@@ -72,7 +73,7 @@ export async function catalogTree(db: Db, opts: { categoryIds?: string[] } = {})
   return out;
 }
 
-async function getType(t: Tx, actor: Actor, input: { typeId?: string | null; typeName?: string | null }) {
+async function getType(t: Tx, actor: Actor, input: { typeId?: string | null; typeName?: string | null }, seriesOnly = false) {
   if (input.typeId) {
     const ty = await t.productType.findUnique({ where: { id: input.typeId } });
     if (!ty) throw new BizError("找不到品項");
@@ -83,8 +84,9 @@ async function getType(t: Tx, actor: Actor, input: { typeId?: string | null; typ
   if (name.length > 30) throw new BizError("品項名稱太長");
   const found = await t.productType.findUnique({ where: { name } });
   if (found) return found;
-  const ty = await t.productType.create({ data: { name } });
-  await audit(t, actor, "productType.save", "ProductType", ty.id, { name, via: "catalog" });
+  // 在系列目錄裡新增的品項：只屬於這個系列（例：一番賞的 A賞），別的系列看不到
+  const ty = await t.productType.create({ data: { name, seriesOnly } });
+  await audit(t, actor, "productType.save", "ProductType", ty.id, { name, via: "catalog", seriesOnly });
   return ty;
 }
 
@@ -98,7 +100,7 @@ const checkPrice = (p: number | null | undefined) => {
 export async function addCatalogItem(t: Tx, actor: Actor, input: { categoryId: string; typeId?: string | null; typeName?: string | null; price?: number | null }) {
   const cat = await t.category.findUnique({ where: { id: input.categoryId } });
   if (!cat) throw new BizError("找不到系列");
-  const ty = await getType(t, actor, input);
+  const ty = await getType(t, actor, input, true);
   const price = checkPrice(input.price);
   const count = await t.categoryTypePrice.count({ where: { categoryId: cat.id } });
   await t.categoryTypePrice.upsert({
@@ -150,11 +152,14 @@ export async function addCatalogCharacter(t: Tx, actor: Actor, input: { category
   if (!ty) throw new BizError("找不到品項");
   const { character } = await ensureCharacter(t, actor, input.characterName);
   const ip = await seriesIpFor(t, cat.id);
-  await t.seriesCharacter.upsert({
-    where: { seriesId_characterId: { seriesId: ip.id, characterId: character.id } },
-    update: {},
-    create: { seriesId: ip.id, characterId: character.id, sortOrder: (await t.seriesCharacter.count({ where: { seriesId: ip.id } })) + 1 },
-  });
+  // 只加在這個系列的角色名單，不改 IP 的預設角色（系列與角色）；預設名單本來就有的不用加
+  if (!(await t.seriesCharacter.findUnique({ where: { seriesId_characterId: { seriesId: ip.id, characterId: character.id } } }))) {
+    await t.categoryCharacter.upsert({
+      where: { categoryId_characterId: { categoryId: cat.id, characterId: character.id } },
+      update: {},
+      create: { categoryId: cat.id, characterId: character.id, sortOrder: (await t.categoryCharacter.count({ where: { categoryId: cat.id } })) + 1 },
+    });
+  }
   const price = await catalogPrice(t, cat.id, ty.id);
   let product = await findVariant(t, { seriesId: ip.id, productTypeId: ty.id, characterId: character.id, spec: null, category: cat });
   if (!product) {
@@ -431,4 +436,60 @@ export async function itemCharacters(db: Db, categoryId: string, typeId: string)
   }
   const sort = (m: Map<string, { id: string; name: string }>) => [...m.values()].sort((a, b) => (order.get(a.id) ?? 1e9) - (order.get(b.id) ?? 1e9) || byText(a.name, b.name));
   return { item: sort(item), series: sort(series) };
+}
+
+export type TypeOpt = { id: string; name: string; only: string[] | null };
+/** 品項選單：共用的品項 only＝null；只屬於某些系列的，only＝系列目錄有它的系列 */
+export async function typeOptions(db: Db): Promise<TypeOpt[]> {
+  const rows = await db.productType.findMany({
+    where: { active: true },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, seriesOnly: true, catPrices: { select: { categoryId: true } } },
+  });
+  return rows.map((r) => ({ id: r.id, name: r.name, only: r.seriesOnly ? r.catPrices.map((c) => c.categoryId) : null }));
+}
+
+/**
+ * 以前從系列目錄加角色、品項時，被放進了 IP 預設角色名單／共用品項，結果跑到別的系列。
+ * 找出「只在這個系列用到、而且是這個系列建立之後才新增」的角色和品項（吉伊這些原本就有的不會列）
+ */
+export async function seriesLeaks(db: Db, categoryId: string) {
+  const cat = await db.category.findUnique({ where: { id: categoryId }, select: { id: true, createdAt: true } });
+  if (!cat) return { chars: [], types: [] };
+  const mine = await db.productCategory.findMany({
+    where: { categoryId, product: { archivedAt: null } },
+    select: { product: { select: { id: true, seriesId: true, productTypeId: true, characters: { select: { characterId: true } } } } },
+  });
+  const charIds = [...new Set(mine.flatMap((m) => m.product.characters.map((c) => c.characterId)))];
+  const typeIds = [...new Set(mine.map((m) => m.product.productTypeId).filter((x): x is string => !!x))];
+  const [roster, chars, elsewhereChar, types, elsewhereType, otherCatTypes] = await Promise.all([
+    db.seriesCharacter.findMany({ where: { characterId: { in: charIds } }, select: { characterId: true } }),
+    db.character.findMany({ where: { id: { in: charIds }, createdAt: { gte: cat.createdAt } }, select: { id: true, name: true } }),
+    db.productCharacter.findMany({ where: { characterId: { in: charIds }, product: { archivedAt: null, categories: { some: { categoryId: { not: categoryId } } } } }, select: { characterId: true } }),
+    db.productType.findMany({ where: { id: { in: typeIds }, seriesOnly: false, createdAt: { gte: cat.createdAt } }, select: { id: true, name: true, sortOrder: true } }),
+    db.product.findMany({ where: { productTypeId: { in: typeIds }, archivedAt: null, categories: { some: { categoryId: { not: categoryId } } } }, select: { productTypeId: true } }),
+    db.categoryTypePrice.findMany({ where: { productTypeId: { in: typeIds }, categoryId: { not: categoryId } }, select: { productTypeId: true } }),
+  ]);
+  const inRoster = new Set(roster.map((r) => r.characterId));
+  const usedElsewhere = new Set(elsewhereChar.map((r) => r.characterId));
+  const typeElsewhere = new Set([...elsewhereType.map((r) => r.productTypeId), ...otherCatTypes.map((r) => r.productTypeId)]);
+  const order = await characterOrder(db);
+  return {
+    chars: chars.filter((c) => inRoster.has(c.id) && !usedElsewhere.has(c.id)).sort((a, b) => (order.get(a.id) ?? 1e9) - (order.get(b.id) ?? 1e9) || byText(a.name, b.name)),
+    types: types.filter((x) => !typeElsewhere.has(x.id)).sort((a, b) => a.sortOrder - b.sortOrder || byText(a.name, b.name)).map(({ id, name }) => ({ id, name })),
+  };
+}
+
+/** 「只留在這裡」：上面找到的角色從 IP 預設名單拿掉、改成只在這個系列；品項改成只有這個系列。商品、庫存、帳都不動 */
+export async function keepInSeries(t: Tx, actor: Actor, categoryId: string) {
+  const leaks = await seriesLeaks(t, categoryId);
+  let n = (await t.categoryCharacter.count({ where: { categoryId } })) + 1;
+  for (const c of leaks.chars) {
+    await t.categoryCharacter.upsert({ where: { categoryId_characterId: { categoryId, characterId: c.id } }, update: {}, create: { categoryId, characterId: c.id, sortOrder: n++ } });
+    await t.seriesCharacter.deleteMany({ where: { characterId: c.id } });
+  }
+  if (leaks.types.length) await t.productType.updateMany({ where: { id: { in: leaks.types.map((x) => x.id) } }, data: { seriesOnly: true } });
+  for (const ty of leaks.types) await t.categoryTypePrice.upsert({ where: { categoryId_productTypeId: { categoryId, productTypeId: ty.id } }, update: {}, create: { categoryId, productTypeId: ty.id } });
+  await audit(t, actor, "catalog.keepInSeries", "Category", categoryId, { chars: leaks.chars.map((c) => c.name), types: leaks.types.map((x) => x.name) });
+  return { chars: leaks.chars.length, types: leaks.types.length };
 }
