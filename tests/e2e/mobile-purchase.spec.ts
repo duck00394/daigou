@@ -2,7 +2,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { login, toast, pickIp, newSupplierPick, openSeries, openMore, pickSupplier, openSeriesPage, choose, chosen, pickChar } from "./helpers";
 
-async function addRow(page: Page, character: string, price: string, qty: string) {
+async function addRow(page: Page, character: string, price: string, qty: string, paid?: string) {
   await pickIp(page);
   await page.getByLabel("品項", { exact: true }).selectOption({ label: "吊娃" });
   await pickChar(page, character);
@@ -10,7 +10,13 @@ async function addRow(page: Page, character: string, price: string, qty: string)
   await expect(r1.getByLabel("數量")).toHaveValue("1"); // 選了角色數量先帶 1
   await r1.getByLabel("單價").fill(price);
   await r1.getByLabel("數量").fill(qty);
+  if (paid) await page.getByLabel("已付多少").fill(paid);
   await page.getByRole("button", { name: "儲存 1 項" }).click();
+  // 有填已付：確認清單寫出已付，按確認才存
+  if (paid) {
+    await expect(page.getByRole("dialog").getByTestId("confirm-pay")).toContainText("會記成這團的付款");
+    await page.getByRole("dialog").getByRole("button", { name: /^沒問題，儲存/ }).click();
+  }
   await toast(page, /已新增 1 個採購品項/);
 }
 
@@ -183,10 +189,9 @@ test("手機：開團時一起記運費（常用運費方式）和訂金；實�
   // 訂單編號、在哪訂的
   await page.getByLabel("訂單編號").fill(`MHB${tag}`);
   await page.getByLabel("在哪訂的").fill(`IP @sugar${tag}`);
-  await openMore(page);
-  await page.getByLabel("已付訂金").fill("500");
+  // 已付（訂金）填在儲存旁邊
   await page.screenshot({ path: "test-results/mobile_purchase_money.png", fullPage: true });
-  await addRow(page, "兔兔", "600", "2");
+  await addRow(page, "兔兔", "600", "2", "500");
   await page.getByTestId("saved-banner").getByRole("link", { name: "看這一團" }).click();
   await expect(page.getByTestId("batch-total")).toHaveText("NT$1,238"); // 600×2 ＋ 運費 38
   await expect(page.getByTestId("batch-due")).toHaveText("NT$738"); // 扣掉訂金 500
