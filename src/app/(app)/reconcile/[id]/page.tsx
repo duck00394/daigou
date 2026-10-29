@@ -7,6 +7,7 @@ import { reconcileList, reconcileSheet } from "@/server/services/reconcile";
 import { PageHeader } from "@/components/ui";
 import { ReconcileSheet } from "./sheet";
 import { ResetButton } from "../reset";
+import { AskButton, AskedText, NotAskedButton } from "../asked";
 
 export default async function ReconcileBatch({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
   await requireUser();
@@ -30,6 +31,19 @@ export default async function ReconcileBatch({ params, searchParams }: { params:
         sub={[sheet.supplierName, idx >= 0 ? `第 ${idx + 1}／${list.todo.length} 團` : "已對完"].filter(Boolean).join("｜")}
         back={{ href: `/reconcile${qs}`, label: "對單" }}
       />
+      {sheet.needsCheck && idx >= 0 && (
+        sheet.askedAt ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#d6def5] bg-ai-soft px-3 py-2 text-[14px] text-ink" data-testid="asked-bar">
+            <AskedText at={sheet.askedAt} />
+            <span className="flex gap-2"><AskButton batchId={sheet.id} again /><NotAskedButton batchId={sheet.id} /></span>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-[#f0dfa8] bg-warn-soft px-3 py-2 text-[14px] text-warn" data-testid="asked-bar">
+            還沒問
+            <AskButton batchId={sheet.id} />
+          </div>
+        )
+      )}
       {(sheet.orderNo || sheet.notes) && (
         <div className="space-y-1 rounded-xl border border-line bg-card px-3 py-2 text-[14px]">
           {sheet.orderNo && <div className="flex items-center gap-2"><span className="text-mute">訂單編號</span><span className="num font-semibold break-all">{sheet.orderNo}</span><CopyButton text={sheet.orderNo} /></div>}

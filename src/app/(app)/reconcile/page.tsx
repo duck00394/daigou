@@ -11,6 +11,7 @@ import { seriesOptions } from "@/server/services/catalog-tree";
 import { PageHeader, Empty } from "@/components/ui";
 import { NavSelect } from "@/components/nav-select";
 import { RefundButton, ResetButton } from "./reset";
+import { AskButton, AskedText } from "./asked";
 
 const day = fmtMonthDay; // 台灣時間的月/日
 
@@ -38,6 +39,26 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
   // 已砍單，未退款：照現在看的人
   const refunds = (await tx((t) => refundsOwed(t))).filter((r) => inView(vk, r));
   const q = href({}).includes("?") ? href({}).slice(href({}).indexOf("?")) : "";
+  // 沒篩選、或從首頁待辦點進來：兩組都打開
+  const openTodo = sp.open === "todo" || sp.open === undefined;
+  const notAsked = data.todo.filter((r) => !r.askedAt);
+  const asked = data.todo.filter((r) => !!r.askedAt).sort((a, b) => a.askedAt!.getTime() - b.askedAt!.getTime());
+  const row = (r: (typeof data.todo)[number], action: React.ReactNode, askedAt?: Date | null) => (
+    <li key={r.id} className="flex items-center gap-2 pr-3" data-testid="reconcile-row" data-name={r.name}>
+      <Link href={`/reconcile/${r.id}${q}`} className="flex min-w-0 flex-1 items-center justify-between gap-3 py-3 pl-4 hover:bg-[#fafbfc]">
+        <div className="min-w-0">
+          <div className="truncate font-semibold">{r.name}</div>
+          <div className="truncate text-[12px] text-mute">{[r.supplierName, r.seriesName, r.orderNo ? `訂單 ${r.orderNo}` : null, r.orderedAt ? `${day(r.orderedAt)} 下單` : null].filter(Boolean).join("｜")}</div>
+          {askedAt && <div className="text-[12.5px] text-ink-2"><AskedText at={askedAt} /></div>}
+        </div>
+        <div className="shrink-0 text-right">
+          <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[12px] text-warn">待確認 {r.pending}</span>
+          <div className="mt-0.5 text-[12px] text-mute">買到 {r.bought}・砍 {r.cut}</div>
+        </div>
+      </Link>
+      <span className="shrink-0">{action}</span>
+    </li>
+  );
   return (
     <div className="space-y-3">
       <PageHeader title="對單" sub="跟代購確認：買到幾件、砍了哪些、哪些還沒回"  />
@@ -71,29 +92,32 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
           </ul>
         </details>
       )}
-      <details className="rounded-xl border border-line bg-card" data-testid="todo-section" open={sp.open === "todo" || undefined}>
-        <summary className="cursor-pointer px-4 py-3 text-[14px] font-semibold text-warn">未確認・還沒對完（{data.todo.length}）</summary>
-        {data.todo.length === 0 ? (
-          <div className="border-t border-line-2"><Empty action={<Link href="/purchase" className="inline-flex min-h-10 items-center rounded-lg bg-ai px-4 text-[14px] text-white">＋ 新增採購</Link>}>全部對完了。新增採購後，這裡會列出要跟代購確認有沒有買到的團。</Empty></div>
-        ) : (
-          <ul className="divide-y divide-line-2 border-t border-line-2">
-            {data.todo.map((r) => (
-              <li key={r.id}>
-                <Link href={`/reconcile/${r.id}${q}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#fafbfc]" data-testid="reconcile-row">
-                  <div className="min-w-0">
-                    <div className="truncate font-semibold">{r.name}</div>
-                    <div className="truncate text-[12px] text-mute">{[r.supplierName, r.seriesName, r.orderNo ? `訂單 ${r.orderNo}` : null, r.orderedAt ? `${day(r.orderedAt)} 下單` : null].filter(Boolean).join("｜")}</div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[12px] text-warn">待確認 {r.pending}</span>
-                    <div className="mt-0.5 text-[12px] text-mute">買到 {r.bought}・砍 {r.cut}</div>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </details>
+      {data.todo.length === 0 ? (
+        <div className="rounded-xl border border-line bg-card" data-testid="todo-section">
+          <Empty action={<Link href="/purchase" className="inline-flex min-h-10 items-center rounded-lg bg-ai px-4 text-[14px] text-white">＋ 新增採購</Link>}>全部對完了。新增採購後，這裡會列出要跟代購確認有沒有買到的團。</Empty>
+        </div>
+      ) : (
+        <>
+          {/* 還沒問：問了按「問好了」，就移到下面「在等回覆」 */}
+          {notAsked.length > 0 && (
+            <details className="rounded-xl border border-line bg-card" data-testid="todo-section" open={openTodo || undefined}>
+              <summary className="cursor-pointer px-4 py-3 text-[14px] font-semibold text-warn">還沒問（{notAsked.length}）</summary>
+              <ul className="divide-y divide-line-2 border-t border-line-2">
+                {notAsked.map((r) => row(r, <AskButton batchId={r.id} />))}
+              </ul>
+            </details>
+          )}
+          {/* 在等回覆：等最久的排上面 */}
+          {asked.length > 0 && (
+            <details className="rounded-xl border border-line bg-card" data-testid="asked-section" open={openTodo || undefined}>
+              <summary className="cursor-pointer px-4 py-3 text-[14px] font-semibold text-info">在等回覆（{asked.length}）</summary>
+              <ul className="divide-y divide-line-2 border-t border-line-2">
+                {asked.map((r) => row(r, <AskButton batchId={r.id} again />, r.askedAt))}
+              </ul>
+            </details>
+          )}
+        </>
+      )}
       {doneCount > 0 && (
         <details className="rounded-xl border border-line bg-card" data-testid="done-section">
           <summary className="cursor-pointer px-4 py-3 text-[14px] font-semibold text-good">已確認・已對完（{doneCount}）<span className="ml-1 font-normal text-mute">點開可以再改</span></summary>

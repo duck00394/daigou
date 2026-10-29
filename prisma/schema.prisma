@@ -718,6 +718,8 @@ model PurchaseBatch {
   categoryId               String? // 所屬代購活動／系列（例：吉伊卡哇聖誕系列）
   category                 Category?           @relation(fields: [categoryId], references: [id])
   supplierOrderNo          String? // 供應商訂單編號
+  // 對單：上次問代購有沒有買到是什麼時候（沒問過＝空）
+  askedAt                  DateTime?
   orderUrl                 String? // 訂購連結
   expectedAt               DateTime?           @db.Date // 預計到貨日
   // ── 經營者責任（記錄的是經營者 ID，改名不影響歷史） ──

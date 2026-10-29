@@ -2,7 +2,7 @@
 import { z } from "zod";
 import { run } from "@/server/action";
 import { tx } from "@/server/db";
-import { saveReconcile } from "@/server/services/reconcile";
+import { saveReconcile, setAsked } from "@/server/services/reconcile";
 import { getMe } from "@/server/me";
 
 export async function saveReconcileAction(batchId: string, input: { rows: { itemId: string; bought: number; cutRest: boolean }[]; reason?: string | null; note?: string | null; paidTotal?: number | null; payKey?: string | null }) {
@@ -26,4 +26,8 @@ export async function resetReconcileAction(batchIds: string[]) {
 export async function recordRefundAction(batchId: string, amount: number) {
   const { recordRefund } = await import("@/server/services/batch-ops");
   return run((a) => tx((t) => recordRefund(t, a, z.string().max(64).parse(batchId), z.number().int().parse(amount))));
+}
+
+export async function setAskedAction(batchId: string, asked: boolean) {
+  return run((a) => tx((t) => setAsked(t, a, z.string().min(1).max(64).parse(batchId), z.boolean().parse(asked))).then(() => null));
 }

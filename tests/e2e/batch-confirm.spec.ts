@@ -46,10 +46,22 @@ test("對單：買到幾件、砍掉剩下的；庫存分一定／不一定有�
   // 對單：買到 2、剩下 2 砍掉
   await page.getByTestId("go-reconcile").click();
   await expect(page).toHaveURL(/\/reconcile$/);
-  // 各區預設收起來，點開才看到
-  await expect(page.getByTestId("reconcile-row").first()).toBeHidden();
-  await page.getByTestId("todo-section").locator("summary").click();
-  await page.getByTestId("reconcile-row").filter({ hasText: `確認測試團 ${tag}` }).click();
+  // 「還沒問」「在等回覆」預設打開；問了按「問好了」→ 移到「在等回覆」，寫上次問的日期
+  const myRow = page.getByTestId("reconcile-row").filter({ hasText: `確認測試團 ${tag}` });
+  await expect(page.getByTestId("todo-section").getByTestId("reconcile-row").filter({ hasText: `確認測試團 ${tag}` })).toBeVisible();
+  await myRow.getByRole("button", { name: "問好了" }).click();
+  await toast(page, "已記下今天問了");
+  const askedRow = page.getByTestId("asked-section").getByTestId("reconcile-row").filter({ hasText: `確認測試團 ${tag}` });
+  await expect(askedRow).toContainText("（今天）");
+  await expect(askedRow.getByRole("button", { name: "再問一次" })).toBeVisible();
+  await page.screenshot({ path: "test-results/mobile_reconcile_asked.png", fullPage: true });
+  await askedRow.getByRole("link").click();
+  await expect(page.getByTestId("asked-bar")).toContainText("上次問是");
+  // 按錯了：改回還沒問
+  await page.getByTestId("asked-bar").getByRole("button", { name: "其實還沒問" }).click();
+  await toast(page, "改回還沒問");
+  await expect(page.getByTestId("asked-bar")).toContainText("還沒問");
+  await expect(page.getByTestId("asked-bar").getByRole("button", { name: "問好了" })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/reconcile/${batch.id}`));
   const it = page.locator(`[data-testid="reconcile-item"][data-name="${product.name}"]`);
   await expect(it.getByTestId("reconcile-status")).toHaveText("待確認 4");
@@ -130,7 +142,6 @@ test("對單：已對完的團可以整團改回待確認", async ({ page }) => 
   await page.getByRole("dialog").getByRole("button", { name: /改回待確認（1 團）/ }).click();
   await toast(page, "已把 1 團改回待確認");
   await page.goto("/reconcile");
-  await page.getByTestId("todo-section").locator("summary").click();
   await expect(page.getByTestId("reconcile-row").filter({ hasText: `確認測試團 ${tag}` })).toContainText("待確認 4");
 });
 

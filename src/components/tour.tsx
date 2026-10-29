@@ -13,7 +13,7 @@ export const TOUR: Step[] = [
   { path: "/purchase", target: "[data-tour=buy-series]", title: "新增採購：先選系列", text: "系列就是一個活動或主題，例如 ANA、萬聖節。沒有的話按「＋ 新系列」。" },
   { path: "/purchase", target: "#pick-supplier", title: "選代購", text: "按這裡選跟哪個代購買的，可以打字找；沒有的話清單最下面可以新增。訂單編號、在哪訂的也可以順便填。" },
   { path: "/purchase", target: "[data-tour=buy-grid]", title: "買了哪些角色", text: "先選品項（例：吊娃），點角色就會加一列，數量自動帶 1。填單價，按「儲存」就記好了。運費、訂金、關稅在「更多」。" },
-  { path: "/reconcile", target: "[data-testid=todo-section]", title: "對單：確認有沒有買到", text: "代購回覆後來這裡，一團一團填買到幾件、沒買到的砍掉。最快是按「這團全部買到」再儲存。確認買到的才算進庫存和成本。" },
+  { path: "/reconcile", target: "[data-testid=todo-section],[data-testid=asked-section]", title: "對單：確認有沒有買到", text: "代購回覆後來這裡，一團一團填買到幾件、沒買到的砍掉。最快是按「這團全部買到」再儲存。確認買到的才算進庫存和成本。" },
   { path: "/inventory?tab=batches", target: "[data-testid=batch-card]", title: "採購團：付錢、到貨", text: "每一團一張卡片。還沒付清的卡片上直接有「付清」；東西寄到了，點進去按「全部到了」就進庫存。" },
   { path: "/inventory?tab=stock", target: "[data-tour=stock-filters]", title: "庫存", text: "選系列按「查看」，看每個角色手上有幾隻、確定會到幾隻、客人訂了幾隻、每隻成本。可以直接按「賣」。" },
   { path: "/sell", title: "賣給客人", text: "選系列，在角色旁邊填數量。手上有貨的直接賣掉；沒貨的會記成客人預訂，到貨後在「出貨」交給客人。" },
