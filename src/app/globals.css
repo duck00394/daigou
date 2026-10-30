@@ -83,3 +83,17 @@ textarea {
   .stack-table td:first-child::before, .stack-table td[data-label=""]::before { content: none; }
   .stack-table td[data-empty], .stack-table td:empty { display: none; }
 }
+
+/* iPhone 的日期欄位：預設比別的欄位高、也會撐出格子，固定成跟時間下拉一樣高 */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  min-width: 0;
+  height: 2.75rem;
+  line-height: 1.2;
+}
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
+}

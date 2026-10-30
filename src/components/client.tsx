@@ -247,9 +247,9 @@ const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"))
 export function TimeInput24({ value, onChange, label, required = true }: { value: string; onChange: (v: string) => void; label: string; required?: boolean }) {
   const [h, m] = /^\d{2}:\d{2}$/.test(value) ? value.split(":") : ["", ""];
   const set = (nh: string, nm: string) => onChange(nh === "" && nm === "" ? "" : `${nh || "00"}:${nm || "00"}`);
-  const sel = "min-h-11 w-full rounded-lg border border-line bg-white px-2 text-[15px] num";
+  const sel = "h-11 w-full min-w-0 rounded-lg border border-line bg-white px-2 text-[15px] text-ink num";
   return (
-    <span className="flex items-center gap-1" data-testid="time24">
+    <span className="flex min-w-0 items-center gap-1" data-testid="time24">
       <select aria-label={`${label} 時`} className={sel} value={h} onChange={(e) => set(e.target.value, m)}>
         {!required || !h ? <option value="">時</option> : null}
         {HOURS.map((x) => <option key={x} value={x}>{x}</option>)}

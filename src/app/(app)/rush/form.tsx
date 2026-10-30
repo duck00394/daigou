@@ -50,11 +50,11 @@ export function RushFormView({ id, initial, suppliers, series }: { id: string | 
         <datalist id="rush-suppliers">{suppliers.map((s) => <option key={s.id} value={s.name} />)}</datalist>
       </label>
       <div className="grid grid-cols-2 gap-2">
-        <label className="block">
+        <label className="block min-w-0">
           <span className={lab}>日期</span>
           <input type="date" className={inputCls} aria-label="日期" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} />
         </label>
-        <label className="block">
+        <label className="block min-w-0">
           <span className={lab}>開始時間</span>
           <TimeInput24 label="開始時間" value={f.time} onChange={(v) => setF({ ...f, time: v })} />
         </label>
