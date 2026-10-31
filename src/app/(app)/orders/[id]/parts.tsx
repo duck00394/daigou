@@ -95,10 +95,12 @@ export function ItemActions({
   item,
   categories,
   disabled,
+  flags,
 }: {
   item: { id: string; name: string; qty: number; cancelled: number; shipped: number; reserved: number; unitPrice: number; lineDiscount: number; categoryId: string | null; specNote: string | null };
   categories: { id: string; name: string }[];
   disabled: boolean;
+  flags?: { purchase: string | null; pack: string | null };
 }) {
   const [mode, setMode] = useState<null | "cancel" | "edit">(null);
   const [cancelQty, setCancelQty] = useState("1");
@@ -173,6 +175,13 @@ export function ItemActions({
           <SelectField label="銷售歸屬分類" value={edit.categoryId} onChange={(e) => setEdit({ ...edit, categoryId: e.target.value })} options={[["", "未歸類"], ...categories.map((c) => [c.id, c.name] as [string, string])]} />
           <TextField label="規格備註" value={edit.specNote} onChange={(e) => setEdit({ ...edit, specNote: e.target.value })} className="sm:col-span-2" />
         </div>
+        {flags && (flags.purchase || flags.pack) && (
+          <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-line-2 pt-3 text-[13px] text-ink-2">
+            {flags.purchase && <span className="flex items-center gap-1.5">採購 <FlagSelect itemId={item.id} kind="purchase" value={flags.purchase} disabled={false} /></span>}
+            {flags.pack && <span className="flex items-center gap-1.5">備貨 <FlagSelect itemId={item.id} kind="pack" value={flags.pack} disabled={false} /></span>}
+            <span className="text-mute">改了馬上存</span>
+          </div>
+        )}
       </Modal>
     </>
   );

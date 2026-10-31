@@ -4,8 +4,11 @@ import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { loadOrderCalc } from "@/server/services/recompute";
 import { inventorySummary } from "@/server/services/inventory";
+import { packState } from "@/server/services/order-flow";
+import { listShippingMethods } from "@/server/services/shipping-methods";
+import { OrderFlow } from "./flow";
 import { PageHeader, Section, TableWrap, StatusBadge, Twd, Badge, TagChip, KV, LinkButton, Empty } from "@/components/ui";
-import { CancelOrderButton, ConfirmOrderButton, EditMetaButton, ItemActions, FlagSelect, ReserveButtons, PaymentForm, VoidPaymentButton, RefundForm, RefundRowActions } from "./parts";
+import { CancelOrderButton, ConfirmOrderButton, EditMetaButton, ItemActions, ReserveButtons, PaymentForm, VoidPaymentButton, RefundForm, RefundRowActions } from "./parts";
 import { fmtDate, orderStatus, paymentStatus, procurementStatus, shipStatus, orderSource, refundStatus, flagLabel } from "@/lib/labels";
 
 const EVENT: Record<string, string> = {
@@ -22,6 +25,8 @@ const EVENT: Record<string, string> = {
   SHIPPED: "出貨",
   CATEGORY_CHANGED: "修改歸屬分類",
 };
+
+const META: Record<string, string> = { groupBuyId: "改代購團", shippingFee: "改運費", orderDiscount: "改整單折扣", notes: "改備註", confirmation: "確認訂單" };
 
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   await requireUser();
@@ -48,11 +53,13 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
     },
   });
   if (!order) notFound();
-  const [{ result: r }, inv, groupBuys, audits] = await Promise.all([
+  const [{ result: r }, inv, groupBuys, audits, packLines, shipMethods] = await Promise.all([
     tx((t) => loadOrderCalc(t, id)),
     tx((t) => inventorySummary(t, order.items.map((i) => i.productId))),
     prisma.groupBuy.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.auditLog.findMany({ where: { entity: "Order", entityId: id }, orderBy: { createdAt: "asc" } }),
+    tx((t) => packState(t, id)),
+    listShippingMethods(prisma),
   ]);
   const cancelled = order.confirmation === "CANCELLED";
   const shipments = new Map<string, { no: string; at: Date; method: string | null; tracking: string | null; status: string; lines: string[] }>();
@@ -62,9 +69,15 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
       s.lines.push(`${it.productNameSnapshot} × ${si.qty}`);
       shipments.set(si.shipmentId, s);
     }
+  // 出貨了、客人還沒取的（這張單的件數）；全部都取了就顯示最後取貨時間
+  const openShips = [...new Map(order.items.flatMap((it) => it.shipmentItems.filter((si) => si.shipment.status === "SHIPPED").map((si) => [si.shipmentId, si.shipment] as const))).values()]
+    .sort((a, b) => a.shippedAt.getTime() - b.shippedAt.getTime())
+    .map((s) => ({ method: s.method, tracking: s.trackingNo, at: s.shippedAt.toISOString(), qty: order.items.flatMap((it) => it.shipmentItems).filter((si) => si.shipmentId === s.id).reduce((a, si) => a + si.qty, 0) }));
+  const allShipItems = order.items.flatMap((it) => it.shipmentItems);
+  const lastDelivered = allShipItems.length && allShipItems.every((si) => si.shipment.status === "DELIVERED") ? allShipItems.map((si) => si.shipment.deliveredAt).filter((d): d is Date => !!d).sort((a, b) => b.getTime() - a.getTime())[0] ?? null : null;
   const history = [
     ...order.items.flatMap((it) => it.events.map((e) => ({ at: e.createdAt, text: `${it.productNameSnapshot}：${EVENT[e.type] ?? e.type}${e.qtyDelta ? `（${e.qtyDelta > 0 ? "+" : ""}${e.qtyDelta}）` : ""}${e.fromValue || e.toValue ? ` ${flagLabel(e.fromValue)} → ${flagLabel(e.toValue)}` : ""}${e.note ? `｜${e.note}` : ""}` }))),
-    ...audits.filter((a) => a.action === "order.update").map((a) => ({ at: a.createdAt, text: `修改訂單：${Object.keys((a.data ?? {}) as object).join("、")}` })),
+    ...audits.filter((a) => a.action === "order.update").map((a) => ({ at: a.createdAt, text: `修改訂單：${Object.keys((a.data ?? {}) as object).map((k) => META[k] ?? k).join("、")}` })),
   ].sort((a, b) => a.at.getTime() - b.at.getTime());
 
   return (
@@ -90,6 +103,17 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           )
         }
       />
+
+      {!cancelled && order.confirmation === "CONFIRMED" && (
+        <OrderFlow
+          orderId={id}
+          lines={packLines.map((l) => ({ id: l.id, name: l.name, pending: l.pending, packed: l.packed, canPack: l.canPack, short: l.short }))}
+          open={openShips}
+          delivered={lastDelivered ? lastDelivered.toISOString() : null}
+          balance={r.balance}
+          methods={shipMethods.map((m) => m.name)}
+        />
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_22rem]">
         <Section title="買家與訂單資料">
@@ -203,13 +227,11 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                   <td>
                     <div className="flex flex-col items-start gap-1">
                       <StatusBadge map={procurementStatus} value={ri.procurementStatus} />
-                      {ri.activeQty > 0 && ri.procurementStatus !== "ARRIVED" && !cancelled && <FlagSelect itemId={it.id} kind="purchase" value={it.purchaseFlag} disabled={false} />}
                     </div>
                   </td>
                   <td>
                     <div className="flex flex-col items-start gap-1">
                       <StatusBadge map={shipStatus} value={ri.shipStatus} />
-                      {ri.pendingShipQty > 0 && !cancelled && <FlagSelect itemId={it.id} kind="pack" value={it.packFlag} disabled={false} />}
                     </div>
                   </td>
                   <td className="num text-right">{reserved}</td>
@@ -222,6 +244,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                           disabled={false}
                           item={{ id: it.id, name: it.productNameSnapshot, qty: it.qty, cancelled: it.cancelledQtyCache, shipped, reserved, unitPrice: it.unitPrice, lineDiscount: it.lineDiscount, categoryId: it.categoryId, specNote: it.specNote }}
                           categories={it.product.categories.map((c) => c.category)}
+                          flags={{ purchase: ri.activeQty > 0 && ri.procurementStatus !== "ARRIVED" ? it.purchaseFlag : null, pack: ri.pendingShipQty > 0 ? it.packFlag : null }}
                         />
                         <ReserveButtons itemId={it.id} need={need} reserved={reserved} available={available} />
                       </div>

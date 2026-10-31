@@ -5,6 +5,7 @@ import { claimRequest } from "@/server/services/common";
 import { tx, prisma, BizError } from "@/server/db";
 import * as o from "@/server/services/orders";
 import * as pay from "@/server/services/payments";
+import * as flow from "@/server/services/order-flow";
 import { buyerWarnings } from "@/server/services/buyers";
 import { parseDateTimeInput } from "@/lib/labels";
 
@@ -230,4 +231,17 @@ export async function setDemandOwnerAction(orderItemId: string, owner: string | 
     const { setDemandOwner } = await import("@/server/services/demand-owner");
     return tx((t) => setDemandOwner(t, a, id, ow), { timeout: 30_000 });
   });
+}
+
+// 訂單頁三步：備齊 → 出貨 → 客人取貨
+export async function setPackedAction(orderId: string, itemIds: string[], packed: boolean) {
+  return run((a) => tx((t) => flow.setPacked(t, a, z.string().parse(orderId), z.array(z.string()).max(500).parse(itemIds), z.boolean().parse(packed)), { timeout: 120_000 }));
+}
+export async function shipOrderAction(input: { orderId: string; method: string | null; trackingNo: string | null; shippedAt: string | null; dedupeKey: string }) {
+  const f = z.object({ orderId: z.string(), method: z.string().max(60).nullable(), trackingNo: z.string().max(80).nullable(), shippedAt: z.string().nullable(), dedupeKey: z.string().min(8).max(100) }).parse(input);
+  return run((a) => tx((t) => flow.shipOrder(t, a, { ...f, shippedAt: parseDateTimeInput(f.shippedAt) ?? undefined }), { timeout: 120_000 }));
+}
+export async function pickedUpAction(input: { orderId: string; at: string | null; collect: boolean; dedupeKey: string }) {
+  const f = z.object({ orderId: z.string(), at: z.string().nullable(), collect: z.boolean(), dedupeKey: z.string().min(8).max(100) }).parse(input);
+  return run((a) => tx((t) => flow.pickedUp(t, a, { ...f, at: parseDateTimeInput(f.at) ?? undefined }), { timeout: 120_000 }));
 }
