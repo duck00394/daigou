@@ -18,6 +18,7 @@ export type ShopProduct = {
   name: string; // 品項｜角色
   typeId: string; // 品項 id（沒有品項的商品用 "p-商品id"）
   typeName: string;
+  typeImage: string | null; // 品項全體照
   character: string;
   imageUrl: string | null;
   price: number | null;
@@ -56,6 +57,7 @@ export async function shopProducts(db: Db, categoryId: string): Promise<ShopProd
         typeName,
         character,
         imageUrl: p.imageUrl,
+        typeImage: (p.productTypeId ? tp.get(p.productTypeId)?.imageUrl : null) ?? null,
         price,
         quota: q.quota,
         sold: s,
@@ -516,4 +518,19 @@ export async function saveShopImage(t: Tx, actor: Actor, dataUrl: string) {
   const img = await t.shopImage.create({ data: { mime: m[1], data: buf, bytes: buf.length } });
   await audit(t, actor, "shop.image", "ShopImage", img.id, { bytes: buf.length });
   return `/api/shop/img/${img.id}`;
+}
+
+const OWN_IMG = /^\/api\/shop\/img\/([a-z0-9]+)$/;
+
+/** 品項全體照：dataUrl＝新照片；null＝拿掉。舊的上傳圖一起刪 */
+export async function setTypeImage(t: Tx, actor: Actor, categoryId: string, productTypeId: string, dataUrl: string | null) {
+  const [cat, type] = await Promise.all([t.category.findUnique({ where: { id: categoryId } }), t.productType.findUnique({ where: { id: productTypeId } })]);
+  if (!cat || !type) throw new BizError("找不到這個系列或品項");
+  const cur = await t.categoryTypePrice.findUnique({ where: { categoryId_productTypeId: { categoryId, productTypeId } } });
+  const url = dataUrl ? await saveShopImage(t, actor, dataUrl) : null;
+  await t.categoryTypePrice.upsert({ where: { categoryId_productTypeId: { categoryId, productTypeId } }, update: { imageUrl: url }, create: { categoryId, productTypeId, imageUrl: url } });
+  const oldId = OWN_IMG.exec(cur?.imageUrl ?? "")?.[1];
+  if (oldId) await t.shopImage.deleteMany({ where: { id: oldId } });
+  await audit(t, actor, "shop.typeImage", "Category", categoryId, { productTypeId, set: !!url });
+  return url;
 }

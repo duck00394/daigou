@@ -12,7 +12,8 @@ export function groupTypes(products: ShopProduct[]): TypeGroup[] {
   for (const p of products) {
     const g = m.get(p.typeId) ?? { typeId: p.typeId, typeName: p.typeName, image: null, price: null, chars: [], left: 0, total: 0, waiting: 0, products: [] };
     g.products.push(p);
-    if (!g.image && p.imageUrl) g.image = p.imageUrl;
+    if (p.typeImage) g.image = p.typeImage;
+    else if (!g.image && p.imageUrl) g.image = p.imageUrl;
     if (p.price !== null) g.price = g.price === null ? p.price : Math.min(g.price, p.price);
     if (p.character) g.chars.push(p.character);
     g.left += p.left;

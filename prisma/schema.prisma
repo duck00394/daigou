@@ -186,6 +186,8 @@ model CategoryTypePrice {
   salePriceTwd    Int?
   // 一整套有哪些角色（角色 id）；空的＝沒設定，改用這個系列這個品項有的角色
   setCharacterIds String[]    @default([])
+  // 訂購頁上這個品項的全體照（方便客人分辨）；上傳的圖是 /api/shop/img/…
+  imageUrl        String?
   sortOrder       Int         @default(0)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt

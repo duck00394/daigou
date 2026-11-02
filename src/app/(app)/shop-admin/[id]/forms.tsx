@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { Button, inputCls, TimeInput24, useLeaveGuard, useRun } from "@/components/client";
-import { saveQuotasAction, saveShopCategoryAction, uploadShopImageAction } from "@/actions/shop";
+import { saveQuotasAction, saveShopCategoryAction, setTypeImageAction, uploadShopImageAction } from "@/actions/shop";
 
 type Settings = { enabled: boolean; openDate: string; openTime: string; perPersonLimit: number | null; ownerId: string | null; imageUrl: string; intro: string };
 
@@ -51,7 +51,7 @@ export function SettingsForm({ categoryId, ops, initial, isNew }: { categoryId: 
   );
 }
 
-export type QuotaRow = { productId: string; type: string; typeSort: number; label: string; charSort: number; name: string; image: string | null; defaultPrice: number | null; price: number | null; quota: number | null; sold: number; waiting: number };
+export type QuotaRow = { productId: string; type: string; typeId: string | null; typeImage: string | null; typeSort: number; label: string; charSort: number; name: string; image: string | null; defaultPrice: number | null; price: number | null; quota: number | null; sold: number; waiting: number };
 
 type Cell = { q: string; p: string };
 const cellOf = (r: QuotaRow): Cell => ({ q: r.quota === null ? "" : String(r.quota), p: r.price === null ? "" : String(r.price) });
@@ -91,7 +91,10 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
         return (
           <div key={t} className="overflow-hidden rounded-lg border border-line-2">
             <div className="flex flex-wrap items-center justify-between gap-2 bg-line-2 px-3 py-2">
-              <span className="text-[15px] font-semibold">{t}</span>
+              <span className="flex items-center gap-2.5">
+                {list[0].typeId && <TypePhoto categoryId={categoryId} typeId={list[0].typeId} typeName={t} value={list[0].typeImage} />}
+                <span className="text-[15px] font-semibold">{t}</span>
+              </span>
               <span className="flex items-center gap-1.5">
                 <input aria-label={`${t} 售價全部填`} inputMode="numeric" placeholder="售價" className="h-9 w-[72px] rounded-md border border-line bg-white px-2 text-[15px]" value={f.p} onChange={(e) => setFill({ ...fill, [t]: { ...f, p: e.target.value.replace(/[^\d]/g, "") } })} />
                 <input aria-label={`${t} 數量全部填`} inputMode="numeric" placeholder="數量" className="h-9 w-14 rounded-md border border-line bg-white px-2 text-[15px]" value={f.q} onChange={(e) => setFill({ ...fill, [t]: { ...f, q: e.target.value.replace(/[^\d]/g, "") } })} />
@@ -202,5 +205,38 @@ function SeriesImage({ value, onChange }: { value: string; onChange: (url: strin
       {err && <p className="text-[13px] text-bad">{err}</p>}
       <p className="text-[12px] text-mute">照片會先在手機上縮小（約 100～300KB）再存，不用另外開服務。</p>
     </div>
+  );
+}
+
+/** 品項全體照：點小框選照片，選完直接存（客人在系列頁、品項頁看到的大圖） */
+function TypePhoto({ categoryId, typeId, typeName, value }: { categoryId: string; typeId: string; typeName: string; value: string | null }) {
+  const { run, pending } = useRun();
+  const [busy, setBusy] = useState(false);
+  const pick = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const data = await shrink(file);
+      await run(() => setTypeImageAction(categoryId, typeId, data), { success: `${typeName}的全體照已更新` });
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <span className="flex items-center gap-1.5">
+      <label className={`relative flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-md bg-white text-[11px] leading-tight text-ink-2 ${value ? "border border-line" : "border-[1.5px] border-dashed border-[#b8bfcc]"}`} title={`${typeName}的全體照`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {value ? <img src={value} alt={`${typeName}全體照`} className="h-full w-full object-cover" /> : <span className="text-center">＋<br />照片</span>}
+        {(busy || pending) && <span className="absolute inset-0 flex items-center justify-center bg-white/80 text-[10px]">上傳中</span>}
+        <input type="file" accept="image/*" className="sr-only" aria-label={`${typeName}的全體照`} disabled={busy || pending} onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} />
+      </label>
+      {value && (
+        <button type="button" className="text-[12px] text-bad underline" disabled={pending} onClick={() => confirm(`拿掉${typeName}的全體照？`) && run(() => setTypeImageAction(categoryId, typeId, null), { success: "已拿掉" })}>
+          拿掉
+        </button>
+      )}
+    </span>
   );
 }

@@ -63,3 +63,13 @@ export async function setShopNameAction(name: string) {
 export async function uploadShopImageAction(dataUrl: string) {
   return run(async (a) => tx((t) => shop.saveShopImage(t, a, z.string().max(1_000_000).parse(dataUrl))));
 }
+
+/** 品項全體照：選完照片直接存；null＝拿掉 */
+export async function setTypeImageAction(categoryId: string, productTypeId: string, dataUrl: string | null) {
+  return run(async (a) => {
+    const url = await tx((t) => shop.setTypeImage(t, a, z.string().max(64).parse(categoryId), z.string().max(64).parse(productTypeId), dataUrl === null ? null : z.string().max(1_000_000).parse(dataUrl)));
+    revalidatePath(`/shop-admin/${categoryId}`);
+    revalidatePath("/shop", "layout");
+    return url;
+  });
+}

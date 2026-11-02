@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { money, Pic, Stepper, useCart } from "../../../../cart";
+import { money, Stepper, useCart } from "../../../../cart";
 import { joinWaitAction } from "../../../../actions";
 
 type Row = { productId: string; name: string; label: string; image: string | null; price: number | null; left: number; waiting: number; mine: number; inWait: boolean; seed: number };
@@ -67,7 +67,6 @@ export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, 
             const note = r.price === null ? "價格待定" : sold ? `已售完${r.waiting ? `・${r.waiting} 人候補` : ""}` : `剩 ${r.left} 個${ic ? `・購物車已有 ${ic}` : ""}${r.mine ? `・你已訂 ${r.mine}` : ""}`;
             return (
               <li key={r.productId} className="flex items-center gap-3 border-b border-[#f1e9e0] px-4 py-3 last:border-b-0">
-                <Pic src={r.image} alt={r.name} seed={r.seed} className="h-[52px] w-[52px] shrink-0 rounded-[14px]" label="" />
                 <div className="min-w-0 flex-1">
                   <div className="text-[16px] font-bold">{r.label}</div>
                   <div className={`text-[12px] ${sold ? "text-shop-rose-2" : "text-shop-mute"}`}>{note}</div>

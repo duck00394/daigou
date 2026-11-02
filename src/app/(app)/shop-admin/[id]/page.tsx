@@ -36,6 +36,8 @@ export default async function ShopCategoryAdmin({ params }: { params: Promise<{ 
       return {
         productId: p.id,
         type: p.productType?.name ?? "其他",
+        typeId: p.productTypeId,
+        typeImage: (p.productTypeId ? tp.get(p.productTypeId)?.imageUrl : null) ?? null,
         typeSort: p.productTypeId ? (tp.get(p.productTypeId)?.sortOrder ?? p.productType?.sortOrder ?? 0) : 9999,
         label: ch?.name ?? p.spec ?? p.name,
         charSort: ch?.sortOrder ?? 0,
