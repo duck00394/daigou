@@ -23,14 +23,14 @@ export default async function TypePage({ params }: { params: Promise<{ id: strin
 
   return (
     <>
-      <div className="relative h-[340px]">
-        <Pic src={g.image} alt={g.typeName} seed={0} className="absolute inset-0 h-full w-full" label="商品圖片" />
+      <div className={`relative ${g.image ? "pt-[68px]" : "h-[340px]"}`}>
+        {g.image ? <Pic src={g.image} alt={g.typeName} fit="natural" /> : <Pic src={null} alt={g.typeName} seed={0} className="absolute inset-0 h-full w-full" label="商品圖片" />}
         <div className="absolute inset-x-4 top-3 flex justify-between">
           <BackCircle href={`/shop/c/${id}`} label={`回到${s.category.name}`} />
           <CartButton />
         </div>
       </div>
-      <div className="relative -mt-9 flex flex-col gap-4 rounded-t-[28px] bg-shop-bg px-4 pt-[22px]">
+      <div className={`relative ${g.image ? "mt-0 pt-4" : "-mt-9 pt-[22px]"} flex flex-col gap-4 rounded-t-[28px] bg-shop-bg px-4`}>
         <div className="flex flex-col gap-1.5">
           <Eyebrow rose>{s.category.name}</Eyebrow>
           <h1 className="font-serif text-[26px] leading-snug font-bold">{g.typeName}</h1>

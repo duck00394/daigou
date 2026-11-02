@@ -24,9 +24,9 @@ export default async function ShopHome({ searchParams }: { searchParams: Promise
 
       {upcoming && (
         <section className="px-4 pt-5">
-          <div className="relative h-[300px] overflow-hidden rounded-[24px] shadow-[0_10px_30px_rgba(120,70,60,0.12)]">
-            <Pic src={upcoming.imageUrl} alt={upcoming.category.name} seed={1} className="absolute inset-0 h-full w-full" label="" />
-            <div className="absolute inset-x-3.5 bottom-3.5 flex flex-col gap-2 rounded-[18px] bg-white/95 p-4">
+          <div className={`relative overflow-hidden rounded-[24px] bg-white shadow-[0_10px_30px_rgba(120,70,60,0.12)] ${upcoming.imageUrl ? "" : "h-[300px]"}`}>
+            {upcoming.imageUrl ? <Pic src={upcoming.imageUrl} alt={upcoming.category.name} fit="natural" /> : <Pic src={null} alt={upcoming.category.name} seed={1} className="absolute inset-0 h-full w-full" label="" />}
+            <div className={`${upcoming.imageUrl ? "relative" : "absolute inset-x-3.5 bottom-3.5 rounded-[18px] bg-white/95"} flex flex-col gap-2 p-4`}>
               <Eyebrow rose>COMING SOON</Eyebrow>
               <SerifTitle>{upcoming.category.name}　開賣倒數</SerifTitle>
               <div className="flex items-center gap-2">

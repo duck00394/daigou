@@ -442,10 +442,11 @@ export async function saveQuotas(t: Tx, actor: Actor, categoryId: string, rows: 
     const key = { categoryId_productId: { categoryId, productId: r.productId } };
     const cur = await t.shopQuota.findUnique({ where: key });
     if (r.quota === null) {
-      if (r.price !== undefined && r.price !== null) throw new BizError("要設售價，請先填開放數量");
+      // 開放數量空白＝從訂購頁拿掉：排候補的人自動取消並通知
       if (cur) {
         await t.shopQuota.delete({ where: key });
         changed.push(r);
+        await dropWaits(t, categoryId, r.productId);
       }
       continue;
     }
@@ -535,4 +536,17 @@ export async function setTypeImage(t: Tx, actor: Actor, categoryId: string, prod
   if (oldId) await t.shopImage.deleteMany({ where: { id: oldId } });
   await audit(t, actor, "shop.typeImage", "Category", categoryId, { productTypeId, url });
   return url;
+}
+
+/** 商品從訂購頁拿掉：候補全部取消，用 LINE 告訴排候補的人 */
+async function dropWaits(t: Tx, categoryId: string, productId: string) {
+  const waits = await t.shopWait.findMany({ where: { categoryId, productId, status: "WAITING" }, include: { buyer: { select: { lineUserId: true } }, product: { select: { name: true } } } });
+  if (!waits.length) return;
+  await t.shopWait.updateMany({ where: { id: { in: waits.map((w) => w.id) } }, data: { status: "CANCELLED" } });
+  const series = await seriesNames(t, [categoryId]);
+  for (const w of waits) {
+    await enqueueLine(t, w.buyer.lineUserId, [
+      orderCard({ tone: "cancelled", eyebrow: "WAITING LIST", title: "候補已取消", orderNo: "（候補）", series, lines: [{ name: w.product.name, qty: w.qty, strike: true }], note: "這個商品這次不開放了，謝謝你排候補！", url: `${appUrl()}/shop/orders` }),
+    ]);
+  }
 }

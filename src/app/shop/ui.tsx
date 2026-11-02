@@ -84,7 +84,7 @@ export function TypeCard({ g, href, seed }: { g: TypeGroup; href: string; seed: 
   return (
     <Link href={href} className="flex flex-col overflow-hidden rounded-[18px] border border-shop-line bg-white shadow-[0_6px_16px_rgba(120,70,60,0.07)]">
       <div className="relative">
-        <Pic src={g.image} alt={g.typeName} seed={seed} className="h-40 w-full" label="商品圖片" />
+        <Pic src={g.image} alt={g.typeName} seed={seed} className="h-40 w-full" label="商品圖片" fit="contain" />
         {soldOut ? (
           <span className="absolute inset-0 flex items-center justify-center bg-white/40"><span className="rounded-[14px] bg-shop-ink/80 px-3.5 py-1.5 text-[14px] font-bold text-white">全部售完</span></span>
         ) : (

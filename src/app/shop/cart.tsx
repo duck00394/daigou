@@ -193,8 +193,12 @@ export function Countdown({ at, compact }: { at: string; compact?: boolean }) {
 
 /** 商品圖片：沒有圖或載入失敗時顯示柔和色塊 */
 const TINTS = ["#f6e3e4", "#e2ecf5", "#f5ecd6", "#e6f2e7", "#efe6dc"];
-export function Pic({ src, alt, seed = 0, className = "", label = "" }: { src: string | null; alt: string; seed?: number; className?: string; label?: string }) {
+export function Pic({ src, alt, seed = 0, className = "", label = "", fit = "cover" }: { src: string | null; alt: string; seed?: number; className?: string; label?: string; fit?: "cover" | "contain" | "natural" }) {
   const [failed, setFailed] = useState(false);
+  // natural：整張圖照原比例顯示（寬度填滿、高度跟著圖），不會被切掉
+  if (fit === "natural" && src && !failed)
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt={alt} referrerPolicy="no-referrer" onError={() => setFailed(true)} className="block h-auto w-full" />;
   if (!src || failed)
     return (
       <div role="img" aria-label={alt} className={`flex items-center justify-center text-[12px] text-shop-mute ${className}`} style={{ background: TINTS[Math.abs(seed) % TINTS.length] }}>
@@ -202,5 +206,5 @@ export function Pic({ src, alt, seed = 0, className = "", label = "" }: { src: s
       </div>
     );
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt={alt} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} className={`object-cover ${className}`} />;
+  return <img src={src} alt={alt} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} className={`${fit === "contain" ? "bg-white object-contain" : "object-cover"} ${className}`} />;
 }

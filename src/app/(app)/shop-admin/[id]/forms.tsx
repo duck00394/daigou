@@ -69,10 +69,9 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
   const num = /^\d{1,6}$/;
   const badQty = changed.find((r) => v[r.productId].q !== "" && !/^\d{1,4}$/.test(v[r.productId].q));
   const badPrice = changed.find((r) => v[r.productId].p !== "" && !num.test(v[r.productId].p));
-  const priceNoQty = changed.find((r) => v[r.productId].p !== "" && v[r.productId].q === "");
   const set = (id: string, patch: Partial<Cell>) => setV((x) => ({ ...x, [id]: { ...x[id], ...patch } }));
   const save = () =>
-    run(() => saveQuotasAction(categoryId, changed.map((r) => ({ productId: r.productId, quota: v[r.productId].q === "" ? null : Number(v[r.productId].q), price: v[r.productId].p === "" ? null : Number(v[r.productId].p) }))), {
+    run(() => saveQuotasAction(categoryId, changed.map((r) => ({ productId: r.productId, quota: v[r.productId].q === "" ? null : Number(v[r.productId].q), price: v[r.productId].q === "" ? undefined : v[r.productId].p === "" ? null : Number(v[r.productId].p) }))), {
       success: (d) => `已儲存 ${d.changed} 個${d.filled ? `，候補遞補了 ${d.filled} 筆` : ""}`,
       onOk: () => setSaved(v),
     });
@@ -82,7 +81,7 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
     <section className="space-y-3 rounded-xl border border-line bg-card p-4">
       <div>
         <h2 className="text-[16px] font-semibold">售價與開放數量</h2>
-        <p className="text-[13px] text-mute">開放數量跟庫存分開算，可以先接單再去買。空白＝不放到訂購頁；0＝顯示但已售完（可排候補）。售價空白＝用品項售價（灰字）。改售價只影響之後的新訂單。</p>
+        <p className="text-[13px] text-mute">開放數量跟庫存分開算，可以先接單再去買。<b>空白＝從訂購頁拿掉</b>（客人看不到、不能訂、不能排候補，已經排候補的人會收到 LINE 通知）；0＝顯示但已售完（可排候補）。售價空白＝用品項售價（灰字）。改售價只影響之後的新訂單。</p>
       </div>
       {types.map((t) => {
         const list = rows.filter((r) => r.type === t);
@@ -130,8 +129,7 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
       })}
       {badQty && <p className="text-[13px] text-bad">開放數量要填 0～9999 的整數</p>}
       {badPrice && <p className="text-[13px] text-bad">售價要填整數（台幣）</p>}
-      {priceNoQty && <p className="text-[13px] text-bad">「{priceNoQty.label}」有填售價，也要填開放數量</p>}
-      <Button variant="primary" className="w-full" loading={pending} disabled={!changed.length || !!badQty || !!badPrice || !!priceNoQty} onClick={save}>{changed.length ? `儲存 ${changed.length} 個變更` : "儲存"}</Button>
+      <Button variant="primary" className="w-full" loading={pending} disabled={!changed.length || !!badQty || !!badPrice} onClick={save}>{changed.length ? `儲存 ${changed.length} 個變更` : "儲存"}</Button>
     </section>
   );
 }

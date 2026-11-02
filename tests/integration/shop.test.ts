@@ -193,7 +193,9 @@ describe("單支售價與 LINE 卡片", () => {
     expect((await prisma.shopQuota.findFirstOrThrow({ where: { productId: s.p1.id } })).price).toBe(650);
     await tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p1.id, quota: 5, price: null }]));
     expect((await shop.shopProducts(prisma, s.halloween.id)).find((p) => p.productId === s.p1.id)!.price).toBe(500);
-    await expect(tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p2.id, quota: null, price: 100 }]))).rejects.toThrow("先填開放數量");
+    // 開放數量空白＝拿掉（售價一起不管）
+    await tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p2.id, quota: null, price: 100 }]));
+    expect((await shop.shopProducts(prisma, s.halloween.id)).some((p) => p.productId === s.p2.id)).toBe(false);
   });
 
   it("LINE 卡片寫上預訂系列", async () => {
@@ -230,5 +232,21 @@ describe("品項全體照", () => {
     expect((await shop.shopProducts(prisma, s.halloween.id)).find((p) => p.productId === s.p1.id)!.typeImage).toBe("https://example.com/all.jpg");
     await tx((t) => shop.setTypeImage(t, actor, s.halloween.id, type.id, ""));
     expect((await shop.shopProducts(prisma, s.halloween.id)).find((p) => p.productId === s.p1.id)!.typeImage).toBeNull();
+  });
+});
+
+describe("拿掉商品", () => {
+  it("開放數量清空：客人看不到、候補取消並通知", async () => {
+    const [a, b] = [await lineBuyer("先買"), await lineBuyer("候補")];
+    await order(a, [{ productId: s.p2.id, qty: 1 }]);
+    await tx((t) => shop.joinWait(t, b, { categoryId: s.halloween.id, productId: s.p2.id, qty: 1 }));
+    await prisma.lineOutbox.deleteMany();
+    await tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p2.id, quota: null }]));
+    expect((await shop.shopProducts(prisma, s.halloween.id)).some((p) => p.productId === s.p2.id)).toBe(false);
+    expect((await prisma.shopWait.findFirstOrThrow({ where: { buyerId: b } })).status).toBe("CANCELLED");
+    const m = await prisma.lineOutbox.findMany();
+    expect(m.length).toBe(1);
+    expect(JSON.stringify(m[0].messages)).toContain("候補已取消");
+    await expect(tx((t) => shop.joinWait(t, a, { categoryId: s.halloween.id, productId: s.p2.id, qty: 1 }))).rejects.toThrow("找不到");
   });
 });

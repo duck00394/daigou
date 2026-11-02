@@ -20,14 +20,14 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
 
   return (
     <>
-      <div className="relative h-[300px]">
-        <Pic src={s.imageUrl} alt={s.category.name} seed={1} className="absolute inset-0 h-full w-full" label="" />
+      <div className={`relative ${s.imageUrl ? "pt-[68px]" : "h-[300px]"}`}>
+        {s.imageUrl ? <Pic src={s.imageUrl} alt={s.category.name} fit="natural" /> : <Pic src={null} alt={s.category.name} seed={1} className="absolute inset-0 h-full w-full" label="" />}
         <div className="absolute inset-x-4 top-3 flex justify-between">
           <BackCircle href="/shop" label="回到全部系列" />
           <CartButton />
         </div>
       </div>
-      <div className="relative mx-4 -mt-16 flex flex-col gap-2.5 rounded-[22px] bg-white p-[18px] shadow-[0_12px_30px_rgba(120,70,60,0.14)]">
+      <div className={`relative mx-4 ${s.imageUrl ? "mt-3" : "-mt-16"} flex flex-col gap-2.5 rounded-[22px] bg-white p-[18px] shadow-[0_12px_30px_rgba(120,70,60,0.14)]`}>
         <Eyebrow rose>COLLECTION</Eyebrow>
         <SerifTitle size={26}>{s.category.name}</SerifTitle>
         <div className="flex flex-wrap gap-1.5">

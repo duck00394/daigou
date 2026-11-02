@@ -68,7 +68,11 @@ export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, 
             return (
               <li key={r.productId} className="flex items-center gap-3 border-b border-[#f1e9e0] px-4 py-3 last:border-b-0">
                 <div className="min-w-0 flex-1">
-                  <div className="text-[16px] font-bold">{r.label}</div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[16px] font-bold">{r.label}</span>
+                    {r.price !== null && <span className={`text-[14px] font-bold ${sold ? "text-shop-mute" : "text-shop-rose"}`}>{money(r.price)}</span>}
+                  </div>
+                  {r.price !== null && <div className={`text-[14px] font-bold ${sold ? "text-shop-mute" : "text-shop-rose"}`}>NT$ {r.price.toLocaleString("en-US")}</div>}
                   <div className={`text-[12px] ${sold ? "text-shop-rose-2" : "text-shop-mute"}`}>{note}</div>
                 </div>
                 {sold ? (
