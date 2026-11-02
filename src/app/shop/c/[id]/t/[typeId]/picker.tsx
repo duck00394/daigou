@@ -6,7 +6,7 @@ import { useMemo, useState, useTransition } from "react";
 import { money, Stepper, useCart } from "../../../../cart";
 import { joinWaitAction } from "../../../../actions";
 
-type Row = { productId: string; name: string; label: string; image: string | null; price: number | null; left: number; waiting: number; mine: number; inWait: boolean; seed: number; bundle: number };
+type Row = { productId: string; name: string; label: string; image: string | null; price: number | null; left: number; waiting: number; mine: number; inWait: boolean; seed: number; bundle: number; bundleAmount: number };
 
 export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, rows }: { categoryId: string; catName: string; open: boolean; loggedIn: boolean; loginHref: string; limit: number | null; rows: Row[] }) {
   const cart = useCart();
@@ -26,13 +26,18 @@ export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, 
   const addAll = () => {
     if (!count) return;
     // 不能單買的角色：這次選的加上購物車裡同品項的其他角色要夠
-    const ids = new Set(rows.map((r) => r.productId));
     for (const r of picked) {
-      if (!r.bundle) continue;
+      if (!r.bundle && !r.bundleAmount) continue;
       const mineQty = (qty[r.productId] ?? 0) + inCart(r.productId);
-      const others = rows.filter((o) => o.productId !== r.productId).reduce((a, o) => a + (qty[o.productId] ?? 0) + inCart(o.productId), 0);
-      if (ids.has(r.productId) && others < mineQty * r.bundle) {
-        setMsg({ text: `${r.label}不能單買：每 1 個要搭配 ${r.bundle} 個其他角色（還差 ${mineQty * r.bundle - others} 個）`, ok: false });
+      const others = rows.filter((o) => o.productId !== r.productId);
+      const n = others.reduce((a, o) => a + (qty[o.productId] ?? 0) + inCart(o.productId), 0);
+      const amt = others.reduce((a, o) => a + ((qty[o.productId] ?? 0) + inCart(o.productId)) * (o.price ?? 0), 0);
+      if (r.bundle && n < mineQty * r.bundle) {
+        setMsg({ text: `${r.label}不能單買：每 1 個要搭配 ${r.bundle} 個其他角色（還差 ${mineQty * r.bundle - n} 個）`, ok: false });
+        return;
+      }
+      if (r.bundleAmount && amt < mineQty * r.bundleAmount) {
+        setMsg({ text: `${r.label}不能單買：每 1 個要搭配其他角色滿 ${money(r.bundleAmount)}（還差 ${money(mineQty * r.bundleAmount - amt)}）`, ok: false });
         return;
       }
     }
@@ -84,12 +89,12 @@ export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, 
                     {r.price !== null && <span className={`text-[14px] font-bold ${sold ? "text-shop-mute" : "text-shop-rose"}`}>{money(r.price)}</span>}
                   </div>
                   <div className={`text-[12px] ${sold ? "text-shop-rose-2" : "text-shop-mute"}`}>{note}</div>
-                  {r.bundle > 0 && <div className="mt-0.5 inline-block rounded-md bg-shop-gold-soft px-1.5 py-0.5 text-[11px] font-bold text-shop-gold">不能單買・每 1 個要搭 {r.bundle} 個其他角色</div>}
+                  {(r.bundle > 0 || r.bundleAmount > 0) && <div className="mt-0.5 inline-block rounded-md bg-shop-gold-soft px-1.5 py-0.5 text-[11px] font-bold text-shop-gold">不能單買・每 1 個要搭{r.bundle ? ` ${r.bundle} 個其他角色` : `其他角色滿 ${money(r.bundleAmount)}`}</div>}
                 </div>
                 {sold ? (
                   r.inWait ? (
                     <span className="flex h-11 w-[128px] items-center justify-center rounded-full bg-shop-rose text-[14px] font-bold text-white">已排候補</span>
-                  ) : open && !r.bundle ? (
+                  ) : open && !r.bundle && !r.bundleAmount ? (
                     <button type="button" disabled={pending} onClick={() => wait(r)} className="h-11 w-[128px] rounded-full border-[1.5px] border-shop-rose bg-white text-[14px] font-bold text-shop-rose-2 disabled:opacity-50">排候補</button>
                   ) : null
                 ) : r.price === null ? null : max === 0 ? (

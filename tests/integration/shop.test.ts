@@ -279,3 +279,17 @@ describe("傳賣貨便連結", () => {
     await expect(tx((t) => shop.sendSaleLink(t, actor, o.id, { url: "https://x.com" }))).rejects.toThrow("沒有用 LINE");
   });
 });
+
+describe("不能單買：金額", () => {
+  it("其他角色要買滿多少錢；個數可以自由設", async () => {
+    const type = await prisma.productType.create({ data: { name: "金額吊娃" } });
+    await prisma.product.updateMany({ where: { id: { in: [s.p1.id, s.p2.id] } }, data: { productTypeId: type.id } });
+    await tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p2.id, quota: 1, bundleAmount: 900 }, { productId: s.p1.id, quota: 3 }]));
+    const b = await lineBuyer("金額");
+    await expect(order(b, [{ productId: s.p2.id, qty: 1 }, { productId: s.p1.id, qty: 1 }])).rejects.toThrow("還差 NT$ 400");
+    await order(b, [{ productId: s.p2.id, qty: 1 }, { productId: s.p1.id, qty: 2 }]);
+    await tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p2.id, quota: 1, bundleNeed: 5, bundleAmount: null }]));
+    const q = await prisma.shopQuota.findFirstOrThrow({ where: { productId: s.p2.id } });
+    expect([q.bundleNeed, q.bundleAmount]).toEqual([5, null]);
+  });
+});

@@ -51,10 +51,11 @@ export function SettingsForm({ categoryId, ops, initial, isNew }: { categoryId: 
   );
 }
 
-export type QuotaRow = { productId: string; type: string; typeId: string | null; typeImage: string | null; typeSort: number; label: string; charSort: number; name: string; image: string | null; defaultPrice: number | null; price: number | null; bundleNeed: number; quota: number | null; sold: number; waiting: number };
+export type QuotaRow = { productId: string; type: string; typeId: string | null; typeImage: string | null; typeSort: number; label: string; charSort: number; name: string; image: string | null; defaultPrice: number | null; price: number | null; bundleNeed: number; bundleAmount: number; quota: number | null; sold: number; waiting: number };
 
-type Cell = { q: string; p: string; b: number };
-const cellOf = (r: QuotaRow): Cell => ({ q: r.quota === null ? "" : String(r.quota), p: r.price === null ? "" : String(r.price), b: r.bundleNeed });
+// m：能不能單買（"" 可以單買／"n" 要搭幾個／"a" 要搭到多少錢），bv：個數或金額
+type Cell = { q: string; p: string; m: "" | "n" | "a"; bv: string };
+const cellOf = (r: QuotaRow): Cell => ({ q: r.quota === null ? "" : String(r.quota), p: r.price === null ? "" : String(r.price), m: r.bundleNeed ? "n" : r.bundleAmount ? "a" : "", bv: r.bundleNeed ? String(r.bundleNeed) : r.bundleAmount ? String(r.bundleAmount) : "" });
 
 export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: QuotaRow[] }) {
   const init = useMemo(() => Object.fromEntries(rows.map((r) => [r.productId, cellOf(r)])), [rows]);
@@ -62,16 +63,17 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
   const [saved, setSaved] = useState(init);
   const [fill, setFill] = useState<Record<string, Cell>>({});
   const { run, pending } = useRun();
-  const same = (a?: Cell, b?: Cell) => (a?.q ?? "") === (b?.q ?? "") && (a?.p ?? "") === (b?.p ?? "") && (a?.b ?? 0) === (b?.b ?? 0);
+  const same = (a?: Cell, b?: Cell) => (a?.q ?? "") === (b?.q ?? "") && (a?.p ?? "") === (b?.p ?? "") && (a?.m ?? "") === (b?.m ?? "") && (a?.m ? a.bv : "") === (b?.m ? b.bv : "");
   const changed = rows.filter((r) => !same(v[r.productId], saved[r.productId]));
   useLeaveGuard(changed.length > 0);
   const types = [...new Set(rows.map((r) => r.type))];
   const num = /^\d{1,6}$/;
   const badQty = changed.find((r) => v[r.productId].q !== "" && !/^\d{1,4}$/.test(v[r.productId].q));
+  const badBundle = changed.find((r) => v[r.productId].q !== "" && v[r.productId].m && !/^[1-9]\d{0,5}$/.test(v[r.productId].bv));
   const badPrice = changed.find((r) => v[r.productId].p !== "" && !num.test(v[r.productId].p));
   const set = (id: string, patch: Partial<Cell>) => setV((x) => ({ ...x, [id]: { ...x[id], ...patch } }));
   const save = () =>
-    run(() => saveQuotasAction(categoryId, changed.map((r) => ({ productId: r.productId, quota: v[r.productId].q === "" ? null : Number(v[r.productId].q), price: v[r.productId].q === "" ? undefined : v[r.productId].p === "" ? null : Number(v[r.productId].p), bundleNeed: v[r.productId].q === "" ? undefined : v[r.productId].b }))), {
+    run(() => saveQuotasAction(categoryId, changed.map((r) => ({ productId: r.productId, quota: v[r.productId].q === "" ? null : Number(v[r.productId].q), price: v[r.productId].q === "" ? undefined : v[r.productId].p === "" ? null : Number(v[r.productId].p), bundleNeed: v[r.productId].q === "" ? undefined : v[r.productId].m === "n" ? Number(v[r.productId].bv) : null, bundleAmount: v[r.productId].q === "" ? undefined : v[r.productId].m === "a" ? Number(v[r.productId].bv) : null }))), {
       success: (d) => `已儲存 ${d.changed} 個${d.filled ? `，候補遞補了 ${d.filled} 筆` : ""}`,
       onOk: () => setSaved(v),
     });
@@ -85,7 +87,7 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
       </div>
       {types.map((t) => {
         const list = rows.filter((r) => r.type === t);
-        const f = fill[t] ?? { q: "", p: "", b: 0 };
+        const f = fill[t] ?? { q: "", p: "", m: "", bv: "" };
         const canFill = (f.q === "" || /^\d{1,4}$/.test(f.q)) && (f.p === "" || num.test(f.p)) && (f.q !== "" || f.p !== "");
         return (
           <div key={t} className="overflow-hidden rounded-lg border border-line-2">
@@ -106,7 +108,7 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
               <span>角色</span><span>售價</span><span>開放數量</span><span className="text-center">已訂</span><span className="text-center">候補</span>
             </div>
             {list.map((r) => {
-              const c = v[r.productId] ?? { q: "", p: "", b: 0 };
+              const c = v[r.productId] ?? { q: "", p: "", m: "", bv: "" };
               const dirty = !same(c, saved[r.productId]);
               const noPrice = c.p === "" && r.defaultPrice === null && c.q !== "";
               return (
@@ -116,10 +118,20 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
                       <span className="block truncate text-[15px]">{r.label}</span>
                       {noPrice && <span className="block text-[12px] text-bad">沒有售價，客人不能訂</span>}
                       {c.q !== "" && list.length > 1 && (
-                        <select aria-label={`${r.label} 能不能單買`} className={`mt-0.5 h-7 max-w-full rounded border px-1 text-[12px] ${c.b ? "border-[#f0dfa8] bg-warn-soft text-warn" : "border-line bg-white text-ink-2"}`} value={c.b} onChange={(e) => set(r.productId, { b: Number(e.target.value) })}>
-                          <option value={0}>可以單買</option>
-                          {[1, 2, 3].map((n) => <option key={n} value={n}>要搭 {n} 個其他角色</option>)}
-                        </select>
+                        <span className="mt-0.5 flex flex-wrap items-center gap-1">
+                          <select aria-label={`${r.label} 能不能單買`} className={`h-7 rounded border px-1 text-[12px] ${c.m ? "border-[#f0dfa8] bg-warn-soft text-warn" : "border-line bg-white text-ink-2"}`} value={c.m} onChange={(e) => set(r.productId, { m: e.target.value as Cell["m"], bv: e.target.value ? c.bv : "" })}>
+                            <option value="">可以單買</option>
+                            <option value="n">要搭其他角色（個數）</option>
+                            <option value="a">要搭其他角色（金額）</option>
+                          </select>
+                          {c.m && (
+                            <span className="flex items-center gap-0.5 text-[12px] text-ink-2">
+                              {c.m === "a" && "滿 NT$"}
+                              <input aria-label={c.m === "n" ? `${r.label} 要搭幾個` : `${r.label} 要搭到多少錢`} inputMode="numeric" className={`h-7 rounded border px-1 text-[13px] ${c.m === "n" ? "w-10" : "w-16"} ${/^[1-9]\d*$/.test(c.bv) ? "border-line" : "border-bad"}`} value={c.bv} onChange={(e) => set(r.productId, { bv: e.target.value.replace(/[^\d]/g, "") })} />
+                              {c.m === "n" && "個"}
+                            </span>
+                          )}
+                        </span>
                       )}
                     </span>
                   </span>
@@ -135,7 +147,8 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
       })}
       {badQty && <p className="text-[13px] text-bad">開放數量要填 0～9999 的整數</p>}
       {badPrice && <p className="text-[13px] text-bad">售價要填整數（台幣）</p>}
-      <Button variant="primary" className="w-full" loading={pending} disabled={!changed.length || !!badQty || !!badPrice} onClick={save}>{changed.length ? `儲存 ${changed.length} 個變更` : "儲存"}</Button>
+      {badBundle && <p className="text-[13px] text-bad">「{badBundle.label}」要搭幾個（或多少錢）要填大於 0 的整數</p>}
+      <Button variant="primary" className="w-full" loading={pending} disabled={!changed.length || !!badQty || !!badPrice || !!badBundle} onClick={save}>{changed.length ? `儲存 ${changed.length} 個變更` : "儲存"}</Button>
     </section>
   );
 }

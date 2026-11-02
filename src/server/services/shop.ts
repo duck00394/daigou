@@ -23,7 +23,8 @@ export type ShopProduct = {
   imageUrl: string | null;
   price: number | null;
   quota: number;
-  bundleNeed: number; // 0＝可以單買；n＝每買 1 個要搭配 n 個同品項的其他角色
+  bundleNeed: number; // 0＝不限；n＝每買 1 個要搭配 n 個同品項的其他角色
+  bundleAmount: number; // 0＝不限；x＝每買 1 個，同品項其他角色要買滿 x 元
   sold: number;
   left: number;
   waiting: number;
@@ -62,6 +63,7 @@ export async function shopProducts(db: Db, categoryId: string): Promise<ShopProd
         price,
         quota: q.quota,
         bundleNeed: q.bundleNeed ?? 0,
+        bundleAmount: q.bundleAmount ?? 0,
         sold: s,
         left: Math.max(0, q.quota - s),
         waiting: waits.get(p.id) ?? 0,
@@ -185,12 +187,11 @@ export async function placeShopOrder(t: Tx, buyerId: string, input: { lines: Car
     if (limit && had + l.qty > limit) throw new BizError(`「${p.name}」每人限購 ${limit} 個${had ? `（你已經訂了 ${had} 個）` : ""}`);
   }
 
-  // 不能單買的角色：同一張訂單裡，同品項的其他角色要夠
+  // 不能單買的角色：同一張訂單裡，同品項的其他角色要夠（個數或金額）
   for (const l of lines) {
     const p = info.get(`${l.categoryId}|${l.productId}`)!;
-    if (!p.bundleNeed) continue;
-    const others = lines.filter((o) => o.categoryId === l.categoryId && o.productId !== l.productId && info.get(`${o.categoryId}|${o.productId}`)?.typeId === p.typeId).reduce((a, o) => a + o.qty, 0);
-    if (others < l.qty * p.bundleNeed) throw new BizError(`「${p.name}」不能單買：每 1 個要搭配 ${p.bundleNeed} 個${p.typeName}的其他角色（還差 ${l.qty * p.bundleNeed - others} 個）`);
+    const msg = bundleShort(p, l.qty, lines.filter((o) => o.categoryId === l.categoryId && o.productId !== l.productId && info.get(`${o.categoryId}|${o.productId}`)?.typeId === p.typeId).map((o) => ({ qty: o.qty, price: info.get(`${o.categoryId}|${o.productId}`)?.price ?? 0 })));
+    if (msg) throw new BizError(msg);
   }
 
   await t.buyer.update({
@@ -270,7 +271,7 @@ export async function joinWait(t: Tx, buyerId: string, input: { categoryId: stri
   const p = (await shopProducts(t, input.categoryId)).find((x) => x.productId === input.productId);
   if (!p) throw new BizError("找不到這個商品");
   if (p.left > 0) throw new BizError(`還有 ${p.left} 個，可以直接下單`);
-  if (p.bundleNeed) throw new BizError("這個角色要搭配其他角色一起買，不能排候補");
+  if (p.bundleNeed || p.bundleAmount) throw new BizError("這個角色要搭配其他角色一起買，不能排候補");
   const had = (await soldMap(t, input.categoryId, [input.productId], buyerId)).get(input.productId) ?? 0;
   if (s.perPersonLimit && had + input.qty > s.perPersonLimit) throw new BizError(`每人限購 ${s.perPersonLimit} 個${had ? `（你已經訂了 ${had} 個）` : ""}`);
   const existing = await t.shopWait.findFirst({ where: { buyerId, categoryId: input.categoryId, productId: input.productId, status: "WAITING" } });
@@ -305,7 +306,7 @@ export async function promoteWaits(t: Tx, categoryId: string, productId: string)
   let filled = 0;
   for (const w of waits) {
     const p = (await shopProducts(t, categoryId)).find((x) => x.productId === productId);
-    if (!p || p.left <= 0 || p.price === null || p.bundleNeed) break;
+    if (!p || p.left <= 0 || p.price === null || p.bundleNeed || p.bundleAmount) break;
     if (!w.buyer.lineUserId || w.buyer.mergedIntoId || w.buyer.archivedAt) {
       await t.shopWait.update({ where: { id: w.id }, data: { status: "CANCELLED" } });
       continue;
@@ -440,7 +441,7 @@ export async function saveShopCategory(t: Tx, actor: Actor, categoryId: string, 
   await audit(t, actor, "shop.category", "Category", categoryId, { before, after: data });
 }
 
-export type QuotaInput = { productId: string; quota: number | null; price?: number | null; bundleNeed?: number | null };
+export type QuotaInput = { productId: string; quota: number | null; price?: number | null; bundleNeed?: number | null; bundleAmount?: number | null };
 
 /** 存開放數量和售價（price 沒傳＝不改售價；null＝改回用品項售價） */
 export async function saveQuotas(t: Tx, actor: Actor, categoryId: string, rows: QuotaInput[]) {
@@ -461,13 +462,15 @@ export async function saveQuotas(t: Tx, actor: Actor, categoryId: string, rows: 
       }
       continue;
     }
-    if (r.bundleNeed !== undefined && r.bundleNeed !== null && (!Number.isInteger(r.bundleNeed) || r.bundleNeed < 0 || r.bundleNeed > 9)) throw new BizError("搭配數量要是 0～9");
+    if (r.bundleNeed !== undefined && r.bundleNeed !== null && (!Number.isInteger(r.bundleNeed) || r.bundleNeed < 0 || r.bundleNeed > 99)) throw new BizError("搭配個數要是 0～99");
     const price = r.price === undefined ? (cur?.price ?? null) : r.price;
+    if (r.bundleAmount !== undefined && r.bundleAmount !== null && (!Number.isInteger(r.bundleAmount) || r.bundleAmount < 0 || r.bundleAmount > 999999)) throw new BizError("搭配金額要是整數（台幣）");
     const bundleNeed = r.bundleNeed === undefined ? (cur?.bundleNeed ?? null) : r.bundleNeed || null;
-    if (!cur || cur.quota !== r.quota || cur.price !== price || cur.bundleNeed !== bundleNeed) {
-      await t.shopQuota.upsert({ where: key, update: { quota: r.quota, price, bundleNeed }, create: { categoryId, productId: r.productId, quota: r.quota, price, bundleNeed } });
-      changed.push({ ...r, price, bundleNeed });
-      if (bundleNeed) await dropWaits(t, categoryId, r.productId);
+    const bundleAmount = r.bundleAmount === undefined ? (cur?.bundleAmount ?? null) : r.bundleAmount || null;
+    if (!cur || cur.quota !== r.quota || cur.price !== price || cur.bundleNeed !== bundleNeed || cur.bundleAmount !== bundleAmount) {
+      await t.shopQuota.upsert({ where: key, update: { quota: r.quota, price, bundleNeed, bundleAmount }, create: { categoryId, productId: r.productId, quota: r.quota, price, bundleNeed, bundleAmount } });
+      changed.push({ ...r, price, bundleNeed, bundleAmount });
+      if (bundleNeed || bundleAmount) await dropWaits(t, categoryId, r.productId);
     }
   }
   let filled = 0;
@@ -595,4 +598,13 @@ export async function sendSaleLink(t: Tx, actor: Actor, orderId: string, input: 
   if (!row) throw new BizError("LINE 推播還沒設定好");
   await audit(t, actor, "shop.saleLink", "Order", orderId, { url, note });
   return { outboxId: row.id, buyer: order.buyer.name };
+}
+
+/** 不能單買的檢查：回傳差多少的說明；夠了回傳 null（訂購頁和下單共用） */
+export function bundleShort(p: { name: string; typeName: string; bundleNeed: number; bundleAmount: number }, qty: number, others: { qty: number; price: number }[]) {
+  const n = others.reduce((a, o) => a + o.qty, 0);
+  const amt = others.reduce((a, o) => a + o.qty * o.price, 0);
+  if (p.bundleNeed && n < qty * p.bundleNeed) return `「${p.name}」不能單買：每 1 個要搭配 ${p.bundleNeed} 個${p.typeName}的其他角色（還差 ${qty * p.bundleNeed - n} 個）`;
+  if (p.bundleAmount && amt < qty * p.bundleAmount) return `「${p.name}」不能單買：每 1 個要搭配${p.typeName}其他角色滿 NT$ ${p.bundleAmount.toLocaleString("en-US")}（還差 NT$ ${(qty * p.bundleAmount - amt).toLocaleString("en-US")}）`;
+  return null;
 }

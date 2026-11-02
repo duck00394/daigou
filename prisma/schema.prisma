@@ -1182,15 +1182,16 @@ model ShopCategory {
 
 // 每個商品（角色）開放幾個：跟實際庫存分開算，可以先接單再去買
 model ShopQuota {
-  categoryId String
-  productId  String
-  quota      Int
-  bundleNeed Int? // 不能單買：每買 1 個，同一張訂單要再買幾個同品項的其他角色；空白＝可以單買
-  price      Int? // 這個角色在訂購頁的售價；空白＝用品項售價（系列頁的品項售價），再沒有就用商品參考售價
-  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  categoryId   String
+  productId    String
+  quota        Int
+  bundleNeed   Int? // 不能單買：每買 1 個，同一張訂單要再買幾個同品項的其他角色；空白＝不限個數
+  bundleAmount Int? // 不能單買：每買 1 個，同一張訂單同品項的其他角色要買滿多少錢（台幣）；空白＝不限金額
+  price        Int? // 這個角色在訂購頁的售價；空白＝用品項售價（系列頁的品項售價），再沒有就用商品參考售價
+  category     Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@id([categoryId, productId])
   @@index([productId])
