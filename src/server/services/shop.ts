@@ -187,11 +187,25 @@ export async function placeShopOrder(t: Tx, buyerId: string, input: { lines: Car
     if (limit && had + l.qty > limit) throw new BizError(`「${p.name}」每人限購 ${limit} 個${had ? `（你已經訂了 ${had} 個）` : ""}`);
   }
 
-  // 不能單買的角色：同一張訂單裡，同品項的其他角色要夠（個數或金額）
+  // 不能單買的角色：同一張訂單裡，同品項「可以單買」的角色要夠（不能單買的不能互搭；好幾個不能單買的要各自搭，加總計算）
+  const groupsByType = new Map<string, CartLine[]>();
   for (const l of lines) {
-    const p = info.get(`${l.categoryId}|${l.productId}`)!;
-    const msg = bundleShort(p, l.qty, lines.filter((o) => o.categoryId === l.categoryId && o.productId !== l.productId && info.get(`${o.categoryId}|${o.productId}`)?.typeId === p.typeId).map((o) => ({ qty: o.qty, price: info.get(`${o.categoryId}|${o.productId}`)?.price ?? 0 })));
-    if (msg) throw new BizError(msg);
+    const k = `${l.categoryId}|${info.get(`${l.categoryId}|${l.productId}`)!.typeId}`;
+    groupsByType.set(k, [...(groupsByType.get(k) ?? []), l]);
+  }
+  for (const group of groupsByType.values()) {
+    const ps = group.map((l) => ({ l, p: info.get(`${l.categoryId}|${l.productId}`)! }));
+    const bundled = ps.filter((x) => x.p.bundleNeed || x.p.bundleAmount);
+    if (!bundled.length) continue;
+    const free = ps.filter((x) => !x.p.bundleNeed && !x.p.bundleAmount);
+    const freeN = free.reduce((a, x) => a + x.l.qty, 0);
+    const freeAmt = free.reduce((a, x) => a + x.l.qty * (x.p.price ?? 0), 0);
+    const needN = bundled.reduce((a, x) => a + x.l.qty * x.p.bundleNeed, 0);
+    const needAmt = bundled.reduce((a, x) => a + x.l.qty * x.p.bundleAmount, 0);
+    const names = bundled.map((x) => x.p.character || x.p.name).join("、");
+    const typeName = bundled[0].p.typeName;
+    if (freeN < needN) throw new BizError(`「${names}」不能單買：要搭配 ${needN} 個${typeName}可以單買的角色（還差 ${needN - freeN} 個）`);
+    if (freeAmt < needAmt) throw new BizError(`「${names}」不能單買：要搭配${typeName}可以單買的角色滿 NT$ ${needAmt.toLocaleString("en-US")}（還差 NT$ ${(needAmt - freeAmt).toLocaleString("en-US")}）`);
   }
 
   await t.buyer.update({
@@ -600,11 +614,3 @@ export async function sendSaleLink(t: Tx, actor: Actor, orderId: string, input: 
   return { outboxId: row.id, buyer: order.buyer.name };
 }
 
-/** 不能單買的檢查：回傳差多少的說明；夠了回傳 null（訂購頁和下單共用） */
-export function bundleShort(p: { name: string; typeName: string; bundleNeed: number; bundleAmount: number }, qty: number, others: { qty: number; price: number }[]) {
-  const n = others.reduce((a, o) => a + o.qty, 0);
-  const amt = others.reduce((a, o) => a + o.qty * o.price, 0);
-  if (p.bundleNeed && n < qty * p.bundleNeed) return `「${p.name}」不能單買：每 1 個要搭配 ${p.bundleNeed} 個${p.typeName}的其他角色（還差 ${qty * p.bundleNeed - n} 個）`;
-  if (p.bundleAmount && amt < qty * p.bundleAmount) return `「${p.name}」不能單買：每 1 個要搭配${p.typeName}其他角色滿 NT$ ${p.bundleAmount.toLocaleString("en-US")}（還差 NT$ ${(qty * p.bundleAmount - amt).toLocaleString("en-US")}）`;
-  return null;
-}

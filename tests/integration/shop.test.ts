@@ -293,3 +293,16 @@ describe("不能單買：金額", () => {
     expect([q.bundleNeed, q.bundleAmount]).toEqual([5, null]);
   });
 });
+
+describe("不能單買的不能互搭", () => {
+  it("兩個不能單買的角色一起買還是不行，要加可以單買的", async () => {
+    const type = await prisma.productType.create({ data: { name: "互搭吊娃" } });
+    const p4 = await prisma.product.create({ data: { code: "PX01", name: "互搭第三隻", productTypeId: type.id, salePriceTwd: 400, categories: { create: { categoryId: s.halloween.id } } } });
+    await prisma.product.updateMany({ where: { id: { in: [s.p1.id, s.p2.id] } }, data: { productTypeId: type.id } });
+    await tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p1.id, quota: 3, bundleNeed: 1 }, { productId: s.p2.id, quota: 3, bundleNeed: 1 }, { productId: p4.id, quota: 5 }]));
+    const b = await lineBuyer("互搭");
+    await expect(order(b, [{ productId: s.p1.id, qty: 1 }, { productId: s.p2.id, qty: 1 }])).rejects.toThrow("可以單買的角色");
+    await expect(order(b, [{ productId: s.p1.id, qty: 1 }, { productId: s.p2.id, qty: 1 }, { productId: p4.id, qty: 1 }])).rejects.toThrow("還差 1 個");
+    await order(b, [{ productId: s.p1.id, qty: 1 }, { productId: s.p2.id, qty: 1 }, { productId: p4.id, qty: 2 }]);
+  });
+});

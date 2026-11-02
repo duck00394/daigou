@@ -25,19 +25,22 @@ export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, 
 
   const addAll = () => {
     if (!count) return;
-    // 不能單買的角色：這次選的加上購物車裡同品項的其他角色要夠
-    for (const r of picked) {
-      if (!r.bundle && !r.bundleAmount) continue;
-      const mineQty = (qty[r.productId] ?? 0) + inCart(r.productId);
-      const others = rows.filter((o) => o.productId !== r.productId);
-      const n = others.reduce((a, o) => a + (qty[o.productId] ?? 0) + inCart(o.productId), 0);
-      const amt = others.reduce((a, o) => a + ((qty[o.productId] ?? 0) + inCart(o.productId)) * (o.price ?? 0), 0);
-      if (r.bundle && n < mineQty * r.bundle) {
-        setMsg({ text: `${r.label}不能單買：每 1 個要搭配 ${r.bundle} 個其他角色（還差 ${mineQty * r.bundle - n} 個）`, ok: false });
+    // 不能單買：這次選的加上購物車裡的，可以單買的角色要夠（不能單買的不能互搭，好幾個要各自搭）
+    const total = (r: Row) => (qty[r.productId] ?? 0) + inCart(r.productId);
+    const bundled = rows.filter((r) => (r.bundle || r.bundleAmount) && total(r) > 0);
+    if (bundled.some((r) => (qty[r.productId] ?? 0) > 0)) {
+      const free = rows.filter((r) => !r.bundle && !r.bundleAmount);
+      const freeN = free.reduce((a, r) => a + total(r), 0);
+      const freeAmt = free.reduce((a, r) => a + total(r) * (r.price ?? 0), 0);
+      const needN = bundled.reduce((a, r) => a + total(r) * r.bundle, 0);
+      const needAmt = bundled.reduce((a, r) => a + total(r) * r.bundleAmount, 0);
+      const names = bundled.map((r) => r.label).join("、");
+      if (freeN < needN) {
+        setMsg({ text: `${names}不能單買：要搭配 ${needN} 個可以單買的角色（還差 ${needN - freeN} 個）`, ok: false });
         return;
       }
-      if (r.bundleAmount && amt < mineQty * r.bundleAmount) {
-        setMsg({ text: `${r.label}不能單買：每 1 個要搭配其他角色滿 ${money(r.bundleAmount)}（還差 ${money(mineQty * r.bundleAmount - amt)}）`, ok: false });
+      if (freeAmt < needAmt) {
+        setMsg({ text: `${names}不能單買：要搭配可以單買的角色滿 ${money(needAmt)}（還差 ${money(needAmt - freeAmt)}）`, ok: false });
         return;
       }
     }
