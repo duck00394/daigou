@@ -178,3 +178,28 @@ describe("取消與合併", () => {
     expect(await prisma.lineOutbox.count()).toBe(0);
   });
 });
+
+describe("單支售價與 LINE 卡片", () => {
+  it("角色可以另外設售價，空白用原本的售價；沒開放數量不能只設售價", async () => {
+    await tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p1.id, quota: 3, price: 650 }]));
+    const ps = await shop.shopProducts(prisma, s.halloween.id);
+    expect(ps.find((p) => p.productId === s.p1.id)!.price).toBe(650);
+    expect(ps.find((p) => p.productId === s.p2.id)!.price).toBe(300);
+    const b = await lineBuyer("單支");
+    await order(b, [{ productId: s.p1.id, qty: 1 }]);
+    expect((await prisma.orderItem.findFirstOrThrow({ where: { productId: s.p1.id } })).unitPrice).toBe(650);
+    // 只改數量（沒傳售價）不會清掉單支售價；傳 null 改回預設
+    await tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p1.id, quota: 5 }]));
+    expect((await prisma.shopQuota.findFirstOrThrow({ where: { productId: s.p1.id } })).price).toBe(650);
+    await tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p1.id, quota: 5, price: null }]));
+    expect((await shop.shopProducts(prisma, s.halloween.id)).find((p) => p.productId === s.p1.id)!.price).toBe(500);
+    await expect(tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p2.id, quota: null, price: 100 }]))).rejects.toThrow("先填開放數量");
+  });
+
+  it("LINE 卡片寫上預訂系列", async () => {
+    const b = await lineBuyer("系列");
+    await order(b, [{ productId: s.p1.id, qty: 1 }]);
+    const m = await prisma.lineOutbox.findFirstOrThrow();
+    expect(JSON.stringify(m.messages)).toContain("預訂系列：萬聖節");
+  });
+});

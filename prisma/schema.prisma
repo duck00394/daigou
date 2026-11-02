@@ -1183,6 +1183,7 @@ model ShopQuota {
   categoryId String
   productId  String
   quota      Int
+  price      Int? // 這個角色在訂購頁的售價；空白＝用品項售價（系列頁的品項售價），再沒有就用商品參考售價
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())

@@ -26,13 +26,13 @@ export default async function ShopCategoryAdmin({ params }: { params: Promise<{ 
     prisma.shopWait.groupBy({ by: ["productId"], where: { categoryId: id, status: "WAITING" }, _count: { _all: true } }),
   ]);
   const sold = await soldMap(prisma, id, products.map((p) => p.id));
-  const q = new Map(quotas.map((x) => [x.productId, x.quota]));
+  const q = new Map(quotas.map((x) => [x.productId, x]));
   const tp = new Map(typePrices.map((t) => [t.productTypeId, t]));
   const w = new Map(waits.map((x) => [x.productId, x._count._all]));
   const rows: QuotaRow[] = products
     .map((p) => {
       const ch = p.characters.map((c) => c.character).sort((a, b) => a.sortOrder - b.sortOrder)[0];
-      const price = (p.productTypeId ? tp.get(p.productTypeId)?.salePriceTwd : null) ?? p.salePriceTwd;
+      const defaultPrice = (p.productTypeId ? tp.get(p.productTypeId)?.salePriceTwd : null) ?? p.salePriceTwd;
       return {
         productId: p.id,
         type: p.productType?.name ?? "其他",
@@ -41,8 +41,9 @@ export default async function ShopCategoryAdmin({ params }: { params: Promise<{ 
         charSort: ch?.sortOrder ?? 0,
         name: p.name,
         image: p.imageUrl,
-        price,
-        quota: q.has(p.id) ? q.get(p.id)! : null,
+        defaultPrice,
+        price: q.get(p.id)?.price ?? null,
+        quota: q.get(p.id)?.quota ?? null,
         sold: sold.get(p.id) ?? 0,
         waiting: w.get(p.id) ?? 0,
       };

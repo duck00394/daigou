@@ -32,7 +32,7 @@ export async function saveShopCategoryAction(categoryId: string, raw: z.infer<ty
   });
 }
 
-const quotaSchema = z.array(z.object({ productId: z.string().max(64), quota: z.number().int().nullable() })).max(500);
+const quotaSchema = z.array(z.object({ productId: z.string().max(64), quota: z.number().int().nullable(), price: z.number().int().nullable().optional() })).max(500);
 
 export async function saveQuotasAction(categoryId: string, raw: z.infer<typeof quotaSchema>) {
   return run(async (a) => {

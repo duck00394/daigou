@@ -148,6 +148,7 @@ export function orderCard(o: {
   title: string;
   eyebrow: string;
   orderNo: string;
+  series?: string; // 預訂系列
   lines: MsgLine[];
   note?: string;
   totalLabel?: string;
@@ -164,6 +165,7 @@ export function orderCard(o: {
   }[o.tone];
   const body: Record<string, unknown>[] = [
     { type: "text", text: `訂單 ${o.orderNo}`, size: "xs", color: MUTE },
+    ...(o.series ? [{ type: "text", text: `預訂系列：${o.series}`, size: "sm", weight: "bold", color: INK, wrap: true }, { type: "separator", margin: "sm" }] : []),
     ...o.lines.slice(0, 15).map(row),
   ];
   if (o.lines.length > 15) body.push({ type: "text", text: `……還有 ${o.lines.length - 15} 項`, size: "xs", color: MUTE });
@@ -201,6 +203,6 @@ export function orderCard(o: {
       contents: [{ type: "button", style: "link", color: ROSE, height: "sm", action: { type: "uri", label: o.buttonLabel ?? "查看我的訂單", uri: o.url } }],
     };
   }
-  const alt = `${o.title}｜訂單 ${o.orderNo}${o.total !== undefined ? `｜${money(o.total)}` : ""}`;
+  const alt = `${o.title}｜${o.series ? `${o.series}｜` : ""}訂單 ${o.orderNo}${o.total !== undefined ? `｜${money(o.total)}` : ""}`;
   return { type: "flex", altText: alt.slice(0, 390), contents: bubble };
 }
