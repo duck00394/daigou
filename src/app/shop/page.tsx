@@ -18,7 +18,7 @@ export default async function ShopHome({ searchParams }: { searchParams: Promise
       <ShopHeader name={name} customer={customer} next="/shop" />
       {sp.err && (
         <div className="px-4 pt-4">
-          <Notice>{sp.err === "line" ? "LINE 登入還沒設定好，請稍後再試或直接私訊我們。" : "LINE 登入沒有成功，請再試一次。"}{sp.why && <span className="ml-1 text-[12px] opacity-70">（代碼：{sp.why.replace(/[^a-z0-9]/gi, "").slice(0, 12)}）</span>}</Notice>
+          <Notice>{sp.err === "line" ? "LINE 登入還沒設定好，請稍後再試或直接私訊我們。" : "LINE 登入沒有成功，請再試一次。"}{sp.why && <span className="ml-1 text-[12px] opacity-70">（代碼：{sp.why.replace(/[^a-z0-9_-]/gi, "").slice(0, 40)}）</span>}</Notice>
         </div>
       )}
 

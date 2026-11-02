@@ -11,9 +11,10 @@ export function appUrl() {
 }
 
 export const lineEnv = () => ({
-  loginId: process.env.LINE_LOGIN_CHANNEL_ID || "",
-  loginSecret: process.env.LINE_LOGIN_CHANNEL_SECRET || "",
-  token: process.env.LINE_CHANNEL_ACCESS_TOKEN || "",
+  // 貼到 Vercel 時常會多帶空白或換行：一律去掉
+  loginId: (process.env.LINE_LOGIN_CHANNEL_ID || "").trim(),
+  loginSecret: (process.env.LINE_LOGIN_CHANNEL_SECRET || "").trim(),
+  token: (process.env.LINE_CHANNEL_ACCESS_TOKEN || "").trim(),
   // 官方帳號的 ID（@ 開頭，例：@123abcde），用來從網頁跳回 LINE 聊天室
   oaId: (process.env.LINE_OA_ID || "").trim(),
 });
@@ -55,7 +56,15 @@ export async function exchangeCode(code: string, nonce: string): Promise<LinePro
     body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: callbackUrl(), client_id: env.loginId, client_secret: env.loginSecret }),
     cache: "no-store",
   });
-  if (!tok.ok) throw new Error(`LINE 登入失敗（${tok.status}）`);
+  if (!tok.ok) {
+    let reason = "";
+    try {
+      reason = String(((await tok.json()) as { error?: string }).error ?? "");
+    } catch {
+      /* 沒有回傳內容 */
+    }
+    throw new Error(`LINE 登入失敗（${tok.status}）${reason.replace(/[^a-z_]/gi, "").slice(0, 30)}`);
+  }
   const { id_token } = (await tok.json()) as { id_token?: string };
   if (!id_token) throw new Error("LINE 沒有回傳登入資料");
   const v = await fetch("https://api.line.me/oauth2/v2.1/verify", {

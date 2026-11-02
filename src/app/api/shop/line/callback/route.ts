@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     const msg = String((e as Error)?.message ?? e);
     console.error("[shop login]", msg);
     const why = msg.includes("驗證") ? "verify" : msg.includes("登入失敗") ? "token" : "db";
-    const status = /（(\d{3})）/.exec(msg)?.[1] ?? "";
-    return back(req, `/shop?err=login&why=${why}${status}`);
+    const m = /（(\d{3})）([a-z_]*)/i.exec(msg);
+    return back(req, `/shop?err=login&why=${why}${m?.[1] ?? ""}${m?.[2] ? `-${m[2]}` : ""}`);
   }
 }
