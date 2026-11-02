@@ -6,7 +6,7 @@ import { taipeiDayLabel, taipeiParts } from "@/lib/taipei";
 import { CartBar, Countdown, Pic } from "./cart";
 import { Eyebrow, groupTypes, Notice, SerifTitle, ShopHeader, Tag, TypeCard } from "./ui";
 
-export default async function ShopHome({ searchParams }: { searchParams: Promise<{ err?: string }> }) {
+export default async function ShopHome({ searchParams }: { searchParams: Promise<{ err?: string; why?: string }> }) {
   const sp = await searchParams;
   const [name, customer, cats] = await Promise.all([getShopName(prisma), currentCustomer(), shopCategories(prisma)]);
   const now = new Date();
@@ -18,7 +18,7 @@ export default async function ShopHome({ searchParams }: { searchParams: Promise
       <ShopHeader name={name} customer={customer} next="/shop" />
       {sp.err && (
         <div className="px-4 pt-4">
-          <Notice>{sp.err === "line" ? "LINE 登入還沒設定好，請稍後再試或直接私訊我們。" : "LINE 登入沒有成功，請再試一次。"}</Notice>
+          <Notice>{sp.err === "line" ? "LINE 登入還沒設定好，請稍後再試或直接私訊我們。" : "LINE 登入沒有成功，請再試一次。"}{sp.why && <span className="ml-1 text-[12px] opacity-70">（代碼：{sp.why.replace(/[^a-z0-9]/gi, "").slice(0, 12)}）</span>}</Notice>
         </div>
       )}
 

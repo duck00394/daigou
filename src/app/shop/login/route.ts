@@ -2,7 +2,7 @@
 import { randomBytes } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { authorizeUrl, loginConfigured } from "@/server/line";
-import { OAUTH_COOKIE, secureCookie } from "@/server/shop-auth";
+import { OAUTH_COOKIE, readPending, secureCookie } from "@/server/shop-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
   const state = randomBytes(16).toString("base64url");
   const nonce = randomBytes(16).toString("base64url");
   const res = NextResponse.redirect(authorizeUrl(state, nonce));
-  res.cookies.set(OAUTH_COOKIE, JSON.stringify({ state, nonce, next }), { httpOnly: true, secure: secureCookie(), sameSite: "lax", path: "/", maxAge: 600 });
+  const prev = readPending(req.cookies.get(OAUTH_COOKIE)?.value).slice(-2);
+  res.cookies.set(OAUTH_COOKIE, JSON.stringify([...prev, { state, nonce, next }]), { httpOnly: true, secure: secureCookie(), sameSite: "lax", path: "/", maxAge: 600 });
   return res;
 }

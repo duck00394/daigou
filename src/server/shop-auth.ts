@@ -52,3 +52,16 @@ export async function currentCustomer(): Promise<ShopCustomer | null> {
   }
   return { id: b.id, name: b.name, picture: b.linePicture, lineUserId: b.lineUserId };
 }
+
+type Pending = { state: string; nonce: string; next: string };
+
+/** 登入中的請求（最多記 3 個：客人重複按登入或開了好幾個分頁時，不會互相蓋掉） */
+export function readPending(raw: string | undefined): Pending[] {
+  try {
+    const v = JSON.parse(raw ?? "[]");
+    const list = Array.isArray(v) ? v : [v];
+    return list.filter((x): x is Pending => !!x && typeof x.state === "string" && typeof x.nonce === "string");
+  } catch {
+    return [];
+  }
+}
