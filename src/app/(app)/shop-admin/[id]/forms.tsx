@@ -117,28 +117,28 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
                     <span className="min-w-0">
                       <span className="block truncate text-[15px]">{r.label}</span>
                       {noPrice && <span className="block text-[12px] text-bad">沒有售價，客人不能訂</span>}
-                      {c.q !== "" && list.length > 1 && (
-                        <span className="mt-0.5 flex flex-wrap items-center gap-1">
-                          <select aria-label={`${r.label} 能不能單買`} className={`h-7 rounded border px-1 text-[12px] ${c.m ? "border-[#f0dfa8] bg-warn-soft text-warn" : "border-line bg-white text-ink-2"}`} value={c.m} onChange={(e) => set(r.productId, { m: e.target.value as Cell["m"], bv: e.target.value ? c.bv : "" })}>
-                            <option value="">可以單買</option>
-                            <option value="n">要搭其他角色（個數）</option>
-                            <option value="a">要搭其他角色（金額）</option>
-                          </select>
-                          {c.m && (
-                            <span className="flex items-center gap-0.5 text-[12px] text-ink-2">
-                              {c.m === "a" && "滿 NT$"}
-                              <input aria-label={c.m === "n" ? `${r.label} 要搭幾個` : `${r.label} 要搭到多少錢`} inputMode="numeric" className={`h-7 rounded border px-1 text-[13px] ${c.m === "n" ? "w-10" : "w-16"} ${/^[1-9]\d*$/.test(c.bv) ? "border-line" : "border-bad"}`} value={c.bv} onChange={(e) => set(r.productId, { bv: e.target.value.replace(/[^\d]/g, "") })} />
-                              {c.m === "n" && "個"}
-                            </span>
-                          )}
-                        </span>
-                      )}
                     </span>
                   </span>
                   <input aria-label={`${r.label} 售價`} inputMode="numeric" placeholder={r.defaultPrice === null ? "未設" : String(r.defaultPrice)} className={`h-10 w-full rounded-md border px-2 text-[15px] placeholder:text-mute ${dirty && c.p !== (saved[r.productId]?.p ?? "") ? "border-ai bg-ai-soft" : noPrice ? "border-bad" : "border-line bg-white"}`} value={c.p} onChange={(e) => set(r.productId, { p: e.target.value.replace(/[^\d]/g, "") })} />
                   <input aria-label={`${r.label} 開放數量`} inputMode="numeric" className={`h-10 w-full rounded-md border px-2 text-[15px] ${dirty && c.q !== (saved[r.productId]?.q ?? "") ? "border-ai bg-ai-soft" : "border-line bg-white"}`} value={c.q} onChange={(e) => set(r.productId, { q: e.target.value.replace(/[^\d]/g, "") })} />
                   <span className={`num text-center text-[15px] ${r.quota !== null && r.sold >= r.quota ? "font-semibold text-bad" : ""}`}>{r.sold}</span>
                   <span className="num text-center text-[15px]">{r.waiting || "–"}</span>
+                  {c.q !== "" && list.length > 1 && (
+                    <span className="col-span-full -mt-0.5 flex flex-wrap items-center gap-1 pb-0.5">
+                      <select aria-label={`${r.label} 能不能單買`} className={`h-7 rounded border px-1 text-[12px] ${c.m ? "border-[#f0dfa8] bg-warn-soft text-warn" : "border-line bg-white text-ink-2"}`} value={c.m} onChange={(e) => set(r.productId, { m: e.target.value as Cell["m"], bv: e.target.value ? c.bv : "" })}>
+                        <option value="">可以單買</option>
+                        <option value="n">要搭其他角色（個數）</option>
+                        <option value="a">要搭其他角色（金額）</option>
+                      </select>
+                      {c.m && (
+                        <span className="flex items-center gap-0.5 text-[12px] text-ink-2">
+                          {c.m === "a" && "滿 NT$"}
+                          <input aria-label={c.m === "n" ? `${r.label} 要搭幾個` : `${r.label} 要搭到多少錢`} inputMode="numeric" className={`h-7 rounded border px-1 text-[13px] ${c.m === "n" ? "w-10" : "w-16"} ${/^[1-9]\d*$/.test(c.bv) ? "border-line" : "border-bad"}`} value={c.bv} onChange={(e) => set(r.productId, { bv: e.target.value.replace(/[^\d]/g, "") })} />
+                          {c.m === "n" && "個"}
+                        </span>
+                      )}
+                    </span>
+                  )}
                 </div>
               );
             })}
