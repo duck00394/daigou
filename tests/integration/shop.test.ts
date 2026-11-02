@@ -222,15 +222,13 @@ describe("系列主圖上傳", () => {
 });
 
 describe("品項全體照", () => {
-  it("設了之後訂購頁用這張；換圖或拿掉會刪舊圖", async () => {
-    const jpg = "data:image/jpeg;base64," + Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1]).toString("base64");
+  it("貼網址；只收 https；訂購頁用這張；空白拿掉", async () => {
     const type = await prisma.productType.create({ data: { name: "測試吊娃" } });
     await prisma.product.update({ where: { id: s.p1.id }, data: { productTypeId: type.id } });
-    const u = await tx((t) => shop.setTypeImage(t, actor, s.halloween.id, type.id, jpg));
-    expect((await shop.shopProducts(prisma, s.halloween.id)).find((p) => p.productId === s.p1.id)!.typeImage).toBe(u);
-    await tx((t) => shop.setTypeImage(t, actor, s.halloween.id, type.id, jpg));
-    expect(await prisma.shopImage.count()).toBe(1);
-    await tx((t) => shop.setTypeImage(t, actor, s.halloween.id, type.id, null));
-    expect(await prisma.shopImage.count()).toBe(0);
+    await expect(tx((t) => shop.setTypeImage(t, actor, s.halloween.id, type.id, "http://x.com/a.jpg"))).rejects.toThrow("https");
+    await tx((t) => shop.setTypeImage(t, actor, s.halloween.id, type.id, "https://example.com/all.jpg"));
+    expect((await shop.shopProducts(prisma, s.halloween.id)).find((p) => p.productId === s.p1.id)!.typeImage).toBe("https://example.com/all.jpg");
+    await tx((t) => shop.setTypeImage(t, actor, s.halloween.id, type.id, ""));
+    expect((await shop.shopProducts(prisma, s.halloween.id)).find((p) => p.productId === s.p1.id)!.typeImage).toBeNull();
   });
 });

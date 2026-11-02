@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { Button, inputCls, TimeInput24, useLeaveGuard, useRun } from "@/components/client";
-import { saveQuotasAction, saveShopCategoryAction, setTypeImageAction, uploadShopImageAction } from "@/actions/shop";
+import { saveQuotasAction, saveShopCategoryAction, setTypeImageAction } from "@/actions/shop";
 
 type Settings = { enabled: boolean; openDate: string; openTime: string; perPersonLimit: number | null; ownerId: string | null; imageUrl: string; intro: string };
 
@@ -91,16 +91,18 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
         return (
           <div key={t} className="overflow-hidden rounded-lg border border-line-2">
             <div className="flex flex-wrap items-center justify-between gap-2 bg-line-2 px-3 py-2">
-              <span className="flex items-center gap-2.5">
-                {list[0].typeId && <TypePhoto categoryId={categoryId} typeId={list[0].typeId} typeName={t} value={list[0].typeImage} />}
-                <span className="text-[15px] font-semibold">{t}</span>
-              </span>
+              <span className="text-[15px] font-semibold">{t}</span>
               <span className="flex items-center gap-1.5">
                 <input aria-label={`${t} 售價全部填`} inputMode="numeric" placeholder="售價" className="h-9 w-[72px] rounded-md border border-line bg-white px-2 text-[15px]" value={f.p} onChange={(e) => setFill({ ...fill, [t]: { ...f, p: e.target.value.replace(/[^\d]/g, "") } })} />
                 <input aria-label={`${t} 數量全部填`} inputMode="numeric" placeholder="數量" className="h-9 w-14 rounded-md border border-line bg-white px-2 text-[15px]" value={f.q} onChange={(e) => setFill({ ...fill, [t]: { ...f, q: e.target.value.replace(/[^\d]/g, "") } })} />
                 <Button small disabled={!canFill} onClick={() => setV({ ...v, ...Object.fromEntries(list.map((r) => [r.productId, { q: f.q !== "" ? f.q : v[r.productId].q, p: f.p !== "" ? f.p : v[r.productId].p }])) })}>全部填</Button>
               </span>
             </div>
+            {list[0].typeId && (
+              <div className="border-b border-line-2 bg-white px-3 py-2">
+                <TypePhoto categoryId={categoryId} typeId={list[0].typeId} typeName={t} value={list[0].typeImage} />
+              </div>
+            )}
             <div className={`${grid} px-3 py-1.5 text-[12px] text-mute`}>
               <span>角色</span><span>售價</span><span>開放數量</span><span className="text-center">已訂</span><span className="text-center">候補</span>
             </div>
@@ -134,109 +136,38 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
   );
 }
 
-/** 在手機上把照片縮小（長邊最多 1400 像素、JPEG），回傳 data URL */
-async function shrink(file: File): Promise<string> {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((ok, bad) => {
-      const i = new Image();
-      i.onload = () => ok(i);
-      i.onerror = () => bad(new Error("讀不到這張圖片"));
-      i.src = url;
-    });
-    const max = 1400;
-    const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
-    const c = document.createElement("canvas");
-    c.width = Math.max(1, Math.round(img.naturalWidth * k));
-    c.height = Math.max(1, Math.round(img.naturalHeight * k));
-    const ctx = c.getContext("2d");
-    if (!ctx) throw new Error("瀏覽器不支援縮圖");
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, c.width, c.height);
-    ctx.drawImage(img, 0, 0, c.width, c.height);
-    for (const q of [0.85, 0.75, 0.6, 0.45]) {
-      const d = c.toDataURL("image/jpeg", q);
-      if (d.length * 0.75 < 550 * 1024) return d;
-    }
-    throw new Error("圖片太大了，請換一張");
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+/** 預覽網址的圖片；載入失敗時提示 */
+function Preview({ url, className }: { url: string; className: string }) {
+  const [bad, setBad] = useState(false);
+  if (!/^https:\/\/\S+$/.test(url) && !url.startsWith("/api/shop/img/")) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return bad ? <span className={`flex items-center justify-center bg-bad-soft text-center text-[11px] text-bad ${className}`}>打不開<br />這張圖</span> : <img src={url} alt="預覽" referrerPolicy="no-referrer" onError={() => setBad(true)} className={`object-cover ${className}`} />;
 }
 
 function SeriesImage({ value, onChange }: { value: string; onChange: (url: string) => void }) {
-  const { run, pending } = useRun();
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [showUrl, setShowUrl] = useState(!!value && !value.startsWith("/api/shop/img/"));
-  const pick = async (file: File | undefined) => {
-    if (!file) return;
-    setErr(null);
-    setBusy(true);
-    try {
-      const data = await shrink(file);
-      await run(() => uploadShopImageAction(data), { refresh: false, success: "照片已上傳，記得按「儲存設定」", onOk: (url) => onChange(url) });
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
   return (
-    <div className="space-y-2">
-      <div className="text-[13px] font-medium text-ink-2">系列主圖（選填，客人在訂購頁看到的大圖）</div>
-      <div className="flex items-center gap-3">
-        <label className={`relative flex h-24 w-36 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg ${value ? "border border-line" : "border-[1.5px] border-dashed border-[#b8bfcc]"} bg-white text-[13px] text-ink-2`}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {value ? <img src={value} alt="系列主圖" className="h-full w-full object-cover" /> : <span>＋ 照片</span>}
-          {(busy || pending) && <span className="absolute inset-0 flex items-center justify-center bg-white/80">上傳中…</span>}
-          <input type="file" accept="image/*" className="sr-only" aria-label="選系列主圖" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} disabled={busy || pending} />
-        </label>
-        <div className="space-y-1.5 text-[13px]">
-          <label className="inline-flex min-h-10 cursor-pointer items-center rounded-lg border border-line bg-white px-3">
-            {value ? "換一張" : "選照片"}
-            <input type="file" accept="image/*" className="sr-only" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} disabled={busy || pending} />
-          </label>
-          {value && <button type="button" className="block text-bad underline" onClick={() => onChange("")}>拿掉照片</button>}
-          <button type="button" className="block text-ai underline" onClick={() => setShowUrl(!showUrl)}>或貼圖片網址</button>
-        </div>
+    <div className="space-y-1.5">
+      <label className="block text-[13px] font-medium text-ink-2" htmlFor="series-image">系列主圖網址（選填，https:// 開頭）</label>
+      <div className="flex items-center gap-2">
+        {value && <Preview key={value} url={value} className="h-14 w-20 shrink-0 rounded-md border border-line" />}
+        <input id="series-image" type="url" className={inputCls} value={value} placeholder="https://…" onChange={(e) => onChange(e.target.value.trim())} />
       </div>
-      {showUrl && <input type="url" aria-label="系列主圖網址" className={inputCls} value={value.startsWith("/api/shop/img/") ? "" : value} placeholder="https://…" onChange={(e) => onChange(e.target.value)} />}
-      {err && <p className="text-[13px] text-bad">{err}</p>}
-      <p className="text-[12px] text-mute">照片會先在手機上縮小（約 100～300KB）再存，不用另外開服務。</p>
+      <p className="text-[12px] text-mute">在圖片上按右鍵（手機長按）→「複製圖片網址」貼上；按「儲存設定」才會換上去。</p>
     </div>
   );
 }
 
-/** 品項全體照：點小框選照片，選完直接存（客人在系列頁、品項頁看到的大圖） */
+/** 品項全體照：貼網址，按「存」就換上去（客人在系列頁、品項頁看到的大圖） */
 function TypePhoto({ categoryId, typeId, typeName, value }: { categoryId: string; typeId: string; typeName: string; value: string | null }) {
   const { run, pending } = useRun();
-  const [busy, setBusy] = useState(false);
-  const pick = async (file: File | undefined) => {
-    if (!file) return;
-    setBusy(true);
-    try {
-      const data = await shrink(file);
-      await run(() => setTypeImageAction(categoryId, typeId, data), { success: `${typeName}的全體照已更新` });
-    } catch (e) {
-      alert((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const [url, setUrl] = useState(value ?? "");
+  const dirty = url.trim() !== (value ?? "");
+  const bad = url.trim() !== "" && !/^https:\/\/\S+$/.test(url.trim()) && url.trim() !== value;
   return (
-    <span className="flex items-center gap-1.5">
-      <label className={`relative flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-md bg-white text-[11px] leading-tight text-ink-2 ${value ? "border border-line" : "border-[1.5px] border-dashed border-[#b8bfcc]"}`} title={`${typeName}的全體照`}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        {value ? <img src={value} alt={`${typeName}全體照`} className="h-full w-full object-cover" /> : <span className="text-center">＋<br />照片</span>}
-        {(busy || pending) && <span className="absolute inset-0 flex items-center justify-center bg-white/80 text-[10px]">上傳中</span>}
-        <input type="file" accept="image/*" className="sr-only" aria-label={`${typeName}的全體照`} disabled={busy || pending} onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} />
-      </label>
-      {value && (
-        <button type="button" className="text-[12px] text-bad underline" disabled={pending} onClick={() => confirm(`拿掉${typeName}的全體照？`) && run(() => setTypeImageAction(categoryId, typeId, null), { success: "已拿掉" })}>
-          拿掉
-        </button>
-      )}
+    <span className="flex w-full items-center gap-1.5">
+      {url.trim() ? <Preview key={url.trim()} url={url.trim()} className="h-10 w-10 shrink-0 rounded-md border border-line" /> : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border-[1.5px] border-dashed border-[#b8bfcc] bg-white text-[10px] text-mute">全體照</span>}
+      <input type="url" aria-label={`${typeName}全體照網址`} placeholder="全體照網址 https://…" className={`h-9 min-w-0 flex-1 rounded-md border bg-white px-2 text-[14px] ${bad ? "border-bad" : "border-line"}`} value={url} onChange={(e) => setUrl(e.target.value)} />
+      <Button small loading={pending} disabled={!dirty || bad} onClick={() => run(() => setTypeImageAction(categoryId, typeId, url.trim() || null), { success: url.trim() ? `${typeName}的全體照已更新` : `已拿掉${typeName}的全體照` })}>存</Button>
     </span>
   );
 }

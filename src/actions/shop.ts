@@ -59,17 +59,12 @@ export async function setShopNameAction(name: string) {
   });
 }
 
-/** 上傳系列主圖（手機上已經縮小過），回傳圖片網址；按「儲存設定」才會換上去 */
-export async function uploadShopImageAction(dataUrl: string) {
-  return run(async (a) => tx((t) => shop.saveShopImage(t, a, z.string().max(1_000_000).parse(dataUrl))));
-}
-
-/** 品項全體照：選完照片直接存；null＝拿掉 */
-export async function setTypeImageAction(categoryId: string, productTypeId: string, dataUrl: string | null) {
+/** 品項全體照（貼網址）；空白＝拿掉 */
+export async function setTypeImageAction(categoryId: string, productTypeId: string, url: string | null) {
   return run(async (a) => {
-    const url = await tx((t) => shop.setTypeImage(t, a, z.string().max(64).parse(categoryId), z.string().max(64).parse(productTypeId), dataUrl === null ? null : z.string().max(1_000_000).parse(dataUrl)));
+    const v = await tx((t) => shop.setTypeImage(t, a, z.string().max(64).parse(categoryId), z.string().max(64).parse(productTypeId), url === null ? null : z.string().max(1000).parse(url)));
     revalidatePath(`/shop-admin/${categoryId}`);
     revalidatePath("/shop", "layout");
-    return url;
+    return v;
   });
 }
