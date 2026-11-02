@@ -53,15 +53,19 @@ export async function currentCustomer(): Promise<ShopCustomer | null> {
   return { id: b.id, name: b.name, picture: b.linePicture, lineUserId: b.lineUserId };
 }
 
-type Pending = { state: string; nonce: string; next: string };
+/** LINE 登入的 state：把 nonce 和登入後要回去的頁面簽章後放在 state 裡（10 分鐘內有效）。
+ * 不靠 Cookie，所以在 LINE 內建瀏覽器、或登入途中跳到 LINE App 再回來也不會失敗。 */
+export async function signState(nonce: string, next: string) {
+  return new SignJWT({ n: nonce, x: next, k: "st" }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("10m").sign(secret());
+}
 
-/** 登入中的請求（最多記 3 個：客人重複按登入或開了好幾個分頁時，不會互相蓋掉） */
-export function readPending(raw: string | undefined): Pending[] {
+export async function readState(state: string | null): Promise<{ nonce: string; next: string } | null> {
+  if (!state || state.length > 600) return null;
   try {
-    const v = JSON.parse(raw ?? "[]");
-    const list = Array.isArray(v) ? v : [v];
-    return list.filter((x): x is Pending => !!x && typeof x.state === "string" && typeof x.nonce === "string");
+    const { payload } = await jwtVerify(state, secret(), { algorithms: ["HS256"] });
+    if (payload.k !== "st" || typeof payload.n !== "string" || typeof payload.x !== "string") return null;
+    return { nonce: payload.n, next: payload.x };
   } catch {
-    return [];
+    return null;
   }
 }
