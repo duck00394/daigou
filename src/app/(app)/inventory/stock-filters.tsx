@@ -33,6 +33,7 @@ export function StockFilters({ series, types, kind, cat, q, type, only }: { seri
           <option value="stock">只看現貨（現在可以賣）</option>
           <option value="sure">預購・一定有貨（代購已確認）</option>
           <option value="unsure">預購・不一定有貨（還沒確認）</option>
+          <option value="short">待買清單（客人訂的比庫存多）</option>
           <option value="all">全部商品（含沒庫存的）</option>
         </select>
       </label>

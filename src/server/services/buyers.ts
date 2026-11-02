@@ -211,6 +211,12 @@ export async function mergeBuyers(t: Tx, actor: Actor, sourceId: string, targetI
   if (Object.keys(fill).length) await t.buyer.update({ where: { id: targetId }, data: fill });
 
   await t.buyer.update({ where: { id: sourceId }, data: { mergedIntoId: targetId, archivedAt: new Date() } });
+  // 訂購頁的 LINE 登入：主要買家還沒綁 LINE 時，把 LINE 搬過去（之後客人登入就是主要買家）
+  if (source.lineUserId && !target.lineUserId) {
+    await t.buyer.update({ where: { id: sourceId }, data: { lineUserId: null } });
+    await t.buyer.update({ where: { id: targetId }, data: { lineUserId: source.lineUserId, linePicture: source.linePicture } });
+  }
+  await t.shopWait.updateMany({ where: { buyerId: sourceId }, data: { buyerId: targetId } });
   const snapshot: Record<string, unknown> = { ...source };
   delete snapshot.aliases;
   delete snapshot.tags;

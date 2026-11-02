@@ -22,6 +22,21 @@
   --color-bad-soft: #fde8e6;
   --color-info: #2f4b7c;
   --color-info-soft: #e9eef7;
+  /* 訂購頁（客人看的）：奶油底、玫瑰色、可可色字 */
+  --color-shop-bg: #fbf6f0;
+  --color-shop-ink: #3b2f2a;
+  --color-shop-ink-2: #5c4f48;
+  --color-shop-mute: #75675f;
+  --color-shop-rose: #b4505e;
+  --color-shop-rose-2: #8e3c48;
+  --color-shop-rose-soft: #f6e3e4;
+  --color-shop-line: #ece3d9;
+  --color-shop-sand: #f6f0e9;
+  --color-shop-good: #2c6b38;
+  --color-shop-good-soft: #e6f2e7;
+  --color-shop-gold: #6b4a00;
+  --color-shop-gold-soft: #f6e8c7;
+  --font-serif: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
   --font-sans: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Noto Sans CJK TC", "Microsoft JhengHei", "Segoe UI", sans-serif;
   --font-round: ui-rounded, "SF Pro Rounded", -apple-system, "PingFang TC", "Noto Sans TC", "Noto Sans CJK TC", "Microsoft JhengHei", sans-serif;
 }

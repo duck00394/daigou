@@ -6,6 +6,7 @@ import { getDefaultRateMicro } from "./settings";
 import { recomputeOrder } from "./recompute";
 import { releaseExcessReservation } from "./inventory";
 import type { OrderSource, PackFlag, PurchaseFlag } from "@prisma/client";
+import { afterShopCancel, notifyShopOrderCancelled } from "./shop";
 
 export interface NewItemInput {
   productId: string;
@@ -168,7 +169,7 @@ export async function appendItems(t: Tx, actor: Actor, orderId: string, items: N
 }
 
 /** 取消明細的部分或全部數量；已出貨的數量不能取消 */
-export async function cancelItemQty(t: Tx, actor: Actor, input: { orderItemId: string; qty: number; reason?: string | null }) {
+export async function cancelItemQty(t: Tx, actor: Actor, input: { orderItemId: string; qty: number; reason?: string | null; silent?: boolean }) {
   const item0 = await t.orderItem.findUniqueOrThrow({ where: { id: input.orderItemId }, select: { orderId: true } });
   await lockRows(t, "Order", [item0.orderId]);
   const it = await t.orderItem.findUniqueOrThrow({
@@ -191,6 +192,8 @@ export async function cancelItemQty(t: Tx, actor: Actor, input: { orderItemId: s
   });
   const after = await recomputeOrder(t, it.orderId);
   await audit(t, actor, "order.cancelItem", "OrderItem", it.id, { qty, reason: input.reason, released });
+  // 網站訂單：用 LINE 通知客人、空出來的名額給候補
+  await afterShopCancel(t, it, qty, emptyToNull(input.reason ?? null), after.receivable, !!input.silent);
   // 應退金額：取消後若已收超過應收，回傳建議退款金額（需另外建立退款紀錄，不會自動視為已退）
   return { cancellation: c, released, receivableBefore: before.receivable, receivableAfter: after.receivable, refundUnscheduled: after.refundUnscheduled };
 }
@@ -204,12 +207,16 @@ export async function cancelOrder(t: Tx, actor: Actor, input: { orderId: string;
   });
   if (order.confirmation === "CANCELLED") throw new BizError("訂單已經取消");
   let shippedAny = false;
+  const done: { name: string; qty: number }[] = [];
   for (const it of order.items) {
     const cancelled = it.cancellations.reduce((s, c) => s + c.qty, 0);
     const shipped = it.shipmentItems.reduce((s, c) => s + c.qty, 0);
     if (shipped > 0) shippedAny = true;
     const left = it.qty - cancelled - shipped;
-    if (left > 0) await cancelItemQty(t, actor, { orderItemId: it.id, qty: left, reason: input.reason ?? "整單取消" });
+    if (left > 0) {
+      await cancelItemQty(t, actor, { orderItemId: it.id, qty: left, reason: input.reason ?? "整單取消", silent: true });
+      done.push({ name: it.productNameSnapshot, qty: left });
+    }
   }
   if (!shippedAny) {
     await t.order.update({ where: { id: order.id }, data: { confirmation: "CANCELLED", cancelledAt: new Date(), cancelReason: emptyToNull(input.reason ?? null) } });
@@ -218,6 +225,7 @@ export async function cancelOrder(t: Tx, actor: Actor, input: { orderId: string;
   }
   const r = await recomputeOrder(t, order.id);
   await audit(t, actor, "order.cancel", "Order", order.id, { reason: input.reason });
+  await notifyShopOrderCancelled(t, order.id, done, emptyToNull(input.reason ?? null), r.receivable);
   return r;
 }
 

@@ -237,6 +237,8 @@ model Product {
   orderItems          OrderItem[]
   purchaseItems       PurchaseBatchItem[]
   movements           InventoryMovement[]
+  shopQuotas          ShopQuota[]
+  shopWaits           ShopWait[]
 
   @@index([name])
   @@index([status])
@@ -293,6 +295,8 @@ model Category {
   typePrices      CategoryTypePrice[]
   characters      CategoryCharacter[]
   batchItems      PurchaseBatchItem[]
+  shop            ShopCategory?
+  shopQuotas      ShopQuota[]
 }
 
 model ProductCategory {
@@ -358,6 +362,10 @@ model Buyer {
   orders         Order[]
   incidents      BuyerIncident[]
   shipments      Shipment[]
+  // 訂購頁：用 LINE 登入的客人（LINE 的使用者 id，只在伺服器使用）
+  lineUserId     String?         @unique
+  linePicture    String?
+  shopWaits      ShopWait[]
 
   @@index([name])
 }
@@ -768,6 +776,9 @@ model Operator {
   supplierPayments SupplierPayment[]
   receivings       ReceivingRecord[]
   batchItemsOwned  PurchaseBatchItem[] @relation("BatchItemOwner")
+  // 訂購頁有新訂單時通知這個 LINE（經營者自己用 LINE 登入訂購頁一次後，在設定綁定）
+  lineUserId       String?
+  shopCategories   ShopCategory[]
 }
 
 enum SupplierPaymentStatus {
@@ -1147,4 +1158,73 @@ model PushSubscription {
   createdAt DateTime  @default(now())
   lastOkAt  DateTime?
   failCount Int       @default(0)
+}
+
+// ───────────────────────── 訂購頁（客人自己下單） ─────────────────────────
+
+// 系列開放訂購的設定：打開就出現在訂購頁
+model ShopCategory {
+  categoryId     String    @id
+  category       Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  enabled        Boolean   @default(false)
+  openAt         DateTime? // 開賣時間（UTC；空白＝打開就能買）
+  perPersonLimit Int? // 每人每款限購幾個；空白＝不限
+  ownerId        String? // 這個系列的訂單是誰的（扣誰的庫存、通知誰）
+  owner          Operator? @relation(fields: [ownerId], references: [id])
+  imageUrl       String? // 系列主圖網址
+  intro          String? // 給客人看的說明（預計到貨等）
+  sortOrder      Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+// 每個商品（角色）開放幾個：跟實際庫存分開算，可以先接單再去買
+model ShopQuota {
+  categoryId String
+  productId  String
+  quota      Int
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@id([categoryId, productId])
+  @@index([productId])
+}
+
+enum ShopWaitStatus {
+  WAITING // 候補中
+  FILLED // 已遞補成立訂單
+  CANCELLED // 客人取消候補
+}
+
+// 售完時排候補：有人取消就依序遞補，自動成立訂單
+model ShopWait {
+  id         String         @id @default(cuid())
+  buyerId    String
+  buyer      Buyer          @relation(fields: [buyerId], references: [id])
+  categoryId String
+  productId  String
+  product    Product        @relation(fields: [productId], references: [id])
+  qty        Int
+  status     ShopWaitStatus @default(WAITING)
+  orderId    String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@index([categoryId, productId, status, createdAt])
+  @@index([buyerId])
+}
+
+// 要送的 LINE 訊息：跟資料寫在同一個交易裡，交易成功後才送（送失敗會記下原因，最多試 3 次）
+model LineOutbox {
+  id        String    @id @default(cuid())
+  to        String
+  messages  Json
+  tries     Int       @default(0)
+  sentAt    DateTime?
+  error     String?
+  createdAt DateTime  @default(now())
+
+  @@index([sentAt, createdAt])
 }

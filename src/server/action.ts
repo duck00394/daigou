@@ -5,6 +5,7 @@ import { ZodError } from "zod";
 import { BizError } from "@/server/db";
 import { AuthError, can, requireActionUser, type Permission } from "@/server/auth";
 import type { Actor } from "@/server/services/common";
+import { flushLineOutbox, pushConfigured } from "@/server/line";
 
 export type ActionResult<T = unknown> = { ok: true; data: T } | { ok: false; error: string; auth?: boolean };
 
@@ -13,6 +14,8 @@ export async function run<T>(fn: (actor: Actor) => Promise<T>, perm: Permission 
     const user = await requireActionUser();
     if (!can(user, perm)) return { ok: false, error: "沒有執行這個操作的權限" };
     const data = await fn({ userId: user.id });
+    // 操作成功後才送 LINE 通知（取消網站訂單、出貨、候補遞補…）；送失敗不影響操作結果
+    if (pushConfigured()) await flushLineOutbox().catch((e) => console.error("[line]", e));
     return { ok: true, data };
   } catch (e) {
     if (e instanceof AuthError) return { ok: false, error: e.message, auth: true };

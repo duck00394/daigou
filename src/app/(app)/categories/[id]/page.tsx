@@ -56,6 +56,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
           <>
             <LinkButton href={`/purchase?categoryId=${c.id}`} primary>＋ 採購</LinkButton>
             <LinkButton href={`/sell?cat=${c.id}`}>賣給客人</LinkButton>
+            <LinkButton href={`/shop-admin/${c.id}`}>開放訂購</LinkButton>
             <MoreMenu>
               <CategoryEditButton label="編輯名稱" customTypes={customTypes} cat={{ id: c.id, name: c.name, type: c.type, customType: c.customType, startDate: dayInput(c.startDate) || null, endDate: dayInput(c.endDate) || null, notes: c.notes, active: c.active }} />
               <LinkButton href={`/api/export/category?id=${c.id}`}>匯出 Excel</LinkButton>

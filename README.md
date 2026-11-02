@@ -38,6 +38,11 @@
 | `QSTASH_CURRENT_SIGNING_KEY`／`QSTASH_NEXT_SIGNING_KEY` | 搶購通知 | 驗證排程呼叫真的來自 QStash |
 | `QSTASH_URL` | 否 | QStash 帳號在非預設區域時才需要（Upstash 主控台會顯示） |
 | `APP_URL` | 否 | 正式網址；沒填時用 Vercel 提供的正式網域 |
+| `LINE_LOGIN_CHANNEL_ID` | 訂購頁 | LINE Login 頻道的 Channel ID（客人用 LINE 登入） |
+| `LINE_LOGIN_CHANNEL_SECRET` | 訂購頁 | LINE Login 頻道的 Channel secret，只放伺服器環境變數 |
+| `LINE_CHANNEL_ACCESS_TOKEN` | 訂購頁 | Messaging API 頻道的長期 Channel access token（官方帳號推播訂單通知） |
+| `LINE_OA_ID` | 否 | 官方帳號 ID（@ 開頭），下單後跳回 LINE 聊天室用 |
+| `SHOP_SESSION_SECRET` | 否 | 客人登入 Cookie 的簽章金鑰；沒填時由 LINE 與管理者密碼的設定推導 |
 
 更換密碼：重新產生雜湊並更新環境變數後重新啟動；可在設定頁「登出所有裝置」。
 
@@ -47,6 +52,24 @@
 - 準時觸發用 Upstash QStash（Vercel 免費方案的排程一天只能一次、誤差可達一小時，不夠準）：存提醒時預約 QStash 在「開始前 N 分鐘」呼叫 `/api/rush/fire`（驗簽章），伺服器再推播。QStash 單次最多預約 7 天，更久的會分段接力。
 - 改時間、取消、刪除、標記結束都會讓舊排程失效（版本號＋觸發時再檢查）；同一場同一版只送一次；全部手機都失敗才讓 QStash 重試。
 - 沒設定上面的環境變數時，畫面會顯示「推播服務還沒設定」，不會假裝排好。
+
+## 訂購頁（客人用 LINE 下單）
+
+- 網址 `/shop`：客人用 LINE 登入（登入時會請客人加官方帳號好友），選系列 → 品項 → 一次選好幾個角色的數量 → 購物車 → 送出，送出後跳回 LINE 聊天室。
+- 後台「訂購頁（客人下單）」：選系列打開「開放訂購」，設開賣時間、每人每款限購、訂單是誰的，每個角色填「開放數量」（跟庫存分開算，可以先接單再去買）。
+- 訂單直接寫進原本的訂單（來源＝網站、已確認、跟誰訂的＝系列負責人），庫存的「客人訂」、待買清單（庫存篩選選「待買清單」）、出貨、收款都照原本的算法。
+- 防超賣：下單時鎖住這些商品的開放數量列，同時很多人搶也只會成立到開放數量為止；名額照送出順序，放在購物車不保留。
+- 售完可以排候補；後台取消網站訂單（或加開數量）時依排隊順序遞補，自動成立訂單。
+- LINE 通知（官方帳號推播）：下單成功（客人＋負責人）、取消（含原因與新的合計）、候補遞補成功、出貨。通知先寫進 `LineOutbox`，交易成功後才送，送失敗記下原因、最多試 3 次。
+- 已經有的買家要接上 LINE：客人用 LINE 登入後會多一位買家，在買家頁把這位「合併」到原本的買家，LINE 會搬過去。
+- 負責人要收到新訂單通知：自己用 LINE 登入一次訂購頁，再到後台「新訂單通知誰」選「這是我」。
+
+### LINE 設定步驟
+
+1. 到 [LINE Developers](https://developers.line.biz/console/) 建一個 Provider，底下建 **LINE Login** 頻道和 **Messaging API** 頻道（綁你的官方帳號）。兩個要在同一個 Provider，客人的 LINE id 才會一樣。
+2. LINE Login 頻道：Callback URL 填 `https://你的網址/api/shop/line/callback`；在「Linked OA」選你的官方帳號（登入時才能請客人加好友）；頻道狀態改成 Published。
+3. Messaging API 頻道：發一組長期的 Channel access token。
+4. 在 Vercel 的 Environment Variables 填上面的 `LINE_*`，重新部署。
 
 ## 測試
 

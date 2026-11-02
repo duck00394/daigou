@@ -7,6 +7,8 @@ const PUBLIC = ["/login", "/manifest.webmanifest", "/sw.js", "/api/rush/fire"];
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (PUBLIC.some((p) => pathname === p)) return NextResponse.next();
+  // 訂購頁（客人用 LINE 登入，跟後台分開；頁面與動作自己檢查客人身分）
+  if (pathname === "/shop" || pathname.startsWith("/shop/") || pathname.startsWith("/api/shop/")) return NextResponse.next();
   if (req.cookies.get("dg_session")?.value) return NextResponse.next();
   if (pathname.startsWith("/api/")) return NextResponse.json({ error: "未登入" }, { status: 401 });
   const url = req.nextUrl.clone();

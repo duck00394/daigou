@@ -1,4 +1,5 @@
 // 出貨服務：支援部分出貨；出貨數量一律從保留中扣除，並同時扣實際在庫。
+import { notifyShipped } from "./shop";
 import { BizError, lockRows, type Tx } from "@/server/db";
 import { audit, emptyToNull, nextCode, type Actor } from "./common";
 import { itemReservations, reserveForItem } from "./inventory";
@@ -96,6 +97,7 @@ export async function createShipment(t: Tx, actor: Actor, input: ShipInput) {
   }
   for (const id of orderIds) await recomputeOrder(t, id);
   await audit(t, actor, "shipment.create", "Shipment", shipment.id, { lines });
+  await notifyShipped(t, shipment.id);
   return { shipment: await t.shipment.findUniqueOrThrow({ where: { id: shipment.id }, include: { items: true } }), duplicated: false };
 }
 
