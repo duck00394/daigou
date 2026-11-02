@@ -1,6 +1,6 @@
 import { prisma } from "@/server/db";
 import { currentCustomer } from "@/server/shop-auth";
-import { isOpen } from "@/server/services/shop";
+import { getContactField, isOpen } from "@/server/services/shop";
 import { BackCircle, Eyebrow, SerifTitle } from "../ui";
 import { CartView } from "./view";
 
@@ -8,11 +8,13 @@ export const metadata = { title: "購物車" };
 
 export default async function CartPage() {
   const customer = await currentCustomer();
-  const [buyer, methods, cats] = await Promise.all([
-    customer ? prisma.buyer.findUnique({ where: { id: customer.id }, select: { name: true, recipientPhone: true, shippingMethod: true } }) : null,
+  const [buyer, methods, cats, field] = await Promise.all([
+    customer ? prisma.buyer.findUnique({ where: { id: customer.id }, select: { name: true, recipientPhone: true, contact: true, shippingMethod: true } }) : null,
     prisma.shippingMethod.findMany({ where: { active: true, kind: "TW_DOMESTIC_SHIPPING" }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { name: true } }),
     prisma.shopCategory.findMany({ where: { enabled: true }, select: { categoryId: true, enabled: true, openAt: true, category: { select: { name: true } } } }),
+    getContactField(prisma),
   ]);
+  const prevContact = (field.mode === "phone" ? buyer?.recipientPhone : field.mode === "text" ? buyer?.contact : "") ?? "";
   const shipping = [...new Set([...methods.map((m) => m.name), "面交"])];
   const status = Object.fromEntries(cats.map((c) => [c.categoryId, { open: isOpen(c), openAt: c.openAt?.toISOString() ?? null, name: c.category.name }]));
   return (
@@ -26,8 +28,9 @@ export default async function CartPage() {
       </header>
       <CartView
         loggedIn={!!customer}
-        defaults={{ name: buyer?.name ?? customer?.name ?? "", phone: buyer?.recipientPhone ?? "", shipping: buyer?.shippingMethod && shipping.includes(buyer.shippingMethod) ? buyer.shippingMethod : shipping[0] }}
-        returning={!!buyer?.recipientPhone}
+        defaults={{ name: buyer?.name ?? customer?.name ?? "", phone: prevContact, shipping: buyer?.shippingMethod && shipping.includes(buyer.shippingMethod) ? buyer.shippingMethod : shipping[0] }}
+        returning={!!buyer?.shippingMethod}
+        field={field}
         shippingOptions={shipping}
         status={status}
       />

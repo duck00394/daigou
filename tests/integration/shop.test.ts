@@ -48,7 +48,7 @@ describe("訂購頁下單", () => {
     const out = await prisma.lineOutbox.findMany({ orderBy: { createdAt: "asc" } });
     expect(out.map((x) => x.to)).toEqual([(await prisma.buyer.findUniqueOrThrow({ where: { id: b } })).lineUserId, "Useller"]);
     const buyer = await prisma.buyer.findUniqueOrThrow({ where: { id: b } });
-    expect([buyer.name, buyer.recipientPhone, buyer.shippingMethod]).toEqual(["小美", "0912345678", "賣貨便"]);
+    expect([buyer.name, buyer.contact, buyer.shippingMethod]).toEqual(["小美", "0912345678", "賣貨便"]);
   });
 
   it("售價用系列的品項售價；沒設定時用商品參考售價", async () => {
@@ -304,5 +304,25 @@ describe("不能單買的不能互搭", () => {
     await expect(order(b, [{ productId: s.p1.id, qty: 1 }, { productId: s.p2.id, qty: 1 }])).rejects.toThrow("可以單買的角色");
     await expect(order(b, [{ productId: s.p1.id, qty: 1 }, { productId: s.p2.id, qty: 1 }, { productId: p4.id, qty: 1 }])).rejects.toThrow("還差 1 個");
     await order(b, [{ productId: s.p1.id, qty: 1 }, { productId: s.p2.id, qty: 1 }, { productId: p4.id, qty: 2 }]);
+  });
+
+  it("結帳聯絡欄位可以在後台設定：帳號／手機／不用留", async () => {
+    const b = await lineBuyer("小美");
+    await tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p1.id, quota: 10 }]));
+    const go = (phone: string) => tx((t) => shop.placeShopOrder(t, b, { lines: [{ categoryId: s.halloween.id, productId: s.p1.id, qty: 1 }], contact: { ...contact, phone }, key: key() }));
+    // 預設：脆 ID 或 IG 帳號（不檢查號碼格式）
+    expect((await shop.getContactField(prisma)).mode).toBe("text");
+    const o1 = await go("@mei_ig");
+    expect((await prisma.order.findUnique({ where: { id: o1.orderId } }))!.notes).toContain("脆 ID 或 IG 帳號：@mei_ig");
+    expect((await prisma.buyer.findUnique({ where: { id: b } }))!.contact).toBe("@mei_ig");
+    await expect(go("")).rejects.toThrow("請填脆 ID 或 IG 帳號");
+    // 改成手機
+    await tx((t) => shop.setContactField(t, actor, { mode: "phone", label: "" }));
+    await expect(go("@mei_ig")).rejects.toThrow("手機號碼格式不對");
+    await go("0912345678");
+    expect((await prisma.buyer.findUnique({ where: { id: b } }))!.recipientPhone).toBe("0912345678");
+    // 不用留
+    await tx((t) => shop.setContactField(t, actor, { mode: "none", label: "" }));
+    await go("");
   });
 });

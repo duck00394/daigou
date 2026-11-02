@@ -27,7 +27,7 @@ async function shopRun<T>(fn: (buyerId: string) => Promise<T>): Promise<ShopResu
 }
 
 const lineSchema = z.object({ categoryId: z.string().max(64), productId: z.string().max(64), qty: z.number().int().min(1).max(99) });
-const contactSchema = z.object({ name: z.string().max(60), phone: z.string().max(30), shipping: z.string().max(40), note: z.string().max(300).nullish() });
+const contactSchema = z.object({ name: z.string().max(60), phone: z.string().max(80), shipping: z.string().max(40), note: z.string().max(300).nullish() });
 
 export async function placeOrderAction(lines: z.infer<typeof lineSchema>[], contact: z.infer<typeof contactSchema>, key: string) {
   return shopRun(async (buyerId) => {

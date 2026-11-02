@@ -59,6 +59,15 @@ export async function setShopNameAction(name: string) {
   });
 }
 
+export async function setContactFieldAction(mode: string, label: string) {
+  return run(async (a) => {
+    await tx((t) => shop.setContactField(t, a, { mode: z.enum(["phone", "text", "none"]).parse(mode), label: z.string().max(40).parse(label) }));
+    revalidatePath("/shop", "layout");
+    revalidatePath("/shop-admin");
+    return true;
+  });
+}
+
 /** 品項全體照（貼網址）；空白＝拿掉 */
 export async function setTypeImageAction(categoryId: string, productTypeId: string, url: string | null) {
   return run(async (a) => {

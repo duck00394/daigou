@@ -92,7 +92,7 @@ export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, 
                     {r.price !== null && <span className={`text-[14px] font-bold ${sold ? "text-shop-mute" : "text-shop-rose"}`}>{money(r.price)}</span>}
                   </div>
                   <div className={`text-[12px] ${sold ? "text-shop-rose-2" : "text-shop-mute"}`}>{note}</div>
-                  {(r.bundle > 0 || r.bundleAmount > 0) && <div className="mt-0.5 inline-block rounded-md bg-shop-gold-soft px-1.5 py-0.5 text-[11px] font-bold text-shop-gold">不能單買・每 1 個要搭{r.bundle ? ` ${r.bundle} 個其他角色` : `其他角色滿 ${money(r.bundleAmount)}`}</div>}
+                  {(r.bundle > 0 || r.bundleAmount > 0) && <div className="mt-0.5 inline-block rounded-md bg-shop-gold-soft px-1.5 py-0.5 text-[11px] font-bold text-shop-gold">不能單買・每 1 個要搭{r.bundle ? ` ${r.bundle} 個可以單買的角色` : `可以單買的角色滿 ${money(r.bundleAmount)}`}</div>}
                 </div>
                 {sold ? (
                   r.inWait ? (

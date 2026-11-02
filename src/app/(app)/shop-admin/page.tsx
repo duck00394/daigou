@@ -3,23 +3,24 @@ import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { appUrl } from "@/server/push";
 import { callbackUrl, lineEnv, loginConfigured, pushConfigured } from "@/server/line";
-import { getShopName, isOpen } from "@/server/services/shop";
+import { getContactField, getShopName, isOpen } from "@/server/services/shop";
 import { PageHeader, Section, Badge } from "@/components/ui";
 import { CopyButton } from "@/components/copy-button";
 import { taipeiDayLabel, taipeiParts } from "@/lib/taipei";
-import { OpenSeries, OperatorLine, ShopName } from "./parts";
+import { ContactFieldForm, OpenSeries, OperatorLine, ShopName } from "./parts";
 
 export const metadata = { title: "訂購頁" };
 
 export default async function ShopAdmin() {
   await requireUser();
-  const [name, shops, cats, ops, lineBuyers, failed] = await Promise.all([
+  const [name, shops, cats, ops, lineBuyers, failed, field] = await Promise.all([
     getShopName(prisma),
     prisma.shopCategory.findMany({ include: { category: { select: { name: true, active: true } }, owner: { select: { name: true } } }, orderBy: [{ enabled: "desc" }, { updatedAt: "desc" }] }),
     prisma.category.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }], select: { id: true, name: true } }),
     prisma.operator.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, lineUserId: true } }),
     prisma.buyer.findMany({ where: { lineUserId: { not: null }, mergedIntoId: null }, orderBy: { updatedAt: "desc" }, take: 80, select: { id: true, name: true, lineName: true, lineUserId: true } }),
     prisma.lineOutbox.count({ where: { sentAt: null, tries: { gte: 3 } } }),
+    getContactField(prisma),
   ]);
   const recent = await prisma.lineOutbox.findMany({ orderBy: { createdAt: "desc" }, take: 6, select: { id: true, createdAt: true, sentAt: true, tries: true, error: true } });
   const quotaCounts = await prisma.shopQuota.groupBy({ by: ["categoryId"], _count: { _all: true } });
@@ -39,6 +40,7 @@ export default async function ShopAdmin() {
         </div>
         <p className="mt-2 text-[13px] text-mute">貼到 LINE 官方帳號的圖文選單或社群公告，客人點了就能下單。</p>
         <div className="mt-3"><ShopName name={name} /></div>
+        <div className="mt-3"><ContactFieldForm mode={field.mode} label={field.label} /></div>
       </Section>
 
       <Section title="開放訂購的系列">

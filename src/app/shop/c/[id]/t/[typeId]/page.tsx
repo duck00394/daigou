@@ -47,7 +47,10 @@ export default async function TypePage({ params }: { params: Promise<{ id: strin
           loggedIn={!!customer}
           loginHref={`/shop/login?next=${encodeURIComponent(next)}`}
           limit={s.perPersonLimit}
-          rows={g.products.map((p, i) => ({
+          rows={[...g.products]
+            // 可以單買的在前、不能單買的在後；同一組照價格由低到高（同價維持原本角色順序）
+            .sort((a, b) => Number(!!(a.bundleNeed || a.bundleAmount)) - Number(!!(b.bundleNeed || b.bundleAmount)) || (a.price ?? Infinity) - (b.price ?? Infinity))
+            .map((p, i) => ({
             productId: p.productId,
             name: p.name,
             label: p.character || p.typeName,

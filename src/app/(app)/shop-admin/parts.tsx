@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button, inputCls, useRun } from "@/components/client";
-import { bindOperatorLineAction, setShopNameAction } from "@/actions/shop";
+import { bindOperatorLineAction, setContactFieldAction, setShopNameAction } from "@/actions/shop";
 
 export function ShopName({ name }: { name: string }) {
   const [v, setV] = useState(name);
@@ -56,5 +56,37 @@ export function OperatorLine({ op, current, choices }: { op: { id: string; name:
       </label>
       <Button loading={pending} disabled={v === current || v === "keep"} onClick={() => run(() => bindOperatorLineAction(op.id, v || null), { success: v ? `之後${op.name}負責的系列有新訂單會通知這個 LINE` : "已取消通知" })}>存</Button>
     </div>
+  );
+}
+
+export function ContactFieldForm({ mode: m0, label: l0 }: { mode: "phone" | "text" | "none"; label: string }) {
+  const [mode, setMode] = useState(m0);
+  const [label, setLabel] = useState(m0 === "text" ? l0 : "脆 ID 或 IG 帳號");
+  const { run, pending } = useRun();
+  const changed = mode !== m0 || (mode === "text" && label.trim() !== l0);
+  return (
+    <form
+      className="flex flex-wrap items-end gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => setContactFieldAction(mode, label), { success: "結帳欄位已更新" });
+      }}
+    >
+      <label className="block min-w-[140px] flex-1 text-[13px] font-medium text-ink-2">
+        結帳時客人要留
+        <select aria-label="客人要留的聯絡方式" className={`${inputCls} mt-1`} value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}>
+          <option value="text">帳號（自己取欄位名稱）</option>
+          <option value="phone">手機號碼</option>
+          <option value="none">不用留（只留暱稱）</option>
+        </select>
+      </label>
+      {mode === "text" && (
+        <label className="block min-w-[140px] flex-1 text-[13px] font-medium text-ink-2">
+          欄位名稱
+          <input aria-label="欄位名稱" className={`${inputCls} mt-1`} value={label} maxLength={20} onChange={(e) => setLabel(e.target.value)} placeholder="例如：脆 ID 或 IG 帳號" />
+        </label>
+      )}
+      <Button type="submit" loading={pending} disabled={!changed || (mode === "text" && !label.trim())}>存</Button>
+    </form>
   );
 }

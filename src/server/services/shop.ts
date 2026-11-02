@@ -117,17 +117,19 @@ async function lockQuotas(t: Tx, pairs: { categoryId: string; productId: string 
   }
 }
 
-function checkContact(c: Contact) {
+function checkContact(c: Contact, field: ContactField) {
   const name = (c.name ?? "").trim();
   const phone = (c.phone ?? "").trim();
   const shipping = (c.shipping ?? "").trim();
   if (!name) throw new BizError("請填社群暱稱");
   if (name.length > 40) throw new BizError("暱稱太長了");
-  if (!/^[0-9+\-\s()]{8,20}$/.test(phone)) throw new BizError("手機號碼格式不對");
+  if (field.mode === "phone" && !/^[0-9+\-\s()]{8,20}$/.test(phone)) throw new BizError("手機號碼格式不對");
+  if (field.mode === "text" && !phone) throw new BizError(`請填${field.label}`);
+  if (phone.length > 60) throw new BizError(`${field.label}太長了`);
   if (!shipping || shipping.length > 30) throw new BizError("請選取貨方式");
   const note = emptyToNull(c.note ?? null);
   if (note && note.length > 200) throw new BizError("備註太長了（最多 200 字）");
-  return { name, phone, shipping, note };
+  return { name, phone: field.mode === "none" ? "" : phone, shipping, note };
 }
 
 /** 客人送出訂單。同一個識別碼重複送出只會成立一次 */
@@ -139,7 +141,8 @@ export async function placeShopOrder(t: Tx, buyerId: string, input: { lines: Car
     if (dup.buyerId !== buyerId) throw new BizError("送出識別碼重複，請重新整理再試");
     return { orderId: dup.id, orderNo: dup.orderNo, duplicate: true };
   }
-  const contact = checkContact(input.contact);
+  const field = await getContactField(t);
+  const contact = checkContact(input.contact, field);
   // 合併同一個商品的數量
   const merged = new Map<string, CartLine>();
   for (const l of input.lines ?? []) {
@@ -210,14 +213,19 @@ export async function placeShopOrder(t: Tx, buyerId: string, input: { lines: Car
 
   await t.buyer.update({
     where: { id: buyerId },
-    data: { name: contact.name, recipientPhone: contact.phone, shippingMethod: contact.shipping, salesChannel: buyer.salesChannel ?? contact.shipping },
+    data: {
+      name: contact.name,
+      ...(field.mode === "phone" ? { recipientPhone: contact.phone } : field.mode === "text" ? { contact: contact.phone } : {}),
+      shippingMethod: contact.shipping,
+      salesChannel: buyer.salesChannel ?? contact.shipping,
+    },
   });
   const order = await createOrder(t, SYSTEM, {
     buyerId,
     source: SHOP_SOURCE,
     confirmation: "CONFIRMED",
     idempotencyKey: idem,
-    notes: [`取貨：${contact.shipping}`, contact.note ? `客人備註：${contact.note}` : null].filter(Boolean).join("\n"),
+    notes: [field.mode !== "none" && contact.phone ? `${field.label}：${contact.phone}` : null, `取貨：${contact.shipping}`, contact.note ? `客人備註：${contact.note}` : null].filter(Boolean).join("\n"),
     items: lines.map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: info.get(`${l.categoryId}|${l.productId}`)!.price!, categoryId: l.categoryId })),
   });
   await t.order.update({ where: { id: order.id }, data: { salesChannel: contact.shipping } });
@@ -235,7 +243,7 @@ export async function placeShopOrder(t: Tx, buyerId: string, input: { lines: Car
   await enqueueLine(t, buyer.lineUserId, [
     orderCard({ tone: "confirmed", eyebrow: "ORDER CONFIRMED", title: "訂單已成立", orderNo: order.orderNo, series: await seriesNames(t, order.items.map((i) => i.categoryId)), lines: msgLines(), note: "採購、到貨、出貨都會在這裡通知你", total: order.receivableCache, url: `${appUrl()}/shop/orders` }),
   ]);
-  await notifySellers(t, order, contact.name, byCat, msgLines);
+  await notifySellers(t, order, field.mode === "text" && contact.phone ? `${contact.name}（${contact.phone}）` : contact.name, byCat, msgLines);
   return { orderId: order.id, orderNo: order.orderNo, duplicate: false };
 }
 
@@ -531,6 +539,29 @@ export async function setShopName(t: Tx, actor: Actor, name: string) {
   if (!v || v.length > 20) throw new BizError("店名要 1～20 個字");
   await t.appSetting.upsert({ where: { key: "shopName" }, update: { value: v }, create: { key: "shopName", value: v } });
   await audit(t, actor, "shop.name", "AppSetting", "shopName", { name: v });
+}
+
+// ───────────── 結帳要客人留的聯絡方式 ─────────────
+
+/** phone＝手機（檢查號碼格式）；text＝自己取名的欄位（例如脆 ID 或 IG 帳號）；none＝不用留 */
+export type ContactField = { mode: "phone" | "text" | "none"; label: string };
+export const DEFAULT_CONTACT_FIELD: ContactField = { mode: "text", label: "脆 ID 或 IG 帳號" };
+
+export async function getContactField(db: Db): Promise<ContactField> {
+  const s = await db.appSetting.findUnique({ where: { key: "shopContactField" } });
+  try {
+    const v = JSON.parse(s?.value ?? "null");
+    if (v && ["phone", "text", "none"].includes(v.mode)) return { mode: v.mode, label: v.mode === "phone" ? "手機" : String(v.label || DEFAULT_CONTACT_FIELD.label).slice(0, 20) };
+  } catch {}
+  return DEFAULT_CONTACT_FIELD;
+}
+
+export async function setContactField(t: Tx, actor: Actor, f: ContactField) {
+  const label = f.mode === "phone" ? "手機" : f.label.trim();
+  if (f.mode === "text" && (!label || label.length > 20)) throw new BizError("欄位名稱要 1～20 個字");
+  const value = JSON.stringify({ mode: f.mode, label: label || DEFAULT_CONTACT_FIELD.label });
+  await t.appSetting.upsert({ where: { key: "shopContactField" }, update: { value }, create: { key: "shopContactField", value } });
+  await audit(t, actor, "shop.contactField", "AppSetting", "shopContactField", { mode: f.mode, label });
 }
 
 // ───────────── 上傳圖片 ─────────────

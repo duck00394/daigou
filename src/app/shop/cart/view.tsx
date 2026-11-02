@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { money, Pic, Stepper, useCart, type CartItem } from "../cart";
 import { placeOrderAction } from "../actions";
+import type { ContactField } from "@/server/services/shop";
 
 type Status = Record<string, { open: boolean; openAt: string | null; name: string }>;
 const fieldCls = "h-[46px] w-full rounded-[14px] border border-[#e6dace] bg-[#fdfaf6] px-3.5 text-[16px] text-shop-ink";
@@ -12,7 +13,7 @@ function newKey() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-export function CartView({ loggedIn, defaults, returning, shippingOptions, status }: { loggedIn: boolean; defaults: { name: string; phone: string; shipping: string }; returning: boolean; shippingOptions: string[]; status: Status }) {
+export function CartView({ loggedIn, defaults, returning, shippingOptions, status, field }: { field: ContactField; loggedIn: boolean; defaults: { name: string; phone: string; shipping: string }; returning: boolean; shippingOptions: string[]; status: Status }) {
   const cart = useCart();
   const router = useRouter();
   const [f, setF] = useState({ ...defaults, note: "" });
@@ -98,9 +99,16 @@ export function CartView({ loggedIn, defaults, returning, shippingOptions, statu
           <label className="flex flex-col gap-1.5 text-[13px] text-shop-mute">社群暱稱
             <input className={fieldCls} value={f.name} maxLength={40} onChange={(e) => setF({ ...f, name: e.target.value })} autoComplete="nickname" />
           </label>
-          <label className="flex flex-col gap-1.5 text-[13px] text-shop-mute">手機
-            <input className={fieldCls} type="tel" value={f.phone} maxLength={20} onChange={(e) => setF({ ...f, phone: e.target.value })} autoComplete="tel" placeholder="0912-345-678" />
-          </label>
+          {field.mode === "phone" && (
+            <label className="flex flex-col gap-1.5 text-[13px] text-shop-mute">手機
+              <input className={fieldCls} type="tel" value={f.phone} maxLength={20} onChange={(e) => setF({ ...f, phone: e.target.value })} autoComplete="tel" placeholder="0912-345-678" />
+            </label>
+          )}
+          {field.mode === "text" && (
+            <label className="flex flex-col gap-1.5 text-[13px] text-shop-mute">{field.label}
+              <input className={fieldCls} value={f.phone} maxLength={60} onChange={(e) => setF({ ...f, phone: e.target.value })} autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+            </label>
+          )}
           <label className="flex flex-col gap-1.5 text-[13px] text-shop-mute">取貨方式
             <select className={fieldCls} value={f.shipping} onChange={(e) => setF({ ...f, shipping: e.target.value })}>
               {shippingOptions.map((s) => <option key={s} value={s}>{s}</option>)}
