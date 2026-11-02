@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: { default: "代購帳房", template: "%s｜代購帳房" },
   description: "日本角色周邊代購管理",
   robots: { index: false, follow: false },
+  manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "代購帳房", statusBarStyle: "default" },
   icons: { apple: "/icons/apple-touch-icon.png" },
 };
