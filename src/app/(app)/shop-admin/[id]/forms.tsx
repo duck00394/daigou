@@ -51,10 +51,10 @@ export function SettingsForm({ categoryId, ops, initial, isNew }: { categoryId: 
   );
 }
 
-export type QuotaRow = { productId: string; type: string; typeId: string | null; typeImage: string | null; typeSort: number; label: string; charSort: number; name: string; image: string | null; defaultPrice: number | null; price: number | null; quota: number | null; sold: number; waiting: number };
+export type QuotaRow = { productId: string; type: string; typeId: string | null; typeImage: string | null; typeSort: number; label: string; charSort: number; name: string; image: string | null; defaultPrice: number | null; price: number | null; bundleNeed: number; quota: number | null; sold: number; waiting: number };
 
-type Cell = { q: string; p: string };
-const cellOf = (r: QuotaRow): Cell => ({ q: r.quota === null ? "" : String(r.quota), p: r.price === null ? "" : String(r.price) });
+type Cell = { q: string; p: string; b: number };
+const cellOf = (r: QuotaRow): Cell => ({ q: r.quota === null ? "" : String(r.quota), p: r.price === null ? "" : String(r.price), b: r.bundleNeed });
 
 export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: QuotaRow[] }) {
   const init = useMemo(() => Object.fromEntries(rows.map((r) => [r.productId, cellOf(r)])), [rows]);
@@ -62,7 +62,7 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
   const [saved, setSaved] = useState(init);
   const [fill, setFill] = useState<Record<string, Cell>>({});
   const { run, pending } = useRun();
-  const same = (a?: Cell, b?: Cell) => (a?.q ?? "") === (b?.q ?? "") && (a?.p ?? "") === (b?.p ?? "");
+  const same = (a?: Cell, b?: Cell) => (a?.q ?? "") === (b?.q ?? "") && (a?.p ?? "") === (b?.p ?? "") && (a?.b ?? 0) === (b?.b ?? 0);
   const changed = rows.filter((r) => !same(v[r.productId], saved[r.productId]));
   useLeaveGuard(changed.length > 0);
   const types = [...new Set(rows.map((r) => r.type))];
@@ -71,7 +71,7 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
   const badPrice = changed.find((r) => v[r.productId].p !== "" && !num.test(v[r.productId].p));
   const set = (id: string, patch: Partial<Cell>) => setV((x) => ({ ...x, [id]: { ...x[id], ...patch } }));
   const save = () =>
-    run(() => saveQuotasAction(categoryId, changed.map((r) => ({ productId: r.productId, quota: v[r.productId].q === "" ? null : Number(v[r.productId].q), price: v[r.productId].q === "" ? undefined : v[r.productId].p === "" ? null : Number(v[r.productId].p) }))), {
+    run(() => saveQuotasAction(categoryId, changed.map((r) => ({ productId: r.productId, quota: v[r.productId].q === "" ? null : Number(v[r.productId].q), price: v[r.productId].q === "" ? undefined : v[r.productId].p === "" ? null : Number(v[r.productId].p), bundleNeed: v[r.productId].q === "" ? undefined : v[r.productId].b }))), {
       success: (d) => `已儲存 ${d.changed} 個${d.filled ? `，候補遞補了 ${d.filled} 筆` : ""}`,
       onOk: () => setSaved(v),
     });
@@ -85,7 +85,7 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
       </div>
       {types.map((t) => {
         const list = rows.filter((r) => r.type === t);
-        const f = fill[t] ?? { q: "", p: "" };
+        const f = fill[t] ?? { q: "", p: "", b: 0 };
         const canFill = (f.q === "" || /^\d{1,4}$/.test(f.q)) && (f.p === "" || num.test(f.p)) && (f.q !== "" || f.p !== "");
         return (
           <div key={t} className="overflow-hidden rounded-lg border border-line-2">
@@ -94,7 +94,7 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
               <span className="flex items-center gap-1.5">
                 <input aria-label={`${t} 售價全部填`} inputMode="numeric" placeholder="售價" className="h-9 w-[72px] rounded-md border border-line bg-white px-2 text-[15px]" value={f.p} onChange={(e) => setFill({ ...fill, [t]: { ...f, p: e.target.value.replace(/[^\d]/g, "") } })} />
                 <input aria-label={`${t} 數量全部填`} inputMode="numeric" placeholder="數量" className="h-9 w-14 rounded-md border border-line bg-white px-2 text-[15px]" value={f.q} onChange={(e) => setFill({ ...fill, [t]: { ...f, q: e.target.value.replace(/[^\d]/g, "") } })} />
-                <Button small disabled={!canFill} onClick={() => setV({ ...v, ...Object.fromEntries(list.map((r) => [r.productId, { q: f.q !== "" ? f.q : v[r.productId].q, p: f.p !== "" ? f.p : v[r.productId].p }])) })}>全部填</Button>
+                <Button small disabled={!canFill} onClick={() => setV({ ...v, ...Object.fromEntries(list.map((r) => [r.productId, { ...v[r.productId], q: f.q !== "" ? f.q : v[r.productId].q, p: f.p !== "" ? f.p : v[r.productId].p }])) })}>全部填</Button>
               </span>
             </div>
             {list[0].typeId && (
@@ -106,7 +106,7 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
               <span>角色</span><span>售價</span><span>開放數量</span><span className="text-center">已訂</span><span className="text-center">候補</span>
             </div>
             {list.map((r) => {
-              const c = v[r.productId] ?? { q: "", p: "" };
+              const c = v[r.productId] ?? { q: "", p: "", b: 0 };
               const dirty = !same(c, saved[r.productId]);
               const noPrice = c.p === "" && r.defaultPrice === null && c.q !== "";
               return (
@@ -115,6 +115,12 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
                     <span className="min-w-0">
                       <span className="block truncate text-[15px]">{r.label}</span>
                       {noPrice && <span className="block text-[12px] text-bad">沒有售價，客人不能訂</span>}
+                      {c.q !== "" && list.length > 1 && (
+                        <select aria-label={`${r.label} 能不能單買`} className={`mt-0.5 h-7 max-w-full rounded border px-1 text-[12px] ${c.b ? "border-[#f0dfa8] bg-warn-soft text-warn" : "border-line bg-white text-ink-2"}`} value={c.b} onChange={(e) => set(r.productId, { b: Number(e.target.value) })}>
+                          <option value={0}>可以單買</option>
+                          {[1, 2, 3].map((n) => <option key={n} value={n}>要搭 {n} 個其他角色</option>)}
+                        </select>
+                      )}
                     </span>
                   </span>
                   <input aria-label={`${r.label} 售價`} inputMode="numeric" placeholder={r.defaultPrice === null ? "未設" : String(r.defaultPrice)} className={`h-10 w-full rounded-md border px-2 text-[15px] placeholder:text-mute ${dirty && c.p !== (saved[r.productId]?.p ?? "") ? "border-ai bg-ai-soft" : noPrice ? "border-bad" : "border-line bg-white"}`} value={c.p} onChange={(e) => set(r.productId, { p: e.target.value.replace(/[^\d]/g, "") })} />

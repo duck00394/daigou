@@ -23,6 +23,7 @@ export type ShopProduct = {
   imageUrl: string | null;
   price: number | null;
   quota: number;
+  bundleNeed: number; // 0＝可以單買；n＝每買 1 個要搭配 n 個同品項的其他角色
   sold: number;
   left: number;
   waiting: number;
@@ -60,6 +61,7 @@ export async function shopProducts(db: Db, categoryId: string): Promise<ShopProd
         typeImage: (p.productTypeId ? tp.get(p.productTypeId)?.imageUrl : null) ?? null,
         price,
         quota: q.quota,
+        bundleNeed: q.bundleNeed ?? 0,
         sold: s,
         left: Math.max(0, q.quota - s),
         waiting: waits.get(p.id) ?? 0,
@@ -183,6 +185,14 @@ export async function placeShopOrder(t: Tx, buyerId: string, input: { lines: Car
     if (limit && had + l.qty > limit) throw new BizError(`「${p.name}」每人限購 ${limit} 個${had ? `（你已經訂了 ${had} 個）` : ""}`);
   }
 
+  // 不能單買的角色：同一張訂單裡，同品項的其他角色要夠
+  for (const l of lines) {
+    const p = info.get(`${l.categoryId}|${l.productId}`)!;
+    if (!p.bundleNeed) continue;
+    const others = lines.filter((o) => o.categoryId === l.categoryId && o.productId !== l.productId && info.get(`${o.categoryId}|${o.productId}`)?.typeId === p.typeId).reduce((a, o) => a + o.qty, 0);
+    if (others < l.qty * p.bundleNeed) throw new BizError(`「${p.name}」不能單買：每 1 個要搭配 ${p.bundleNeed} 個${p.typeName}的其他角色（還差 ${l.qty * p.bundleNeed - others} 個）`);
+  }
+
   await t.buyer.update({
     where: { id: buyerId },
     data: { name: contact.name, recipientPhone: contact.phone, shippingMethod: contact.shipping, salesChannel: buyer.salesChannel ?? contact.shipping },
@@ -260,6 +270,7 @@ export async function joinWait(t: Tx, buyerId: string, input: { categoryId: stri
   const p = (await shopProducts(t, input.categoryId)).find((x) => x.productId === input.productId);
   if (!p) throw new BizError("找不到這個商品");
   if (p.left > 0) throw new BizError(`還有 ${p.left} 個，可以直接下單`);
+  if (p.bundleNeed) throw new BizError("這個角色要搭配其他角色一起買，不能排候補");
   const had = (await soldMap(t, input.categoryId, [input.productId], buyerId)).get(input.productId) ?? 0;
   if (s.perPersonLimit && had + input.qty > s.perPersonLimit) throw new BizError(`每人限購 ${s.perPersonLimit} 個${had ? `（你已經訂了 ${had} 個）` : ""}`);
   const existing = await t.shopWait.findFirst({ where: { buyerId, categoryId: input.categoryId, productId: input.productId, status: "WAITING" } });
@@ -294,7 +305,7 @@ export async function promoteWaits(t: Tx, categoryId: string, productId: string)
   let filled = 0;
   for (const w of waits) {
     const p = (await shopProducts(t, categoryId)).find((x) => x.productId === productId);
-    if (!p || p.left <= 0 || p.price === null) break;
+    if (!p || p.left <= 0 || p.price === null || p.bundleNeed) break;
     if (!w.buyer.lineUserId || w.buyer.mergedIntoId || w.buyer.archivedAt) {
       await t.shopWait.update({ where: { id: w.id }, data: { status: "CANCELLED" } });
       continue;
@@ -429,7 +440,7 @@ export async function saveShopCategory(t: Tx, actor: Actor, categoryId: string, 
   await audit(t, actor, "shop.category", "Category", categoryId, { before, after: data });
 }
 
-export type QuotaInput = { productId: string; quota: number | null; price?: number | null };
+export type QuotaInput = { productId: string; quota: number | null; price?: number | null; bundleNeed?: number | null };
 
 /** 存開放數量和售價（price 沒傳＝不改售價；null＝改回用品項售價） */
 export async function saveQuotas(t: Tx, actor: Actor, categoryId: string, rows: QuotaInput[]) {
@@ -450,10 +461,13 @@ export async function saveQuotas(t: Tx, actor: Actor, categoryId: string, rows: 
       }
       continue;
     }
+    if (r.bundleNeed !== undefined && r.bundleNeed !== null && (!Number.isInteger(r.bundleNeed) || r.bundleNeed < 0 || r.bundleNeed > 9)) throw new BizError("搭配數量要是 0～9");
     const price = r.price === undefined ? (cur?.price ?? null) : r.price;
-    if (!cur || cur.quota !== r.quota || cur.price !== price) {
-      await t.shopQuota.upsert({ where: key, update: { quota: r.quota, price }, create: { categoryId, productId: r.productId, quota: r.quota, price } });
-      changed.push({ ...r, price });
+    const bundleNeed = r.bundleNeed === undefined ? (cur?.bundleNeed ?? null) : r.bundleNeed || null;
+    if (!cur || cur.quota !== r.quota || cur.price !== price || cur.bundleNeed !== bundleNeed) {
+      await t.shopQuota.upsert({ where: key, update: { quota: r.quota, price, bundleNeed }, create: { categoryId, productId: r.productId, quota: r.quota, price, bundleNeed } });
+      changed.push({ ...r, price, bundleNeed });
+      if (bundleNeed) await dropWaits(t, categoryId, r.productId);
     }
   }
   let filled = 0;
@@ -549,4 +563,36 @@ async function dropWaits(t: Tx, categoryId: string, productId: string) {
       orderCard({ tone: "cancelled", eyebrow: "WAITING LIST", title: "候補已取消", orderNo: "（候補）", series, lines: [{ name: w.product.name, qty: w.qty, strike: true }], note: "這個商品這次不開放了，謝謝你排候補！", url: `${appUrl()}/shop/orders` }),
     ]);
   }
+}
+
+// ───────────── 後台傳 LINE 給客人（賣貨便連結） ─────────────
+
+export async function sendSaleLink(t: Tx, actor: Actor, orderId: string, input: { url: string; note?: string | null }) {
+  const url = (input.url ?? "").trim();
+  if (!/^https:\/\/\S+$/.test(url) || url.length > 1000) throw new BizError("連結要用 https:// 開頭");
+  const note = emptyToNull(input.note ?? null);
+  if (note && note.length > 300) throw new BizError("備註最多 300 字");
+  const order = await t.order.findUnique({ where: { id: orderId }, include: { buyer: { select: { lineUserId: true, name: true } }, items: true } });
+  if (!order) throw new BizError("找不到這筆訂單");
+  if (!order.buyer.lineUserId) throw new BizError("這位客人沒有用 LINE 登入過，沒辦法傳 LINE");
+  const lines = order.items
+    .map((i) => ({ name: i.productNameSnapshot, qty: i.qty - i.cancelledQtyCache, amount: Math.round(((i.unitPrice * i.qty - i.lineDiscount) * (i.qty - i.cancelledQtyCache)) / Math.max(1, i.qty)) }))
+    .filter((l) => l.qty > 0);
+  const msg = orderCard({
+    tone: "confirmed",
+    eyebrow: "PAYMENT",
+    title: "請到賣貨便下單",
+    orderNo: order.orderNo,
+    series: await seriesNames(t, order.items.map((i) => i.categoryId)),
+    lines,
+    note: note ?? "點下面的按鈕到賣貨便下單付款，完成後我們就會寄出～",
+    totalLabel: "應付金額",
+    total: order.balanceCache > 0 ? order.balanceCache : order.receivableCache,
+    url,
+    buttonLabel: "前往賣貨便下單",
+  });
+  const row = await enqueueLine(t, order.buyer.lineUserId, [msg]);
+  if (!row) throw new BizError("LINE 推播還沒設定好");
+  await audit(t, actor, "shop.saleLink", "Order", orderId, { url, note });
+  return { outboxId: row.id, buyer: order.buyer.name };
 }

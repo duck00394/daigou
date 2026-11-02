@@ -250,3 +250,32 @@ describe("拿掉商品", () => {
     await expect(tx((t) => shop.joinWait(t, a, { categoryId: s.halloween.id, productId: s.p2.id, qty: 1 }))).rejects.toThrow("找不到");
   });
 });
+
+describe("不能單買", () => {
+  it("要搭配同品項的其他角色；不能排候補", async () => {
+    const type = await prisma.productType.create({ data: { name: "搭配吊娃" } });
+    await prisma.product.updateMany({ where: { id: { in: [s.p1.id, s.p2.id] } }, data: { productTypeId: type.id } });
+    await tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p2.id, quota: 1, bundleNeed: 1 }]));
+    const b = await lineBuyer("搭配");
+    await expect(order(b, [{ productId: s.p2.id, qty: 1 }])).rejects.toThrow("不能單買");
+    await order(b, [{ productId: s.p2.id, qty: 1 }, { productId: s.p1.id, qty: 1 }]);
+    const c = await lineBuyer("候補搭配");
+    await expect(tx((t) => shop.joinWait(t, c, { categoryId: s.halloween.id, productId: s.p2.id, qty: 1 }))).rejects.toThrow("不能排候補");
+  });
+});
+
+describe("傳賣貨便連結", () => {
+  it("有 LINE 的客人才能傳；只收 https", async () => {
+    const b = await lineBuyer("賣貨便");
+    const r = await order(b, [{ productId: s.p1.id, qty: 2 }]);
+    await prisma.lineOutbox.deleteMany();
+    await expect(tx((t) => shop.sendSaleLink(t, actor, r.orderId, { url: "http://x" }))).rejects.toThrow("https");
+    await tx((t) => shop.sendSaleLink(t, actor, r.orderId, { url: "https://myship.7-11.com.tw/abc" }));
+    const m = await prisma.lineOutbox.findFirstOrThrow();
+    expect(JSON.stringify(m.messages)).toContain("myship.7-11.com.tw/abc");
+    expect(JSON.stringify(m.messages)).toContain("請到賣貨便下單");
+    const { createOrder } = await import("@/server/services/orders");
+    const o = await tx((t) => createOrder(t, actor, { buyerId: s.b1.id, items: [{ productId: s.p1.id, qty: 1 }] }));
+    await expect(tx((t) => shop.sendSaleLink(t, actor, o.id, { url: "https://x.com" }))).rejects.toThrow("沒有用 LINE");
+  });
+});

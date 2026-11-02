@@ -7,6 +7,7 @@ import { inventorySummary } from "@/server/services/inventory";
 import { packState } from "@/server/services/order-flow";
 import { listShippingMethods } from "@/server/services/shipping-methods";
 import { OrderFlow } from "./flow";
+import { SendLineLink } from "./line-link";
 import { PageHeader, Section, TableWrap, StatusBadge, Twd, Badge, TagChip, KV, LinkButton, Empty } from "@/components/ui";
 import { CancelOrderButton, ConfirmOrderButton, EditMetaButton, ItemActions, ReserveButtons, PaymentForm, VoidPaymentButton, RefundForm, RefundRowActions } from "./parts";
 import { fmtDate, orderStatus, paymentStatus, procurementStatus, shipStatus, orderSource, refundStatus, flagLabel } from "@/lib/labels";
@@ -114,6 +115,8 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           methods={shipMethods.map((m) => m.name)}
         />
       )}
+
+      {!cancelled && order.buyer.lineUserId && <SendLineLink orderId={id} buyer={order.buyer.name} />}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_22rem]">
         <Section title="買家與訂單資料">

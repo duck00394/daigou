@@ -58,6 +58,7 @@ export default async function TypePage({ params }: { params: Promise<{ id: strin
             mine: mine.get(p.productId) ?? 0,
             inWait: waits.some((w) => w.productId === p.productId),
             seed: i,
+            bundle: p.bundleNeed,
           }))}
         />
         {s.intro && (

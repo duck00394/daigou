@@ -45,6 +45,7 @@ export default async function ShopCategoryAdmin({ params }: { params: Promise<{ 
         image: p.imageUrl,
         defaultPrice,
         price: q.get(p.id)?.price ?? null,
+        bundleNeed: q.get(p.id)?.bundleNeed ?? 0,
         quota: q.get(p.id)?.quota ?? null,
         sold: sold.get(p.id) ?? 0,
         waiting: w.get(p.id) ?? 0,

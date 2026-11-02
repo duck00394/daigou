@@ -6,7 +6,7 @@ import { useMemo, useState, useTransition } from "react";
 import { money, Stepper, useCart } from "../../../../cart";
 import { joinWaitAction } from "../../../../actions";
 
-type Row = { productId: string; name: string; label: string; image: string | null; price: number | null; left: number; waiting: number; mine: number; inWait: boolean; seed: number };
+type Row = { productId: string; name: string; label: string; image: string | null; price: number | null; left: number; waiting: number; mine: number; inWait: boolean; seed: number; bundle: number };
 
 export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, rows }: { categoryId: string; catName: string; open: boolean; loggedIn: boolean; loginHref: string; limit: number | null; rows: Row[] }) {
   const cart = useCart();
@@ -25,6 +25,17 @@ export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, 
 
   const addAll = () => {
     if (!count) return;
+    // 不能單買的角色：這次選的加上購物車裡同品項的其他角色要夠
+    const ids = new Set(rows.map((r) => r.productId));
+    for (const r of picked) {
+      if (!r.bundle) continue;
+      const mineQty = (qty[r.productId] ?? 0) + inCart(r.productId);
+      const others = rows.filter((o) => o.productId !== r.productId).reduce((a, o) => a + (qty[o.productId] ?? 0) + inCart(o.productId), 0);
+      if (ids.has(r.productId) && others < mineQty * r.bundle) {
+        setMsg({ text: `${r.label}不能單買：每 1 個要搭配 ${r.bundle} 個其他角色（還差 ${mineQty * r.bundle - others} 個）`, ok: false });
+        return;
+      }
+    }
     cart.add(picked.map((r) => ({ categoryId, productId: r.productId, qty: qty[r.productId], name: r.name, price: r.price!, image: r.image, catName, max: Math.min(r.left, limit ? limit - r.mine : 99) })));
     setMsg({ text: `已加入購物車：${summary}`, ok: true });
     setQty({});
@@ -72,13 +83,13 @@ export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, 
                     <span className="text-[16px] font-bold">{r.label}</span>
                     {r.price !== null && <span className={`text-[14px] font-bold ${sold ? "text-shop-mute" : "text-shop-rose"}`}>{money(r.price)}</span>}
                   </div>
-                  {r.price !== null && <div className={`text-[14px] font-bold ${sold ? "text-shop-mute" : "text-shop-rose"}`}>NT$ {r.price.toLocaleString("en-US")}</div>}
                   <div className={`text-[12px] ${sold ? "text-shop-rose-2" : "text-shop-mute"}`}>{note}</div>
+                  {r.bundle > 0 && <div className="mt-0.5 inline-block rounded-md bg-shop-gold-soft px-1.5 py-0.5 text-[11px] font-bold text-shop-gold">不能單買・每 1 個要搭 {r.bundle} 個其他角色</div>}
                 </div>
                 {sold ? (
                   r.inWait ? (
                     <span className="flex h-11 w-[128px] items-center justify-center rounded-full bg-shop-rose text-[14px] font-bold text-white">已排候補</span>
-                  ) : open ? (
+                  ) : open && !r.bundle ? (
                     <button type="button" disabled={pending} onClick={() => wait(r)} className="h-11 w-[128px] rounded-full border-[1.5px] border-shop-rose bg-white text-[14px] font-bold text-shop-rose-2 disabled:opacity-50">排候補</button>
                   ) : null
                 ) : r.price === null ? null : max === 0 ? (

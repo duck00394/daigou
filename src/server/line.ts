@@ -85,8 +85,8 @@ export type LineMessage = Record<string, unknown>;
 
 /** 在交易裡登記要送的訊息；沒設定推播時不登記（之後設定好也不會補送舊訊息） */
 export async function enqueueLine(t: Tx, to: string | null | undefined, messages: LineMessage[]) {
-  if (!to || !pushConfigured() || messages.length === 0) return;
-  await t.lineOutbox.create({ data: { to, messages: messages as object[] } });
+  if (!to || !pushConfigured() || messages.length === 0) return null;
+  return t.lineOutbox.create({ data: { to, messages: messages as object[] } });
 }
 
 async function pushNow(to: string, messages: unknown) {

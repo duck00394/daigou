@@ -68,3 +68,16 @@ export async function setTypeImageAction(categoryId: string, productTypeId: stri
     return v;
   });
 }
+
+/** 後台訂單頁：傳賣貨便連結給客人（LINE），馬上送出並回報結果 */
+export async function sendSaleLinkAction(orderId: string, url: string, note: string | null) {
+  return run(async (a) => {
+    const r = await tx((t) => shop.sendSaleLink(t, a, z.string().max(64).parse(orderId), { url: z.string().max(1000).parse(url), note: note === null ? null : z.string().max(400).parse(note) }));
+    const { flushLineOutbox } = await import("@/server/line");
+    const { prisma } = await import("@/server/db");
+    await flushLineOutbox();
+    const row = await prisma.lineOutbox.findUnique({ where: { id: r.outboxId } });
+    if (!row?.sentAt) throw new BizError(`LINE 沒有送出去${row?.error ? `：${row.error.slice(0, 80)}` : "，請稍後再試"}`);
+    return { buyer: r.buyer };
+  });
+}

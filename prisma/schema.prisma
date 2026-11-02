@@ -1185,6 +1185,7 @@ model ShopQuota {
   categoryId String
   productId  String
   quota      Int
+  bundleNeed Int? // 不能單買：每買 1 個，同一張訂單要再買幾個同品項的其他角色；空白＝可以單買
   price      Int? // 這個角色在訂購頁的售價；空白＝用品項售價（系列頁的品項售價），再沒有就用商品參考售價
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
