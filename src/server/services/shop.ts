@@ -415,11 +415,14 @@ export async function saveShopCategory(t: Tx, actor: Actor, categoryId: string, 
   if (input.perPersonLimit !== null && (!Number.isInteger(input.perPersonLimit) || input.perPersonLimit < 1 || input.perPersonLimit > MAX_QTY)) throw new BizError("每人限購要是 1～99 的整數，或空白（不限）");
   if (input.ownerId && !(await t.operator.findUnique({ where: { id: input.ownerId } }))) throw new BizError("找不到這個經營者");
   const imageUrl = emptyToNull(input.imageUrl);
-  if (imageUrl && !/^https:\/\/\S+$/.test(imageUrl)) throw new BizError("圖片網址要用 https:// 開頭");
+  if (imageUrl && !/^https:\/\/\S+$/.test(imageUrl) && !/^\/api\/shop\/img\/[a-z0-9]+$/.test(imageUrl)) throw new BizError("圖片網址要用 https:// 開頭");
   const intro = emptyToNull(input.intro);
   if (intro && intro.length > 500) throw new BizError("說明最多 500 字");
   const data = { enabled: input.enabled, openAt: input.openAt, perPersonLimit: input.perPersonLimit, ownerId: input.ownerId, imageUrl, intro };
   const before = await t.shopCategory.findUnique({ where: { categoryId } });
+  // 換掉或拿掉自己上傳的舊圖：一起刪掉，不佔資料庫空間
+  const oldId = /^\/api\/shop\/img\/([a-z0-9]+)$/.exec(before?.imageUrl ?? "")?.[1];
+  if (oldId && before?.imageUrl !== imageUrl) await t.shopImage.deleteMany({ where: { id: oldId } });
   await t.shopCategory.upsert({ where: { categoryId }, update: data, create: { categoryId, ...data } });
   await audit(t, actor, "shop.category", "Category", categoryId, { before, after: data });
 }
@@ -494,4 +497,23 @@ export async function setShopName(t: Tx, actor: Actor, name: string) {
   if (!v || v.length > 20) throw new BizError("店名要 1～20 個字");
   await t.appSetting.upsert({ where: { key: "shopName" }, update: { value: v }, create: { key: "shopName", value: v } });
   await audit(t, actor, "shop.name", "AppSetting", "shopName", { name: v });
+}
+
+// ───────────── 上傳圖片 ─────────────
+
+export const IMAGE_MAX_BYTES = 600 * 1024;
+
+/** 存一張已經在手機上縮小過的圖（JPEG／WebP／PNG），回傳圖片網址 */
+export async function saveShopImage(t: Tx, actor: Actor, dataUrl: string) {
+  const m = /^data:(image\/(?:jpeg|webp|png));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl ?? "");
+  if (!m) throw new BizError("只能上傳 JPG、PNG 或 WebP 圖片");
+  const buf = Buffer.from(m[2], "base64");
+  if (buf.length > IMAGE_MAX_BYTES) throw new BizError("圖片太大了（縮小後還超過 600KB），請換一張");
+  // 檢查檔案開頭，確定真的是圖片
+  const head = buf.subarray(0, 12).toString("hex");
+  const ok = m[1] === "image/jpeg" ? head.startsWith("ffd8ff") : m[1] === "image/png" ? head.startsWith("89504e47") : head.startsWith("52494646") && head.slice(16, 24) === "57454250";
+  if (!ok) throw new BizError("這個檔案不是圖片");
+  const img = await t.shopImage.create({ data: { mime: m[1], data: buf, bytes: buf.length } });
+  await audit(t, actor, "shop.image", "ShopImage", img.id, { bytes: buf.length });
+  return `/api/shop/img/${img.id}`;
 }

@@ -203,3 +203,20 @@ describe("單支售價與 LINE 卡片", () => {
     expect(JSON.stringify(m.messages)).toContain("預訂系列：萬聖節");
   });
 });
+
+describe("系列主圖上傳", () => {
+  const jpg = "data:image/jpeg;base64," + Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1]).toString("base64");
+  it("只收真的圖片；換圖或拿掉時刪掉舊的", async () => {
+    await expect(tx((t) => shop.saveShopImage(t, actor, "data:image/jpeg;base64," + Buffer.from("hello world!").toString("base64")))).rejects.toThrow("不是圖片");
+    await expect(tx((t) => shop.saveShopImage(t, actor, "data:image/gif;base64,AAAA"))).rejects.toThrow("只能上傳");
+    const u1 = await tx((t) => shop.saveShopImage(t, actor, jpg));
+    expect(u1).toMatch(/^\/api\/shop\/img\/[a-z0-9]+$/);
+    const base = { enabled: true, openAt: null, perPersonLimit: null, ownerId: "op_a", intro: null };
+    await tx((t) => shop.saveShopCategory(t, actor, s.halloween.id, { ...base, imageUrl: u1 }));
+    const u2 = await tx((t) => shop.saveShopImage(t, actor, jpg));
+    await tx((t) => shop.saveShopCategory(t, actor, s.halloween.id, { ...base, imageUrl: u2 }));
+    expect(await prisma.shopImage.count()).toBe(1);
+    await tx((t) => shop.saveShopCategory(t, actor, s.halloween.id, { ...base, imageUrl: null }));
+    expect(await prisma.shopImage.count()).toBe(0);
+  });
+});

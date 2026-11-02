@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
-import { Button, inputCls, ProductImage, TimeInput24, useLeaveGuard, useRun } from "@/components/client";
-import { saveQuotasAction, saveShopCategoryAction } from "@/actions/shop";
+import { Button, inputCls, TimeInput24, useLeaveGuard, useRun } from "@/components/client";
+import { saveQuotasAction, saveShopCategoryAction, uploadShopImageAction } from "@/actions/shop";
 
 type Settings = { enabled: boolean; openDate: string; openTime: string; perPersonLimit: number | null; ownerId: string | null; imageUrl: string; intro: string };
 
@@ -41,10 +41,7 @@ export function SettingsForm({ categoryId, ops, initial, isNew }: { categoryId: 
           {ops.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
       </label>
-      <label className="block text-[13px] font-medium text-ink-2">
-        系列主圖網址（選填，https:// 開頭）
-        <input type="url" className={`${inputCls} mt-1`} value={f.imageUrl} placeholder="https://…" onChange={(e) => setF({ ...f, imageUrl: e.target.value })} />
-      </label>
+      <SeriesImage value={f.imageUrl} onChange={(url) => setF({ ...f, imageUrl: url })} />
       <label className="block text-[13px] font-medium text-ink-2">
         給客人看的說明（選填，例如預計到貨時間、付款方式）
         <textarea rows={3} maxLength={500} className={`${inputCls} mt-1`} value={f.intro} onChange={(e) => setF({ ...f, intro: e.target.value })} />
@@ -111,7 +108,6 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
               return (
                 <div key={r.productId} className={`${grid} border-t border-line-2 px-3 py-1.5`}>
                   <span className="flex min-w-0 items-center gap-2">
-                    <ProductImage src={r.image} alt={r.name} size={32} />
                     <span className="min-w-0">
                       <span className="block truncate text-[15px]">{r.label}</span>
                       {noPrice && <span className="block text-[12px] text-bad">沒有售價，客人不能訂</span>}
@@ -132,5 +128,79 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
       {priceNoQty && <p className="text-[13px] text-bad">「{priceNoQty.label}」有填售價，也要填開放數量</p>}
       <Button variant="primary" className="w-full" loading={pending} disabled={!changed.length || !!badQty || !!badPrice || !!priceNoQty} onClick={save}>{changed.length ? `儲存 ${changed.length} 個變更` : "儲存"}</Button>
     </section>
+  );
+}
+
+/** 在手機上把照片縮小（長邊最多 1400 像素、JPEG），回傳 data URL */
+async function shrink(file: File): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((ok, bad) => {
+      const i = new Image();
+      i.onload = () => ok(i);
+      i.onerror = () => bad(new Error("讀不到這張圖片"));
+      i.src = url;
+    });
+    const max = 1400;
+    const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(img.naturalWidth * k));
+    c.height = Math.max(1, Math.round(img.naturalHeight * k));
+    const ctx = c.getContext("2d");
+    if (!ctx) throw new Error("瀏覽器不支援縮圖");
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    for (const q of [0.85, 0.75, 0.6, 0.45]) {
+      const d = c.toDataURL("image/jpeg", q);
+      if (d.length * 0.75 < 550 * 1024) return d;
+    }
+    throw new Error("圖片太大了，請換一張");
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function SeriesImage({ value, onChange }: { value: string; onChange: (url: string) => void }) {
+  const { run, pending } = useRun();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [showUrl, setShowUrl] = useState(!!value && !value.startsWith("/api/shop/img/"));
+  const pick = async (file: File | undefined) => {
+    if (!file) return;
+    setErr(null);
+    setBusy(true);
+    try {
+      const data = await shrink(file);
+      await run(() => uploadShopImageAction(data), { refresh: false, success: "照片已上傳，記得按「儲存設定」", onOk: (url) => onChange(url) });
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="space-y-2">
+      <div className="text-[13px] font-medium text-ink-2">系列主圖（選填，客人在訂購頁看到的大圖）</div>
+      <div className="flex items-center gap-3">
+        <label className={`relative flex h-24 w-36 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg ${value ? "border border-line" : "border-[1.5px] border-dashed border-[#b8bfcc]"} bg-white text-[13px] text-ink-2`}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {value ? <img src={value} alt="系列主圖" className="h-full w-full object-cover" /> : <span>＋ 照片</span>}
+          {(busy || pending) && <span className="absolute inset-0 flex items-center justify-center bg-white/80">上傳中…</span>}
+          <input type="file" accept="image/*" className="sr-only" aria-label="選系列主圖" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} disabled={busy || pending} />
+        </label>
+        <div className="space-y-1.5 text-[13px]">
+          <label className="inline-flex min-h-10 cursor-pointer items-center rounded-lg border border-line bg-white px-3">
+            {value ? "換一張" : "選照片"}
+            <input type="file" accept="image/*" className="sr-only" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} disabled={busy || pending} />
+          </label>
+          {value && <button type="button" className="block text-bad underline" onClick={() => onChange("")}>拿掉照片</button>}
+          <button type="button" className="block text-ai underline" onClick={() => setShowUrl(!showUrl)}>或貼圖片網址</button>
+        </div>
+      </div>
+      {showUrl && <input type="url" aria-label="系列主圖網址" className={inputCls} value={value.startsWith("/api/shop/img/") ? "" : value} placeholder="https://…" onChange={(e) => onChange(e.target.value)} />}
+      {err && <p className="text-[13px] text-bad">{err}</p>}
+      <p className="text-[12px] text-mute">照片會先在手機上縮小（約 100～300KB）再存，不用另外開服務。</p>
+    </div>
   );
 }

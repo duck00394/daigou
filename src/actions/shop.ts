@@ -58,3 +58,8 @@ export async function setShopNameAction(name: string) {
     return true;
   });
 }
+
+/** 上傳系列主圖（手機上已經縮小過），回傳圖片網址；按「儲存設定」才會換上去 */
+export async function uploadShopImageAction(dataUrl: string) {
+  return run(async (a) => tx((t) => shop.saveShopImage(t, a, z.string().max(1_000_000).parse(dataUrl))));
+}

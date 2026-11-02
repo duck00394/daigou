@@ -1229,3 +1229,12 @@ model LineOutbox {
 
   @@index([sentAt, createdAt])
 }
+
+// 訂購頁上傳的圖片（系列主圖）：在手機上先縮小再存，放在資料庫，不用另外開圖片服務
+model ShopImage {
+  id        String   @id @default(cuid())
+  mime      String
+  data      Bytes
+  bytes     Int
+  createdAt DateTime @default(now())
+}
