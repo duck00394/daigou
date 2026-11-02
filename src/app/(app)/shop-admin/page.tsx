@@ -21,6 +21,7 @@ export default async function ShopAdmin() {
     prisma.buyer.findMany({ where: { lineUserId: { not: null }, mergedIntoId: null }, orderBy: { updatedAt: "desc" }, take: 80, select: { id: true, name: true, lineName: true, lineUserId: true } }),
     prisma.lineOutbox.count({ where: { sentAt: null, tries: { gte: 3 } } }),
   ]);
+  const recent = await prisma.lineOutbox.findMany({ orderBy: { createdAt: "desc" }, take: 6, select: { id: true, createdAt: true, sentAt: true, tries: true, error: true } });
   const quotaCounts = await prisma.shopQuota.groupBy({ by: ["categoryId"], _count: { _all: true } });
   const qc = new Map(quotaCounts.map((q) => [q.categoryId, q._count._all]));
   const base = appUrl();
@@ -84,6 +85,20 @@ export default async function ShopAdmin() {
           </div>
         )}
         {failed > 0 && <p className="mt-2 text-[13px] text-bad">有 {failed} 則 LINE 通知送不出去（客人可能封鎖了官方帳號，或金鑰不對）。</p>}
+        {recent.length > 0 && (
+          <div className="mt-3">
+            <div className="text-[13px] font-medium text-ink-2">最近的 LINE 通知</div>
+            <ul className="mt-1 divide-y divide-line-2 rounded-lg border border-line-2 text-[13px]">
+              {recent.map((r) => (
+                <li key={r.id} className="flex flex-wrap items-center gap-2 px-3 py-1.5" data-testid="line-outbox">
+                  <span className="num text-mute">{taipeiParts(r.createdAt).date.slice(5)} {taipeiParts(r.createdAt).time}</span>
+                  {r.sentAt ? <Badge tone="good">已送出</Badge> : r.tries >= 3 ? <Badge tone="bad">送不出去</Badge> : <Badge tone="warn">等待送出</Badge>}
+                  {r.error && <span className="min-w-0 flex-1 break-all text-bad">{r.error}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </Section>
 
       <Section title="新訂單通知誰">
