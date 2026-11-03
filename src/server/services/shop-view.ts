@@ -2,7 +2,7 @@
 import type { Db } from "@/server/db";
 import { waitPosition } from "./shop";
 
-export type StepKey = "PLACED" | "PAY" | "BUYING" | "ARRIVED" | "SHIPPED";
+export type StepKey = "PLACED" | "DEPOSIT" | "PAY" | "BUYING" | "ARRIVED" | "SHIPPED";
 export type OrderView = {
   id: string;
   orderNo: string;
@@ -17,6 +17,7 @@ export type OrderView = {
   cancelled: boolean;
   cancelReason: string | null;
   pay: { url: string; timing: "ORDER" | "ARRIVAL"; hours: number; dueAt: Date | null; done: boolean; overdue: boolean } | null;
+  deposit: { amount: number; dueAt: Date | null; ref: string | null; reported: boolean; confirmed: boolean; overdue: boolean } | null;
   steps: { key: StepKey; label: string; state: "done" | "now" | "todo" }[];
   status: string; // 給客人看的一句話狀態
   waits: { name: string; qty: number; position: number }[];
@@ -40,21 +41,26 @@ export async function orderView(db: Db, orderId: string, now = new Date()): Prom
   const reserved = o.items.reduce((a, i) => a + Math.min(i.reservedQtyCache, Math.max(0, i.qty - i.cancelledQtyCache - i.shippedQtyCache)), 0);
   const buying = o.items.some((i) => i.purchaseFlag === "ORDERED" || i.procurementStatusCache === "ORDERED" || i.procurementStatusCache === "PARTIAL_ARRIVED" || i.procurementStatusCache === "ARRIVED");
   const arrived = open > 0 && reserved >= open;
+  const deposit = o.depositAmount
+    ? { amount: o.depositAmount, dueAt: o.depositDueAt, ref: o.depositRef, reported: !!o.depositReportedAt, confirmed: !!o.depositConfirmedAt, overdue: !o.depositReportedAt && !!o.depositDueAt && o.depositDueAt <= now }
+    : null;
   const pay = sc?.payUrl ? { url: sc.payUrl, timing: sc.payTiming, hours: sc.payHours, dueAt: o.payDueAt, done: !!o.myshipAt, overdue: !!o.payDueAt && o.payDueAt <= now && !o.myshipAt } : null;
 
   // 進度：成立 →（成立就付）賣貨便下單 → 採購中 → 已到貨 →（到貨才付）賣貨便下單 → 已出貨
-  const flow: StepKey[] = pay?.timing === "ORDER" ? ["PLACED", "PAY", "BUYING", "ARRIVED", "SHIPPED"] : pay ? ["PLACED", "BUYING", "ARRIVED", "PAY", "SHIPPED"] : ["PLACED", "BUYING", "ARRIVED", "SHIPPED"];
-  const reached: Record<StepKey, boolean> = { PLACED: true, PAY: !!o.myshipAt || shipped > 0, BUYING: buying || arrived || shipped > 0, ARRIVED: arrived || shipped > 0, SHIPPED: shipped > 0 && open === 0 };
+  const flow: StepKey[] = deposit ? ["PLACED", "DEPOSIT", "PAY", "BUYING", "ARRIVED", "SHIPPED"] : pay?.timing === "ORDER" ? ["PLACED", "PAY", "BUYING", "ARRIVED", "SHIPPED"] : pay ? ["PLACED", "BUYING", "ARRIVED", "PAY", "SHIPPED"] : ["PLACED", "BUYING", "ARRIVED", "SHIPPED"];
+  const reached: Record<StepKey, boolean> = { PLACED: true, DEPOSIT: !!deposit?.confirmed, PAY: !!o.myshipAt || shipped > 0, BUYING: buying || arrived || shipped > 0, ARRIVED: arrived || shipped > 0, SHIPPED: shipped > 0 && open === 0 };
   if (pay?.timing === "ARRIVAL" && o.payDueAt) reached.ARRIVED = true;
   let nowIdx = flow.findIndex((k) => !reached[k]);
   if (nowIdx === -1) nowIdx = flow.length;
-  const label: Record<StepKey, string> = { PLACED: "訂單成立", PAY: "用賣貨便下單", BUYING: "採購中", ARRIVED: "已到貨・等待出貨", SHIPPED: "已出貨" };
+  const label: Record<StepKey, string> = { PLACED: "訂單成立", DEPOSIT: deposit?.reported && !deposit.confirmed ? "匯訂金（等賣家確認）" : "匯訂金", PAY: "用賣貨便下單", BUYING: "採購中", ARRIVED: "已到貨・等待出貨", SHIPPED: "已出貨" };
   const steps = flow.map((k, i) => ({ key: k, label: label[k], state: (i < nowIdx ? "done" : i === nowIdx && !cancelled ? "now" : "todo") as "done" | "now" | "todo" }));
 
   let status: string;
   if (cancelled) status = "已取消";
   else if (shipped > 0 && open === 0) status = "已出貨";
   else if (shipped > 0) status = "部分出貨";
+  else if (deposit && !deposit.reported) status = "等待匯訂金";
+  else if (deposit && !deposit.confirmed) status = "訂金確認中";
   else if (pay && o.payDueAt && !o.myshipAt) status = "等待賣貨便下單";
   else if (arrived) status = "已到貨・等待出貨";
   else if (buying) status = "採購中";
@@ -78,6 +84,7 @@ export async function orderView(db: Db, orderId: string, now = new Date()): Prom
     cancelled,
     cancelReason: o.cancelReason,
     pay,
+    deposit,
     steps,
     status,
     waits: await Promise.all(waits.map(async (w) => ({ name: w.product.name, qty: w.qty, position: await waitPosition(db, w.id) }))),

@@ -40,7 +40,7 @@ function fail(e: unknown): { ok: false; error: string } {
 }
 
 const lineSchema = z.object({ categoryId: z.string().max(64), productId: z.string().max(64), qty: z.number().int().min(1).max(99) });
-const contactSchema = z.object({ name: z.string().max(60), phone: z.string().max(80), shipping: z.string().max(40), note: z.string().max(300).nullish() });
+const contactSchema = z.object({ name: z.string().max(60), phone: z.string().max(80), shipping: z.string().max(40), note: z.string().max(300).nullish(), social: z.string().max(80).nullish() });
 
 /** 送出訂單：有 LINE 登入就用 LINE 的身分；沒登入就是訪客（要填 Email） */
 export async function placeOrderAction(lines: z.infer<typeof lineSchema>[], contact: z.infer<typeof contactSchema>, key: string, opts: { guestEmail?: string | null; agree: boolean }) {
@@ -108,4 +108,27 @@ export async function cancelWaitAction(waitId: string) {
     revalidatePath("/shop/orders");
     return true;
   });
+}
+
+/** 客人回傳匯款末五碼：要有這筆的查看權杖，或是這支手機下的單、或 LINE 登入的本人 */
+export async function reportDepositAction(orderId: string, token: string | null, ref: string) {
+  try {
+    const id = z.string().max(64).parse(orderId);
+    let ok = pay.checkOrderToken(id, token);
+    if (!ok) {
+      const { myOrderIds } = await import("@/server/shop-auth");
+      ok = (await myOrderIds()).includes(id);
+    }
+    if (!ok) {
+      const c = await currentCustomer();
+      ok = !!c && !!(await prisma.order.findFirst({ where: { id, buyerId: c.id }, select: { id: true } }));
+    }
+    if (!ok) return { ok: false as const, error: "找不到這筆訂單，請用訂單編號＋查詢碼重新查詢" };
+    await tx((t) => pay.reportDeposit(t, id, z.string().max(20).parse(ref)));
+    await flushAll();
+    revalidatePath("/shop", "layout");
+    return { ok: true as const, data: true };
+  } catch (e) {
+    return fail(e);
+  }
 }

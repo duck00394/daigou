@@ -91,17 +91,18 @@ export function ContactFieldForm({ mode: m0, label: l0 }: { mode: "phone" | "tex
   );
 }
 
-export function ShopInfoForm({ threads: t0, supportEmail: e0 }: { threads: string; supportEmail: string }) {
+export function ShopInfoForm({ threads: t0, supportEmail: e0, bankInfo: b0 }: { threads: string; supportEmail: string; bankInfo: string }) {
   const [threads, setThreads] = useState(t0);
   const [email, setEmail] = useState(e0);
+  const [bank, setBank] = useState(b0);
   const { run, pending } = useRun();
-  const changed = threads.trim() !== t0 || email.trim() !== e0;
+  const changed = threads.trim() !== t0 || email.trim() !== e0 || bank.trim() !== b0;
   return (
     <form
       className="space-y-2"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => setShopInfoAction(threads, email), { success: "客服資料已更新" });
+        run(() => setShopInfoAction(threads, email, bank), { success: "客服資料已更新" });
       }}
     >
       <label className="block text-[13px] font-medium text-ink-2">
@@ -111,6 +112,10 @@ export function ShopInfoForm({ threads: t0, supportEmail: e0 }: { threads: strin
       <label className="block text-[13px] font-medium text-ink-2">
         客服 Email（寫在訂單憑證、交易規則、隱私權政策）
         <input aria-label="客服 Email" type="email" className={`${inputCls} mt-1`} value={email} maxLength={254} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+      </label>
+      <label className="block text-[13px] font-medium text-ink-2">
+        訂金匯款帳戶（要收訂金的系列才會顯示給客人；只在訂單成立後顯示）
+        <textarea aria-label="訂金匯款帳戶" rows={2} className={`${inputCls} mt-1`} value={bank} maxLength={200} onChange={(e) => setBank(e.target.value)} placeholder="例如：中國信託（822）帳號 1234-5678-9012 戶名 王小明" />
       </label>
       <Button type="submit" loading={pending} disabled={!changed}>存</Button>
     </form>

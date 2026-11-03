@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { Button, inputCls, TimeInput24, useLeaveGuard, useRun } from "@/components/client";
 import { saveQuotasAction, saveShopCategoryAction, setTypeImageAction } from "@/actions/shop";
 
-type Settings = { enabled: boolean; openDate: string; openTime: string; perPersonLimit: number | null; ownerId: string | null; imageUrl: string; intro: string; payUrl: string; payTiming: "ORDER" | "ARRIVAL"; payHours: number };
+type Settings = { enabled: boolean; openDate: string; openTime: string; perPersonLimit: number | null; ownerId: string | null; imageUrl: string; intro: string; payUrl: string; payTiming: "ORDER" | "ARRIVAL"; payHours: number; depositPerItem: number | null };
 
 export function SettingsForm({ categoryId, ops, initial, isNew }: { categoryId: string; ops: { id: string; name: string }[]; initial: Settings; isNew: boolean }) {
   const [f, setF] = useState(initial);
@@ -13,7 +13,7 @@ export function SettingsForm({ categoryId, ops, initial, isNew }: { categoryId: 
   useLeaveGuard(JSON.stringify(f) !== JSON.stringify(saved));
   const save = () =>
     run(
-      () => saveShopCategoryAction(categoryId, { enabled: f.enabled, openDate: f.openDate, openTime: f.openTime, perPersonLimit: f.perPersonLimit, ownerId: f.ownerId, imageUrl: f.imageUrl || null, intro: f.intro || null, payUrl: f.payUrl.trim() || null, payTiming: f.payTiming, payHours: f.payHours }),
+      () => saveShopCategoryAction(categoryId, { enabled: f.enabled, openDate: f.openDate, openTime: f.openTime, perPersonLimit: f.perPersonLimit, ownerId: f.ownerId, imageUrl: f.imageUrl || null, intro: f.intro || null, payUrl: f.payUrl.trim() || null, payTiming: f.payTiming, payHours: f.payHours, depositPerItem: f.depositPerItem }),
       { success: f.enabled ? "已儲存，客人看得到了" : "已儲存（還沒開放，客人看不到）", onOk: () => setSaved(f) },
     );
   return (
@@ -49,11 +49,15 @@ export function SettingsForm({ categoryId, ops, initial, isNew }: { categoryId: 
       <div className="space-y-2 rounded-lg border border-line-2 p-3">
         <div className="text-[14px] font-semibold">賣貨便付款</div>
         <label className="block text-[13px] font-medium text-ink-2">
-          賣貨便賣場連結（這個系列共用一個；空白＝不自動發付款通知）
+          訂金（每件，台幣；空白＝不用訂金）
+          <input type="number" inputMode="numeric" min={1} className={`${inputCls} mt-1`} value={f.depositPerItem ?? ""} onChange={(e) => setF({ ...f, depositPerItem: e.target.value === "" ? null : Math.max(1, Math.floor(Number(e.target.value))) })} />
+        </label>
+        <label className="block text-[13px] font-medium text-ink-2">
+          {f.depositPerItem ? "尾款的賣貨便賣場連結（賣場價格要設成扣掉訂金後的金額）" : "賣貨便賣場連結（這個系列共用一個；空白＝不自動發付款通知）"}
           <input type="url" inputMode="url" className={`${inputCls} mt-1`} value={f.payUrl} placeholder="https://myship.7-11.com.tw/…" onChange={(e) => setF({ ...f, payUrl: e.target.value })} />
         </label>
-        <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-1.5">
-          <label className="block text-[13px] font-medium text-ink-2">
+        <div className={f.depositPerItem ? "" : "grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-1.5"}>
+          <label className={`block text-[13px] font-medium text-ink-2 ${f.depositPerItem ? "hidden" : ""}`}>
             什麼時候要客人下單
             <select className={`${inputCls} mt-1`} value={f.payTiming} onChange={(e) => setF({ ...f, payTiming: e.target.value as Settings["payTiming"] })}>
               <option value="ORDER">訂單成立就下單</option>
@@ -61,16 +65,22 @@ export function SettingsForm({ categoryId, ops, initial, isNew }: { categoryId: 
             </select>
           </label>
           <label className="block text-[13px] font-medium text-ink-2">
-            幾小時內
+            {f.depositPerItem ? "確認訂金後，幾小時內要在賣貨便下單" : "幾小時內"}
             <select className={`${inputCls} mt-1`} value={f.payHours} onChange={(e) => setF({ ...f, payHours: Number(e.target.value) })}>
               {[1, 2, 3, 6, 12, 24, 48, 72].map((h) => <option key={h} value={h}>{h} 小時</option>)}
             </select>
           </label>
         </div>
+        {f.depositPerItem ? (
+          <p className="text-[12px] text-mute">
+            客人下單後 <b className="text-bad">1 小時</b>內要匯款並回傳末五碼，沒回傳自動取消。你在「訂購頁付款」確認收到後，系統才傳尾款賣場連結，<b className="text-bad">{f.payHours} 小時</b>內要下單；已付訂金的逾期不會自動取消，會列在「逾期」給你處理。匯款帳戶在「訂購頁」的客服資料設定。
+          </p>
+        ) : (
         <p className="text-[12px] text-mute">
           {f.payTiming === "ORDER" ? "訂單成立（或候補遞補成立）時，自動把賣場連結傳給客人，" : "到貨後在「訂購頁付款」按「已到貨，發付款通知」，系統把賣場連結傳給客人，"}
           <b className="text-bad">{f.payHours} 小時</b>內沒在後台按「賣貨便已下單」就自動取消，名額給下一位候補。
         </p>
+        )}
       </div>
       <Button variant="primary" className="w-full" loading={pending} disabled={!dirty} onClick={save}>儲存設定</Button>
     </section>

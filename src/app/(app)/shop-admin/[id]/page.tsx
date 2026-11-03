@@ -83,6 +83,7 @@ export default async function ShopCategoryAdmin({ params }: { params: Promise<{ 
           payUrl: s?.payUrl ?? "",
           payTiming: s?.payTiming ?? "ORDER",
           payHours: s?.payHours ?? 1,
+          depositPerItem: s?.depositPerItem ?? null,
         }}
         isNew={!s}
       />

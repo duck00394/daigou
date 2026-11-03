@@ -148,6 +148,9 @@ export async function notifyCustomer(
 // ───────────── 付款期限 ─────────────
 
 export const PAY_DUE_TEXT = "請在 {due} 前使用賣貨便下單完成，逾期會取消並讓給候補的人。";
+export const DEPOSIT_PAY_TEXT = "請在 {due} 前使用賣貨便下單完成。";
+export const DEPOSIT_DUE_TEXT = "請在 {due} 前匯款並回傳末五碼，逾時自動取消。";
+export const DEPOSIT_HOURS = 1;
 
 const remainingLines = (items: { productNameSnapshot: string; qty: number; cancelledQtyCache: number; unitPrice: number; lineDiscount: number }[]): MsgLine[] =>
   items
@@ -163,7 +166,7 @@ async function paySetting(t: Tx | Db, order: { items: { categoryId: string | nul
 }
 
 /** 開始計時並發付款通知（同一筆只會開始一次）。cardExtra 有給時，會跟「訂單成立」合成一則通知 */
-export async function startPay(t: Tx, orderId: string, opts: { now?: Date; merged?: { card: CardInput; code?: string } } = {}) {
+export async function startPay(t: Tx, orderId: string, opts: { now?: Date; merged?: { card: CardInput; code?: string }; deposit?: boolean } = {}) {
   const now = opts.now ?? new Date();
   const order = await t.order.findUnique({ where: { id: orderId }, include: { items: true, buyer: { select: { lineUserId: true, email: true } } } });
   if (!order || order.source !== "WEB" || order.confirmation === "CANCELLED" || order.payDueAt || order.myshipAt) return null;
@@ -177,8 +180,10 @@ export async function startPay(t: Tx, orderId: string, opts: { now?: Date; merge
   const balance = order.balanceCache > 0 ? order.balanceCache : order.receivableCache;
   const card: CardInput = opts.merged
     ? { ...opts.merged.card, url: s.payUrl!, buttonLabel: "前往賣貨便下單" }
-    : { tone: "confirmed", eyebrow: "PAYMENT", title: "請用賣貨便下單", orderNo: order.orderNo, series: s.category.name, lines, totalLabel: "應付金額", total: balance, url: s.payUrl!, buttonLabel: "前往賣貨便下單" };
-  await notifyCustomer(t, order.buyer, card, { orderId, code: opts.merged?.code, due, dueText: PAY_DUE_TEXT, dedupeKey: `pay:${orderId}:1` });
+    : opts.deposit
+      ? { tone: "confirmed", eyebrow: "DEPOSIT RECEIVED", title: "訂金已收到，請用賣貨便下單", orderNo: order.orderNo, series: s.category.name, lines, note: "賣貨便的價格已經扣掉訂金，到貨後取貨時付尾款。", totalLabel: "尾款（取貨時付）", total: balance, url: s.payUrl!, buttonLabel: "前往賣貨便下單" }
+      : { tone: "confirmed", eyebrow: "PAYMENT", title: "請用賣貨便下單", orderNo: order.orderNo, series: s.category.name, lines, totalLabel: "應付金額", total: balance, url: s.payUrl!, buttonLabel: "前往賣貨便下單" };
+  await notifyCustomer(t, order.buyer, card, { orderId, code: opts.merged?.code, due, dueText: opts.deposit ? DEPOSIT_PAY_TEXT : PAY_DUE_TEXT, dedupeKey: `pay:${orderId}:1` });
   await scheduleExpire(orderId, due);
   return due;
 }
@@ -190,7 +195,7 @@ export async function startArrivalPay(t: Tx, actor: Actor, orderIds: string[]) {
     const order = await t.order.findUnique({ where: { id }, include: { items: { select: { categoryId: true } } } });
     if (!order || order.source !== "WEB" || order.payDueAt || order.myshipAt || order.confirmation === "CANCELLED") continue;
     const s = await paySetting(t, order);
-    if (!s || s.payTiming !== "ARRIVAL") continue;
+    if (!s || s.payTiming !== "ARRIVAL" || s.depositPerItem) continue;
     if (await startPay(t, id)) n++;
   }
   await audit(t, actor, "shop.arrivalPay", "Order", null, { orderIds, started: n });
@@ -198,22 +203,108 @@ export async function startArrivalPay(t: Tx, actor: Actor, orderIds: string[]) {
 }
 
 /** 訂單成立時：成立就付的系列馬上開始；回傳 true＝已經合併發出通知 */
-export async function payOnPlaced(t: Tx, orderId: string, merged: { card: CardInput; code?: string }) {
+export async function payOnPlaced(t: Tx, orderId: string, merged: { card: CardInput; code?: string }, opts: { strict?: boolean } = { strict: true }) {
   const order = await t.order.findUnique({ where: { id: orderId }, include: { items: { select: { categoryId: true } } } });
   if (!order) return false;
   const s = await paySetting(t, order);
-  if (!s || s.payTiming !== "ORDER") return false;
+  if (!s) return false;
+  if (s.depositPerItem) {
+    // 候補遞補時（取消別人的訂單時觸發）不能因為匯款帳戶沒設定就讓取消失敗：先成立，留給後台處理
+    if (!opts.strict && !(await getShopInfo(t)).bankInfo) return false;
+    return !!(await startDeposit(t, orderId, s.depositPerItem, merged));
+  }
+  if (s.payTiming !== "ORDER") return false;
   return !!(await startPay(t, orderId, { merged }));
 }
 
-/** 期限到了還沒下單：自動取消整筆（名額遞補給候補）。可以重複呼叫 */
+// ───────────── 訂金（匯款） ─────────────
+// 流程：成立（名額先扣）→ 顯示匯款帳戶與金額 → 1 小時內回傳末五碼（沒回傳自動取消）
+// → 經營者確認無誤 → 傳扣除訂金的賣貨便連結（幾小時內下單看系列設定；已付訂金的逾期不自動取消）→ 取貨付尾款
+
+/** 開始收訂金：記金額與期限，發「請匯訂金」通知（跟成立通知合成一則） */
+async function startDeposit(t: Tx, orderId: string, perItem: number, merged: { card: CardInput; code?: string }, now = new Date()) {
+  const order = await t.order.findUnique({ where: { id: orderId }, include: { items: true, buyer: { select: { lineUserId: true, email: true } } } });
+  if (!order || order.depositAmount !== null || order.confirmation === "CANCELLED") return null;
+  const qty = order.items.reduce((a, i) => a + i.qty - i.cancelledQtyCache, 0);
+  const amount = Math.min(perItem * qty, order.receivableCache);
+  if (amount <= 0) return null;
+  const bank = (await getShopInfo(t)).bankInfo;
+  if (!bank) throw new BizError("賣家還沒設定匯款資料，這個系列暫時不能下單，請聯絡客服");
+  const due = new Date(now.getTime() + DEPOSIT_HOURS * 3600_000);
+  await t.order.update({ where: { id: orderId }, data: { depositAmount: amount, depositDueAt: due } });
+  await audit(t, SYSTEM, "shop.depositStart", "Order", orderId, { amount, due });
+  await notifyCustomer(
+    t,
+    order.buyer,
+    { ...merged.card, title: "訂單已成立，請匯訂金", note: [`應匯訂金：NT$ ${amount.toLocaleString("en-US")}`, `匯款帳戶：${bank}`, "尾款到貨後用賣貨便取貨付款，不用再匯款。"].join("\n"), url: orderLink(orderId), buttonLabel: "回傳匯款末五碼" },
+    { orderId, code: merged.code, due, dueText: DEPOSIT_DUE_TEXT, dedupeKey: `deposit:${orderId}` },
+  );
+  await scheduleExpire(orderId, due);
+  return due;
+}
+
+/** 客人回傳匯款末五碼（確認前可以改） */
+export async function reportDeposit(t: Tx, orderId: string, refRaw: string, now = new Date()) {
+  const ref = (refRaw ?? "").replace(/\s/g, "");
+  if (!/^\d{5}$/.test(ref)) throw new BizError("請填 5 位數字（匯款帳號的末五碼）");
+  const o = await t.order.findUnique({ where: { id: orderId }, include: { buyer: { select: { name: true } }, items: { select: { categoryId: true } } } });
+  if (!o || o.source !== "WEB" || !o.depositAmount) throw new BizError("這筆訂單不用匯訂金");
+  if (o.confirmation === "CANCELLED") throw new BizError("這筆訂單已經取消了");
+  if (o.depositConfirmedAt) throw new BizError("訂金已經確認過了");
+  if (!o.depositReportedAt && o.depositDueAt && o.depositDueAt <= now) throw new BizError("已經超過回傳時間，這筆會自動取消");
+  await t.order.update({ where: { id: orderId }, data: { depositRef: ref, depositReportedAt: now } });
+  await audit(t, SYSTEM, "shop.depositReport", "Order", orderId, { ref });
+  // 通知這個系列的負責人
+  const cid = o.items.find((i) => i.categoryId)?.categoryId;
+  const sc = cid ? await t.shopCategory.findUnique({ where: { categoryId: cid }, include: { owner: { select: { lineUserId: true } }, category: { select: { name: true } } } }) : null;
+  if (sc?.owner?.lineUserId)
+    await enqueueLine(
+      t,
+      sc.owner.lineUserId,
+      [orderCard({ tone: "seller", eyebrow: "DEPOSIT", title: `${o.buyer.name} 回報已匯訂金`, orderNo: o.orderNo, series: sc.category.name, lines: [], note: `末五碼 ${ref}`, totalLabel: "訂金", total: o.depositAmount, url: `${appUrl()}/shop-pay?v=deposit`, buttonLabel: "到後台確認" })],
+      `deposit-report:${orderId}:${ref}`,
+    );
+}
+
+/** 經營者確認收到訂金：記一筆收款，再傳扣除訂金的賣貨便連結、開始計時 */
+export async function confirmDeposit(t: Tx, actor: Actor, orderId: string) {
+  const o = await t.order.findUnique({ where: { id: orderId } });
+  if (!o || o.source !== "WEB" || !o.depositAmount) throw new BizError("這筆訂單沒有訂金");
+  if (o.confirmation === "CANCELLED") throw new BizError("這筆訂單已經取消了");
+  if (o.depositConfirmedAt) throw new BizError("訂金已經確認過了");
+  if (!o.depositRef) throw new BizError("客人還沒回傳末五碼");
+  const { addPayment } = await import("./payments");
+  await addPayment(t, actor, { orderId, amount: o.depositAmount, method: "匯款（訂金）", reference: o.depositRef, note: "訂購頁訂金", dedupeKey: `deposit:${orderId}` });
+  await t.order.update({ where: { id: orderId }, data: { depositConfirmedAt: new Date() } });
+  await audit(t, actor, "shop.depositConfirm", "Order", orderId, { amount: o.depositAmount, ref: o.depositRef });
+  const due = await startPay(t, orderId, { deposit: true });
+  if (!due) throw new BizError("這個系列還沒設定賣貨便連結（尾款賣場），請先到系列的訂購設定貼上");
+  return due;
+}
+
+/** 沒收到訂金：取消整筆（名額給候補） */
+export async function rejectDeposit(t: Tx, actor: Actor, orderId: string) {
+  const o = await t.order.findUnique({ where: { id: orderId } });
+  if (!o || o.source !== "WEB" || !o.depositAmount) throw new BizError("這筆訂單沒有訂金");
+  if (o.depositConfirmedAt) throw new BizError("訂金已經確認過了，要取消請到訂單頁");
+  const { cancelOrder } = await import("./orders");
+  await cancelOrder(t, actor, { orderId, reason: "沒有收到訂金" });
+  await audit(t, actor, "shop.depositReject", "Order", orderId, { ref: o.depositRef });
+}
+
+// 會被自動取消的：沒付訂金的單，過了賣貨便下單期限；有訂金的單，過了回傳末五碼的期限還沒回傳。
+// 已付訂金（確認過）的單過了賣貨便下單期限不自動取消，留在後台「逾期」給人處理。
+const PAY_OVERDUE = (now: Date) => ({ source: "WEB" as const, payDueAt: { lte: now }, myshipAt: null, depositConfirmedAt: null, confirmation: { not: "CANCELLED" as const } });
+const DEPOSIT_OVERDUE = (now: Date) => ({ source: "WEB" as const, depositDueAt: { lte: now }, depositReportedAt: null, depositConfirmedAt: null, confirmation: { not: "CANCELLED" as const } });
+
+/** 期限到了還沒下單／沒回傳末五碼：自動取消整筆（名額遞補給候補）。可以重複呼叫 */
 export async function expireOverdue(now = new Date(), limit = 30) {
   const { tx } = await import("@/server/db");
   const { cancelOrder } = await import("./orders");
   const list = await prisma.order.findMany({
-    where: { source: "WEB", payDueAt: { lte: now }, myshipAt: null, confirmation: { not: "CANCELLED" } },
+    where: { OR: [PAY_OVERDUE(now), DEPOSIT_OVERDUE(now)] },
     select: { id: true },
-    orderBy: { payDueAt: "asc" },
+    orderBy: { orderedAt: "asc" },
     take: limit,
   });
   let n = 0;
@@ -221,9 +312,12 @@ export async function expireOverdue(now = new Date(), limit = 30) {
     try {
       await tx(async (t) => {
         const cur = await t.order.findUnique({ where: { id: o.id } });
-        if (!cur || cur.myshipAt || cur.confirmation === "CANCELLED" || !cur.payDueAt || cur.payDueAt > now) return;
-        await cancelOrder(t, SYSTEM, { orderId: o.id, reason: "超過時間沒有用賣貨便下單" });
-        await audit(t, SYSTEM, "shop.payExpired", "Order", o.id, { due: cur.payDueAt });
+        if (!cur || cur.confirmation === "CANCELLED") return;
+        const depositLate = !!cur.depositAmount && !cur.depositReportedAt && !cur.depositConfirmedAt && !!cur.depositDueAt && cur.depositDueAt <= now;
+        const payLate = !cur.myshipAt && !cur.depositConfirmedAt && !!cur.payDueAt && cur.payDueAt <= now;
+        if (!depositLate && !payLate) return;
+        await cancelOrder(t, SYSTEM, { orderId: o.id, reason: depositLate ? "超過時間沒有回傳匯款末五碼" : "超過時間沒有用賣貨便下單" });
+        await audit(t, SYSTEM, depositLate ? "shop.depositExpired" : "shop.payExpired", "Order", o.id, { due: depositLate ? cur.depositDueAt : cur.payDueAt });
         n++;
       }, { timeout: 30_000 });
     } catch (e) {
@@ -236,7 +330,8 @@ export async function expireOverdue(now = new Date(), limit = 30) {
 
 /** 頁面打開時順便檢查（排程服務沒設定或漏掉時的保險），之後送出通知 */
 export async function sweepShopPay() {
-  const due = await prisma.order.count({ where: { source: "WEB", payDueAt: { lte: new Date() }, myshipAt: null, confirmation: { not: "CANCELLED" } } });
+  const now = new Date();
+  const due = await prisma.order.count({ where: { OR: [PAY_OVERDUE(now), DEPOSIT_OVERDUE(now)] } });
   if (!due) return 0;
   const n = await expireOverdue();
   const { flushLineOutbox } = await import("@/server/line");
@@ -355,24 +450,29 @@ export type PayRow = {
   myshipRef: string | null;
   cancelled: boolean;
   timing: "ORDER" | "ARRIVAL";
+  deposit: { amount: number; ref: string | null; dueAt: Date | null; reportedAt: Date | null; confirmed: boolean } | null;
 };
 
-export async function payRows(db: Db, view: "waiting" | "arrival" | "overdue" | "myship", ownerKeys: string[] | null): Promise<PayRow[]> {
+export type PayView = "waiting" | "deposit" | "arrival" | "overdue" | "myship";
+
+export async function payRows(db: Db, view: PayView, ownerKeys: string[] | null): Promise<PayRow[]> {
   const now = new Date();
   const where = {
     source: "WEB" as const,
     ...(ownerKeys ? { items: { some: { ownerKey: { in: ownerKeys } } } } : {}),
     ...(view === "waiting"
-      ? { payDueAt: { gt: now }, myshipAt: null, confirmation: { not: "CANCELLED" as const } }
+      ? { confirmation: { not: "CANCELLED" as const }, OR: [{ payDueAt: { gt: now }, myshipAt: null }, { depositDueAt: { gt: now }, depositReportedAt: null, depositConfirmedAt: null }] }
+      : view === "deposit"
+        ? { depositReportedAt: { not: null }, depositConfirmedAt: null, confirmation: { not: "CANCELLED" as const } }
       : view === "overdue"
-        ? { payDueAt: { lte: now, gte: new Date(now.getTime() - 14 * 86400_000) }, myshipAt: null }
+        ? { OR: [{ payDueAt: { lte: now, gte: new Date(now.getTime() - 14 * 86400_000) }, myshipAt: null }, { depositDueAt: { lte: now, gte: new Date(now.getTime() - 14 * 86400_000) }, depositReportedAt: null }] }
         : view === "myship"
           ? { myshipAt: { not: null } }
-          : { payDueAt: null, myshipAt: null, confirmation: { not: "CANCELLED" as const } }),
+          : { payDueAt: null, myshipAt: null, depositAmount: null, confirmation: { not: "CANCELLED" as const } }),
   };
   const orders = await db.order.findMany({
     where,
-    orderBy: view === "myship" ? { myshipAt: "desc" } : view === "arrival" ? { orderedAt: "asc" } : { payDueAt: view === "overdue" ? "desc" : "asc" },
+    orderBy: view === "myship" ? { myshipAt: "desc" } : view === "overdue" ? { orderedAt: "desc" } : { orderedAt: "asc" },
     take: 200,
     include: { buyer: { select: { name: true, lineUserId: true, email: true } }, items: { select: { categoryId: true } } },
   });
@@ -395,10 +495,11 @@ export async function payRows(db: Db, view: "waiting" | "arrival" | "overdue" | 
         myshipRef: o.myshipRef,
         cancelled: o.confirmation === "CANCELLED",
         timing: c?.payTiming ?? "ORDER",
+        deposit: o.depositAmount ? { amount: o.depositAmount, ref: o.depositRef, dueAt: o.depositDueAt, reportedAt: o.depositReportedAt, confirmed: !!o.depositConfirmedAt } : null,
         hasPay: !!c?.payUrl,
       };
     })
-    .filter((r) => (view === "arrival" ? r.hasPay && r.timing === "ARRIVAL" : true))
+    .filter((r) => (view === "arrival" ? r.hasPay && r.timing === "ARRIVAL" && !r.deposit : true))
     .map((r) => {
       const { hasPay, ...rest } = r;
       void hasPay;

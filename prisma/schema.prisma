@@ -530,6 +530,12 @@ model Order {
   payNoticeAt        DateTime? // 付款通知（賣貨便連結）第一次發出的時間
   myshipAt           DateTime? // 後台確認客人已經在賣貨便下單
   myshipRef          String? // 賣貨便訂單編號（選填）
+  // ── 訂購頁：訂金（匯款） ──
+  depositAmount      Int? // 這筆要匯的訂金（空白＝不用訂金）
+  depositDueAt       DateTime? // 要在這個時間前匯款並回傳末五碼，沒回傳自動取消
+  depositRef         String? // 客人回傳的匯款帳號末五碼
+  depositReportedAt  DateTime?
+  depositConfirmedAt DateTime? // 經營者確認收到訂金（確認後才傳扣除訂金的賣貨便連結）
   // ── 以下為快取，依流水重新計算 ──
   statusCache        OrderStatus       @default(CONFIRMED)
   paymentStatusCache PaymentStatus     @default(UNPAID)
@@ -553,6 +559,7 @@ model Order {
   @@index([statusCache])
   @@index([paymentStatusCache])
   @@index([payDueAt])
+  @@index([depositDueAt])
 }
 
 // 採購／到貨狀態中需人為設定的部分；已到貨、部分到貨、已取消由數量推算
@@ -1187,6 +1194,7 @@ model ShopCategory {
   payUrl         String? // 賣貨便賣場連結（這個系列共用一個通用賣場）
   payTiming      ShopPayTiming @default(ORDER) // 什麼時候要客人用賣貨便下單
   payHours       Int           @default(1) // 幾小時內要下單；逾期自動取消並遞補候補
+  depositPerItem Int? // 每件訂金（台幣）；空白＝不用訂金。有訂金時 payUrl 是「尾款賣場」（價格已扣訂金）
   sortOrder      Int       @default(0)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

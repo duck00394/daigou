@@ -47,7 +47,7 @@ export default async function ShopAdmin() {
       </Section>
 
       <Section title="客服資料">
-        <ShopInfoForm threads={info.threads} supportEmail={info.supportEmail} />
+        <ShopInfoForm threads={info.threads} supportEmail={info.supportEmail} bankInfo={info.bankInfo} />
         <p className="mt-2 text-[13px] text-mute">
           客人會看到的頁面：<a href="/shop/rules" target="_blank" rel="noreferrer" className="text-ai underline">交易規則</a>、<a href="/shop/privacy" target="_blank" rel="noreferrer" className="text-ai underline">隱私權政策</a>
         </p>

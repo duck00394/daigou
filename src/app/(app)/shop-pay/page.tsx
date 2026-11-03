@@ -14,7 +14,8 @@ export const metadata = { title: "訂購頁付款" };
 export const dynamic = "force-dynamic";
 
 const VIEWS = {
-  waiting: "等客人下單",
+  waiting: "等客人下單／匯款",
+  deposit: "訂金待確認",
   arrival: "到貨才付：等發通知",
   overdue: "逾期",
   myship: "賣貨便已下單",
@@ -39,7 +40,16 @@ export default async function ShopPay({ searchParams }: { searchParams: Promise<
       <Section>
         <PayList
           view={v}
-          rows={rows.map((r) => ({ ...r, dueLabel: r.dueAt ? dueLabel(r.dueAt) : null, noticeLabel: r.noticeAt ? dueLabel(r.noticeAt) : null, myshipLabel: r.myshipAt ? dueLabel(r.myshipAt) : null, dueAt: r.dueAt?.toISOString() ?? null, noticeAt: null, myshipAt: null }))}
+          rows={rows.map((r) => ({
+            ...r,
+            dueLabel: r.dueAt ? dueLabel(r.dueAt) : null,
+            noticeLabel: r.noticeAt ? dueLabel(r.noticeAt) : null,
+            myshipLabel: r.myshipAt ? dueLabel(r.myshipAt) : null,
+            dueAt: r.dueAt?.toISOString() ?? null,
+            noticeAt: null,
+            myshipAt: null,
+            deposit: r.deposit ? { amount: r.deposit.amount, ref: r.deposit.ref, confirmed: r.deposit.confirmed, dueLabel: r.deposit.dueAt ? dueLabel(r.deposit.dueAt) : null, reportedLabel: r.deposit.reportedAt ? dueLabel(r.deposit.reportedAt) : null } : null,
+          }))}
         />
       </Section>
       <p className="text-[12px] text-mute">每一個「賣貨便已下單」「補發通知」「延期」「取消」都會記在操作紀錄裡。</p>

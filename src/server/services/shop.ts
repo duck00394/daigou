@@ -108,7 +108,7 @@ export const isOpen = (s: { enabled: boolean; openAt: Date | null }, now = new D
 // ───────────── 下單 ─────────────
 
 export type CartLine = { categoryId: string; productId: string; qty: number };
-export type Contact = { name: string; phone: string; shipping: string; note?: string | null };
+export type Contact = { name: string; phone: string; shipping: string; note?: string | null; social?: string | null };
 
 async function lockQuotas(t: Tx, pairs: { categoryId: string; productId: string }[]) {
   const keys = [...new Set(pairs.map((p) => `${p.categoryId}\u0001${p.productId}`))].sort();
@@ -175,6 +175,11 @@ export async function placeShopOrder(t: Tx, buyerId: string, input: { lines: Car
     if (!s || !s.enabled || !s.category.active) throw new BizError("有系列已經停止訂購，請重新整理購物車");
     if (!isOpen(s, now)) throw new BizError(`「${s.category.name}」還沒開賣`);
   }
+  // 要訂金的系列：一定要留 Threads 或 IG 帳號（有問題時聯絡得到人）
+  const needSocial = settings.some((x) => x.depositPerItem && x.payUrl);
+  const social = field.mode === "text" ? contact.phone : (input.contact.social ?? "").trim();
+  if (needSocial && !social) throw new BizError("要付訂金的商品，請填 Threads 或 IG 帳號");
+  if (social.length > 60) throw new BizError("Threads 或 IG 帳號太長了");
 
   // 鎖住開放數量，再算剩下幾個（同時下單的人會排隊，名額照順序）
   await lockQuotas(t, lines);
@@ -228,7 +233,7 @@ export async function placeShopOrder(t: Tx, buyerId: string, input: { lines: Car
     },
   });
   const code = newLookupCode();
-  const notes = [field.mode !== "none" && contact.phone ? `${field.label}：${contact.phone}` : null, `取貨：${contact.shipping}`, contact.note ? `客人備註：${contact.note}` : null, buyer.lineUserId ? null : `訪客下單（${buyer.email}）`].filter(Boolean).join("\n");
+  const notes = [field.mode !== "none" && contact.phone ? `${field.label}：${contact.phone}` : null, field.mode !== "text" && social ? `Threads／IG：${social}` : null, `取貨：${contact.shipping}`, contact.note ? `客人備註：${contact.note}` : null, buyer.lineUserId ? null : `訪客下單（${buyer.email}）`].filter(Boolean).join("\n");
   const placed: { orderId: string; orderNo: string }[] = [];
   for (const [idx, cid] of catIds.entries()) {
     const mine = lines.filter((l) => l.categoryId === cid);
@@ -359,7 +364,7 @@ export async function promoteWaits(t: Tx, categoryId: string, productId: string)
     await audit(t, SYSTEM, "shop.waitFilled", "Order", order.id, { waitId: w.id, productId, qty });
     const lines = [{ name: p.name, qty, amount: p.price * qty }];
     const card = { tone: "waitlist" as const, eyebrow: "GOOD NEWS", title: "候補成功！訂單已成立", orderNo: order.orderNo, series: await seriesNames(t, [categoryId]), lines, note: qty < w.qty ? `空出來的名額只有 ${qty} 個，先幫你訂 ${qty} 個` : undefined, total: order.receivableCache, url: `${appUrl()}/shop/orders` };
-    if (!(await payOnPlaced(t, order.id, { card }))) await notifyCustomer(t, w.buyer, card, { orderId: order.id });
+    if (!(await payOnPlaced(t, order.id, { card }, { strict: false }))) await notifyCustomer(t, w.buyer, card, { orderId: order.id });
     const byCat = new Map([[categoryId, s]]);
     await notifySellers(t, order, `${w.buyer.name}（候補）`, byCat, () => lines);
     filled++;
@@ -425,6 +430,7 @@ export type CustomerOrder = {
   total: number;
   lines: { name: string; qty: number; amount: number; image: string | null; cancelled: number }[];
   pay: { url: string; dueAt: Date } | null; // 還沒在賣貨便下單、還沒逾期
+  depositPending: boolean; // 要匯訂金、還沒確認
 };
 
 export async function customerOrders(db: Db, buyerId: string): Promise<CustomerOrder[]> {
@@ -459,6 +465,7 @@ export async function customerOrders(db: Db, buyerId: string): Promise<CustomerO
       total: o.receivableCache,
       lines: o.items.map((i) => ({ name: i.productNameSnapshot, qty: i.qty, amount: i.unitPrice * i.qty - i.lineDiscount, image: i.product.imageUrl, cancelled: i.cancelledQtyCache })),
       pay,
+      depositPending: !!o.depositAmount && !o.depositConfirmedAt && o.confirmation !== "CANCELLED",
     };
   });
 }
@@ -470,7 +477,7 @@ export async function customerWaits(db: Db, buyerId: string) {
 
 // ───────────── 後台設定 ─────────────
 
-export type ShopCategoryInput = { enabled: boolean; openAt: Date | null; perPersonLimit: number | null; ownerId: string | null; imageUrl: string | null; intro: string | null; payUrl?: string | null; payTiming?: "ORDER" | "ARRIVAL"; payHours?: number };
+export type ShopCategoryInput = { enabled: boolean; openAt: Date | null; perPersonLimit: number | null; ownerId: string | null; imageUrl: string | null; intro: string | null; payUrl?: string | null; payTiming?: "ORDER" | "ARRIVAL"; payHours?: number; depositPerItem?: number | null };
 
 export async function saveShopCategory(t: Tx, actor: Actor, categoryId: string, input: ShopCategoryInput) {
   const cat = await t.category.findUnique({ where: { id: categoryId } });
@@ -485,6 +492,8 @@ export async function saveShopCategory(t: Tx, actor: Actor, categoryId: string, 
   if (payUrl && (!/^https:\/\/\S+$/.test(payUrl) || payUrl.length > 1000)) throw new BizError("賣貨便連結要用 https:// 開頭");
   if (input.payHours !== undefined && (!Number.isInteger(input.payHours) || input.payHours < 1 || input.payHours > 168)) throw new BizError("下單期限要是 1～168 小時");
   if (input.payTiming !== undefined && !["ORDER", "ARRIVAL"].includes(input.payTiming)) throw new BizError("付款時機不對");
+  if (input.depositPerItem !== undefined && input.depositPerItem !== null && (!Number.isInteger(input.depositPerItem) || input.depositPerItem < 1 || input.depositPerItem > 99999)) throw new BizError("每件訂金要是 1～99999 的整數，或空白（不用訂金）");
+  if (input.depositPerItem && !(payUrl ?? (await t.shopCategory.findUnique({ where: { categoryId } }))?.payUrl)) throw new BizError("要收訂金的話，請先貼上尾款的賣貨便賣場連結");
   const data = {
     enabled: input.enabled,
     openAt: input.openAt,
@@ -495,6 +504,7 @@ export async function saveShopCategory(t: Tx, actor: Actor, categoryId: string, 
     ...(payUrl !== undefined ? { payUrl } : {}),
     ...(input.payTiming ? { payTiming: input.payTiming } : {}),
     ...(input.payHours !== undefined ? { payHours: input.payHours } : {}),
+    ...(input.depositPerItem !== undefined ? { depositPerItem: input.depositPerItem } : {}),
   };
   const before = await t.shopCategory.findUnique({ where: { categoryId } });
   // 換掉或拿掉自己上傳的舊圖：一起刪掉，不佔資料庫空間

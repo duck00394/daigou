@@ -54,7 +54,7 @@ export default async function Done({ searchParams }: { searchParams: Promise<{ o
           {views.map((v) => (
             <div key={v.id} className="flex flex-col gap-3 rounded-[18px] border border-shop-line bg-white p-4">
               <Lines v={v} />
-              <PayBox v={v} />
+              <PayBox v={v} bank={info.bankInfo} />
               <Link href={`/shop/o/${v.id}?t=${orderToken(v.id)}`} className="flex h-11 items-center justify-center rounded-full border border-[#d8c9bc] text-[14px] text-shop-ink-2">
                 查看完整訂單憑證
               </Link>

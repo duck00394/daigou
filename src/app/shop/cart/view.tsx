@@ -6,7 +6,7 @@ import { money, Pic, Stepper, useCart, type CartItem } from "../cart";
 import { placeOrderAction } from "../actions";
 import type { ContactField } from "@/server/services/shop";
 
-type Status = Record<string, { open: boolean; openAt: string | null; name: string; pay: { timing: "ORDER" | "ARRIVAL"; hours: number } | null }>;
+type Status = Record<string, { open: boolean; openAt: string | null; name: string; pay: { timing: "ORDER" | "ARRIVAL"; hours: number; deposit: number } | null }>;
 export const DONE_KEY = "dg_done";
 const fieldCls = "h-[46px] w-full rounded-[14px] border border-[#e6dace] bg-[#fdfaf6] px-3.5 text-[16px] text-shop-ink";
 
@@ -17,7 +17,7 @@ function newKey() {
 export function CartView({ loggedIn, lineName, defaults, returning, shippingOptions, status, field }: { field: ContactField; loggedIn: boolean; lineName: string | null; defaults: { name: string; phone: string; shipping: string }; returning: boolean; shippingOptions: string[]; status: Status }) {
   const cart = useCart();
   const router = useRouter();
-  const [f, setF] = useState({ ...defaults, note: "", email: "" });
+  const [f, setF] = useState({ ...defaults, note: "", email: "", social: "" });
   const [mode, setMode] = useState<"guest" | "line">(loggedIn ? "line" : "guest");
   const [agree, setAgree] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -41,22 +41,26 @@ export function CartView({ loggedIn, lineName, defaults, returning, shippingOpti
   const guest = !loggedIn && mode === "guest";
   const canSubmit = loggedIn || guest;
   // 付款方式提醒：同樣設定的系列合在一起講
-  const payNotes = [...new Set([...groups.keys()].map((c) => status[c]?.pay).filter((p): p is NonNullable<typeof p> => !!p).map((p) => `${p.timing}|${p.hours}`))].map((k) => {
+  const payKey = (p: NonNullable<Status[string]["pay"]>) => (p.deposit ? "DEPOSIT|1" : `${p.timing}|${p.hours}`);
+  const payNotes = [...new Set([...groups.keys()].map((c) => status[c]?.pay).filter((p): p is NonNullable<typeof p> => !!p).map(payKey))].map((k) => {
     const [timing, hours] = k.split("|");
-    const names = [...groups.keys()].filter((c) => status[c]?.pay && `${status[c].pay!.timing}|${status[c].pay!.hours}` === k).map((c) => status[c].name);
-    return { timing, hours: Number(hours), names };
+    const cats = [...groups.keys()].filter((c) => status[c]?.pay && payKey(status[c].pay!) === k);
+    const deposit = cats.reduce((a, c) => a + (status[c].pay!.deposit || 0) * (groups.get(c) ?? []).reduce((x, it) => x + it.qty, 0), 0);
+    return { timing, hours: Number(hours), names: cats.map((c) => status[c].name), deposit };
   });
+  const needSocial = payNotes.some((p) => p.timing === "DEPOSIT") && field.mode !== "text";
 
   const submit = () => {
     setErr(null);
     if (gone.length) return setErr("有商品的系列已經停止訂購，請先刪掉");
     if (notOpen.length) return setErr(`「${status[notOpen[0]].name}」還沒開賣，時間到才能送出`);
     if (guest && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.email.trim())) return setErr("請填正確的 Email（收訂單通知和查詢碼用）");
+    if (needSocial && !f.social.trim()) return setErr("要付訂金的商品，請填 Threads 或 IG 帳號");
     if (!agree) return setErr("請先勾選已閱讀交易規則與隱私權政策");
     start(async () => {
       const res = await placeOrderAction(
         cart.items.map((i) => ({ categoryId: i.categoryId, productId: i.productId, qty: i.qty })),
-        { name: f.name, phone: f.phone, shipping: f.shipping, note: f.note || null },
+        { name: f.name, phone: f.phone, shipping: f.shipping, note: f.note || null, social: needSocial ? f.social.trim() : null },
         key,
         { guestEmail: guest ? f.email.trim() : null, agree },
       );
@@ -141,6 +145,11 @@ export function CartView({ loggedIn, lineName, defaults, returning, shippingOpti
               <input className={fieldCls} value={f.phone} maxLength={60} onChange={(e) => setF({ ...f, phone: e.target.value })} autoCapitalize="none" autoCorrect="off" spellCheck={false} />
             </label>
           )}
+          {needSocial && (
+            <label className="flex flex-col gap-1.5 text-[13px] text-shop-mute">Threads 或 IG 帳號（要付訂金的商品必填，聯絡用）
+              <input className={fieldCls} value={f.social} maxLength={60} onChange={(e) => setF({ ...f, social: e.target.value })} autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="@your_id" />
+            </label>
+          )}
           <label className="flex flex-col gap-1.5 text-[13px] text-shop-mute">取貨方式
             <select className={fieldCls} value={f.shipping} onChange={(e) => setF({ ...f, shipping: e.target.value })}>
               {shippingOptions.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -171,7 +180,9 @@ export function CartView({ loggedIn, lineName, defaults, returning, shippingOpti
           {payNotes.map((p) => (
             <p key={`${p.timing}${p.hours}`}>
               {payNotes.length > 1 && <b>{p.names.join("、")}：</b>}
-              {p.timing === "ORDER" ? (
+              {p.timing === "DEPOSIT" ? (
+                <>需要訂金 <b>NT$ {p.deposit.toLocaleString("en-US")}</b>：成立後 <b className="text-[#c8102e]">1 小時</b>內匯款並回傳末五碼，逾時自動取消。尾款用賣貨便取貨付款，不用再匯款。</>
+              ) : p.timing === "ORDER" ? (
                 <>成立後 <b className="text-[#c8102e]">{p.hours} 小時</b>內，用賣貨便下單。逾期會取消並讓給候補的人。</>
               ) : (
                 <>到貨後會通知你，收到通知 <b className="text-[#c8102e]">{p.hours} 小時</b>內用賣貨便下單。逾期會取消並讓給候補的人。</>

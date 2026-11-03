@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Button, inputCls, Modal, useRun } from "@/components/client";
-import { cancelOverdueAction, extendPayAction, markMyshipAction, resendPayAction, startArrivalPayAction, undoMyshipAction } from "@/actions/shop";
+import { cancelOverdueAction, confirmDepositAction, extendPayAction, markMyshipAction, rejectDepositAction, resendPayAction, startArrivalPayAction, undoMyshipAction } from "@/actions/shop";
 
 type Row = {
   id: string;
@@ -17,22 +17,24 @@ type Row = {
   myshipLabel: string | null;
   myshipRef: string | null;
   cancelled: boolean;
+  deposit: { amount: number; ref: string | null; confirmed: boolean; dueLabel: string | null; reportedLabel: string | null } | null;
 };
 
 const money = (n: number) => `NT$ ${n.toLocaleString("en-US")}`;
 
-export function PayList({ view, rows }: { view: "waiting" | "arrival" | "overdue" | "myship"; rows: Row[] }) {
+export function PayList({ view, rows }: { view: "waiting" | "deposit" | "arrival" | "overdue" | "myship"; rows: Row[] }) {
   const { run, pending } = useRun();
   const [ship, setShip] = useState<Row | null>(null);
   const [ref, setRef] = useState("");
   const [extend, setExtend] = useState<Row | null>(null);
   const [hours, setHours] = useState(24);
+  const [reject, setReject] = useState<Row | null>(null);
   const series = useMemo(() => [...new Set(rows.map((r) => r.series))], [rows]);
 
   if (!rows.length)
     return (
       <p className="py-6 text-center text-[14px] text-mute">
-        {view === "waiting" ? "沒有等客人下單的訂單" : view === "arrival" ? "沒有等到貨的訂單（系列設成「到貨後才下單」的才會出現）" : view === "overdue" ? "沒有逾期的訂單" : "還沒有標記賣貨便已下單的訂單"}
+        {view === "waiting" ? "沒有等客人下單或匯款的訂單" : view === "deposit" ? "沒有等確認的訂金" : view === "arrival" ? "沒有等到貨的訂單（系列設成「到貨後才下單」的才會出現）" : view === "overdue" ? "沒有逾期的訂單" : "還沒有標記賣貨便已下單的訂單"}
       </p>
     );
 
@@ -61,13 +63,35 @@ export function PayList({ view, rows }: { view: "waiting" | "arrival" | "overdue
             <div className="text-[12px] text-mute">
               <Link href={`/orders/${r.id}`} className="text-ai underline">{r.orderNo}</Link>・{r.series}・{r.channel === "無" ? "沒有聯絡方式" : r.channel}
             </div>
-            {view === "waiting" && r.dueLabel && (
+            {view === "waiting" && r.deposit && !r.deposit.confirmed && (
               <div className="text-[12px] text-warn">
+                等客人匯訂金 {money(r.deposit.amount)}・<b className="text-bad">{r.deposit.dueLabel} 前</b>要回傳末五碼，沒回傳自動取消
+              </div>
+            )}
+            {view === "waiting" && !(r.deposit && !r.deposit.confirmed) && r.dueLabel && (
+              <div className="text-[12px] text-warn">
+                {r.deposit && "已付訂金・"}
                 <b className="text-bad">{r.dueLabel} 到期</b>
                 {r.noticeLabel && `・已通知 ${r.noticeLabel}`}
               </div>
             )}
-            {view === "overdue" && <div className="text-[12px]">{r.cancelled ? <span className="text-mute">已自動取消（{r.dueLabel} 到期）</span> : <b className="text-bad">{r.dueLabel} 到期，還沒取消（可能已部分出貨）</b>}</div>}
+            {view === "deposit" && r.deposit && (
+              <div className="rounded-lg bg-warn-soft px-2.5 py-1.5 text-[13px]">
+                訂金 <b>{money(r.deposit.amount)}</b>・末五碼 <b className="font-mono tracking-[2px]">{r.deposit.ref}</b>
+                <span className="text-mute">（{r.deposit.reportedLabel} 回傳）</span>
+              </div>
+            )}
+            {view === "overdue" && (
+              <div className="text-[12px]">
+                {r.cancelled ? (
+                  <span className="text-mute">已自動取消（{r.deposit && !r.deposit.confirmed ? `沒回傳末五碼，${r.deposit.dueLabel}` : r.dueLabel} 到期）</span>
+                ) : r.deposit?.confirmed ? (
+                  <b className="text-bad">已付訂金 {money(r.deposit.amount)}，{r.dueLabel} 到期還沒在賣貨便下單，請聯絡客人</b>
+                ) : (
+                  <b className="text-bad">{r.dueLabel} 到期，還沒取消（可能已部分出貨）</b>
+                )}
+              </div>
+            )}
             {view === "myship" && <div className="text-[12px] text-good">賣貨便已下單 {r.myshipLabel}{r.myshipRef ? `・${r.myshipRef}` : ""}</div>}
             <div className="flex flex-wrap gap-1.5">
               {view === "waiting" && (
@@ -77,12 +101,19 @@ export function PayList({ view, rows }: { view: "waiting" | "arrival" | "overdue
                   <Button small onClick={() => { setExtend(r); setHours(24); }}>延期</Button>
                 </>
               )}
+              {view === "deposit" && (
+                <>
+                  <Button small variant="primary" loading={pending} onClick={() => run(() => confirmDepositAction(r.id), { success: "已記下訂金，賣貨便連結已傳給客人" })}>確認無誤，傳賣貨便連結</Button>
+                  <Button small variant="danger" onClick={() => setReject(r)}>沒收到</Button>
+                </>
+              )}
               {view === "arrival" && <Button small loading={pending} onClick={() => run(() => startArrivalPayAction([r.id]), { success: "已發出付款通知" })}>發付款通知</Button>}
               {view === "overdue" && !r.cancelled && (
                 <>
                   <Button small variant="primary" onClick={() => { setShip(r); setRef(""); }}>其實已下單</Button>
                   <Button small onClick={() => { setExtend(r); setHours(24); }}>延期</Button>
-                  <Button small variant="danger" loading={pending} onClick={() => run(() => cancelOverdueAction(r.id), { success: "已取消，名額給候補" })}>取消訂單</Button>
+                  {r.deposit?.confirmed && <Button small loading={pending} onClick={() => run(() => resendPayAction(r.id), { success: "已補發通知" })}>補發通知</Button>}
+                  <Button small variant="danger" loading={pending} onClick={() => run(() => cancelOverdueAction(r.id), { success: r.deposit?.confirmed ? "已取消，名額給候補；訂金請到收款與退款處理" : "已取消，名額給候補" })}>取消訂單</Button>
                 </>
               )}
               {view === "myship" && !r.cancelled && <Button small variant="ghost" loading={pending} onClick={() => run(() => undoMyshipAction(r.id), { success: "已改回還沒下單" })}>改回還沒下單</Button>}
@@ -103,6 +134,16 @@ export function PayList({ view, rows }: { view: "waiting" | "arrival" | "overdue
           <input className={`${inputCls} mt-1`} value={ref} maxLength={60} onChange={(e) => setRef(e.target.value)} />
         </label>
         <p className="mt-2 text-[12px] text-mute">取貨付款收到錢後，照平常在「收款與退款」記收款。</p>
+      </Modal>
+
+      <Modal
+        open={!!reject}
+        onClose={() => setReject(null)}
+        title="沒收到訂金"
+        footer={<Button variant="danger" className="w-full" loading={pending} onClick={() => reject && run(() => rejectDepositAction(reject.id), { success: "已取消，名額給候補", onOk: () => setReject(null) })}>取消這筆訂單</Button>}
+      >
+        <p className="text-[14px]">{reject?.buyer}・{reject?.orderNo}・末五碼 {reject?.deposit?.ref}</p>
+        <p className="mt-2 text-[13px] text-mute">會取消整筆訂單並通知客人（原因：沒有收到訂金），名額依序給候補。確定前建議再查一次帳戶。</p>
       </Modal>
 
       <Modal

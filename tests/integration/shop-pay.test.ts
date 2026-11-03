@@ -218,6 +218,91 @@ describe("賣貨便付款期限", () => {
   });
 });
 
+describe("訂金", () => {
+  const setDeposit = async (perItem = 300, payHours = 24) => {
+    await tx((t) => pay.setShopInfo(t, actor, { bankInfo: "中國信託（822）1234-5678-9012" }));
+    await tx((t) => shop.saveShopCategory(t, actor, s.halloween.id, { enabled: true, openAt: null, perPersonLimit: null, ownerId: "op_a", imageUrl: null, intro: null, payUrl: PAY, payTiming: "ORDER", payHours, depositPerItem: perItem }));
+  };
+  const depositGuest = (email: string, social: string | null = null, lines = [{ productId: s.p1.id, qty: 2 }]) =>
+    tx(async (t) => shop.placeShopOrder(t, await pay.guestBuyer(t, email, "訂金客", () => nextCode(t, "buyer")), { lines: lines.map((l) => ({ categoryId: s.halloween.id, ...l })), contact: { ...contact, social }, key: key() }));
+
+  it("成立後先收訂金：顯示帳戶與金額、1 小時內回傳末五碼；還沒確認前不會傳賣貨便連結", async () => {
+    await setDeposit(300);
+    const r = await depositGuest("dep@example.com");
+    const o = await prisma.order.findUniqueOrThrow({ where: { id: r.orderId } });
+    expect([o.depositAmount, o.payDueAt]).toEqual([600, null]);
+    expect(o.depositDueAt!.getTime() - Date.now()).toBeGreaterThan(55 * 60_000);
+    const mail = await prisma.mailOutbox.findFirstOrThrow({ where: { to: "dep@example.com" } });
+    expect(mail.text).toContain("中國信託（822）1234-5678-9012");
+    expect(mail.text).toContain("NT$ 600");
+    expect(mail.text).toContain("前匯款並回傳末五碼，逾時自動取消");
+    expect(mail.text).not.toContain(PAY);
+    await expect(tx((t) => pay.reportDeposit(t, r.orderId, "1234"))).rejects.toThrow("5 位數字");
+    await tx((t) => pay.reportDeposit(t, r.orderId, "12345"));
+    await tx((t) => pay.reportDeposit(t, r.orderId, "54321")); // 確認前可以改
+    expect((await pay.payRows(prisma, "deposit", null)).map((x) => [x.id, x.deposit?.ref])).toEqual([[r.orderId, "54321"]]);
+    expect((await orderView(prisma, r.orderId))!.status).toBe("訂金確認中");
+    // 回傳過的不會因為過了 1 小時被取消
+    expect(await pay.expireOverdue(new Date(Date.now() + 2 * 3600_000))).toBe(0);
+  });
+
+  it("確認無誤：記一筆收款、傳扣除訂金的賣貨便連結並開始計時；逾期不自動取消", async () => {
+    await setDeposit(300, 24);
+    const r = await depositGuest("ok@example.com");
+    await tx((t) => pay.reportDeposit(t, r.orderId, "11111"));
+    await prisma.mailOutbox.deleteMany();
+    await expect(tx((t) => pay.confirmDeposit(t, actor, "nope"))).rejects.toThrow();
+    await tx((t) => pay.confirmDeposit(t, actor, r.orderId));
+    await expect(tx((t) => pay.confirmDeposit(t, actor, r.orderId))).rejects.toThrow("已經確認過了");
+    const o = await prisma.order.findUniqueOrThrow({ where: { id: r.orderId }, include: { payments: true } });
+    expect(o.payments.map((p) => [p.amount, p.reference])).toEqual([[600, "11111"]]);
+    expect([o.paidCache, o.balanceCache]).toEqual([600, 400]);
+    expect(o.payDueAt!.getTime() - Date.now()).toBeGreaterThan(23 * 3600_000);
+    const mail = await prisma.mailOutbox.findFirstOrThrow({ where: { to: "ok@example.com" } });
+    expect(mail.subject).toContain("訂金已收到");
+    expect(mail.html).toContain(PAY);
+    expect(mail.text).toContain("NT$ 400");
+    expect(mail.text).not.toContain("逾期會取消");
+    // 已付訂金：過了期限不會自動取消，列在逾期
+    expect(await pay.expireOverdue(new Date(Date.now() + 30 * 3600_000))).toBe(0);
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: r.orderId } })).confirmation).toBe("CONFIRMED");
+  });
+
+  it("1 小時內沒回傳末五碼：自動取消、名額給候補；沒收到訂金：後台取消", async () => {
+    await setDeposit(300);
+    const late = await depositGuest("late2@example.com", null, [{ productId: s.p2.id, qty: 1 }]);
+    const w = await lineBuyer("等候補");
+    await tx((t) => shop.joinWait(t, w, { categoryId: s.halloween.id, productId: s.p2.id, qty: 1 }));
+    expect(await pay.expireOverdue(new Date(Date.now() + 61 * 60_000))).toBe(1);
+    const o = await prisma.order.findUniqueOrThrow({ where: { id: late.orderId } });
+    expect([o.confirmation, o.cancelReason]).toEqual(["CANCELLED", "超過時間沒有回傳匯款末五碼"]);
+    await expect(tx((t) => pay.reportDeposit(t, late.orderId, "12345"))).rejects.toThrow("已經取消");
+    // 候補遞補成立，也要先付訂金
+    const filled = await prisma.order.findFirstOrThrow({ where: { buyerId: w, source: "WEB" } });
+    expect(filled.depositAmount).toBe(300);
+    await tx((t) => pay.reportDeposit(t, filled.id, "22222"));
+    await tx((t) => pay.rejectDeposit(t, actor, filled.id));
+    const f2 = await prisma.order.findUniqueOrThrow({ where: { id: filled.id } });
+    expect([f2.confirmation, f2.cancelReason]).toEqual(["CANCELLED", "沒有收到訂金"]);
+    const acts = (await prisma.auditLog.findMany({ where: { entityId: filled.id }, select: { action: true } })).map((a) => a.action);
+    expect(acts).toEqual(expect.arrayContaining(["shop.depositStart", "shop.depositReport", "shop.depositReject"]));
+  });
+
+  it("要訂金的系列：沒設匯款帳戶不能下單；結帳欄位不是帳號時要另外填 Threads／IG；沒有尾款賣場不能設訂金", async () => {
+    await tx((t) => shop.saveShopCategory(t, actor, s.halloween.id, { enabled: true, openAt: null, perPersonLimit: null, ownerId: "op_a", imageUrl: null, intro: null, payUrl: PAY, payTiming: "ORDER", payHours: 24, depositPerItem: 300 }));
+    await expect(depositGuest("nobank@example.com")).rejects.toThrow("還沒設定匯款資料");
+    expect(await prisma.order.count()).toBe(0);
+    await tx((t) => pay.setShopInfo(t, actor, { bankInfo: "郵局 700 0001234567" }));
+    await tx((t) => shop.setContactField(t, actor, { mode: "phone", label: "手機" }));
+    const phoneContact = { name: "阿手", phone: "0912345678", shipping: "賣貨便" };
+    const place = (social: string | null) => tx(async (t) => shop.placeShopOrder(t, await pay.guestBuyer(t, "phone@example.com", "阿手", () => nextCode(t, "buyer")), { lines: [{ categoryId: s.halloween.id, productId: s.p1.id, qty: 1 }], contact: { ...phoneContact, social }, key: key() }));
+    await expect(place(null)).rejects.toThrow("Threads 或 IG");
+    const r = await place("@ashou");
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: r.orderId } })).notes).toContain("Threads／IG：@ashou");
+    await expect(tx((t) => shop.saveShopCategory(t, actor, s.shanghai.id, { enabled: true, openAt: null, perPersonLimit: null, ownerId: "op_a", imageUrl: null, intro: null, payUrl: null, depositPerItem: 100 }))).rejects.toThrow("尾款");
+  });
+});
+
 describe("店家資訊", () => {
   it("Threads 帳號可以貼網址或 @，客服 Email 要格式正確", async () => {
     const r = await tx((t) => pay.setShopInfo(t, actor, { threads: "https://www.threads.net/@ura.treasure", supportEmail: "Help@Example.com" }));

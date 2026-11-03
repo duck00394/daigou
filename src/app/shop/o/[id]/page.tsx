@@ -51,7 +51,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
           </div>
           {v.cancelled && <p className="text-[13px] text-shop-ink-2">這筆訂單已取消{v.cancelReason ? `（${v.cancelReason}）` : ""}。</p>}
           <Steps v={v} />
-          <PayBox v={v} />
+          <PayBox v={v} bank={info.bankInfo} />
         </div>
 
         <div className="flex flex-col gap-3 rounded-[20px] border border-shop-line bg-white p-4">

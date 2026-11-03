@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/server/db";
 import { currentCustomer, myOrderIds } from "@/server/shop-auth";
 import { customerOrders, customerWaits, type CustomerOrder } from "@/server/services/shop";
-import { orderToken, sweepShopPay } from "@/server/services/shop-pay";
+import { getShopInfo, orderToken, sweepShopPay } from "@/server/services/shop-pay";
 import { orderView } from "@/server/services/shop-view";
 import { Lines, PayBox, StatusTag } from "../o/parts";
 import { dueLabel } from "@/server/services/shop-pay";
@@ -33,6 +33,7 @@ export default async function MyOrders({ searchParams }: { searchParams: Promise
   if (!customer) {
     // 訪客：這支手機下過（或查過）的訂單＋查詢＋寄給我
     const ids = await myOrderIds();
+    const bank = (await getShopInfo(prisma)).bankInfo;
     const views = (await Promise.all(ids.map((id) => orderView(prisma, id)))).filter((v): v is NonNullable<typeof v> => !!v).sort((a, b) => b.orderedAt.getTime() - a.orderedAt.getTime());
     return (
       <>
@@ -53,7 +54,7 @@ export default async function MyOrders({ searchParams }: { searchParams: Promise
                 <StatusTag v={v} />
               </div>
               <Lines v={v} />
-              <PayBox v={v} />
+              <PayBox v={v} bank={bank} />
               <Link href={`/shop/o/${v.id}?t=${orderToken(v.id)}`} className="flex h-11 items-center justify-center rounded-full border border-[#d8c9bc] text-[14px] text-shop-ink-2">查看貨況與訂單憑證</Link>
             </div>
           ))}
@@ -138,6 +139,11 @@ export default async function MyOrders({ searchParams }: { searchParams: Promise
                       <div className="text-[14px]">{l.amount.toLocaleString("en-US")}</div>
                     </div>
                   ))}
+                  {o.depositPending && (
+                    <Link href={`/shop/o/${o.id}?t=${orderToken(o.id)}`} className="flex h-11 items-center justify-center rounded-[14px] bg-shop-gold-soft text-[14px] font-bold text-shop-gold">
+                      匯訂金・回傳末五碼
+                    </Link>
+                  )}
                   {o.pay && (
                     <a href={o.pay.url} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-0.5 rounded-[14px] bg-shop-rose px-3 py-2.5 text-center text-white">
                       <span className="text-[15px] font-bold">前往賣貨便下單</span>
