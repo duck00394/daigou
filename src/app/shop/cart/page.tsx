@@ -11,12 +11,12 @@ export default async function CartPage() {
   const [buyer, methods, cats, field] = await Promise.all([
     customer ? prisma.buyer.findUnique({ where: { id: customer.id }, select: { name: true, recipientPhone: true, contact: true, shippingMethod: true } }) : null,
     prisma.shippingMethod.findMany({ where: { active: true, kind: "TW_DOMESTIC_SHIPPING" }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { name: true } }),
-    prisma.shopCategory.findMany({ where: { enabled: true }, select: { categoryId: true, enabled: true, openAt: true, category: { select: { name: true } } } }),
+    prisma.shopCategory.findMany({ where: { enabled: true }, select: { categoryId: true, enabled: true, openAt: true, payUrl: true, payTiming: true, payHours: true, category: { select: { name: true } } } }),
     getContactField(prisma),
   ]);
   const prevContact = (field.mode === "phone" ? buyer?.recipientPhone : field.mode === "text" ? buyer?.contact : "") ?? "";
   const shipping = [...new Set([...methods.map((m) => m.name), "面交"])];
-  const status = Object.fromEntries(cats.map((c) => [c.categoryId, { open: isOpen(c), openAt: c.openAt?.toISOString() ?? null, name: c.category.name }]));
+  const status = Object.fromEntries(cats.map((c) => [c.categoryId, { open: isOpen(c), openAt: c.openAt?.toISOString() ?? null, name: c.category.name, pay: c.payUrl ? { timing: c.payTiming, hours: c.payHours } : null }]));
   return (
     <>
       <header className="flex items-center gap-3 px-4 py-3">
@@ -28,6 +28,7 @@ export default async function CartPage() {
       </header>
       <CartView
         loggedIn={!!customer}
+        lineName={customer?.name ?? null}
         defaults={{ name: buyer?.name ?? customer?.name ?? "", phone: prevContact, shipping: buyer?.shippingMethod && shipping.includes(buyer.shippingMethod) ? buyer.shippingMethod : shipping[0] }}
         returning={!!buyer?.shippingMethod}
         field={field}

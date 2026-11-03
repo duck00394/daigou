@@ -16,6 +16,8 @@ export async function run<T>(fn: (actor: Actor) => Promise<T>, perm: Permission 
     const data = await fn({ userId: user.id });
     // 操作成功後才送 LINE 通知（取消網站訂單、出貨、候補遞補…）；送失敗不影響操作結果
     if (pushConfigured()) await flushLineOutbox().catch((e) => console.error("[line]", e));
+    // 訪客下單的客人用 Email 通知（取消、出貨、付款提醒…）
+    await import("@/server/mail").then((m) => m.flushMailOutbox()).catch((e) => console.error("[mail]", e));
     return { ok: true, data };
   } catch (e) {
     if (e instanceof AuthError) return { ok: false, error: e.message, auth: true };

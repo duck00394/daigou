@@ -7,6 +7,7 @@ import { BizError, type Db, type Tx } from "@/server/db";
 import { appUrl, enqueueLine, orderCard, type MsgLine } from "@/server/line";
 import { audit, emptyToNull, SYSTEM, type Actor } from "./common";
 import { createOrder } from "./orders";
+import { hashCode, newLookupCode, notifyCustomer, payOnPlaced } from "./shop-pay";
 
 export const SHOP_SOURCE = "WEB" as const;
 const MAX_QTY = 99;
@@ -132,14 +133,20 @@ function checkContact(c: Contact, field: ContactField) {
   return { name, phone: field.mode === "none" ? "" : phone, shipping, note };
 }
 
-/** 客人送出訂單。同一個識別碼重複送出只會成立一次 */
-export async function placeShopOrder(t: Tx, buyerId: string, input: { lines: CartLine[]; contact: Contact; key: string }) {
+export type PlacedOrders = { orderId: string; orderNo: string; orders: { orderId: string; orderNo: string }[]; code: string | null; duplicate: boolean };
+
+/** 客人送出訂單（LINE 登入或訪客）。同一個識別碼重複送出只會成立一次。
+ * 一個系列一張訂單（每個系列有自己的賣貨便賣場和付款期限），同一次結帳共用一組查詢碼。 */
+export async function placeShopOrder(t: Tx, buyerId: string, input: { lines: CartLine[]; contact: Contact; key: string }): Promise<PlacedOrders> {
   if (!/^[A-Za-z0-9_-]{8,80}$/.test(input.key ?? "")) throw new BizError("送出識別碼格式不正確，請重新整理再試");
   const idem = `shop:${input.key}`;
-  const dup = await t.order.findUnique({ where: { idempotencyKey: idem }, select: { id: true, orderNo: true, buyerId: true } });
-  if (dup) {
-    if (dup.buyerId !== buyerId) throw new BizError("送出識別碼重複，請重新整理再試");
-    return { orderId: dup.id, orderNo: dup.orderNo, duplicate: true };
+  const dups = (await t.order.findMany({ where: { idempotencyKey: { startsWith: idem } }, orderBy: { createdAt: "asc" }, select: { id: true, orderNo: true, buyerId: true, idempotencyKey: true } })).filter(
+    (d) => d.idempotencyKey === idem || d.idempotencyKey!.startsWith(`${idem}#`),
+  );
+  if (dups.length) {
+    if (dups.some((d) => d.buyerId !== buyerId)) throw new BizError("送出識別碼重複，請重新整理再試");
+    const orders = dups.map((d) => ({ orderId: d.id, orderNo: d.orderNo }));
+    return { ...orders[0], orders, code: null, duplicate: true };
   }
   const field = await getContactField(t);
   const contact = checkContact(input.contact, field);
@@ -157,7 +164,7 @@ export async function placeShopOrder(t: Tx, buyerId: string, input: { lines: Car
   if (lines.length > 60) throw new BizError("一次最多 60 種商品，請分開下單");
 
   const buyer = await t.buyer.findUnique({ where: { id: buyerId } });
-  if (!buyer || !buyer.lineUserId || buyer.mergedIntoId || buyer.archivedAt) throw new BizError("請重新用 LINE 登入");
+  if (!buyer || buyer.mergedIntoId || buyer.archivedAt || (!buyer.lineUserId && !buyer.email)) throw new BizError("請重新登入，或用訪客下單");
 
   const catIds = [...new Set(lines.map((l) => l.categoryId))];
   const settings = await t.shopCategory.findMany({ where: { categoryId: { in: catIds } }, include: { category: { select: { name: true, active: true } }, owner: { select: { id: true, lineUserId: true } } } });
@@ -220,31 +227,36 @@ export async function placeShopOrder(t: Tx, buyerId: string, input: { lines: Car
       salesChannel: buyer.salesChannel ?? contact.shipping,
     },
   });
-  const order = await createOrder(t, SYSTEM, {
-    buyerId,
-    source: SHOP_SOURCE,
-    confirmation: "CONFIRMED",
-    idempotencyKey: idem,
-    notes: [field.mode !== "none" && contact.phone ? `${field.label}：${contact.phone}` : null, `取貨：${contact.shipping}`, contact.note ? `客人備註：${contact.note}` : null].filter(Boolean).join("\n"),
-    items: lines.map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: info.get(`${l.categoryId}|${l.productId}`)!.price!, categoryId: l.categoryId })),
-  });
-  await t.order.update({ where: { id: order.id }, data: { salesChannel: contact.shipping } });
-  // 跟誰訂的＝這個系列設定的負責人（扣他的庫存、通知他）
-  for (const it of order.items) {
-    const owner = it.categoryId ? byCat.get(it.categoryId)?.ownerId : null;
-    if (owner) await t.orderItem.update({ where: { id: it.id }, data: { ownerKey: owner } });
-  }
-  await audit(t, SYSTEM, "shop.order", "Order", order.id, { buyerId, lines });
+  const code = newLookupCode();
+  const notes = [field.mode !== "none" && contact.phone ? `${field.label}：${contact.phone}` : null, `取貨：${contact.shipping}`, contact.note ? `客人備註：${contact.note}` : null, buyer.lineUserId ? null : `訪客下單（${buyer.email}）`].filter(Boolean).join("\n");
+  const placed: { orderId: string; orderNo: string }[] = [];
+  for (const [idx, cid] of catIds.entries()) {
+    const mine = lines.filter((l) => l.categoryId === cid);
+    const order = await createOrder(t, SYSTEM, {
+      buyerId,
+      source: SHOP_SOURCE,
+      confirmation: "CONFIRMED",
+      idempotencyKey: idx === 0 ? idem : `${idem}#${idx + 1}`,
+      notes,
+      items: mine.map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: info.get(`${l.categoryId}|${l.productId}`)!.price!, categoryId: l.categoryId })),
+    });
+    await t.order.update({ where: { id: order.id }, data: { salesChannel: contact.shipping, lookupHash: hashCode(code) } });
+    // 跟誰訂的＝這個系列設定的負責人（扣他的庫存、通知他）
+    const owner = byCat.get(cid)?.ownerId;
+    if (owner) await t.orderItem.updateMany({ where: { orderId: order.id }, data: { ownerKey: owner } });
+    await audit(t, SYSTEM, "shop.order", "Order", order.id, { buyerId, lines: mine, guest: !buyer.lineUserId });
 
-  const msgLines = (ids?: Set<string>) =>
-    order.items
-      .filter((it) => !ids || ids.has(it.id))
-      .map((it) => ({ name: info.get(`${it.categoryId}|${it.productId}`)?.name ?? it.productNameSnapshot, qty: it.qty, amount: it.unitPrice * it.qty - it.lineDiscount }));
-  await enqueueLine(t, buyer.lineUserId, [
-    orderCard({ tone: "confirmed", eyebrow: "ORDER CONFIRMED", title: "訂單已成立", orderNo: order.orderNo, series: await seriesNames(t, order.items.map((i) => i.categoryId)), lines: msgLines(), note: "採購、到貨、出貨都會在這裡通知你", total: order.receivableCache, url: `${appUrl()}/shop/orders` }),
-  ]);
-  await notifySellers(t, order, field.mode === "text" && contact.phone ? `${contact.name}（${contact.phone}）` : contact.name, byCat, msgLines);
-  return { orderId: order.id, orderNo: order.orderNo, duplicate: false };
+    const msgLines = (ids?: Set<string>) =>
+      order.items
+        .filter((it) => !ids || ids.has(it.id))
+        .map((it) => ({ name: info.get(`${it.categoryId}|${it.productId}`)?.name ?? it.productNameSnapshot, qty: it.qty, amount: it.unitPrice * it.qty - it.lineDiscount }));
+    const card = { tone: "confirmed" as const, eyebrow: "ORDER CONFIRMED", title: "訂單已成立", orderNo: order.orderNo, series: await seriesNames(t, [cid]), lines: msgLines(), note: buyer.lineUserId ? "採購、到貨、出貨都會在這裡通知你" : "採購、到貨、出貨都會寄信通知你，也可以用訂單編號＋查詢碼查詢貨況", total: order.receivableCache, url: `${appUrl()}/shop/orders` };
+    // 成立就要付款的系列：成立通知跟賣貨便連結合成一則
+    if (!(await payOnPlaced(t, order.id, { card, code }))) await notifyCustomer(t, buyer, card, { orderId: order.id, code });
+    await notifySellers(t, order, field.mode === "text" && contact.phone ? `${contact.name}（${contact.phone}）` : contact.name, byCat, msgLines);
+    placed.push({ orderId: order.id, orderNo: order.orderNo });
+  }
+  return { ...placed[0], orders: placed, code, duplicate: false };
 }
 
 /** 預訂系列的名稱（好幾個系列用「、」接起來） */
@@ -329,7 +341,7 @@ export async function promoteWaits(t: Tx, categoryId: string, productId: string)
   for (const w of waits) {
     const p = (await shopProducts(t, categoryId)).find((x) => x.productId === productId);
     if (!p || p.left <= 0 || p.price === null || p.bundleNeed || p.bundleAmount) break;
-    if (!w.buyer.lineUserId || w.buyer.mergedIntoId || w.buyer.archivedAt) {
+    if ((!w.buyer.lineUserId && !w.buyer.email) || w.buyer.mergedIntoId || w.buyer.archivedAt) {
       await t.shopWait.update({ where: { id: w.id }, data: { status: "CANCELLED" } });
       continue;
     }
@@ -346,9 +358,8 @@ export async function promoteWaits(t: Tx, categoryId: string, productId: string)
     await t.shopWait.update({ where: { id: w.id }, data: { status: "FILLED", orderId: order.id, qty } });
     await audit(t, SYSTEM, "shop.waitFilled", "Order", order.id, { waitId: w.id, productId, qty });
     const lines = [{ name: p.name, qty, amount: p.price * qty }];
-    await enqueueLine(t, w.buyer.lineUserId, [
-      orderCard({ tone: "waitlist", eyebrow: "GOOD NEWS", title: "候補成功！訂單已成立", orderNo: order.orderNo, series: await seriesNames(t, [categoryId]), lines, note: qty < w.qty ? `空出來的名額只有 ${qty} 個，先幫你訂 ${qty} 個` : undefined, total: order.receivableCache, url: `${appUrl()}/shop/orders` }),
-    ]);
+    const card = { tone: "waitlist" as const, eyebrow: "GOOD NEWS", title: "候補成功！訂單已成立", orderNo: order.orderNo, series: await seriesNames(t, [categoryId]), lines, note: qty < w.qty ? `空出來的名額只有 ${qty} 個，先幫你訂 ${qty} 個` : undefined, total: order.receivableCache, url: `${appUrl()}/shop/orders` };
+    if (!(await payOnPlaced(t, order.id, { card }))) await notifyCustomer(t, w.buyer, card, { orderId: order.id });
     const byCat = new Map([[categoryId, s]]);
     await notifySellers(t, order, `${w.buyer.name}（候補）`, byCat, () => lines);
     filled++;
@@ -360,12 +371,15 @@ export async function promoteWaits(t: Tx, categoryId: string, productId: string)
 
 /** 網站訂單的明細被取消後：遞補候補、通知客人。silent＝整單取消時由呼叫的地方一起通知 */
 export async function afterShopCancel(t: Tx, item: { orderId: string; categoryId: string | null; productId: string; productNameSnapshot: string }, qty: number, reason: string | null, receivableAfter: number, silent: boolean) {
-  const order = await t.order.findUnique({ where: { id: item.orderId }, select: { source: true, orderNo: true, buyer: { select: { lineUserId: true } } } });
+  const order = await t.order.findUnique({ where: { id: item.orderId }, select: { source: true, orderNo: true, buyer: { select: { lineUserId: true, email: true } } } });
   if (!order || order.source !== SHOP_SOURCE) return;
   if (!silent) {
-    await enqueueLine(t, order.buyer.lineUserId, [
-      orderCard({ tone: "cancelled", eyebrow: "ORDER CANCELLED", title: "部分商品已取消", orderNo: order.orderNo, series: await seriesNames(t, [item.categoryId]), lines: [{ name: item.productNameSnapshot, qty, strike: true }], note: reason ? `原因：${reason}` : undefined, totalLabel: "新的合計", total: receivableAfter, url: `${appUrl()}/shop/orders` }),
-    ]);
+    await notifyCustomer(
+      t,
+      order.buyer,
+      { tone: "cancelled", eyebrow: "ORDER CANCELLED", title: "部分商品已取消", orderNo: order.orderNo, series: await seriesNames(t, [item.categoryId]), lines: [{ name: item.productNameSnapshot, qty, strike: true }], note: reason ? `原因：${reason}` : undefined, totalLabel: "新的合計", total: receivableAfter, url: `${appUrl()}/shop/orders` },
+      { orderId: item.orderId },
+    );
   }
   if (item.categoryId && (await t.shopQuota.findUnique({ where: { categoryId_productId: { categoryId: item.categoryId, productId: item.productId } } }))) {
     await promoteWaits(t, item.categoryId, item.productId);
@@ -373,26 +387,32 @@ export async function afterShopCancel(t: Tx, item: { orderId: string; categoryId
 }
 
 export async function notifyShopOrderCancelled(t: Tx, orderId: string, cancelled: { name: string; qty: number }[], reason: string | null, receivableAfter: number) {
-  const order = await t.order.findUnique({ where: { id: orderId }, select: { source: true, orderNo: true, buyer: { select: { lineUserId: true } }, items: { select: { categoryId: true } } } });
+  const order = await t.order.findUnique({ where: { id: orderId }, select: { source: true, orderNo: true, buyer: { select: { lineUserId: true, email: true } }, items: { select: { categoryId: true } } } });
   if (!order || order.source !== SHOP_SOURCE || !cancelled.length) return;
-  await enqueueLine(t, order.buyer.lineUserId, [
-    orderCard({ tone: "cancelled", eyebrow: "ORDER CANCELLED", title: receivableAfter > 0 ? "部分商品已取消" : "訂單已取消", orderNo: order.orderNo, series: await seriesNames(t, order.items.map((i) => i.categoryId)), lines: cancelled.map((c) => ({ ...c, strike: true })), note: reason ? `原因：${reason}` : undefined, totalLabel: "新的合計", total: receivableAfter, url: `${appUrl()}/shop/orders` }),
-  ]);
+  await notifyCustomer(
+    t,
+    order.buyer,
+    { tone: "cancelled", eyebrow: "ORDER CANCELLED", title: receivableAfter > 0 ? "部分商品已取消" : "訂單已取消", orderNo: order.orderNo, series: await seriesNames(t, order.items.map((i) => i.categoryId)), lines: cancelled.map((c) => ({ ...c, strike: true })), note: reason ? `原因：${reason}` : undefined, totalLabel: "新的合計", total: receivableAfter, url: `${appUrl()}/shop/orders` },
+    { orderId },
+  );
 }
 
 /** 出貨後通知（網站訂單才送） */
 export async function notifyShipped(t: Tx, shipmentId: string) {
   const sh = await t.shipment.findUnique({
     where: { id: shipmentId },
-    include: { buyer: { select: { lineUserId: true } }, items: { include: { orderItem: { select: { productNameSnapshot: true, categoryId: true, order: { select: { orderNo: true, source: true } } } } } } },
+    include: { buyer: { select: { lineUserId: true, email: true } }, items: { include: { orderItem: { select: { productNameSnapshot: true, categoryId: true, orderId: true, order: { select: { orderNo: true, source: true } } } } } } },
   });
-  if (!sh?.buyer.lineUserId) return;
+  if (!sh || (!sh.buyer.lineUserId && !sh.buyer.email)) return;
   const web = sh.items.filter((i) => i.orderItem.order.source === SHOP_SOURCE);
   if (!web.length) return;
   const orderNos = [...new Set(web.map((i) => i.orderItem.order.orderNo))].join("、");
-  await enqueueLine(t, sh.buyer.lineUserId, [
-    orderCard({ tone: "shipped", eyebrow: "SHIPPED", title: "商品已出貨", orderNo: orderNos, series: await seriesNames(t, web.map((i) => i.orderItem.categoryId)), lines: web.map((i) => ({ name: i.orderItem.productNameSnapshot, qty: i.qty })), note: [sh.method ? `寄送方式：${sh.method}` : null, sh.trackingNo ? `單號：${sh.trackingNo}` : null].filter(Boolean).join("\n") || undefined, url: `${appUrl()}/shop/orders` }),
-  ]);
+  await notifyCustomer(
+    t,
+    sh.buyer,
+    { tone: "shipped", eyebrow: "SHIPPED", title: "商品已出貨", orderNo: orderNos, series: await seriesNames(t, web.map((i) => i.orderItem.categoryId)), lines: web.map((i) => ({ name: i.orderItem.productNameSnapshot, qty: i.qty })), note: [sh.method ? `寄送方式：${sh.method}` : null, sh.trackingNo ? `單號：${sh.trackingNo}` : null].filter(Boolean).join("\n") || undefined, url: `${appUrl()}/shop/orders` },
+    { orderId: web[0].orderItem.orderId },
+  );
 }
 
 // ───────────── 客人的訂單 ─────────────
@@ -404,6 +424,7 @@ export type CustomerOrder = {
   stage: "CANCELLED" | "PLACED" | "BUYING" | "ARRIVED" | "SHIPPED" | "DONE";
   total: number;
   lines: { name: string; qty: number; amount: number; image: string | null; cancelled: number }[];
+  pay: { url: string; dueAt: Date } | null; // 還沒在賣貨便下單、還沒逾期
 };
 
 export async function customerOrders(db: Db, buyerId: string): Promise<CustomerOrder[]> {
@@ -413,7 +434,12 @@ export async function customerOrders(db: Db, buyerId: string): Promise<CustomerO
     take: 60,
     include: { items: { include: { product: { select: { imageUrl: true } } } } },
   });
+  const cids = [...new Set(orders.flatMap((o) => o.items.map((i) => i.categoryId)).filter((x): x is string => !!x))];
+  const payUrls = new Map((await db.shopCategory.findMany({ where: { categoryId: { in: cids } }, select: { categoryId: true, payUrl: true } })).map((c) => [c.categoryId, c.payUrl]));
+  const now = new Date();
   return orders.map((o) => {
+    const payUrl = payUrls.get(o.items.find((i) => i.categoryId)?.categoryId ?? "");
+    const pay = o.source === SHOP_SOURCE && payUrl && o.payDueAt && o.payDueAt > now && !o.myshipAt && o.confirmation !== "CANCELLED" ? { url: payUrl, dueAt: o.payDueAt } : null;
     const open = o.items.reduce((a, i) => a + Math.max(0, i.qty - i.cancelledQtyCache - i.shippedQtyCache), 0);
     const reserved = o.items.reduce((a, i) => a + Math.min(i.reservedQtyCache, Math.max(0, i.qty - i.cancelledQtyCache - i.shippedQtyCache)), 0);
     const shipped = o.items.reduce((a, i) => a + i.shippedQtyCache, 0);
@@ -432,6 +458,7 @@ export async function customerOrders(db: Db, buyerId: string): Promise<CustomerO
       stage,
       total: o.receivableCache,
       lines: o.items.map((i) => ({ name: i.productNameSnapshot, qty: i.qty, amount: i.unitPrice * i.qty - i.lineDiscount, image: i.product.imageUrl, cancelled: i.cancelledQtyCache })),
+      pay,
     };
   });
 }
@@ -443,7 +470,7 @@ export async function customerWaits(db: Db, buyerId: string) {
 
 // ───────────── 後台設定 ─────────────
 
-export type ShopCategoryInput = { enabled: boolean; openAt: Date | null; perPersonLimit: number | null; ownerId: string | null; imageUrl: string | null; intro: string | null };
+export type ShopCategoryInput = { enabled: boolean; openAt: Date | null; perPersonLimit: number | null; ownerId: string | null; imageUrl: string | null; intro: string | null; payUrl?: string | null; payTiming?: "ORDER" | "ARRIVAL"; payHours?: number };
 
 export async function saveShopCategory(t: Tx, actor: Actor, categoryId: string, input: ShopCategoryInput) {
   const cat = await t.category.findUnique({ where: { id: categoryId } });
@@ -454,7 +481,21 @@ export async function saveShopCategory(t: Tx, actor: Actor, categoryId: string, 
   if (imageUrl && !/^https:\/\/\S+$/.test(imageUrl) && !/^\/api\/shop\/img\/[a-z0-9]+$/.test(imageUrl)) throw new BizError("圖片網址要用 https:// 開頭");
   const intro = emptyToNull(input.intro);
   if (intro && intro.length > 500) throw new BizError("說明最多 500 字");
-  const data = { enabled: input.enabled, openAt: input.openAt, perPersonLimit: input.perPersonLimit, ownerId: input.ownerId, imageUrl, intro };
+  const payUrl = input.payUrl === undefined ? undefined : emptyToNull(input.payUrl);
+  if (payUrl && (!/^https:\/\/\S+$/.test(payUrl) || payUrl.length > 1000)) throw new BizError("賣貨便連結要用 https:// 開頭");
+  if (input.payHours !== undefined && (!Number.isInteger(input.payHours) || input.payHours < 1 || input.payHours > 168)) throw new BizError("下單期限要是 1～168 小時");
+  if (input.payTiming !== undefined && !["ORDER", "ARRIVAL"].includes(input.payTiming)) throw new BizError("付款時機不對");
+  const data = {
+    enabled: input.enabled,
+    openAt: input.openAt,
+    perPersonLimit: input.perPersonLimit,
+    ownerId: input.ownerId,
+    imageUrl,
+    intro,
+    ...(payUrl !== undefined ? { payUrl } : {}),
+    ...(input.payTiming ? { payTiming: input.payTiming } : {}),
+    ...(input.payHours !== undefined ? { payHours: input.payHours } : {}),
+  };
   const before = await t.shopCategory.findUnique({ where: { categoryId } });
   // 換掉或拿掉自己上傳的舊圖：一起刪掉，不佔資料庫空間
   const oldId = /^\/api\/shop\/img\/([a-z0-9]+)$/.exec(before?.imageUrl ?? "")?.[1];
@@ -602,14 +643,12 @@ export async function setTypeImage(t: Tx, actor: Actor, categoryId: string, prod
 
 /** 商品從訂購頁拿掉：候補全部取消，用 LINE 告訴排候補的人 */
 async function dropWaits(t: Tx, categoryId: string, productId: string) {
-  const waits = await t.shopWait.findMany({ where: { categoryId, productId, status: "WAITING" }, include: { buyer: { select: { lineUserId: true } }, product: { select: { name: true } } } });
+  const waits = await t.shopWait.findMany({ where: { categoryId, productId, status: "WAITING" }, include: { buyer: { select: { lineUserId: true, email: true } }, product: { select: { name: true } } } });
   if (!waits.length) return;
   await t.shopWait.updateMany({ where: { id: { in: waits.map((w) => w.id) } }, data: { status: "CANCELLED" } });
   const series = await seriesNames(t, [categoryId]);
   for (const w of waits) {
-    await enqueueLine(t, w.buyer.lineUserId, [
-      orderCard({ tone: "cancelled", eyebrow: "WAITING LIST", title: "候補已取消", orderNo: "（候補）", series, lines: [{ name: w.product.name, qty: w.qty, strike: true }], note: "這個商品這次不開放了，謝謝你排候補！", url: `${appUrl()}/shop/orders` }),
-    ]);
+    await notifyCustomer(t, w.buyer, { tone: "cancelled", eyebrow: "WAITING LIST", title: "候補已取消", orderNo: "（候補）", series, lines: [{ name: w.product.name, qty: w.qty, strike: true }], note: "這個商品這次不開放了，謝謝你排候補！", url: `${appUrl()}/shop/orders` });
   }
 }
 

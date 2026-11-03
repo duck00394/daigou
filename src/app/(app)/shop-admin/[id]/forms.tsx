@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { Button, inputCls, TimeInput24, useLeaveGuard, useRun } from "@/components/client";
 import { saveQuotasAction, saveShopCategoryAction, setTypeImageAction } from "@/actions/shop";
 
-type Settings = { enabled: boolean; openDate: string; openTime: string; perPersonLimit: number | null; ownerId: string | null; imageUrl: string; intro: string };
+type Settings = { enabled: boolean; openDate: string; openTime: string; perPersonLimit: number | null; ownerId: string | null; imageUrl: string; intro: string; payUrl: string; payTiming: "ORDER" | "ARRIVAL"; payHours: number };
 
 export function SettingsForm({ categoryId, ops, initial, isNew }: { categoryId: string; ops: { id: string; name: string }[]; initial: Settings; isNew: boolean }) {
   const [f, setF] = useState(initial);
@@ -13,7 +13,7 @@ export function SettingsForm({ categoryId, ops, initial, isNew }: { categoryId: 
   useLeaveGuard(JSON.stringify(f) !== JSON.stringify(saved));
   const save = () =>
     run(
-      () => saveShopCategoryAction(categoryId, { enabled: f.enabled, openDate: f.openDate, openTime: f.openTime, perPersonLimit: f.perPersonLimit, ownerId: f.ownerId, imageUrl: f.imageUrl || null, intro: f.intro || null }),
+      () => saveShopCategoryAction(categoryId, { enabled: f.enabled, openDate: f.openDate, openTime: f.openTime, perPersonLimit: f.perPersonLimit, ownerId: f.ownerId, imageUrl: f.imageUrl || null, intro: f.intro || null, payUrl: f.payUrl.trim() || null, payTiming: f.payTiming, payHours: f.payHours }),
       { success: f.enabled ? "已儲存，客人看得到了" : "已儲存（還沒開放，客人看不到）", onOk: () => setSaved(f) },
     );
   return (
@@ -46,6 +46,32 @@ export function SettingsForm({ categoryId, ops, initial, isNew }: { categoryId: 
         給客人看的說明（選填，例如預計到貨時間、付款方式）
         <textarea rows={3} maxLength={500} className={`${inputCls} mt-1`} value={f.intro} onChange={(e) => setF({ ...f, intro: e.target.value })} />
       </label>
+      <div className="space-y-2 rounded-lg border border-line-2 p-3">
+        <div className="text-[14px] font-semibold">賣貨便付款</div>
+        <label className="block text-[13px] font-medium text-ink-2">
+          賣貨便賣場連結（這個系列共用一個；空白＝不自動發付款通知）
+          <input type="url" inputMode="url" className={`${inputCls} mt-1`} value={f.payUrl} placeholder="https://myship.7-11.com.tw/…" onChange={(e) => setF({ ...f, payUrl: e.target.value })} />
+        </label>
+        <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-1.5">
+          <label className="block text-[13px] font-medium text-ink-2">
+            什麼時候要客人下單
+            <select className={`${inputCls} mt-1`} value={f.payTiming} onChange={(e) => setF({ ...f, payTiming: e.target.value as Settings["payTiming"] })}>
+              <option value="ORDER">訂單成立就下單</option>
+              <option value="ARRIVAL">到貨後才下單</option>
+            </select>
+          </label>
+          <label className="block text-[13px] font-medium text-ink-2">
+            幾小時內
+            <select className={`${inputCls} mt-1`} value={f.payHours} onChange={(e) => setF({ ...f, payHours: Number(e.target.value) })}>
+              {[1, 2, 3, 6, 12, 24, 48, 72].map((h) => <option key={h} value={h}>{h} 小時</option>)}
+            </select>
+          </label>
+        </div>
+        <p className="text-[12px] text-mute">
+          {f.payTiming === "ORDER" ? "訂單成立（或候補遞補成立）時，自動把賣場連結傳給客人，" : "到貨後在「訂購頁付款」按「已到貨，發付款通知」，系統把賣場連結傳給客人，"}
+          <b className="text-bad">{f.payHours} 小時</b>內沒在後台按「賣貨便已下單」就自動取消，名額給下一位候補。
+        </p>
+      </div>
       <Button variant="primary" className="w-full" loading={pending} disabled={!dirty} onClick={save}>儲存設定</Button>
     </section>
   );

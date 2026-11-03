@@ -84,9 +84,10 @@ export async function exchangeCode(code: string, nonce: string): Promise<LinePro
 export type LineMessage = Record<string, unknown>;
 
 /** 在交易裡登記要送的訊息；沒設定推播時不登記（之後設定好也不會補送舊訊息） */
-export async function enqueueLine(t: Tx, to: string | null | undefined, messages: LineMessage[]) {
+export async function enqueueLine(t: Tx, to: string | null | undefined, messages: LineMessage[], dedupeKey?: string) {
   if (!to || !pushConfigured() || messages.length === 0) return null;
-  return t.lineOutbox.create({ data: { to, messages: messages as object[] } });
+  if (dedupeKey && (await t.lineOutbox.findUnique({ where: { dedupeKey } }))) return null;
+  return t.lineOutbox.create({ data: { to, messages: messages as object[], dedupeKey: dedupeKey ?? null } });
 }
 
 async function pushNow(to: string, messages: unknown) {

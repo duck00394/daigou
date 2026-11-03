@@ -69,3 +69,42 @@ export async function readState(state: string | null): Promise<{ nonce: string; 
     return null;
   }
 }
+
+// ───────────── 這支手機下過的訂單（訪客不用登入也能在「我的訂單」看到） ─────────────
+
+export const MY_ORDERS_COOKIE = "dg_my";
+const MY_MAX = 40;
+
+export async function myOrderIds(): Promise<string[]> {
+  const v = (await cookies()).get(MY_ORDERS_COOKIE)?.value;
+  if (!v || v.length > 4000) return [];
+  try {
+    const { payload } = await jwtVerify(v, secret(), { algorithms: ["HS256"] });
+    return Array.isArray(payload.o) ? payload.o.filter((x): x is string => typeof x === "string").slice(0, MY_MAX) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 把訂單記到這支手機（只在下單成功、或用查詢碼／Email 連結查到時呼叫） */
+export async function rememberOrders(ids: string[]) {
+  const cur = await myOrderIds();
+  const list = [...new Set([...ids, ...cur])].slice(0, MY_MAX);
+  const token = await new SignJWT({ o: list }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("365d").sign(secret());
+  (await cookies()).set(MY_ORDERS_COOKIE, token, { httpOnly: true, secure: secureCookie(), sameSite: "lax", path: "/", maxAge: 365 * 86400 });
+}
+
+export async function forgetOrders() {
+  (await cookies()).delete(MY_ORDERS_COOKIE);
+}
+
+/** 訂購頁的查詢次數限制（猜查詢碼、一直要求寄信） */
+export async function shopRateLimited(kind: "lookup" | "mail", max: number, minutes: number) {
+  const { headers } = await import("next/headers");
+  const h = await headers();
+  const ip = (h.get("x-forwarded-for")?.split(",")[0] ?? h.get("x-real-ip") ?? "local").trim();
+  const key = `shop:${kind}:${ip}`;
+  const since = new Date(Date.now() - minutes * 60_000);
+  const n = await prisma.loginAttempt.count({ where: { key, success: false, createdAt: { gte: since } } });
+  return { limited: n >= max, record: (ok: boolean) => prisma.loginAttempt.create({ data: { key, success: ok } }) };
+}

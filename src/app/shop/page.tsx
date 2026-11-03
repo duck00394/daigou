@@ -77,13 +77,18 @@ export default async function ShopHome({ searchParams }: { searchParams: Promise
       )}
 
       <footer className="px-4 pt-10 pb-4 text-center text-[12px] text-shop-mute">
-        {customer ? (
-          <>
-            <Link href="/shop/orders" className="underline">我的訂單</Link>　·　<a href="/shop/logout" className="underline">登出</a>
-          </>
-        ) : (
-          "用 LINE 登入就能下單，訂單會傳到 LINE 聊天室"
-        )}
+        <div>
+          <Link href="/shop/orders" className="underline">我的訂單・查詢訂單</Link>
+          {customer && (
+            <>
+              　·　<a href="/shop/logout" className="underline">登出</a>
+            </>
+          )}
+        </div>
+        <div className="mt-2">
+          <Link href="/shop/rules" className="underline">交易規則</Link>　·　<Link href="/shop/privacy" className="underline">隱私權政策</Link>
+        </div>
+        {!customer && <p className="mt-2">不用註冊，訪客也能下單；用 LINE 登入的話訂單會傳到 LINE 聊天室</p>}
       </footer>
       <CartBar />
     </>

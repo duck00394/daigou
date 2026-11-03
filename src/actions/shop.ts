@@ -15,6 +15,9 @@ const catSchema = z.object({
   ownerId: z.string().max(64).nullable(),
   imageUrl: z.string().max(1000).nullable(),
   intro: z.string().max(1000).nullable(),
+  payUrl: z.string().max(1000).nullable(),
+  payTiming: z.enum(["ORDER", "ARRIVAL"]),
+  payHours: z.number().int(),
 });
 
 export async function saveShopCategoryAction(categoryId: string, raw: z.infer<typeof catSchema>) {
@@ -25,7 +28,7 @@ export async function saveShopCategoryAction(categoryId: string, raw: z.infer<ty
       openAt = taipeiToUtc(v.openDate, v.openTime || "00:00");
       if (!openAt) throw new BizError("開賣時間格式不對");
     }
-    await tx((t) => shop.saveShopCategory(t, a, categoryId, { enabled: v.enabled, openAt, perPersonLimit: v.perPersonLimit, ownerId: v.ownerId, imageUrl: v.imageUrl, intro: v.intro }));
+    await tx((t) => shop.saveShopCategory(t, a, categoryId, { enabled: v.enabled, openAt, perPersonLimit: v.perPersonLimit, ownerId: v.ownerId, imageUrl: v.imageUrl, intro: v.intro, payUrl: v.payUrl, payTiming: v.payTiming, payHours: v.payHours }));
     revalidatePath(`/shop-admin/${categoryId}`);
     revalidatePath("/shop");
     return true;
@@ -89,4 +92,56 @@ export async function sendSaleLinkAction(orderId: string, url: string, note: str
     if (!row?.sentAt) throw new BizError(`LINE 沒有送出去${row?.error ? `：${row.error.slice(0, 80)}` : "，請稍後再試"}`);
     return { buyer: r.buyer };
   });
+}
+
+// ───────────── 訂購頁付款（賣貨便） ─────────────
+
+const idSchema = z.string().max(64);
+
+export async function setShopInfoAction(threads: string, supportEmail: string) {
+  return run(async (a) => {
+    const { setShopInfo } = await import("@/server/services/shop-pay");
+    const r = await tx((t) => setShopInfo(t, a, { threads: z.string().max(100).parse(threads), supportEmail: z.string().max(254).parse(supportEmail) }));
+    revalidatePath("/shop", "layout");
+    revalidatePath("/shop-admin");
+    return r;
+  });
+}
+
+async function payOp<T>(fn: (t: Parameters<Parameters<typeof tx>[0]>[0], a: { userId: string | null }) => Promise<T>) {
+  return run(async (a) => {
+    const r = await tx((t) => fn(t, a), { timeout: 30_000 });
+    revalidatePath("/shop-pay");
+    return r;
+  });
+}
+
+export async function markMyshipAction(orderId: string, ref: string | null) {
+  const { markMyship } = await import("@/server/services/shop-pay");
+  return payOp((t, a) => markMyship(t, a, idSchema.parse(orderId), ref === null ? null : z.string().max(80).parse(ref)));
+}
+
+export async function undoMyshipAction(orderId: string) {
+  const { undoMyship } = await import("@/server/services/shop-pay");
+  return payOp((t, a) => undoMyship(t, a, idSchema.parse(orderId)));
+}
+
+export async function resendPayAction(orderId: string) {
+  const { resendPay } = await import("@/server/services/shop-pay");
+  return payOp((t, a) => resendPay(t, a, idSchema.parse(orderId)));
+}
+
+export async function extendPayAction(orderId: string, hours: number) {
+  const { extendPay } = await import("@/server/services/shop-pay");
+  return payOp((t, a) => extendPay(t, a, idSchema.parse(orderId), z.number().int().parse(hours)));
+}
+
+export async function startArrivalPayAction(orderIds: string[]) {
+  const { startArrivalPay } = await import("@/server/services/shop-pay");
+  return payOp((t, a) => startArrivalPay(t, a, z.array(idSchema).max(300).parse(orderIds)));
+}
+
+export async function cancelOverdueAction(orderId: string) {
+  const { cancelOrder } = await import("@/server/services/orders");
+  return payOp((t, a) => cancelOrder(t, a, { orderId: idSchema.parse(orderId), reason: "超過時間沒有用賣貨便下單" }));
 }

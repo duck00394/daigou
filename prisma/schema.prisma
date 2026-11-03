@@ -368,6 +368,8 @@ model Buyer {
   lineUserId     String?         @unique
   linePicture    String?
   shopWaits      ShopWait[]
+  // 訂購頁：訪客下單的 Email（小寫）；同一個 Email 算同一位客人（每人限購用）
+  email          String?         @unique
 
   @@index([name])
 }
@@ -522,6 +524,12 @@ model Order {
   cancelReason       String?
   importBatchId      String?
   idempotencyKey     String?           @unique // 手動建單的防重複送出識別碼
+  // ── 訂購頁：查詢與付款期限 ──
+  lookupHash         String? // 查詢碼的雜湊（只存雜湊；同一次結帳的幾張訂單共用一組查詢碼）
+  payDueAt           DateTime? // 要在這個時間前用賣貨便下單（空白＝還沒開始算）
+  payNoticeAt        DateTime? // 付款通知（賣貨便連結）第一次發出的時間
+  myshipAt           DateTime? // 後台確認客人已經在賣貨便下單
+  myshipRef          String? // 賣貨便訂單編號（選填）
   // ── 以下為快取，依流水重新計算 ──
   statusCache        OrderStatus       @default(CONFIRMED)
   paymentStatusCache PaymentStatus     @default(UNPAID)
@@ -544,6 +552,7 @@ model Order {
   @@index([orderedAt])
   @@index([statusCache])
   @@index([paymentStatusCache])
+  @@index([payDueAt])
 }
 
 // 採購／到貨狀態中需人為設定的部分；已到貨、部分到貨、已取消由數量推算
@@ -1175,9 +1184,17 @@ model ShopCategory {
   owner          Operator? @relation(fields: [ownerId], references: [id])
   imageUrl       String? // 系列主圖網址
   intro          String? // 給客人看的說明（預計到貨等）
+  payUrl         String? // 賣貨便賣場連結（這個系列共用一個通用賣場）
+  payTiming      ShopPayTiming @default(ORDER) // 什麼時候要客人用賣貨便下單
+  payHours       Int           @default(1) // 幾小時內要下單；逾期自動取消並遞補候補
   sortOrder      Int       @default(0)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+}
+
+enum ShopPayTiming {
+  ORDER // 訂單成立就要下單
+  ARRIVAL // 到貨（保留給這筆訂單）後才要下單
 }
 
 // 每個商品（角色）開放幾個：跟實際庫存分開算，可以先接單再去買
@@ -1224,6 +1241,7 @@ model ShopWait {
 // 要送的 LINE 訊息：跟資料寫在同一個交易裡，交易成功後才送（送失敗會記下原因，最多試 3 次）
 model LineOutbox {
   id        String    @id @default(cuid())
+  dedupeKey String?   @unique // 同一種通知只送一次（例：付款通知）
   to        String
   messages  Json
   tries     Int       @default(0)
@@ -1241,4 +1259,20 @@ model ShopImage {
   data      Bytes
   bytes     Int
   createdAt DateTime @default(now())
+}
+
+// 要寄的 Email（訪客下單的客人）：跟 LineOutbox 一樣，跟資料寫在同一個交易，成功後才寄，失敗最多試 3 次
+model MailOutbox {
+  id        String    @id @default(cuid())
+  dedupeKey String?   @unique
+  to        String
+  subject   String
+  html      String
+  text      String
+  tries     Int       @default(0)
+  sentAt    DateTime?
+  error     String?
+  createdAt DateTime  @default(now())
+
+  @@index([sentAt, createdAt])
 }

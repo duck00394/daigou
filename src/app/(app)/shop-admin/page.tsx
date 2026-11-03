@@ -7,12 +7,15 @@ import { getContactField, getShopName, isOpen } from "@/server/services/shop";
 import { PageHeader, Section, Badge } from "@/components/ui";
 import { CopyButton } from "@/components/copy-button";
 import { taipeiDayLabel, taipeiParts } from "@/lib/taipei";
-import { ContactFieldForm, OpenSeries, OperatorLine, ShopName } from "./parts";
+import { ContactFieldForm, OpenSeries, OperatorLine, ShopInfoForm, ShopName } from "./parts";
+import { getShopInfo } from "@/server/services/shop-pay";
+import { mailConfigured, mailEnv } from "@/server/mail";
 
 export const metadata = { title: "訂購頁" };
 
 export default async function ShopAdmin() {
   await requireUser();
+  const [info, mailFailed] = await Promise.all([getShopInfo(prisma), prisma.mailOutbox.count({ where: { sentAt: null, tries: { gte: 3 } } })]);
   const [name, shops, cats, ops, lineBuyers, failed, field] = await Promise.all([
     getShopName(prisma),
     prisma.shopCategory.findMany({ include: { category: { select: { name: true, active: true } }, owner: { select: { name: true } } }, orderBy: [{ enabled: "desc" }, { updatedAt: "desc" }] }),
@@ -31,7 +34,7 @@ export default async function ShopAdmin() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="訂購頁（客人下單）" sub="客人用 LINE 登入自己下單，訂單會直接進「訂單」，也會算進庫存的客人訂" />
+      <PageHeader title="訂購頁（客人下單）" sub="客人用訪客或 LINE 登入自己下單，訂單會直接進「訂單」，也會算進庫存的客人訂" actions={<Link href="/shop-pay" className="text-[14px] text-ai underline">訂購頁付款</Link>} />
 
       <Section title="訂購頁網址">
         <div className="flex flex-wrap items-center gap-2">
@@ -41,6 +44,27 @@ export default async function ShopAdmin() {
         <p className="mt-2 text-[13px] text-mute">貼到 LINE 官方帳號的圖文選單或社群公告，客人點了就能下單。</p>
         <div className="mt-3"><ShopName name={name} /></div>
         <div className="mt-3"><ContactFieldForm mode={field.mode} label={field.label} /></div>
+      </Section>
+
+      <Section title="客服資料">
+        <ShopInfoForm threads={info.threads} supportEmail={info.supportEmail} />
+        <p className="mt-2 text-[13px] text-mute">
+          客人會看到的頁面：<a href="/shop/rules" target="_blank" rel="noreferrer" className="text-ai underline">交易規則</a>、<a href="/shop/privacy" target="_blank" rel="noreferrer" className="text-ai underline">隱私權政策</a>
+        </p>
+      </Section>
+
+      <Section title="Email 通知（訪客下單的客人）">
+        <ul className="space-y-1.5 text-[14px]">
+          <li className="flex flex-wrap items-center gap-2">{mailConfigured() ? <Badge tone="good">已設定</Badge> : <Badge tone="bad">還沒設定</Badge>} 用 Gmail 寄信（GMAIL_USER、GMAIL_APP_PASSWORD）{mailConfigured() && <span className="text-mute">寄件人：{mailEnv().user}</span>}</li>
+        </ul>
+        {!mailConfigured() && (
+          <ol className="mt-2 list-decimal space-y-1 pl-5 text-[13px] text-ink-2">
+            <li>Google 帳號要先開「兩步驟驗證」。</li>
+            <li>到 Google 帳號的「應用程式密碼」建立一組（16 個字）。</li>
+            <li>在 Vercel 專案的環境變數加上 GMAIL_USER（Gmail 地址）和 GMAIL_APP_PASSWORD（那 16 個字），重新部署。</li>
+          </ol>
+        )}
+        {mailFailed > 0 && <p className="mt-2 text-[13px] text-bad">有 {mailFailed} 封信寄不出去（可能是 Email 打錯，或應用程式密碼不對）。</p>}
       </Section>
 
       <Section title="開放訂購的系列">

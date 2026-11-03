@@ -1,13 +1,20 @@
 import Link from "next/link";
 import { prisma } from "@/server/db";
-import { currentCustomer } from "@/server/shop-auth";
+import { currentCustomer, myOrderIds } from "@/server/shop-auth";
 import { customerOrders, customerWaits, type CustomerOrder } from "@/server/services/shop";
+import { orderToken, sweepShopPay } from "@/server/services/shop-pay";
+import { orderView } from "@/server/services/shop-view";
+import { Lines, PayBox, StatusTag } from "../o/parts";
+import { dueLabel } from "@/server/services/shop-pay";
+
+const DueText = ({ at }: { at: Date }) => <>{dueLabel(at)}</>;
 import { taipeiParts } from "@/lib/taipei";
 import { Pic } from "../cart";
 import { BackCircle, Eyebrow, SerifTitle } from "../ui";
-import { CancelWait, OrderFilter } from "./parts";
+import { CancelWait, LookupForm, MailMeForm, OrderFilter } from "./parts";
 
 export const metadata = { title: "我的訂單" };
+export const dynamic = "force-dynamic";
 
 const STEPS = ["已成立", "採購中", "已到貨", "已出貨"];
 const STAGE: Record<CustomerOrder["stage"], { label: string; step: number; cls: string }> = {
@@ -19,20 +26,49 @@ const STAGE: Record<CustomerOrder["stage"], { label: string; step: number; cls: 
   CANCELLED: { label: "已取消", step: -1, cls: "bg-[#ece5dd] text-shop-ink-2" },
 };
 
-export default async function MyOrders({ searchParams }: { searchParams: Promise<{ show?: string }> }) {
-  const { show = "open" } = await searchParams;
+export default async function MyOrders({ searchParams }: { searchParams: Promise<{ show?: string; expired?: string }> }) {
+  const { show = "open", expired } = await searchParams;
+  await sweepShopPay().catch(() => 0);
   const customer = await currentCustomer();
-  if (!customer)
+  if (!customer) {
+    // 訪客：這支手機下過（或查過）的訂單＋查詢＋寄給我
+    const ids = await myOrderIds();
+    const views = (await Promise.all(ids.map((id) => orderView(prisma, id)))).filter((v): v is NonNullable<typeof v> => !!v).sort((a, b) => b.orderedAt.getTime() - a.orderedAt.getTime());
     return (
-      <div className="flex min-h-[70dvh] flex-col items-center justify-center gap-4 px-6 text-center">
-        <SerifTitle>我的訂單</SerifTitle>
-        <p className="text-[14px] text-shop-mute">用 LINE 登入就能看到你的訂單</p>
-        <a href="/shop/login?next=/shop/orders" className="flex h-12 items-center gap-2 rounded-full bg-[#078a3e] px-6 text-[16px] font-bold text-white">
-          <span className="rounded-full bg-white px-1.5 py-0.5 text-[11px] font-bold text-[#078a3e]">LINE</span>用 LINE 登入
-        </a>
-        <Link href="/shop" className="text-[14px] text-shop-rose-2 underline">回商店</Link>
-      </div>
+      <>
+        <header className="flex items-center gap-3 px-4 py-3">
+          <BackCircle href="/shop" label="回商店" />
+          <div className="flex-1">
+            <Eyebrow>MY ORDERS</Eyebrow>
+            <SerifTitle size={22}>我的訂單</SerifTitle>
+          </div>
+        </header>
+        <div className="flex flex-col gap-4 px-4 pt-2 pb-6">
+          {expired && <p role="alert" className="rounded-[14px] bg-[#f8e1dd] px-3.5 py-2.5 text-[13px] font-bold text-[#a63a2e]">信裡的連結已經過期了，請在下面重新寄一次。</p>}
+          {views.length > 0 && <p className="text-[13px] text-shop-mute">這支手機下過或查過的訂單</p>}
+          {views.map((v) => (
+            <div key={v.id} className="flex flex-col gap-3 rounded-[20px] border border-shop-line bg-white p-4 shadow-[0_6px_18px_rgba(120,70,60,0.08)]">
+              <div className="flex items-center justify-between gap-2">
+                <span className="num text-[15px] font-bold">訂單 {v.orderNo}</span>
+                <StatusTag v={v} />
+              </div>
+              <Lines v={v} />
+              <PayBox v={v} />
+              <Link href={`/shop/o/${v.id}?t=${orderToken(v.id)}`} className="flex h-11 items-center justify-center rounded-full border border-[#d8c9bc] text-[14px] text-shop-ink-2">查看貨況與訂單憑證</Link>
+            </div>
+          ))}
+          <LookupForm />
+          <MailMeForm />
+          <div className="flex flex-col items-center gap-2 rounded-[20px] border border-shop-line bg-white p-4 text-center">
+            <p className="text-[13px] text-shop-mute">用 LINE 下單的話，登入就能看到所有訂單</p>
+            <a href="/shop/login?next=/shop/orders" className="flex h-11 items-center gap-2 rounded-full bg-[#078a3e] px-5 text-[15px] font-bold text-white">
+              <span className="rounded-full bg-white px-1.5 py-0.5 text-[11px] font-bold text-[#078a3e]">LINE</span>用 LINE 登入
+            </a>
+          </div>
+        </div>
+      </>
     );
+  }
   const [orders, waits] = await Promise.all([customerOrders(prisma, customer.id), customerWaits(prisma, customer.id)]);
   const groups = {
     open: orders.filter((o) => ["PLACED", "BUYING", "ARRIVED", "SHIPPED"].includes(o.stage)),
@@ -87,7 +123,7 @@ export default async function MyOrders({ searchParams }: { searchParams: Promise
                 <div className="flex items-center justify-between border-b border-[#f1e9e0] px-4 py-3.5">
                   <div>
                     <div className="text-[12px] text-shop-mute">{at.date.slice(5).replace("-", "/")} {at.time}</div>
-                    <div className="text-[15px] font-bold">訂單 {o.orderNo}</div>
+                    <Link href={`/shop/o/${o.id}?t=${orderToken(o.id)}`} className="text-[15px] font-bold underline decoration-[#e6dace] underline-offset-4">訂單 {o.orderNo}</Link>
                   </div>
                   <span className={`rounded-[14px] px-3 py-1 text-[13px] font-bold ${st.cls}`}>{st.label}</span>
                 </div>
@@ -102,6 +138,12 @@ export default async function MyOrders({ searchParams }: { searchParams: Promise
                       <div className="text-[14px]">{l.amount.toLocaleString("en-US")}</div>
                     </div>
                   ))}
+                  {o.pay && (
+                    <a href={o.pay.url} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-0.5 rounded-[14px] bg-shop-rose px-3 py-2.5 text-center text-white">
+                      <span className="text-[15px] font-bold">前往賣貨便下單</span>
+                      <span className="text-[12px]">請在 <b className="rounded bg-white px-1 text-[#c8102e]"><DueText at={o.pay.dueAt} /></b> 前使用賣貨便下單完成</span>
+                    </a>
+                  )}
                   <div className="flex items-baseline justify-between border-t border-dashed border-[#e6dace] pt-2.5">
                     <span className="text-[14px] text-shop-mute">合計</span>
                     <span className="text-[19px] font-bold text-shop-rose">NT$ {o.total.toLocaleString("en-US")}</span>

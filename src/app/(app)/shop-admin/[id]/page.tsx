@@ -80,6 +80,9 @@ export default async function ShopCategoryAdmin({ params }: { params: Promise<{ 
           ownerId: s?.ownerId ?? view.me ?? ops[0]?.id ?? null,
           imageUrl: s?.imageUrl ?? "",
           intro: s?.intro ?? "",
+          payUrl: s?.payUrl ?? "",
+          payTiming: s?.payTiming ?? "ORDER",
+          payHours: s?.payHours ?? 1,
         }}
         isNew={!s}
       />

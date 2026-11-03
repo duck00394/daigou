@@ -31,7 +31,8 @@ export async function loginWithPassword(password: string): Promise<{ ok: true } 
   const since = new Date(Date.now() - LOCK_MINUTES * 60_000);
   const [failsKey, failsAll] = await Promise.all([
     prisma.loginAttempt.count({ where: { key: ip, success: false, createdAt: { gte: since } } }),
-    prisma.loginAttempt.count({ where: { success: false, createdAt: { gte: since } } }),
+    // 訂購頁查詢失敗（key 以 shop: 開頭）不算進後台登入的全站上限
+    prisma.loginAttempt.count({ where: { success: false, createdAt: { gte: since }, NOT: { key: { startsWith: "shop:" } } } }),
   ]);
   if (failsKey >= MAX_FAILS_PER_KEY || failsAll >= MAX_FAILS_GLOBAL) {
     return { ok: false, error: `登入失敗次數過多，請 ${LOCK_MINUTES} 分鐘後再試` };

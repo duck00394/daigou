@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button, inputCls, useRun } from "@/components/client";
-import { bindOperatorLineAction, setContactFieldAction, setShopNameAction } from "@/actions/shop";
+import { bindOperatorLineAction, setContactFieldAction, setShopInfoAction, setShopNameAction } from "@/actions/shop";
 
 export function ShopName({ name }: { name: string }) {
   const [v, setV] = useState(name);
@@ -87,6 +87,32 @@ export function ContactFieldForm({ mode: m0, label: l0 }: { mode: "phone" | "tex
         </label>
       )}
       <Button type="submit" loading={pending} disabled={!changed || (mode === "text" && !label.trim())}>存</Button>
+    </form>
+  );
+}
+
+export function ShopInfoForm({ threads: t0, supportEmail: e0 }: { threads: string; supportEmail: string }) {
+  const [threads, setThreads] = useState(t0);
+  const [email, setEmail] = useState(e0);
+  const { run, pending } = useRun();
+  const changed = threads.trim() !== t0 || email.trim() !== e0;
+  return (
+    <form
+      className="space-y-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => setShopInfoAction(threads, email), { success: "客服資料已更新" });
+      }}
+    >
+      <label className="block text-[13px] font-medium text-ink-2">
+        Threads 帳號（客人在成立頁按「Threads 客服」會打開）
+        <input aria-label="Threads 帳號" className={`${inputCls} mt-1`} value={threads} maxLength={60} onChange={(e) => setThreads(e.target.value)} placeholder="例如：ura_treasure（不用打 @）" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+      </label>
+      <label className="block text-[13px] font-medium text-ink-2">
+        客服 Email（寫在訂單憑證、交易規則、隱私權政策）
+        <input aria-label="客服 Email" type="email" className={`${inputCls} mt-1`} value={email} maxLength={254} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+      </label>
+      <Button type="submit" loading={pending} disabled={!changed}>存</Button>
     </form>
   );
 }

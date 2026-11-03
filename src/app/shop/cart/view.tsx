@@ -6,17 +6,20 @@ import { money, Pic, Stepper, useCart, type CartItem } from "../cart";
 import { placeOrderAction } from "../actions";
 import type { ContactField } from "@/server/services/shop";
 
-type Status = Record<string, { open: boolean; openAt: string | null; name: string }>;
+type Status = Record<string, { open: boolean; openAt: string | null; name: string; pay: { timing: "ORDER" | "ARRIVAL"; hours: number } | null }>;
+export const DONE_KEY = "dg_done";
 const fieldCls = "h-[46px] w-full rounded-[14px] border border-[#e6dace] bg-[#fdfaf6] px-3.5 text-[16px] text-shop-ink";
 
 function newKey() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-export function CartView({ loggedIn, defaults, returning, shippingOptions, status, field }: { field: ContactField; loggedIn: boolean; defaults: { name: string; phone: string; shipping: string }; returning: boolean; shippingOptions: string[]; status: Status }) {
+export function CartView({ loggedIn, lineName, defaults, returning, shippingOptions, status, field }: { field: ContactField; loggedIn: boolean; lineName: string | null; defaults: { name: string; phone: string; shipping: string }; returning: boolean; shippingOptions: string[]; status: Status }) {
   const cart = useCart();
   const router = useRouter();
-  const [f, setF] = useState({ ...defaults, note: "" });
+  const [f, setF] = useState({ ...defaults, note: "", email: "" });
+  const [mode, setMode] = useState<"guest" | "line">(loggedIn ? "line" : "guest");
+  const [agree, setAgree] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [key, setKey] = useState(newKey);
   const [pending, start] = useTransition();
@@ -35,21 +38,34 @@ export function CartView({ loggedIn, defaults, returning, shippingOptions, statu
   const gone = cart.items.filter((it) => !status[it.categoryId]);
   const notOpen = [...groups.keys()].filter((c) => status[c] && !status[c].open);
 
+  const guest = !loggedIn && mode === "guest";
+  const canSubmit = loggedIn || guest;
+  // 付款方式提醒：同樣設定的系列合在一起講
+  const payNotes = [...new Set([...groups.keys()].map((c) => status[c]?.pay).filter((p): p is NonNullable<typeof p> => !!p).map((p) => `${p.timing}|${p.hours}`))].map((k) => {
+    const [timing, hours] = k.split("|");
+    const names = [...groups.keys()].filter((c) => status[c]?.pay && `${status[c].pay!.timing}|${status[c].pay!.hours}` === k).map((c) => status[c].name);
+    return { timing, hours: Number(hours), names };
+  });
+
   const submit = () => {
     setErr(null);
     if (gone.length) return setErr("有商品的系列已經停止訂購，請先刪掉");
     if (notOpen.length) return setErr(`「${status[notOpen[0]].name}」還沒開賣，時間到才能送出`);
+    if (guest && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.email.trim())) return setErr("請填正確的 Email（收訂單通知和查詢碼用）");
+    if (!agree) return setErr("請先勾選已閱讀交易規則與隱私權政策");
     start(async () => {
       const res = await placeOrderAction(
         cart.items.map((i) => ({ categoryId: i.categoryId, productId: i.productId, qty: i.qty })),
         { name: f.name, phone: f.phone, shipping: f.shipping, note: f.note || null },
         key,
+        { guestEmail: guest ? f.email.trim() : null, agree },
       );
       if (res.ok) {
+        try {
+          sessionStorage.setItem(DONE_KEY, JSON.stringify({ code: res.data.code, ids: res.data.orders.map((o) => o.orderId) }));
+        } catch {}
         cart.clear();
-        router.push(`/shop/done?no=${encodeURIComponent(res.data.orderNo)}`);
-      } else if (res.login) {
-        location.href = `/shop/login?next=${encodeURIComponent("/shop/cart")}`;
+        router.push(`/shop/done?o=${res.data.orders.map((o, i) => `${o.orderId}.${res.data.tokens[i]}`).join(",")}`);
       } else {
         setErr(res.error);
         setKey(newKey());
@@ -90,15 +106,31 @@ export function CartView({ loggedIn, defaults, returning, shippingOptions, statu
         );
       })}
 
-      {loggedIn ? (
+      {!loggedIn && (
+        <div role="radiogroup" aria-label="下單方式" className="grid grid-cols-2 overflow-hidden rounded-[14px] border border-[#e2d6ca] bg-white text-[14px]">
+          {(["guest", "line"] as const).map((m) => (
+            <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)} className={`h-11 font-bold ${mode === m ? "bg-shop-ink text-white" : "text-shop-ink-2"}`}>
+              {m === "guest" ? "訪客下單" : "LINE 登入下單"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {canSubmit ? (
         <div className="flex flex-col gap-3 rounded-[20px] border border-shop-line bg-white p-4 shadow-[0_6px_18px_rgba(120,70,60,0.08)]">
           <div className="flex items-baseline justify-between">
             <span className="text-[16px] font-bold">聯絡資料</span>
-            <span className="text-[12px] text-shop-mute">{returning ? "已從上次訂單帶入" : "第一次填，之後自動帶入"}</span>
+            <span className="text-[12px] text-shop-mute">{guest ? "不用註冊，填好就能下單" : returning ? "已從上次訂單帶入" : "第一次填，之後自動帶入"}</span>
           </div>
+          {loggedIn && lineName && <div className="text-[13px] text-shop-mute">已用 LINE 登入：{lineName}</div>}
           <label className="flex flex-col gap-1.5 text-[13px] text-shop-mute">社群暱稱
             <input className={fieldCls} value={f.name} maxLength={40} onChange={(e) => setF({ ...f, name: e.target.value })} autoComplete="nickname" />
           </label>
+          {guest && (
+            <label className="flex flex-col gap-1.5 text-[13px] text-shop-mute">Email（收訂單通知和查詢碼）
+              <input className={fieldCls} type="email" inputMode="email" value={f.email} maxLength={254} onChange={(e) => setF({ ...f, email: e.target.value })} autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="name@example.com" />
+            </label>
+          )}
           {field.mode === "phone" && (
             <label className="flex flex-col gap-1.5 text-[13px] text-shop-mute">手機
               <input className={fieldCls} type="tel" value={f.phone} maxLength={20} onChange={(e) => setF({ ...f, phone: e.target.value })} autoComplete="tel" placeholder="0912-345-678" />
@@ -120,8 +152,8 @@ export function CartView({ loggedIn, defaults, returning, shippingOptions, statu
         </div>
       ) : (
         <div className="flex flex-col items-center gap-3 rounded-[20px] border border-shop-line bg-white p-5 text-center">
-          <div className="text-[15px] font-bold">用 LINE 登入才能送出訂單</div>
-          <p className="text-[13px] text-shop-mute">登入後訂單明細、取消、出貨都會傳到 LINE 聊天室</p>
+          <div className="text-[15px] font-bold">用 LINE 登入下單</div>
+          <p className="text-[13px] text-shop-mute">登入後訂單明細、付款提醒、出貨都會傳到 LINE 聊天室；不想登入可以選「訪客下單」</p>
           <a href={`/shop/login?next=${encodeURIComponent("/shop/cart")}`} className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#078a3e] text-[16px] font-bold text-white">
             <span className="rounded-full bg-white px-1.5 py-0.5 text-[11px] font-bold text-[#078a3e]">LINE</span>用 LINE 登入
           </a>
@@ -134,7 +166,35 @@ export function CartView({ loggedIn, defaults, returning, shippingOptions, statu
         <div className="mt-0.5 flex justify-between border-t border-dashed border-[#e6dace] pt-2.5"><span className="font-bold">合計</span><span className="text-[20px] font-bold text-shop-rose">{money(cart.total)}</span></div>
       </div>
 
+      {canSubmit && (
+        <div className="flex flex-col gap-2.5 rounded-[20px] border border-[#ecd9a8] bg-shop-gold-soft p-4 text-[14px] leading-relaxed text-shop-gold">
+          {payNotes.map((p) => (
+            <p key={`${p.timing}${p.hours}`}>
+              {payNotes.length > 1 && <b>{p.names.join("、")}：</b>}
+              {p.timing === "ORDER" ? (
+                <>成立後 <b className="text-[#c8102e]">{p.hours} 小時</b>內，用賣貨便下單。逾期會取消並讓給候補的人。</>
+              ) : (
+                <>到貨後會通知你，收到通知 <b className="text-[#c8102e]">{p.hours} 小時</b>內用賣貨便下單。逾期會取消並讓給候補的人。</>
+              )}
+            </p>
+          ))}
+          <label className="flex items-start gap-2.5 text-shop-ink">
+            <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-[#b4505e]" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+            <span>我已閱讀<a href="/shop/rules" target="_blank" className="mx-0.5 font-bold text-shop-rose-2 underline">交易規則</a>與<a href="/shop/privacy" target="_blank" className="mx-0.5 font-bold text-shop-rose-2 underline">隱私權政策</a></span>
+          </label>
+        </div>
+      )}
+
       {err && <div role="alert" className="rounded-[14px] border border-[#f1c9cc] bg-[#fdf0f1] px-3.5 py-3 text-[14px] font-bold text-shop-rose-2">{err}</div>}
+
+      {guest && (
+        <div className="flex flex-col gap-2 pt-1">
+          <button type="button" disabled={pending} onClick={submit} className="flex h-14 items-center justify-center rounded-full bg-[#2a2220] text-[17px] font-bold text-white shadow-[0_10px_24px_rgba(42,34,32,0.25)] disabled:opacity-60">
+            {pending ? "送出中…" : `送出訂單　${money(cart.total)}`}
+          </button>
+          <p className="text-center text-[12px] text-shop-mute">{notOpen.length ? "開賣時間到才能送出" : "送出後會顯示訂單編號和查詢碼，也會寄到你的 Email"}</p>
+        </div>
+      )}
 
       {loggedIn && (
         <div className="flex flex-col gap-2 pt-1">
