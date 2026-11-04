@@ -176,9 +176,11 @@ export async function placeShopOrder(t: Tx, buyerId: string, input: { lines: Car
     if (!isOpen(s, now)) throw new BizError(`「${s.category.name}」還沒開賣`);
   }
   // 要訂金的系列：一定要留 Threads 或 IG 帳號（有問題時聯絡得到人）
-  const needSocial = settings.some((x) => x.depositPerItem && x.payUrl);
+  // 訪客下單、要付訂金的商品：一定要留 Threads 或 IG 帳號（有問題時聯絡得到人）
+  const needDeposit = settings.some((x) => x.depositPerItem && x.payUrl);
+  const needSocial = needDeposit || !buyer.lineUserId;
   const social = field.mode === "text" ? contact.phone : (input.contact.social ?? "").trim();
-  if (needSocial && !social) throw new BizError("要付訂金的商品，請填 Threads 或 IG 帳號");
+  if (needSocial && !social) throw new BizError(needDeposit ? "要付訂金的商品，請填 Threads 或 IG 帳號" : "請填 Threads 或 IG 帳號");
   if (social.length > 60) throw new BizError("Threads 或 IG 帳號太長了");
 
   // 鎖住開放數量，再算剩下幾個（同時下單的人會排隊，名額照順序）
@@ -325,7 +327,7 @@ export async function joinWait(t: Tx, buyerId: string, input: { categoryId: stri
 export async function waitPosition(db: Db, waitId: string) {
   const w = await db.shopWait.findUnique({ where: { id: waitId } });
   if (!w || w.status !== "WAITING") return 0;
-  return (await db.shopWait.count({ where: { categoryId: w.categoryId, productId: w.productId, status: "WAITING", createdAt: { lte: w.createdAt } } })) || 1;
+  return (await db.shopWait.count({ where: { categoryId: w.categoryId, productId: w.productId, status: "WAITING", OR: [{ sortAt: { lt: w.sortAt } }, { sortAt: w.sortAt, id: { lte: w.id } }] } })) || 1;
 }
 
 export async function cancelWait(t: Tx, buyerId: string, waitId: string) {
@@ -339,7 +341,7 @@ export async function cancelWait(t: Tx, buyerId: string, waitId: string) {
 export async function promoteWaits(t: Tx, categoryId: string, productId: string) {
   const s = await t.shopCategory.findUnique({ where: { categoryId }, include: { owner: { select: { id: true, lineUserId: true } } } });
   if (!s?.enabled) return 0;
-  const waits = await t.shopWait.findMany({ where: { categoryId, productId, status: "WAITING" }, orderBy: { createdAt: "asc" }, include: { buyer: true } });
+  const waits = await t.shopWait.findMany({ where: { categoryId, productId, status: "WAITING" }, orderBy: [{ sortAt: "asc" }, { id: "asc" }], include: { buyer: true } });
   if (!waits.length) return 0;
   await lockQuotas(t, [{ categoryId, productId }]);
   let filled = 0;
@@ -694,3 +696,54 @@ export async function sendSaleLink(t: Tx, actor: Actor, orderId: string, input: 
   return { outboxId: row.id, buyer: order.buyer.name };
 }
 
+
+// ───────────── 後台：候補名單與手動調整順位 ─────────────
+
+export type WaitRow = { id: string; buyer: string; qty: number; channel: "LINE" | "Email" | "無"; createdAt: Date; position: number; moved: { from: number; to: number; by: string; reason: string; at: Date } | null };
+export type WaitMove = { at: Date; product: string; buyer: string; from: number; to: number; by: string; reason: string };
+
+type MoveData = { waitId: string; productId: string; buyer: string; product: string; from: number; to: number; by: string; reason: string };
+
+/** 這個系列每個角色的候補名單（照目前順位），和調整紀錄 */
+export async function waitlists(db: Db, categoryId: string) {
+  const ws = await db.shopWait.findMany({
+    where: { categoryId, status: "WAITING" },
+    orderBy: [{ sortAt: "asc" }, { id: "asc" }],
+    include: { buyer: { select: { name: true, lineUserId: true, email: true } }, product: { select: { name: true } } },
+  });
+  const logs = await db.auditLog.findMany({ where: { action: "shop.waitMove", entity: "Category", entityId: categoryId }, orderBy: { createdAt: "desc" }, take: 100 });
+  const moves = logs.map((l) => ({ at: l.createdAt, ...(l.data as MoveData) }));
+  const lastMove = new Map<string, (typeof moves)[number]>();
+  for (const m of moves) if (!lastMove.has(m.waitId)) lastMove.set(m.waitId, m);
+  const byProduct = new Map<string, { productId: string; name: string; rows: WaitRow[] }>();
+  for (const w of ws) {
+    const g = byProduct.get(w.productId) ?? { productId: w.productId, name: w.product.name, rows: [] };
+    const m = lastMove.get(w.id);
+    g.rows.push({ id: w.id, buyer: w.buyer.name, qty: w.qty, channel: w.buyer.lineUserId ? "LINE" : w.buyer.email ? "Email" : "無", createdAt: w.createdAt, position: g.rows.length + 1, moved: m ? { from: m.from, to: m.to, by: m.by, reason: m.reason, at: m.at } : null });
+    byProduct.set(w.productId, g);
+  }
+  return { lists: [...byProduct.values()], moves: moves.map((m) => ({ at: m.at, product: m.product, buyer: m.buyer, from: m.from, to: m.to, by: m.by, reason: m.reason })) as WaitMove[] };
+}
+
+/** 手動調整候補順位（一定要填原因，記在操作紀錄）。to＝新的順位（1 起算） */
+export async function moveWait(t: Tx, actor: Actor, input: { waitId: string; to: number; reason: string; by: string }) {
+  const reason = (input.reason ?? "").trim();
+  if (!reason) throw new BizError("請填調整原因");
+  if (reason.length > 100) throw new BizError("原因最多 100 字");
+  const w = await t.shopWait.findUnique({ where: { id: input.waitId }, include: { buyer: { select: { name: true } }, product: { select: { name: true } } } });
+  if (!w || w.status !== "WAITING") throw new BizError("這筆候補已經不在名單上了，請重新整理");
+  await lockQuotas(t, [{ categoryId: w.categoryId, productId: w.productId }]);
+  const list = await t.shopWait.findMany({ where: { categoryId: w.categoryId, productId: w.productId, status: "WAITING" }, orderBy: [{ sortAt: "asc" }, { id: "asc" }], select: { id: true, sortAt: true } });
+  const from = list.findIndex((x) => x.id === w.id) + 1;
+  if (!Number.isInteger(input.to) || input.to < 1 || input.to > list.length) throw new BizError(`順位要是 1～${list.length}`);
+  if (input.to === from) throw new BizError("順位沒有變");
+  // 把同一組排隊時間照新的順序重新分配（時間一樣的錯開 1 毫秒），其他人的相對順序不變
+  const times = list.map((x) => x.sortAt.getTime());
+  for (let i = 1; i < times.length; i++) if (times[i] <= times[i - 1]) times[i] = times[i - 1] + 1;
+  const order = list.filter((x) => x.id !== w.id);
+  order.splice(input.to - 1, 0, list[from - 1]);
+  for (const [i, x] of order.entries()) if (x.sortAt.getTime() !== times[i]) await t.shopWait.update({ where: { id: x.id }, data: { sortAt: new Date(times[i]) } });
+  const data: MoveData = { waitId: w.id, productId: w.productId, buyer: w.buyer.name, product: w.product.name, from, to: input.to, by: (input.by || "").slice(0, 20) || "後台", reason };
+  await audit(t, actor, "shop.waitMove", "Category", w.categoryId, data);
+  return { from, to: input.to };
+}

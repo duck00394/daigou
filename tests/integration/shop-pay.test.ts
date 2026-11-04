@@ -312,3 +312,44 @@ describe("店家資訊", () => {
     await expect(tx((t) => pay.setShopInfo(t, actor, { threads: "中文帳號" }))).rejects.toThrow("Threads");
   });
 });
+
+describe("訪客要留 Threads 或 IG", () => {
+  it("結帳欄位是手機或不用留時，訪客要另外填 Threads／IG；LINE 登入的不用", async () => {
+    await tx((t) => shop.setContactField(t, actor, { mode: "phone", label: "" }));
+    const place = (social: string | null) =>
+      tx(async (t) => shop.placeShopOrder(t, await pay.guestBuyer(t, "soc@example.com", "社社", () => nextCode(t, "buyer")), { lines: [{ categoryId: s.halloween.id, productId: s.p1.id, qty: 1 }], contact: { name: "社社", phone: "0912345678", shipping: "賣貨便", social }, key: key() }));
+    await expect(place(null)).rejects.toThrow("請填 Threads 或 IG 帳號");
+    const r = await place("@soc_ig");
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: r.orderId } })).notes).toContain("Threads／IG：@soc_ig");
+    const b = await lineBuyer("線線");
+    await tx((t) => shop.placeShopOrder(t, b, { lines: [{ categoryId: s.halloween.id, productId: s.p1.id, qty: 1 }], contact: { name: "線線", phone: "0912345678", shipping: "賣貨便" }, key: key() }));
+  });
+});
+
+describe("候補手動調整順位", () => {
+  it("要填原因；照新順位遞補；記下誰調的；其他人相對順序不變", async () => {
+    const r = await guest("first@example.com", [{ productId: s.p2.id, qty: 1 }]);
+    const [a, b, c] = [await lineBuyer("甲"), await lineBuyer("乙"), await lineBuyer("丙")];
+    for (const x of [a, b, c]) await tx((t) => shop.joinWait(t, x, { categoryId: s.halloween.id, productId: s.p2.id, qty: 1 }));
+    const wl = await shop.waitlists(prisma, s.halloween.id);
+    const rows = wl.lists[0].rows;
+    expect(rows.map((x) => x.buyer)).toEqual(["甲", "乙", "丙"]);
+    await expect(tx((t) => shop.moveWait(t, actor, { waitId: rows[2].id, to: 1, reason: " ", by: "JING" }))).rejects.toThrow("請填調整原因");
+    await expect(tx((t) => shop.moveWait(t, actor, { waitId: rows[2].id, to: 4, reason: "x", by: "JING" }))).rejects.toThrow("順位要是 1～3");
+    await tx((t) => shop.moveWait(t, actor, { waitId: rows[2].id, to: 1, reason: "舊客優先", by: "JING" }));
+    const after = await shop.waitlists(prisma, s.halloween.id);
+    expect(after.lists[0].rows.map((x) => [x.buyer, x.position])).toEqual([["丙", 1], ["甲", 2], ["乙", 3]]);
+    expect(after.lists[0].rows[0].moved).toMatchObject({ from: 3, to: 1, by: "JING", reason: "舊客優先" });
+    expect(after.moves).toHaveLength(1);
+    expect(await shop.waitPosition(prisma, rows[0].id)).toBe(2);
+    // 名額空出來：遞補給調到第一的丙
+    await tx((t) => cancelOrder(t, actor, { orderId: r.orderId, reason: "客人不要了" }));
+    expect(await prisma.order.count({ where: { buyerId: c, source: "WEB" } })).toBe(1);
+    expect(await prisma.order.count({ where: { buyerId: a, source: "WEB" } })).toBe(0);
+    // 往後移一格
+    const now = (await shop.waitlists(prisma, s.halloween.id)).lists[0].rows;
+    expect(now.map((x) => x.buyer)).toEqual(["甲", "乙"]);
+    await tx((t) => shop.moveWait(t, actor, { waitId: now[0].id, to: 2, reason: "客人說可以等", by: "宸" }));
+    expect((await shop.waitlists(prisma, s.halloween.id)).lists[0].rows.map((x) => x.buyer)).toEqual(["乙", "甲"]);
+  });
+});

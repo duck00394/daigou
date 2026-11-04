@@ -48,14 +48,17 @@ export function CartView({ loggedIn, lineName, defaults, returning, shippingOpti
     const deposit = cats.reduce((a, c) => a + (status[c].pay!.deposit || 0) * (groups.get(c) ?? []).reduce((x, it) => x + it.qty, 0), 0);
     return { timing, hours: Number(hours), names: cats.map((c) => status[c].name), deposit };
   });
-  const needSocial = payNotes.some((p) => p.timing === "DEPOSIT") && field.mode !== "text";
+  const hasDeposit = payNotes.some((p) => p.timing === "DEPOSIT");
+  // 訪客下單、要付訂金的商品都要留 Threads 或 IG 帳號；結帳欄位本身就是帳號時不用再多一格
+  const needSocial = (guest || hasDeposit) && field.mode !== "text";
 
   const submit = () => {
     setErr(null);
     if (gone.length) return setErr("有商品的系列已經停止訂購，請先刪掉");
     if (notOpen.length) return setErr(`「${status[notOpen[0]].name}」還沒開賣，時間到才能送出`);
     if (guest && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.email.trim())) return setErr("請填正確的 Email（收訂單通知和查詢碼用）");
-    if (needSocial && !f.social.trim()) return setErr("要付訂金的商品，請填 Threads 或 IG 帳號");
+    if (needSocial && !f.social.trim()) return setErr(hasDeposit ? "要付訂金的商品，請填 Threads 或 IG 帳號" : "請填 Threads 或 IG 帳號");
+    if ((guest || hasDeposit) && field.mode === "text" && !f.phone.trim()) return setErr(`請填${field.label}`);
     if (!agree) return setErr("請先勾選已閱讀交易規則與隱私權政策");
     start(async () => {
       const res = await placeOrderAction(
@@ -146,7 +149,7 @@ export function CartView({ loggedIn, lineName, defaults, returning, shippingOpti
             </label>
           )}
           {needSocial && (
-            <label className="flex flex-col gap-1.5 text-[13px] text-shop-mute">Threads 或 IG 帳號（要付訂金的商品必填，聯絡用）
+            <label className="flex flex-col gap-1.5 text-[13px] text-shop-mute">Threads 或 IG 帳號（聯絡用）
               <input className={fieldCls} value={f.social} maxLength={60} onChange={(e) => setF({ ...f, social: e.target.value })} autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="@your_id" />
             </label>
           )}

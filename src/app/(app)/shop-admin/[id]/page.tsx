@@ -7,6 +7,9 @@ import { soldMap } from "@/server/services/shop";
 import { taipeiParts } from "@/lib/taipei";
 import { PageHeader } from "@/components/ui";
 import { QuotaForm, SettingsForm, type QuotaRow } from "./forms";
+import { Waitlist } from "./waitlist";
+import { waitlists } from "@/server/services/shop";
+import { taipeiDayLabel as dayLabel, taipeiParts as tpParts } from "@/lib/taipei";
 
 export default async function ShopCategoryAdmin({ params }: { params: Promise<{ id: string }> }) {
   await requireUser();
@@ -26,6 +29,7 @@ export default async function ShopCategoryAdmin({ params }: { params: Promise<{ 
     prisma.shopWait.groupBy({ by: ["productId"], where: { categoryId: id, status: "WAITING" }, _count: { _all: true } }),
   ]);
   const sold = await soldMap(prisma, id, products.map((p) => p.id));
+  const wl = await waitlists(prisma, id);
   const q = new Map(quotas.map((x) => [x.productId, x]));
   const tp = new Map(typePrices.map((t) => [t.productTypeId, t]));
   const w = new Map(waits.map((x) => [x.productId, x._count._all]));
@@ -88,6 +92,10 @@ export default async function ShopCategoryAdmin({ params }: { params: Promise<{ 
         isNew={!s}
       />
       <QuotaForm categoryId={id} rows={rows} />
+      <Waitlist
+        lists={wl.lists.map((l) => ({ ...l, rows: l.rows.map((r) => ({ id: r.id, buyer: r.buyer, qty: r.qty, channel: r.channel, position: r.position, created: `${dayLabel(r.createdAt)} ${tpParts(r.createdAt).time}`, moved: r.moved ? { from: r.moved.from, to: r.moved.to, by: r.moved.by, reason: r.moved.reason } : null })) }))}
+        moves={wl.moves.map((m) => ({ ...m, at: `${dayLabel(m.at)} ${tpParts(m.at).time}` }))}
+      />
     </div>
   );
 }

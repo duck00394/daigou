@@ -156,3 +156,17 @@ export async function rejectDepositAction(orderId: string) {
   const { rejectDeposit } = await import("@/server/services/shop-pay");
   return payOp((t, a) => rejectDeposit(t, a, idSchema.parse(orderId)));
 }
+
+/** 手動調整候補順位（要填原因；記下是誰調的） */
+export async function moveWaitAction(waitId: string, to: number, reason: string) {
+  return run(async (a) => {
+    const { getMe } = await import("@/server/me");
+    const me = await getMe();
+    const { prisma } = await import("@/server/db");
+    const by = me ? ((await prisma.operator.findUnique({ where: { id: me }, select: { name: true } }))?.name ?? "") : "";
+    const r = await tx((t) => shop.moveWait(t, a, { waitId: z.string().max(64).parse(waitId), to: z.number().int().parse(to), reason: z.string().max(200).parse(reason), by }));
+    revalidatePath("/shop-admin");
+    revalidatePath("/shop", "layout");
+    return r;
+  });
+}

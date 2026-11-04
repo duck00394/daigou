@@ -1239,10 +1239,11 @@ model ShopWait {
   qty        Int
   status     ShopWaitStatus @default(WAITING)
   orderId    String?
+  sortAt     DateTime       @default(now()) // 排隊順序（預設＝排入時間；後台手動調整順位時改這個）
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
 
-  @@index([categoryId, productId, status, createdAt])
+  @@index([categoryId, productId, status, sortAt])
   @@index([buyerId])
 }
 
