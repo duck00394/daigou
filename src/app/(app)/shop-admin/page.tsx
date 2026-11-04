@@ -15,7 +15,11 @@ export const metadata = { title: "訂購頁" };
 
 export default async function ShopAdmin() {
   await requireUser();
-  const [info, mailFailed] = await Promise.all([getShopInfo(prisma), prisma.mailOutbox.count({ where: { sentAt: null, tries: { gte: 3 } } })]);
+  const [info, mailFailed, recentMail] = await Promise.all([
+    getShopInfo(prisma),
+    prisma.mailOutbox.count({ where: { sentAt: null, tries: { gte: 3 } } }),
+    prisma.mailOutbox.findMany({ orderBy: { createdAt: "desc" }, take: 6, select: { id: true, to: true, subject: true, createdAt: true, sentAt: true, tries: true, error: true } }),
+  ]);
   const [name, shops, cats, ops, lineBuyers, failed, field] = await Promise.all([
     getShopName(prisma),
     prisma.shopCategory.findMany({ include: { category: { select: { name: true, active: true } }, owner: { select: { name: true } } }, orderBy: [{ enabled: "desc" }, { updatedAt: "desc" }] }),
@@ -65,6 +69,25 @@ export default async function ShopAdmin() {
           </ol>
         )}
         {mailFailed > 0 && <p className="mt-2 text-[13px] text-bad">有 {mailFailed} 封信寄不出去（可能是 Email 打錯，或應用程式密碼不對）。</p>}
+        {mailConfigured() && (
+          <div className="mt-3">
+            <div className="text-[13px] font-medium text-ink-2">最近的 Email 通知</div>
+            {recentMail.length === 0 ? (
+              <p className="mt-1 text-[13px] text-mute">還沒有寄過信。訪客下單（不用 LINE）時才會寄。</p>
+            ) : (
+              <ul className="mt-1 divide-y divide-line-2 rounded-lg border border-line-2 text-[13px]">
+                {recentMail.map((r) => (
+                  <li key={r.id} className="flex flex-wrap items-center gap-2 px-3 py-1.5" data-testid="mail-outbox">
+                    <span className="num text-mute">{taipeiParts(r.createdAt).date.slice(5)} {taipeiParts(r.createdAt).time}</span>
+                    {r.sentAt ? <Badge tone="good">已寄出</Badge> : r.tries >= 3 ? <Badge tone="bad">寄不出去</Badge> : r.tries > 0 ? <Badge tone="warn">失敗，會再試</Badge> : <Badge tone="warn">等待寄出</Badge>}
+                    <span className="min-w-0 flex-1 truncate">{r.to}</span>
+                    {r.error && <span className="w-full break-all text-bad">{r.error}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </Section>
 
       <Section title="開放訂購的系列">
