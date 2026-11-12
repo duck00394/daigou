@@ -119,7 +119,7 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
       </div>
 
       {warn && (warn.tags.length > 0 || openOrders.length > 0 || warn.cancelledCount > 0) && (
-        <div role="note" className="rounded-xl border border-[#f0dfa8] bg-warn-soft px-4 py-3 text-sm text-ink">
+        <div role="note" className="rounded-xl border border-tone-amber-300-2 bg-warn-soft px-4 py-3 text-sm text-ink">
           {warn.tags.length > 0 && (
             <p className="mb-1">
               <b>標籤提醒：</b>
@@ -168,7 +168,7 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
         <div className="mb-1 text-[13px] font-medium text-ink-2">商品明細</div>
         <div className="space-y-3">
           {lines.map((l, i) => (
-            <div key={l.key} className="rounded-xl border border-line bg-[#fbfcfd] p-3">
+            <div key={l.key} className="rounded-xl border border-line bg-tone-gray-50-6 p-3">
               <div className="grid gap-2 sm:grid-cols-[1fr_6rem_8rem_7rem]">
                 <ProductPicker value={l.product} onPick={(p) => upd(l.key, { product: p, categoryId: "" })} label={`商品 ${i + 1}`} />
                 <TextField label="數量" inputMode="numeric" value={l.qty} onChange={(e) => upd(l.key, { qty: e.target.value })} />

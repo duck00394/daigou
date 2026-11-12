@@ -37,7 +37,7 @@ export function ShippingMethods({ rows }: { rows: Row[] }) {
             <li key={r.id} className={`flex items-center justify-between gap-2 py-2 ${r.active ? "" : "opacity-50"}`}>
               <span>
                 <b>{r.name}</b>
-                <span className="ml-2 text-[12px] text-mute">{kindName[r.kind] ?? "其他"}{r.active ? "" : "・已停用"}</span>
+                <span className="ml-2 text-[12px] text-mute">{kindName[r.kind] ?? "其他"}{r.active ? "" : "，已停用"}</span>
               </span>
               <span className="flex items-center gap-3">
                 <span className="num">{r.currency === "JPY" ? formatJpy(r.amount) : formatTwd(r.amount)}</span>

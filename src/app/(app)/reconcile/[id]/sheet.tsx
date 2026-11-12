@@ -49,7 +49,7 @@ export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchH
   const save = () => {
     if (!changed.length && !payChanged) return go();
     run(() => saveReconcileAction(batchId, { rows: changed.map((i) => ({ itemId: i.id, bought: d[i.id].bought, cutRest: d[i.id].cut })), reason: anyCut ? reason : null, paidTotal: payChanged ? paidNum : null, payKey }), {
-      success: (r) => `已儲存：買到 ${sum.bought}${sum.cut ? `・砍 ${sum.cut}` : ""}${r.pending ? `・還要等 ${r.pending}` : "，這團對完了"}${r.paidAdded ? `；記了付款 ${formatTwd(r.paidAdded)}` : ""}`,
+      success: (r) => `已儲存：買到 ${sum.bought}${sum.cut ? `，砍 ${sum.cut}` : ""}${r.pending ? `，還要等 ${r.pending}` : "，這團對完了"}${r.paidAdded ? `；記了付款 ${formatTwd(r.paidAdded)}` : ""}`,
       refresh: false,
       onOk: (r) => {
         if (r.affected.length) setAffected(r.affected);
@@ -60,9 +60,9 @@ export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchH
 
   if (affected) {
     return (
-      <div className="space-y-3 rounded-xl border border-[#fdba74] bg-[#fff7ed] p-4" data-testid="reconcile-affected">
-        <p className="font-semibold text-[#9a3412]">有客人預訂的被砍了，記得回覆：</p>
-        <ul className="list-disc pl-5 text-[14px] text-[#7c2d12]">
+      <div className="space-y-3 rounded-xl border border-tone-orange-400-2 bg-tone-orange-50 p-4" data-testid="reconcile-affected">
+        <p className="font-semibold text-tone-orange-700">有客人預訂的被砍了，記得回覆：</p>
+        <ul className="list-disc pl-5 text-[14px] text-tone-orange-800">
           {affected.map((a, k) => <li key={k}>{a.buyerName} 預訂的 {a.productName} 少 {a.qty} 件</li>)}
         </ul>
         <Button variant="primary" className="w-full" onClick={go}>{nextHref ? "下一團" : "回對單清單"}</Button>
@@ -73,9 +73,9 @@ export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchH
   const status = (i: Item) => {
     const x = d[i.id];
     const rest = i.active - x.bought;
-    if (x.cut && rest > 0) return { t: x.bought ? `買到 ${x.bought}・砍 ${rest}` : `砍 ${rest}`, c: "bg-bad-soft text-bad" };
+    if (x.cut && rest > 0) return { t: x.bought ? `買到 ${x.bought}，砍 ${rest}` : `砍 ${rest}`, c: "bg-bad-soft text-bad" };
     if (rest === 0) return { t: `買到 ${x.bought}／${i.active}`, c: "bg-good-soft text-good" };
-    if (x.bought) return { t: `買到 ${x.bought}・待確認 ${rest}`, c: "bg-warn-soft text-warn" };
+    if (x.bought) return { t: `買到 ${x.bought}，待確認 ${rest}`, c: "bg-warn-soft text-warn" };
     return { t: `待確認 ${rest}`, c: "bg-warn-soft text-warn" };
   };
   const groups = [...new Set(items.map((i) => i.group))];
@@ -85,12 +85,12 @@ export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchH
     <div className="space-y-3 pb-4">
       <div className="grid grid-cols-2 gap-2">
         <button type="button" className={`${btn} border-good bg-good font-semibold text-white`} onClick={() => setD(Object.fromEntries(items.map((i) => [i.id, { bought: i.active, cut: false }])))}>這團全部買到</button>
-        <button type="button" className={`${btn} border-[#f1b5b5] bg-white font-semibold text-bad`} onClick={() => setD((x) => Object.fromEntries(items.map((i) => [i.id, x[i.id].bought < i.active ? { ...x[i.id], cut: true } : x[i.id]])))}>沒回的全部砍</button>
+        <button type="button" className={`${btn} border-tone-red-300-2 bg-white font-semibold text-bad`} onClick={() => setD((x) => Object.fromEntries(items.map((i) => [i.id, x[i.id].bought < i.active ? { ...x[i.id], cut: true } : x[i.id]])))}>沒回的全部砍</button>
       </div>
       <div className="overflow-hidden rounded-xl border border-line bg-card">
         {groups.map((g) => (
           <div key={g}>
-            <div className="bg-[#f7f8fa] px-3 py-1.5 text-[13px] font-semibold text-ink-2">{g}</div>
+            <div className="bg-tone-gray-50-2 px-3 py-1.5 text-[13px] font-semibold text-ink-2">{g}</div>
             {items.filter((i) => i.group === g).map((i) => {
               const x = d[i.id];
               if (i.active === 0) {
@@ -106,7 +106,7 @@ export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchH
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="font-semibold">{i.name}</div>
-                      <div className="text-[12px] text-mute">訂 {i.active}{i.received ? `・已到 ${i.received}` : ""}{i.cut ? `・之前砍 ${i.cut}` : ""}</div>
+                      <div className="text-[12px] text-mute">訂 {i.active}{i.received ? `，已到 ${i.received}` : ""}{i.cut ? `，之前砍 ${i.cut}` : ""}</div>
                     </div>
                     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[12px] ${st.c}`} data-testid="reconcile-status">{st.t}</span>
                   </div>
@@ -130,7 +130,7 @@ export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchH
                       type="button"
                       aria-label={`${i.name} 砍`}
                       aria-pressed={x.cut}
-                      className={`${btn} ${x.cut ? "border-bad bg-bad-soft text-bad" : "border-[#f1b5b5] bg-white text-bad"}`}
+                      className={`${btn} ${x.cut ? "border-bad bg-bad-soft text-bad" : "border-tone-red-300-2 bg-white text-bad"}`}
                       onClick={() => set(i.id, x.cut ? { cut: false } : { cut: true, bought: x.bought >= i.active ? i.received : x.bought })}
                     >
                       {x.cut ? "已選砍" : "砍"}
@@ -166,7 +166,7 @@ export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchH
           {paidNum < pay.paidTwd ? <span className="text-bad">比已登記的少；要改少請到這團的付款紀錄作廢</span> : payChanged ? `會多記一筆付款 ${formatTwd(paidNum - pay.paidTwd)}，還要付 ${formatTwd(Math.max(0, newTotal - paidNum))}` : `還要付 ${formatTwd(Math.max(0, newTotal - pay.paidTwd))}`}
         </p>
       </div>
-      <p className="text-center text-[13px] text-mute" data-testid="reconcile-sum">這團：買到 {sum.bought}・砍 {sum.cut}・還要等 {sum.wait}</p>
+      <p className="text-center text-[13px] text-mute" data-testid="reconcile-sum">這團：買到 {sum.bought}，砍 {sum.cut}，還要等 {sum.wait}</p>
       <Button variant="primary" className="w-full" loading={pending} onClick={save}>{changed.length || payChanged ? (nextHref ? `儲存，下一團${left ? `（還有 ${left} 團）` : ""}` : "儲存") : nextHref ? "沒有改，下一團" : "回對單清單"}</Button>
       <p className="text-center text-[12px]"><Link href={batchHref} className="text-ai">看這團的付款、收貨</Link></p>
     </div>

@@ -63,7 +63,7 @@ export function OrderFlow({ orderId, lines, open, delivered, balance, methods }:
                     aria-label={`${l.name} 備齊`}
                     disabled={dis}
                     onClick={() => toggle(l)}
-                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border-[1.5px] text-white ${l.packed ? "border-ai bg-ai" : "border-[#c9ccd4] bg-white"} ${dis && !l.packed ? "opacity-40" : ""}`}
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border-[1.5px] text-white ${l.packed ? "border-ai bg-ai" : "border-tone-gray-300 bg-white"} ${dis && !l.packed ? "opacity-40" : ""}`}
                   >
                     {l.packed ? "✓" : ""}
                   </button>
@@ -83,7 +83,7 @@ export function OrderFlow({ orderId, lines, open, delivered, balance, methods }:
         <div className={`${total ? "mt-3 border-t border-line-2 pt-3" : ""}`}>
           {open.map((s, i) => (
             <div key={i} className="flex justify-between py-1 text-[15px]">
-              <span>{s.method ?? "已出貨"}{s.tracking ? `・${s.tracking}` : ""}</span>
+              <span>{s.method ?? "已出貨"}{s.tracking ? `，${s.tracking}` : ""}</span>
               <span className="num text-mute">{s.qty} 件</span>
             </div>
           ))}

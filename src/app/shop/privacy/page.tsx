@@ -10,7 +10,7 @@ export default async function Privacy() {
   const [name, info] = await Promise.all([getShopName(prisma), getShopInfo(prisma)]);
   const contact = [info.supportEmail ? `Email ${info.supportEmail}` : null, info.threads ? `Threads @${info.threads}` : null, "LINE 官方帳號"].filter(Boolean).join("、");
   return (
-    <DocPage eyebrow="PRIVACY" title="隱私權政策" updated="2026/11/3">
+    <DocPage title="隱私權政策" updated="2026/11/3">
       <p>{name}重視你的個人資料，以下說明我們蒐集哪些資料、怎麼使用、保存多久，以及你可以怎麼查詢或刪除。</p>
 
       <DocSection title="1. 我們蒐集的資料">

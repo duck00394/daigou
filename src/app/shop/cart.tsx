@@ -105,12 +105,12 @@ export function CartBar() {
   if (!ready || count === 0) return null;
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-3 pb-[max(12px,env(safe-area-inset-bottom))]">
-      <div className="pointer-events-auto mx-auto flex max-w-md items-center justify-between gap-3 rounded-[26px] bg-shop-ink py-2 pr-2 pl-5 text-white shadow-[0_10px_24px_rgba(59,47,42,0.3)]">
+      <div className="pointer-events-auto mx-auto flex max-w-md items-center justify-between gap-3 rounded-[26px] bg-shop-ink py-2 pr-2 pl-5 text-white shadow-lift-2">
         <div>
           <div className="text-[12px] opacity-80">購物車 {count} 件</div>
           <div className="text-[18px] font-bold">{money(total)}</div>
         </div>
-        <Link href="/shop/cart" className="flex h-12 items-center rounded-full bg-shop-rose px-5 text-[15px] font-bold text-white">前往結帳 →</Link>
+        <Link href="/shop/cart" className="flex h-12 items-center rounded-full bg-shop-rose px-5 text-[15px] font-bold text-white">前往結帳</Link>
       </div>
     </div>
   );
@@ -140,7 +140,7 @@ export function Stepper({ value, max, onChange, label, size = "md" }: { value: n
         }}
         className="w-0 min-w-0 flex-1 appearance-none bg-transparent text-center text-[17px] font-bold text-shop-ink outline-none [&::-webkit-inner-spin-button]:appearance-none"
       />
-      <button type="button" aria-label={`${label}加一`} disabled={atMax} onClick={() => onChange(clamp(value + 1))} className={`${btn} rounded-full ${atMax ? "bg-[#ece5dd] text-[#b8aca2]" : "bg-white text-shop-ink"}`}>+</button>
+      <button type="button" aria-label={`${label}加一`} disabled={atMax} onClick={() => onChange(clamp(value + 1))} className={`${btn} rounded-full ${atMax ? "bg-tone-orange-200-2 text-tone-orange-400" : "bg-white text-shop-ink"}`}>+</button>
     </div>
   );
 }
@@ -192,7 +192,7 @@ export function Countdown({ at, compact }: { at: string; compact?: boolean }) {
 }
 
 /** 商品圖片：沒有圖或載入失敗時顯示柔和色塊 */
-const TINTS = ["#f6e3e4", "#e2ecf5", "#f5ecd6", "#e6f2e7", "#efe6dc"];
+const TINTS = [1, 2, 3, 4, 5].map((i) => `var(--color-shop-tint-${i})`);
 export function Pic({ src, alt, seed = 0, className = "", label = "", fit = "cover" }: { src: string | null; alt: string; seed?: number; className?: string; label?: string; fit?: "cover" | "contain" | "natural" }) {
   const [failed, setFailed] = useState(false);
   // natural：整張圖照原比例顯示（寬度填滿、高度跟著圖），不會被切掉

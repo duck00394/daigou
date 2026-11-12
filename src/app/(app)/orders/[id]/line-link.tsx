@@ -13,7 +13,7 @@ export function SendLineLink({ orderId, buyer }: { orderId: string; buyer: strin
   if (!open)
     return (
       <Button onClick={() => setOpen(true)} className="w-full sm:w-auto">
-        <span className="mr-1 rounded bg-[#078a3e] px-1 text-[10px] font-bold text-white">LINE</span>傳賣貨便連結給 {buyer}
+        <span className="mr-1 rounded bg-tone-green-800 px-1 text-[10px] font-bold text-white">LINE</span>傳賣貨便連結給 {buyer}
       </Button>
     );
   return (

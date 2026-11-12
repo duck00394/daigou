@@ -1,4 +1,5 @@
 "use client";
+import { Icon } from "@/components/icons";
 import { useState } from "react";
 import { Button, Modal, TextField, TextArea, SelectField, useRun } from "@/components/client";
 import { saveSupplierAction, setSupplierFavoriteAction } from "@/actions/series";
@@ -44,10 +45,10 @@ export function FavoriteStar({ id, name, on }: { id: string; name: string; on: b
       aria-pressed={on}
       aria-label={on ? `取消常用「${name}」` : `設「${name}」為常用`}
       disabled={pending}
-      className={`min-h-10 min-w-10 text-[22px] leading-none ${on ? "text-[#f59e0b]" : "text-[#cfd4dc]"}`}
+      className={`min-h-10 min-w-10 text-[22px] leading-none ${on ? "text-tone-orange-500-2" : "text-tone-blue-300-3"}`}
       onClick={() => run(() => setSupplierFavoriteAction(id, !on), { success: on ? `「${name}」不是常用了` : `「${name}」設成常用` })}
     >
-      {on ? "★" : "☆"}
+      <Icon name="star" filled={on} />
     </button>
   );
 }

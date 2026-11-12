@@ -178,7 +178,7 @@ test("手機：開團時一起記運費（常用運費方式）和訂金；實�
   await expect(page.getByTestId("chosen-series")).toContainText(`E2E 現貨 ${tag}`);
   // 改活動名稱
   await openSeries(page);
-  await page.getByRole("button", { name: /✎ 改/ }).click();
+  await page.getByRole("button", { name: /^\s*改名/ }).click();
   await page.getByLabel("新名稱").fill(`E2E 現貨展 ${tag}`);
   await page.getByRole("button", { name: "儲存", exact: true }).click();
   await expect(page.getByLabel("系列", { exact: true }).locator("option:checked")).toHaveText(`E2E 現貨展 ${tag}`);

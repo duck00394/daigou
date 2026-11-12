@@ -61,23 +61,23 @@ export function PayList({ view, rows }: { view: "waiting" | "deposit" | "arrival
               <span className="num shrink-0 whitespace-nowrap text-[15px]">{money(r.total)}</span>
             </div>
             <div className="text-[12px] text-mute">
-              <Link href={`/orders/${r.id}`} className="text-ai underline">{r.orderNo}</Link>・{r.series}・{r.channel === "無" ? "沒有聯絡方式" : r.channel}
+              <Link href={`/orders/${r.id}`} className="text-ai underline">{r.orderNo}</Link>，{r.series}，{r.channel === "無" ? "沒有聯絡方式" : r.channel}
             </div>
             {view === "waiting" && r.deposit && !r.deposit.confirmed && (
               <div className="text-[12px] text-warn">
-                等客人匯訂金 {money(r.deposit.amount)}・<b className="text-bad">{r.deposit.dueLabel} 前</b>要回傳末五碼，沒回傳自動取消
+                等客人匯訂金 {money(r.deposit.amount)}，<b className="text-bad">{r.deposit.dueLabel} 前</b>要回傳末五碼，沒回傳自動取消
               </div>
             )}
             {view === "waiting" && !(r.deposit && !r.deposit.confirmed) && r.dueLabel && (
               <div className="text-[12px] text-warn">
-                {r.deposit && "已付訂金・"}
+                {r.deposit && "已付訂金，"}
                 <b className="text-bad">{r.dueLabel} 到期</b>
-                {r.noticeLabel && `・已通知 ${r.noticeLabel}`}
+                {r.noticeLabel && `，已通知 ${r.noticeLabel}`}
               </div>
             )}
             {view === "deposit" && r.deposit && (
               <div className="rounded-lg bg-warn-soft px-2.5 py-1.5 text-[13px]">
-                訂金 <b>{money(r.deposit.amount)}</b>・末五碼 <b className="font-mono tracking-[2px]">{r.deposit.ref}</b>
+                訂金 <b>{money(r.deposit.amount)}</b>，末五碼 <b className="font-mono">{r.deposit.ref}</b>
                 <span className="text-mute">（{r.deposit.reportedLabel} 回傳）</span>
               </div>
             )}
@@ -92,7 +92,7 @@ export function PayList({ view, rows }: { view: "waiting" | "deposit" | "arrival
                 )}
               </div>
             )}
-            {view === "myship" && <div className="text-[12px] text-good">賣貨便已下單 {r.myshipLabel}{r.myshipRef ? `・${r.myshipRef}` : ""}</div>}
+            {view === "myship" && <div className="text-[12px] text-good">賣貨便已下單 {r.myshipLabel}{r.myshipRef ? `，${r.myshipRef}` : ""}</div>}
             <div className="flex flex-wrap gap-1.5">
               {view === "waiting" && (
                 <>
@@ -128,7 +128,7 @@ export function PayList({ view, rows }: { view: "waiting" | "deposit" | "arrival
         title="賣貨便已下單"
         footer={<Button variant="primary" className="w-full" loading={pending} onClick={() => ship && run(() => markMyshipAction(ship.id, ref.trim() || null), { success: "已記下，這筆不會再逾期取消", onOk: () => setShip(null) })}>確定</Button>}
       >
-        <p className="text-[14px]">{ship?.buyer}・{ship?.orderNo}</p>
+        <p className="text-[14px]">{ship?.buyer}，{ship?.orderNo}</p>
         <label className="mt-2 block text-[13px] font-medium text-ink-2">
           賣貨便訂單編號（選填）
           <input className={`${inputCls} mt-1`} value={ref} maxLength={60} onChange={(e) => setRef(e.target.value)} />
@@ -142,7 +142,7 @@ export function PayList({ view, rows }: { view: "waiting" | "deposit" | "arrival
         title="沒收到訂金"
         footer={<Button variant="danger" className="w-full" loading={pending} onClick={() => reject && run(() => rejectDepositAction(reject.id), { success: "已取消，名額給候補", onOk: () => setReject(null) })}>取消這筆訂單</Button>}
       >
-        <p className="text-[14px]">{reject?.buyer}・{reject?.orderNo}・末五碼 {reject?.deposit?.ref}</p>
+        <p className="text-[14px]">{reject?.buyer}，{reject?.orderNo}，末五碼 {reject?.deposit?.ref}</p>
         <p className="mt-2 text-[13px] text-mute">會取消整筆訂單並通知客人（原因：沒有收到訂金），名額依序給候補。確定前建議再查一次帳戶。</p>
       </Modal>
 
@@ -152,7 +152,7 @@ export function PayList({ view, rows }: { view: "waiting" | "deposit" | "arrival
         title="延長下單期限"
         footer={<Button variant="primary" className="w-full" loading={pending} onClick={() => extend && run(() => extendPayAction(extend.id, hours), { success: "已延長期限", onOk: () => setExtend(null) })}>延長</Button>}
       >
-        <p className="text-[14px]">{extend?.buyer}・{extend?.orderNo}</p>
+        <p className="text-[14px]">{extend?.buyer}，{extend?.orderNo}</p>
         <label className="mt-2 block text-[13px] font-medium text-ink-2">
           延長多久
           <select className={`${inputCls} mt-1`} value={hours} onChange={(e) => setHours(Number(e.target.value))}>

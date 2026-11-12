@@ -155,7 +155,7 @@ export function ShipOwnerButton({ id, now, operators }: { id: string; now: strin
         title="改出貨人"
         footer={<Button variant="primary" loading={pending} disabled={!owner} onClick={() => run(() => switchShipmentOwnerAction(id, owner), { success: (d) => (d.moved ? `已改成${d.name}出貨（換了 ${d.moved} 件）` : `本來就是${d.name}的，不用換`), onOk: () => setOpen(false) })}>確認更改</Button>}
       >
-        <p className="mb-3 text-[14px]">現在扣的是：<b>{now || "—"}</b></p>
+        <p className="mb-3 text-[14px]">現在扣的是：<b>{now || "無"}</b></p>
         <Choice label="改成誰出的貨（扣誰的庫存）" value={owner} onChange={setOwner} placeholder="選一個人" options={ownerOpts(operators)} />
         <p className="mt-2 text-[12px] text-mute">原本扣到的貨會退回原本那個人的庫存，改扣新選的人。出貨件數、收款不變；成本和「誰賺多少」會跟著重新算。新選的人庫存不夠會擋下來，什麼都不改。</p>
       </Modal>

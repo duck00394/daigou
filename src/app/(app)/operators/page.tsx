@@ -45,7 +45,7 @@ export default async function OperatorsPage({ searchParams }: { searchParams: Pr
   return (
     <div className="space-y-4">
       <PageHeader title="經營者對帳" sub="誰負責下單、誰實際付了供應商多少、誰收貨清點。" actions={<LinkButton href="/settings">經營者名稱</LinkButton>} />
-      <p className="rounded-xl border border-[#f0dfa8] bg-warn-soft px-4 py-2.5 text-[13px] leading-6 text-warn">
+      <p className="rounded-xl border border-tone-amber-300-2 bg-warn-soft px-4 py-2.5 text-[13px] leading-6 text-warn">
         這裡只呈現實際發生的紀錄，<strong>不是</strong>合夥人之間的成本分攤或還款結算：誰付給供應商的錢，不代表誰應該負擔這筆成本，也不代表誰欠誰。不同幣別分開統計，不直接相加。
       </p>
 
@@ -186,11 +186,11 @@ async function PaymentsList({ f, sp, opName }: { f: OperatorFilter; sp: SP; opNa
                 <td>{opName(p.paidById)}</td>
                 <td><Link className="text-ai hover:underline" href={`/inventory/batches/${p.batch.id}#pay-${p.id}`}>{p.batch.code} {p.batch.name}</Link>{p.batch.supplierRef && <div className="text-[12px] text-mute">{p.batch.supplierRef.name}</div>}</td>
                 <td className="num text-right">{money(p.amount, p.currency)}</td>
-                <td className="num text-[13px]">{p.currency === "TWD" ? "—" : p.rateMicro ? `${formatRate(p.rateMicro)}／${formatTwd(jpyToTwd(p.amount, p.rateMicro))}` : "未填"}</td>
-                <td>{p.purpose ? paymentPurpose[p.purpose] : "—"}</td>
-                <td>{p.method ?? "—"}</td>
+                <td className="num text-[13px]">{p.currency === "TWD" ? "無" : p.rateMicro ? `${formatRate(p.rateMicro)}／${formatTwd(jpyToTwd(p.amount, p.rateMicro))}` : "未填"}</td>
+                <td>{p.purpose ? paymentPurpose[p.purpose] : "無"}</td>
+                <td>{p.method ?? "無"}</td>
                 <td>{supplierPaymentStatus[p.status][0]}</td>
-                <td className="text-[13px]">{[p.reference, p.note, p.voidReason ? `作廢：${p.voidReason}` : null].filter(Boolean).join("｜") || "—"}</td>
+                <td className="text-[13px]">{[p.reference, p.note, p.voidReason ? `作廢：${p.voidReason}` : null].filter(Boolean).join("｜") || "無"}</td>
               </tr>
             ))}
           </tbody>
@@ -248,7 +248,7 @@ async function BatchesList({ f, role, opName }: { f: OperatorFilter; role: strin
             {rows.map((b) => (
               <tr key={b.id}>
                 <td><Link className="text-ai hover:underline" href={`/inventory/batches/${b.id}`}>{b.code} {b.name}</Link></td>
-                <td>{b.supplierRef?.name ?? b.supplier ?? "—"}</td>
+                <td>{b.supplierRef?.name ?? b.supplier ?? "無"}</td>
                 <td className="num">{fmtDate(b.orderedAt)}</td>
                 <td>{opName(b.orderedById)}</td>
                 <td>{opName(b.paymentResponsibleById)}</td>

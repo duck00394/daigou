@@ -37,7 +37,7 @@ test("手機：關稅 %、預購平均成本、庫存欄", async ({ page }) => {
   // 團頁面：自動算出關稅 1,000 × 10% = 100
   await page.getByRole("link", { name: "看這一團" }).click();
   const fee = page.getByTestId("fee-row").filter({ has: page.getByTestId("auto-duty") });
-  await expect(fee).toContainText("10%・自動算");
+  await expect(fee).toContainText("10%，自動算");
   await expect(fee).toContainText("NT$100");
   await expect(page.getByTestId("duty-bar").getByLabel("關稅 %")).toHaveValue("10");
 
@@ -108,7 +108,7 @@ test("手機：關稅 %、預購平均成本、庫存欄", async ({ page }) => {
   // 點到庫存，再按返回 → 回到系列頁（不是首頁）
   const seriesUrl = page.url();
   await prod.locator("summary").click();
-  await prod.getByRole("link", { name: "看庫存 ›" }).click();
+  await prod.getByRole("link", { name: "看庫存" }).click();
   await expect(page).toHaveURL(/tab=stock/);
   await page.getByTestId("back").click();
   await expect(page).toHaveURL(seriesUrl);

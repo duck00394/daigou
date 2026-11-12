@@ -1,3 +1,4 @@
+import { SHOP_ROSE, ICON_TEXT } from "@/lib/brand";
 // 訂購頁的主畫面圖示：玫瑰色底＋店名第一個字（跟訂購頁左上角一樣）
 import { ImageResponse } from "next/og";
 import { prisma } from "@/server/db";
@@ -21,7 +22,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ size: s
   }
   return new ImageResponse(
     (
-      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#b4505e", color: "#fff", fontSize: size * 0.56, fontWeight: 700, fontFamily: fonts ? "Noto Serif TC" : "serif" }}>
+      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: SHOP_ROSE, color: ICON_TEXT, fontSize: size * 0.56, fontWeight: 700, fontFamily: fonts ? "Noto Serif TC" : "serif" }}>
         {first}
       </div>
     ),

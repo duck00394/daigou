@@ -96,10 +96,9 @@ export default async function Home() {
           <ul className="divide-y divide-line-2 overflow-hidden rounded-xl border border-line bg-card" data-testid="home-todo" data-tour="home-todo">
             {todo.map((t) => (
               <li key={t.href + t.text}>
-                <Link href={t.href} className="flex items-center gap-3 px-3 py-3 hover:bg-[#fafbfd]">
+                <Link href={t.href} className="flex items-center gap-3 px-3 py-3 hover:bg-tone-gray-50-5">
                   <span className="num min-w-8 rounded-md bg-peach px-1.5 text-center font-semibold text-peach-ink">{t.n}</span>
                   <span className="flex-1 text-[15px]">{t.text}</span>
-                  <span aria-hidden className="text-mute">›</span>
                 </Link>
               </li>
             ))}

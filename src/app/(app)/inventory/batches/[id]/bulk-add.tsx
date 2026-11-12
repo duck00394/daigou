@@ -1,4 +1,5 @@
 "use client";
+import { Icon } from "@/components/icons";
 import { SeriesPicker, type SeriesOpt } from "@/components/series-picker";
 import type { RowDefault } from "@/server/services/series";
 // 批次新增系列商品：同一張表格填寫多個角色的單價與數量，一次建立。
@@ -491,7 +492,7 @@ export function BulkAddGrid({
       else shared += v;
     }
     const tot = Object.values(joint.pct).reduce((a, b) => a + b, 0) || 1;
-    return joint.ops.map((o) => `${o.name} ${formatTwd(Math.round(by.get(o.id)! + (shared * (joint.pct[o.id] ?? 0)) / tot))}`).join("・") + (shared ? `（含一起的 ${formatTwd(shared)}）` : "");
+    return joint.ops.map((o) => `${o.name} ${formatTwd(Math.round(by.get(o.id)! + (shared * (joint.pct[o.id] ?? 0)) / tot))}`).join("、") + (shared ? `（含一起的 ${formatTwd(shared)}）` : "");
   }, [eff, joint, ownerAll, rateMicro]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 表格裡有幾個品項：兩個以上才分組顯示
@@ -723,9 +724,9 @@ export function BulkAddGrid({
       </div>
 
       {draft && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#f0dfa8] bg-warn-soft px-3 py-2 text-[14px] text-warn" data-testid="bulk-draft">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-tone-amber-300-2 bg-warn-soft px-3 py-2 text-[14px] text-warn" data-testid="bulk-draft">
           <span>
-            上次{draft.cat || draft.typeName ? `在「${[draft.cat?.name, draft.typeName].filter(Boolean).join("・")}」` : ""}有 {draft.rows.length} 列還沒存（{fmtAgo(draft.at)}），要帶回來嗎？
+            上次{draft.cat || draft.typeName ? `在「${[draft.cat?.name, draft.typeName].filter(Boolean).join("、")}」` : ""}有 {draft.rows.length} 列還沒存（{fmtAgo(draft.at)}），要帶回來嗎？
             {draft.sent && (
               <span className="mt-1 block font-semibold text-bad" data-testid="bulk-draft-sent">
                 上次按過儲存但沒收到結果，可能已經存好了：先<Link href={`/inventory/batches/${draft.sent.batchId}`} className="underline">看那一團</Link>，確定沒有再帶回來，免得重複。
@@ -740,7 +741,7 @@ export function BulkAddGrid({
       )}
       {/* 4：快速加入角色 */}
       {seriesId && (
-        <div className="rounded-xl border border-line bg-[#fbfcfd] p-3">
+        <div className="rounded-xl border border-line bg-tone-gray-50-6 p-3">
           <div className="mb-2 flex flex-wrap items-center gap-2 text-[13px]">
             <span className="font-medium text-ink-2">點角色加一列（再點一次拿掉）</span>
             {roster.length === 0 && <span className="text-mute">這個系列還沒有角色，直接在下方表格輸入新角色即可。</span>}
@@ -767,7 +768,7 @@ export function BulkAddGrid({
           </div>
           {cat && typeId && !hasItemChars && (
             <p className="mt-1.5 text-[12.5px] text-mute" data-testid="item-chars-hint">
-              {typeName}還沒設角色{seriesChars.length ? "，先列這個系列用到的角色" : ""}。<Link href={`/catalog?open=${cat.id}`} className="text-ai underline">到系列目錄設定 ›</Link>
+              {typeName}還沒設角色{seriesChars.length ? "，先列這個系列用到的角色" : ""}。<Link href={`/catalog?open=${cat.id}`} className="text-ai underline">到系列目錄設定</Link>
             </p>
           )}
           {otherChips.length > 0 && (
@@ -844,7 +845,7 @@ export function BulkAddGrid({
         <span className="shrink-0 text-mute">{supplierCurrency === "JPY" ? "日幣" : "元"}</span>
       </label>
       {joint && (
-        <div className="rounded-xl border border-[#d9c8f2] bg-[#f7f2fd] p-3" data-testid="joint-owner-box">
+        <div className="rounded-xl border border-tone-purple-200 bg-tone-purple-50 p-3" data-testid="joint-owner-box">
           <label className="block text-[13px] font-medium text-ink-2">
             合資：這批全部設成
             <select aria-label="這批全部設成" className={`${inputCls} mt-1 min-h-11`} value={ownerAll} onChange={(e) => { setOwnerAll(e.target.value); setRows((rs) => rs.map((r) => ({ ...r, ownerId: undefined }))); }}>
@@ -891,9 +892,9 @@ export function BulkAddGrid({
           return (
             <Fragment key={r.key}>
             {head && (
-              <div className={`flex items-baseline justify-between rounded-md bg-[#f7f8fa] px-2 py-1.5 text-[14px] font-semibold ${i > 0 ? "mt-3 border-t-2 border-dashed border-line pt-2" : ""}`} data-testid="type-group" data-type={head.name}>
+              <div className={`flex items-baseline justify-between rounded-md bg-tone-gray-50-2 px-2 py-1.5 text-[14px] font-semibold ${i > 0 ? "mt-3 border-t-2 border-dashed border-line pt-2" : ""}`} data-testid="type-group" data-type={head.name}>
                 {head.name || "沒選品項"}
-                <span className="text-[12.5px] font-normal text-mute">{head.rows} 列・{head.qty} 件</span>
+                <span className="text-[12.5px] font-normal text-mute">{head.rows} 列，{head.qty} 件</span>
               </div>
             )}
             <div
@@ -957,7 +958,7 @@ export function BulkAddGrid({
               </div>
               <div role="cell">
                 <label className={lbl} htmlFor={`u-${r.key}`}>單價</label>
-                <input id={`u-${r.key}`} {...cell(2)} className={`${inputCls} num text-right ${sameOn(r) ? "bg-[#eef3fb] placeholder:text-ink" : ""} ${err?.includes("單價") && !isBlank(r) ? "border-bad ring-1 ring-bad" : ""}`} inputMode="numeric" disabled={r.loading} placeholder={r.loading ? "讀取中…" : sameOn(r) ? sameOf(r)! : fill.get(r.key) ? `≈${fill.get(r.key)}` : undefined} value={sameOn(r) ? "" : fill.has(r.key) && !r.touched ? "" : r.unitCost} onFocus={() => !r.touched && !sameOn(r) && update(r.key, { touched: true })} onChange={(e) => update(r.key, { unitCost: e.target.value, hint: "", touched: true })} />
+                <input id={`u-${r.key}`} {...cell(2)} className={`${inputCls} num text-right ${sameOn(r) ? "bg-tone-blue-100-2 placeholder:text-ink" : ""} ${err?.includes("單價") && !isBlank(r) ? "border-bad ring-1 ring-bad" : ""}`} inputMode="numeric" disabled={r.loading} placeholder={r.loading ? "讀取中…" : sameOn(r) ? sameOf(r)! : fill.get(r.key) ? `≈${fill.get(r.key)}` : undefined} value={sameOn(r) ? "" : fill.has(r.key) && !r.touched ? "" : r.unitCost} onFocus={() => !r.touched && !sameOn(r) && update(r.key, { touched: true })} onChange={(e) => update(r.key, { unitCost: e.target.value, hint: "", touched: true })} />
                 {r.hint && !sameOn(r) && <span className="mt-0.5 hidden text-[11px] leading-tight text-mute md:block">{r.hint}</span>}
               </div>
               <div role="cell" className={`order-last col-span-2 md:order-none md:col-span-1 ${extra}`}>
@@ -981,7 +982,7 @@ export function BulkAddGrid({
               </div>
               <div role="cell" className="hidden md:block md:pt-2.5 md:text-right">
                 <span className="sr-only">小計</span>
-                <span className="num font-medium">{sub === null ? "—" : eff[i].currency === "JPY" ? formatJpy(sub) : formatTwd(sub)}</span>
+                <span className="num font-medium">{sub === null ? "無" : eff[i].currency === "JPY" ? formatJpy(sub) : formatTwd(sub)}</span>
               </div>
               <div role="cell" className="flex justify-end gap-1 pt-2 md:pt-1">
                 <button type="button" className="hidden rounded-md px-2 py-1 text-[13px] text-ai hover:bg-ai-soft md:inline" onClick={() => duplicateRow(r.key)} title="複製這一列的單價、幣別、數量到下一列（Ctrl+D）">複製</button>
@@ -1140,10 +1141,10 @@ export function BulkAddGrid({
                 )}
                 <tr className="border-t border-line-2">
                   <td className="py-1">{r.characterId === "__new__" ? <>{r.newName}<span className="ml-1 text-[12px] text-info">（新角色）</span></> : nameOf(r.characterId)}</td>
-                  <td>{r.spec || "—"}</td>
+                  <td>{r.spec || "無"}</td>
                   <td className="num text-right">
                     {r.currency === "JPY" ? formatJpy(c) : formatTwd(c)}
-                    {(r.currency === "JPY" ? c >= 100000 : c >= 20000) && <span className="block text-[12px] font-medium text-bad">⚠ 單價很高，請確認</span>}
+                    {(r.currency === "JPY" ? c >= 100000 : c >= 20000) && <span className="block text-[12px] font-medium text-bad"><Icon name="warn" /> 單價很高，請確認</span>}
                   </td>
                   <td className="num text-right">{q}</td>
                   <td className="num text-right">{r.currency === "JPY" ? formatJpy(q * c) : formatTwd(q * c)}</td>
@@ -1158,7 +1159,7 @@ export function BulkAddGrid({
             {pay.extraTwd > 0 && <p className="flex justify-between"><span>運費</span><span className="num">{formatTwd(pay.extraTwd)}</span></p>}
             <p className="flex justify-between font-semibold"><span>總額</span><span className="num">{formatTwd(grandTwd)}</span></p>
             <p className="flex justify-between"><span>已付{paidAmount() > 0 ? "（會記成這團的付款）" : ""}</span><span className="num">{paidAmount() > 0 ? formatTwd(paidAmount()) : "還沒付"}</span></p>
-            {overpaid && <p className="font-medium text-bad">⚠ 已付比總額多 {formatTwd(paidAmount() - grandTwd)}，確定嗎？</p>}
+            {overpaid && <p className="font-medium text-bad"><Icon name="warn" /> 已付比總額多 {formatTwd(paidAmount() - grandTwd)}，確定嗎？</p>}
           </div>
         )}
       </Modal>

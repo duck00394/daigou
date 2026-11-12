@@ -9,7 +9,7 @@ function Line({ href, testid, children, profit }: { href: string; testid: string
   return (
     <Link href={href} className="flex items-baseline justify-between gap-2 py-1 text-[14px]" data-testid={testid}>
       <span>{children}</span>
-      <span className={`num shrink-0 font-semibold ${profit < 0 ? "text-bad" : "text-good"}`}>{profit < 0 ? "賠" : "賺"} {formatTwd(Math.abs(profit))} <span className="font-normal text-mute">›</span></span>
+      <span className={`num shrink-0 font-semibold ${profit < 0 ? "text-bad" : "text-good"}`}>{profit < 0 ? "賠" : "賺"} {formatTwd(Math.abs(profit))}</span>
     </Link>
   );
 }
@@ -33,7 +33,7 @@ export function ProfitCard({ p, categoryId, est = false, sureHref, estHref, name
   return (
     <section className="space-y-2.5" aria-label="這個系列算起來" data-testid="series-profit" data-tour="series-profit">
       {sureHref && estHref && (
-        <nav className="flex rounded-xl bg-[#e7eaf0] p-1" aria-label="確定的或預估的" data-testid="est-toggle">
+        <nav className="flex rounded-xl bg-tone-gray-100 p-1" aria-label="確定的或預估的" data-testid="est-toggle">
           <Link href={sureHref} scroll={false} className={seg(!est)} aria-current={!est ? "page" : undefined}>確定的</Link>
           <Link href={estHref} scroll={false} className={seg(est)} aria-current={est ? "page" : undefined}>預估的</Link>
         </nav>
@@ -50,7 +50,7 @@ export function ProfitCard({ p, categoryId, est = false, sureHref, estHref, name
       )}
       {unpriced > 0 && (
         <p className="text-[14px] text-warn" data-testid="profit-unpriced">
-          還有 {unpriced} 隻沒填售價，填了才算得出來 <Link href={`/categories/${categoryId}?tab=catalog`} className="text-ai">去填 ›</Link>
+          還有 {unpriced} 隻沒填售價，填了才算得出來 <Link href={`/categories/${categoryId}?tab=catalog`} className="text-ai">去填</Link>
         </p>
       )}
       <details className="rounded-xl border border-line bg-card px-3 py-2 text-[14px]">

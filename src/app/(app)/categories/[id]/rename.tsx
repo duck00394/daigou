@@ -9,7 +9,7 @@ export function RenameNames({ categoryId, plan }: { categoryId: string; plan: { 
   const { run, pending } = useRun();
   if (!plan.length) return null;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#f0dfa8] bg-warn-soft px-4 py-2.5 text-[14px] text-warn" data-testid="rename-banner">
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-tone-amber-300-2 bg-warn-soft px-4 py-2.5 text-[14px] text-warn" data-testid="rename-banner">
       <span>
         有 {plan.length} 個商品還是舊名稱（例：{plan[0].from} → <b>{plan[0].to}</b>）
       </span>

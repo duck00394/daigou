@@ -42,7 +42,7 @@ test("手機：新增、衝突、編輯、取消、刪除搶購提醒", async ({
 
   // 編輯時間：衝突消失
   await page.goto(firstUrl);
-  await page.getByRole("link", { name: "✎ 編輯" }).click();
+  await page.getByRole("link", { name: "編輯" }).click();
   await page.getByLabel("開始時間 時").selectOption("21");
   await page.getByLabel("開始時間 分").selectOption("00");
   // 時間選單是 24 小時制，不會出現上午／下午
@@ -61,7 +61,7 @@ test("手機：新增、衝突、編輯、取消、刪除搶購提醒", async ({
 
   // 刪除
   await page.locator(`[data-testid="rush-row"][data-name^="頑皮喵 ${tag}"]`).click();
-  await page.getByRole("button", { name: "🗑 刪除" }).click();
+  await page.getByRole("button", { name: "刪除" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "刪除", exact: true }).click();
   await expect(page).toHaveURL(/\/rush$/);
   await expect(page.locator(`[data-testid="rush-row"][data-name^="頑皮喵 ${tag}"]`)).toHaveCount(0);
@@ -94,7 +94,7 @@ test("手機：還沒開通知時，按開啟但選不允許，不會顯示成�
   await login(page);
   await page.goto("/rush/notify");
   await expect(page.getByTestId("push-setup")).toHaveAttribute("data-state", "off");
-  await page.getByRole("button", { name: "🔔 開啟這支手機的通知" }).click();
+  await page.getByRole("button", { name: "開啟這支手機的通知" }).click();
   await expect(page.getByRole("alert").filter({ hasText: "通知被拒絕了" })).toBeVisible();
   await expect(page.getByTestId("push-setup")).toHaveAttribute("data-state", "denied");
   await page.screenshot({ path: "test-results/mobile_rush_notify.png", fullPage: true });

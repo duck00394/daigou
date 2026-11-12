@@ -1,5 +1,6 @@
 "use client";
 // 新增／編輯搶購提醒：代購團、系列可以選既有的或直接打字；日期時間是台灣時間
+import { Icon } from "@/components/icons";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, inputCls, notify, useRun, TimeInput24 } from "@/components/client";
@@ -87,8 +88,8 @@ export function RushFormView({ id, initial, suppliers, series }: { id: string | 
         </div>
       )}
       {clash.length > 0 && (
-        <p className="rounded-xl border border-[#fdba74] bg-[#fff7ed] px-3 py-2 text-[13px] text-[#9a3412]" data-testid="rush-clash">
-          ⚠ 時間衝突：{clash.map((c) => `${taipeiParts(new Date(c.startAt)).time} ${c.label}`).join("、")}
+        <p className="rounded-xl border border-tone-orange-400-2 bg-tone-orange-50 px-3 py-2 text-[13px] text-tone-orange-700" data-testid="rush-clash">
+          <Icon name="warn" /> 時間衝突：{clash.map((c) => `${taipeiParts(new Date(c.startAt)).time} ${c.label}`).join("、")}
         </p>
       )}
       <Button type="submit" variant="primary" className="w-full" loading={pending}>

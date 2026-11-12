@@ -36,7 +36,7 @@ export function ResponsibilityCard({ batchId, operators, value, editable, jointS
             <dt className="text-[12px] text-mute">這團是誰的</dt>
             <dd data-testid="resp-orderedById" className={`truncate text-[15px] font-semibold sm:text-[16px] ${value.ownership === "JOINT" || value.orderedById ? "" : "text-mute"}`}>{ownerLabel}</dd>
             {value.ownership === "JOINT" && (
-              <dd className="text-[11px] text-mute">{jointShares && jointShares.length ? jointShares.map((x) => `${x.name} ${x.percent}%`).join("・") : "還沒登記付款，暫時不分"}</dd>
+              <dd className="text-[11px] text-mute">{jointShares && jointShares.length ? jointShares.map((x) => `${x.name} ${x.percent}%`).join("、") : "還沒登記付款，暫時不分"}</dd>
             )}
           </div>
           {rows.map(([label, k, note]) => (

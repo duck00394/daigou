@@ -111,9 +111,9 @@ export function Tour() {
   return (
     <div className="fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-label="新手教學" data-testid="tour">
       {rect ? (
-        <div className="pointer-events-none fixed rounded-xl ring-4 ring-[#ffd34d]" style={{ left: rect.left - pad, top: rect.top - pad, width: rect.width + pad * 2, height: rect.height + pad * 2, boxShadow: "0 0 0 9999px rgba(20,25,35,0.6)" }} />
+        <div className="pointer-events-none fixed rounded-xl ring-4 ring-tone-amber-400" style={{ left: rect.left - pad, top: rect.top - pad, width: rect.width + pad * 2, height: rect.height + pad * 2, boxShadow: "0 0 0 9999px rgba(20,25,35,0.6)" }} />
       ) : (
-        <div className="fixed inset-0 bg-[rgba(20,25,35,0.6)]" />
+        <div className="fixed inset-0 bg-scrim" />
       )}
       <div className="fixed inset-x-3 mx-auto max-w-md rounded-2xl bg-white p-4 shadow-2xl" style={tipStyle}>
         <div className="text-[12px] text-mute">第 {step! + 1} 步／共 {TOUR.length} 步</div>

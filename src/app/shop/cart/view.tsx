@@ -8,7 +8,7 @@ import type { ContactField } from "@/server/services/shop";
 
 type Status = Record<string, { open: boolean; openAt: string | null; name: string; pay: { timing: "ORDER" | "ARRIVAL"; hours: number } | null }>;
 export const DONE_KEY = "dg_done";
-const fieldCls = "h-[46px] w-full rounded-[14px] border border-[#e6dace] bg-[#fdfaf6] px-3.5 text-[16px] text-shop-ink";
+const fieldCls = "h-[46px] w-full rounded-[14px] border border-tone-orange-200 bg-tone-sand-50 px-3.5 text-[16px] text-shop-ink";
 
 function newKey() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -88,13 +88,13 @@ export function CartView({ loggedIn, lineName, deposits, defaults, returning, sh
       {[...groups.entries()].map(([cid, list]) => {
         const st = status[cid];
         return (
-          <div key={cid} className="overflow-hidden rounded-[20px] border border-shop-line bg-white shadow-[0_6px_18px_rgba(120,70,60,0.08)]">
-            <div className="flex items-center justify-between border-b border-[#f3e1e1] bg-[#fdf1f1] px-4 py-3.5">
+          <div key={cid} className="overflow-hidden rounded-[20px] border border-shop-line bg-white shadow-lift-1">
+            <div className="flex items-center justify-between border-b border-tone-red-200-2 bg-tone-red-50-2 px-4 py-3.5">
               <span className="font-serif text-[17px] font-bold">{list[0].catName}</span>
               <span className="text-[12px] font-bold text-shop-rose-2">{!st ? "已停止訂購" : st.open ? "販售中" : "還沒開賣"}</span>
             </div>
             {list.map((it, i) => (
-              <div key={it.productId} className="flex gap-3 border-b border-[#f1e9e0] px-4 py-3.5 last:border-b-0">
+              <div key={it.productId} className="flex gap-3 border-b border-tone-orange-200-3 px-4 py-3.5 last:border-b-0">
                 <Pic src={it.image} alt={it.name} seed={i} className="h-16 w-16 shrink-0 rounded-[14px]" label="" />
                 <div className="flex flex-1 flex-col gap-2">
                   <div className="flex justify-between gap-2">
@@ -119,7 +119,7 @@ export function CartView({ loggedIn, lineName, deposits, defaults, returning, sh
       })}
 
       {!loggedIn && (
-        <div role="radiogroup" aria-label="下單方式" className="grid grid-cols-2 overflow-hidden rounded-[14px] border border-[#e2d6ca] bg-white text-[14px]">
+        <div role="radiogroup" aria-label="下單方式" className="grid grid-cols-2 overflow-hidden rounded-[14px] border border-tone-orange-300-4 bg-white text-[14px]">
           {(["guest", "line"] as const).map((m) => (
             <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)} className={`h-11 font-bold ${mode === m ? "bg-shop-ink text-white" : "text-shop-ink-2"}`}>
               {m === "guest" ? "訪客下單" : "LINE 登入下單"}
@@ -129,7 +129,7 @@ export function CartView({ loggedIn, lineName, deposits, defaults, returning, sh
       )}
 
       {canSubmit ? (
-        <div className="flex flex-col gap-3 rounded-[20px] border border-shop-line bg-white p-4 shadow-[0_6px_18px_rgba(120,70,60,0.08)]">
+        <div className="flex flex-col gap-3 rounded-[20px] border border-shop-line bg-white p-4 shadow-lift-1">
           <div className="flex items-baseline justify-between">
             <span className="text-[16px] font-bold">聯絡資料</span>
             <span className="text-[12px] text-shop-mute">{guest ? "不用註冊，填好就能下單" : returning ? "已從上次訂單帶入" : "第一次填，之後自動帶入"}</span>
@@ -171,8 +171,8 @@ export function CartView({ loggedIn, lineName, deposits, defaults, returning, sh
         <div className="flex flex-col items-center gap-3 rounded-[20px] border border-shop-line bg-white p-5 text-center">
           <div className="text-[15px] font-bold">用 LINE 登入下單</div>
           <p className="text-[13px] text-shop-mute">登入後訂單明細、付款提醒、出貨都會傳到 LINE 聊天室；不想登入可以選「訪客下單」</p>
-          <a href={`/shop/login?next=${encodeURIComponent("/shop/cart")}`} className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#078a3e] text-[16px] font-bold text-white">
-            <span className="rounded-full bg-white px-1.5 py-0.5 text-[11px] font-bold text-[#078a3e]">LINE</span>用 LINE 登入
+          <a href={`/shop/login?next=${encodeURIComponent("/shop/cart")}`} className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-tone-green-800 text-[16px] font-bold text-white">
+            <span className="rounded-full bg-white px-1.5 py-0.5 text-[11px] font-bold text-tone-green-800">LINE</span>用 LINE 登入
           </a>
         </div>
       )}
@@ -180,35 +180,35 @@ export function CartView({ loggedIn, lineName, deposits, defaults, returning, sh
       <div className="flex flex-col gap-2 rounded-[20px] border border-shop-line bg-white p-4 text-[14px]">
         <div className="flex justify-between"><span className="text-shop-mute">商品小計（{cart.count} 件）</span><span>{money(cart.total)}</span></div>
         <div className="flex justify-between"><span className="text-shop-mute">運費</span><span>到貨後通知</span></div>
-        <div className="mt-0.5 flex justify-between border-t border-dashed border-[#e6dace] pt-2.5"><span className="font-bold">合計</span><span className="text-[20px] font-bold text-shop-rose">{money(cart.total)}</span></div>
+        <div className="mt-0.5 flex justify-between border-t border-dashed border-tone-orange-200 pt-2.5"><span className="font-bold">合計</span><span className="text-[20px] font-bold text-shop-rose">{money(cart.total)}</span></div>
       </div>
 
       {canSubmit && (
-        <div className="flex flex-col gap-2.5 rounded-[20px] border border-[#ecd9a8] bg-shop-gold-soft p-4 text-[14px] leading-relaxed text-shop-gold">
+        <div className="flex flex-col gap-2.5 rounded-[20px] border border-tone-amber-300 bg-shop-gold-soft p-4 text-[14px] leading-relaxed text-shop-gold">
           {payNotes.map((p) => (
             <p key={`${p.timing}${p.hours}`}>
               {payNotes.length > 1 && <b>{p.names.join("、")}：</b>}
               {p.timing === "DEPOSIT" ? (
-                <>有要訂金的商品，訂金 <b>NT$ {p.deposit.toLocaleString("en-US")}</b>：成立後 <b className="text-[#c8102e]">1 小時</b>內匯款並回傳末五碼，逾時自動取消。確認後會傳賣貨便連結，整張訂單一起在賣貨便下單，尾款取貨時付。</>
+                <>有要訂金的商品，訂金 <b>NT$ {p.deposit.toLocaleString("en-US")}</b>：成立後 <b className="text-tone-red-600-2">1 小時</b>內匯款並回傳末五碼，逾時自動取消。確認後會傳賣貨便連結，整張訂單一起在賣貨便下單，尾款取貨時付。</>
               ) : p.timing === "ORDER" ? (
-                <>成立後 <b className="text-[#c8102e]">{p.hours} 小時</b>內，用賣貨便下單。逾期會取消並讓給候補的人。</>
+                <>成立後 <b className="text-tone-red-600-2">{p.hours} 小時</b>內，用賣貨便下單。逾期會取消並讓給候補的人。</>
               ) : (
-                <>到貨後會通知你，收到通知 <b className="text-[#c8102e]">{p.hours} 小時</b>內用賣貨便下單。逾期會取消並讓給候補的人。</>
+                <>到貨後會通知你，收到通知 <b className="text-tone-red-600-2">{p.hours} 小時</b>內用賣貨便下單。逾期會取消並讓給候補的人。</>
               )}
             </p>
           ))}
           <label className="flex items-start gap-2.5 text-shop-ink">
-            <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-[#b4505e]" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+            <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-shop-rose" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
             <span>我已閱讀<a href="/shop/rules" target="_blank" className="mx-0.5 font-bold text-shop-rose-2 underline">交易規則</a>與<a href="/shop/privacy" target="_blank" className="mx-0.5 font-bold text-shop-rose-2 underline">隱私權政策</a></span>
           </label>
         </div>
       )}
 
-      {err && <div role="alert" className="rounded-[14px] border border-[#f1c9cc] bg-[#fdf0f1] px-3.5 py-3 text-[14px] font-bold text-shop-rose-2">{err}</div>}
+      {err && <div role="alert" className="rounded-[14px] border border-tone-red-200 bg-tone-red-50 px-3.5 py-3 text-[14px] font-bold text-shop-rose-2">{err}</div>}
 
       {guest && (
         <div className="flex flex-col gap-2 pt-1">
-          <button type="button" disabled={pending} onClick={submit} className="flex h-14 items-center justify-center rounded-full bg-[#2a2220] text-[17px] font-bold text-white shadow-[0_10px_24px_rgba(42,34,32,0.25)] disabled:opacity-60">
+          <button type="button" disabled={pending} onClick={submit} className="flex h-14 items-center justify-center rounded-full bg-tone-gray-900 text-[17px] font-bold text-white shadow-lift-5 disabled:opacity-60">
             {pending ? "送出中…" : `送出訂單　${money(cart.total)}`}
           </button>
           <p className="text-center text-[12px] text-shop-mute">{notOpen.length ? "開賣時間到才能送出" : "送出後會顯示訂單編號和查詢碼，也會寄到你的 Email"}</p>
@@ -217,8 +217,8 @@ export function CartView({ loggedIn, lineName, deposits, defaults, returning, sh
 
       {loggedIn && (
         <div className="flex flex-col gap-2 pt-1">
-          <button type="button" disabled={pending} onClick={submit} className="flex h-14 items-center justify-center gap-2.5 rounded-full bg-[#078a3e] text-[17px] font-bold text-white shadow-[0_10px_24px_rgba(7,138,62,0.3)] disabled:opacity-60">
-            <span className="rounded-full bg-white px-1.5 py-0.5 text-[11px] font-bold text-[#078a3e]">LINE</span>
+          <button type="button" disabled={pending} onClick={submit} className="flex h-14 items-center justify-center gap-2.5 rounded-full bg-tone-green-800 text-[17px] font-bold text-white shadow-lift-6 disabled:opacity-60">
+            <span className="rounded-full bg-white px-1.5 py-0.5 text-[11px] font-bold text-tone-green-800">LINE</span>
             {pending ? "送出中…" : "送出訂單並回到 LINE"}
           </button>
           <p className="text-center text-[12px] text-shop-mute">{notOpen.length ? "開賣時間到才能送出" : "訂單明細會傳到 LINE 聊天室"}</p>

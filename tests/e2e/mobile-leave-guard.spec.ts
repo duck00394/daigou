@@ -65,7 +65,7 @@ test("手機：沒存的採購離開前會先問，意外離開可從草稿帶�
   // 4. 真的離開了（重新整理按確定）→ 回來時可以把草稿帶回來
   answer = true;
   await page.reload();
-  await expect(page.getByTestId("bulk-draft")).toContainText(`在「${cat}b・吊娃」有 1 列還沒存`);
+  await expect(page.getByTestId("bulk-draft")).toContainText(`在「${cat}b、吊娃」有 1 列還沒存`);
   await page.getByTestId("bulk-draft").getByRole("button", { name: "帶回來" }).click();
   await expect(row1(page).getByLabel("單價")).toHaveValue("480");
   await expect(row1(page).getByLabel("數量")).toHaveValue("2");

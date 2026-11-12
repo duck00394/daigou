@@ -22,7 +22,7 @@ test("手機：一整套設定與庫存套數", async ({ page }) => {
   await page.getByTestId("type-set").getByRole("button", { name: "勾的 2 隻＝一整套" }).click();
   await toast(page, /一整套 2 隻/);
   await expect(page.getByTestId("type-set")).toContainText("吊娃一整套 2 隻");
-  await expect(page.getByTestId("type-set")).toContainText("吉伊・小八");
+  await expect(page.getByTestId("type-set")).toContainText("吉伊、小八");
 
   const grid = page.getByRole("table", { name: "批次新增採購品項" });
   for (const [n, q] of [["第 1 列", "3"], ["第 2 列", "2"]] as const) {
@@ -49,7 +49,7 @@ test("手機：一整套設定與庫存套數", async ({ page }) => {
   await page.getByRole("button", { name: "建立", exact: true }).click();
   await expect(typeSel).toHaveValue(/.+/);
   await expect(page.getByTestId("item-chars-hint")).toContainText("先列這個系列用到的角色");
-  await expect(page.getByTestId("item-chars-hint").getByRole("link", { name: "到系列目錄設定 ›" })).toHaveAttribute("href", /\/catalog\?open=/);
+  await expect(page.getByTestId("item-chars-hint").getByRole("link", { name: "到系列目錄設定" })).toHaveAttribute("href", /\/catalog\?open=/);
   await expect(chips.getByRole("button", { name: "＋ 吉伊" })).toBeVisible();
   await expect(chips.getByRole("button", { name: "＋ 兔兔" })).toHaveCount(0);
   await page.screenshot({ path: "test-results/mobile_series_chars.png" });

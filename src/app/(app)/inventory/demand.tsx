@@ -15,7 +15,7 @@ export function DemandButton({ name, shown, cls, rows, operators, viewer = "" }:
   const label = (k: string | null) => (k === null ? "還沒分" : k === "joint" ? "合資" : k === "none" ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
   // 看某個人：只列自己的（＋合資）＋還沒分的；別人的不顯示
   const mine = viewer ? rows.filter((r) => r.ownerKey === viewer || r.ownerKey === "joint" || r.ownerKey === null) : rows;
-  if (!mine.length) return <span className={cls}>{shown || "–"}</span>;
+  if (!mine.length) return <span className={cls}>{shown || 0}</span>;
   const groups = viewer
     ? [
         { key: "mine", title: "我的", list: mine.filter((r) => r.ownerKey !== null) },
@@ -34,9 +34,9 @@ export function DemandButton({ name, shown, cls, rows, operators, viewer = "" }:
   return (
     <>
       <button type="button" className={`${cls} border-b-2 border-dotted border-current px-0.5`} onClick={() => setOpen(true)} aria-label={`${name} 客人訂 ${shown}，看是誰訂的`} data-testid="demand-open">
-        {shown || "–"}
+        {shown || 0}
       </button>
-      <Modal open={open && !edit} onClose={() => setOpen(false)} title={`${name}・客人訂`}>
+      <Modal open={open && !edit} onClose={() => setOpen(false)} title={`${name}，客人訂`}>
         <div className="space-y-3 text-left font-normal" data-testid="demand-list">
           {groups.filter((g) => g.list.length).map((g) => (
             <div key={g.key}>
@@ -46,7 +46,7 @@ export function DemandButton({ name, shown, cls, rows, operators, viewer = "" }:
                   <li key={r.id} className="flex items-center gap-2 px-3 py-2" data-testid="demand-row" data-buyer={r.buyer} data-owner={r.ownerKey ?? ""}>
                     <div className="min-w-0 flex-1 text-[14px]">
                       <div className="truncate font-medium">{r.buyer} × {r.qty}</div>
-                      <div className="text-[12px] text-mute">{r.at} 記的・<Link href={`/orders/${r.orderId}`} className="underline">{r.orderNo}</Link></div>
+                      <div className="text-[12px] text-mute">{r.at} 記的，<Link href={`/orders/${r.orderId}`} className="underline">{r.orderNo}</Link></div>
                     </div>
                     {viewer && r.ownerKey === null ? (
                       <Button small variant="primary" onClick={() => setEdit({ row: r, to: viewer })}>是我的</Button>

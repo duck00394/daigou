@@ -15,7 +15,7 @@ export default async function Suppliers() {
   });
   return (
     <div>
-      <PageHeader title="供應商" sub="點 ☆ 設成常用：新增採購時直接列在最上面，其他用搜尋找。" actions={<SupplierEditButton />} />
+      <PageHeader title="供應商" sub="點星號設成常用：新增採購時直接列在最上面，其他用搜尋找。" actions={<SupplierEditButton />} />
       <Section pad={false}>
         {list.length === 0 ? (
           <Empty action={<SupplierEditButton />}>還沒有供應商。</Empty>
@@ -27,11 +27,11 @@ export default async function Suppliers() {
                 <tr key={s.id} className={s.active ? "" : "opacity-60"}>
                   <td className="text-center">{s.active && <FavoriteStar id={s.id} name={s.name} on={s.favorite} />}</td>
                   <td className="font-medium">{s.name}{!s.active && <span className="ml-1"><Badge tone="muted">已封存</Badge></span>}</td>
-                  <td>{s.kind ? supplierKind[s.kind] : "—"}</td>
+                  <td>{s.kind ? supplierKind[s.kind] : "無"}</td>
                   <td>{s.defaultCurrency}</td>
                   <td className="num text-right">{s._count.batches}</td>
-                  <td>{s.batches[0] ? <Link href={`/inventory/batches/${s.batches[0].id}`} className="text-ai hover:underline">{s.batches[0].code} {s.batches[0].name}</Link> : "—"}<div className="text-[12px] text-mute">{s.batches[0] ? fmtDate(s.batches[0].orderedAt) : ""}</div></td>
-                  <td className="text-[13px]">{s.contact ?? "—"}{s.paymentMethod && <div className="text-mute">付款：{s.paymentMethod}</div>}{s.orderUrl && <a href={s.orderUrl} target="_blank" rel="noopener noreferrer" className="text-ai hover:underline">訂購連結</a>}</td>
+                  <td>{s.batches[0] ? <Link href={`/inventory/batches/${s.batches[0].id}`} className="text-ai hover:underline">{s.batches[0].code} {s.batches[0].name}</Link> : "無"}<div className="text-[12px] text-mute">{s.batches[0] ? fmtDate(s.batches[0].orderedAt) : ""}</div></td>
+                  <td className="text-[13px]">{s.contact ?? "無"}{s.paymentMethod && <div className="text-mute">付款：{s.paymentMethod}</div>}{s.orderUrl && <a href={s.orderUrl} target="_blank" rel="noopener noreferrer" className="text-ai hover:underline">訂購連結</a>}</td>
                   <td><SupplierEditButton supplier={{ id: s.id, name: s.name, defaultCurrency: s.defaultCurrency, kind: s.kind, contact: s.contact, paymentMethod: s.paymentMethod, orderUrl: s.orderUrl, notes: s.notes, active: s.active }} /></td>
                 </tr>
               ))}

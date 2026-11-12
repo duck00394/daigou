@@ -8,7 +8,7 @@ export function ActingChoice({ label, value, options, onChange, defaultValue, no
   const name = (v: string) => (options.find((o) => o.value === v)?.label ?? "").replace(/（我）$/, "");
   if (!open && value === defaultValue && defaultValue) {
     return (
-      <div className="flex items-center justify-between gap-2 rounded-lg border border-[#c9d6ec] bg-[#eef3fb] px-3 py-2" data-testid={testid}>
+      <div className="flex items-center justify-between gap-2 rounded-lg border border-tone-blue-200 bg-tone-blue-100-2 px-3 py-2" data-testid={testid}>
         <span className="text-[14px] text-ink">
           這是 <b data-testid={`${testid}-name`}>{name(value)}</b> 的{noun}
           <span className="ml-1 text-[12px] text-mute">（跟著「現在看誰的」）</span>

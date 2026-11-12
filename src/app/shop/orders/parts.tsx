@@ -35,14 +35,14 @@ export function CancelWait({ id }: { id: string }) {
           router.refresh();
         });
       }}
-      className="h-10 shrink-0 rounded-full border border-[#ddd0c3] bg-white px-3.5 text-[13px] text-shop-ink disabled:opacity-50"
+      className="h-10 shrink-0 rounded-full border border-tone-orange-300-3 bg-white px-3.5 text-[13px] text-shop-ink disabled:opacity-50"
     >
       取消候補
     </button>
   );
 }
 
-const inputCls = "h-[46px] w-full min-w-0 rounded-[14px] border border-[#e6dace] bg-[#fdfaf6] px-3.5 text-[16px] text-shop-ink";
+const inputCls = "h-[46px] w-full min-w-0 rounded-[14px] border border-tone-orange-200 bg-tone-sand-50 px-3.5 text-[16px] text-shop-ink";
 
 /** 訂單編號＋查詢碼查詢 */
 export function LookupForm() {
@@ -69,7 +69,7 @@ export function LookupForm() {
           <input className={inputCls} value={f.no} maxLength={20} onChange={(e) => setF({ ...f, no: e.target.value })} placeholder="O261103-012" autoCapitalize="characters" autoCorrect="off" spellCheck={false} />
         </label>
         <label className="flex min-w-0 flex-col gap-1 text-[12px] text-shop-mute">查詢碼
-          <input className={`${inputCls} font-mono tracking-[2px]`} value={f.code} maxLength={8} onChange={(e) => setF({ ...f, code: e.target.value.toUpperCase() })} placeholder="6 碼" autoCapitalize="characters" autoCorrect="off" spellCheck={false} />
+          <input className={`${inputCls} font-mono`} value={f.code} maxLength={8} onChange={(e) => setF({ ...f, code: e.target.value.toUpperCase() })} placeholder="6 碼" autoCapitalize="characters" autoCorrect="off" spellCheck={false} />
         </label>
       </div>
       {err && <p role="alert" className="text-[13px] font-bold text-shop-rose-2">{err}</p>}
@@ -99,7 +99,7 @@ export function MailMeForm() {
       <p className="text-[13px] text-shop-mute">輸入下單時填的 Email，我們會把這個 Email 的所有訂單寄給你。</p>
       <input className={inputCls} type="email" inputMode="email" value={email} maxLength={254} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
       {msg && <p role="status" className={`text-[13px] ${msg.ok ? "text-shop-good" : "font-bold text-shop-rose-2"}`}>{msg.text}</p>}
-      <button type="submit" disabled={pending || !email.includes("@")} className="h-12 rounded-full border border-[#d8c9bc] bg-white text-[15px] font-bold text-shop-ink-2 disabled:opacity-50">{pending ? "寄送中…" : "寄給我"}</button>
+      <button type="submit" disabled={pending || !email.includes("@")} className="h-12 rounded-full border border-tone-orange-300 bg-white text-[15px] font-bold text-shop-ink-2 disabled:opacity-50">{pending ? "寄送中…" : "寄給我"}</button>
     </form>
   );
 }

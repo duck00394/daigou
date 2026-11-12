@@ -85,9 +85,9 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
         }
       />
       {onlyUnassigned ? (
-        <div className="mb-3 rounded-xl border border-[#f0dfa8] bg-warn-soft px-3 py-2 text-[14px] text-warn" data-testid="orders-unassigned-list">
+        <div className="mb-3 rounded-xl border border-tone-amber-300-2 bg-warn-soft px-3 py-2 text-[14px] text-warn" data-testid="orders-unassigned-list">
           只列還沒分是跟誰訂的 {unassignedN} 張（含待確認、已經給了的）。勾選後在下面選「分給誰」。已經給了的會照扣到誰的貨自動分。
-          <Link href="/orders" className="ml-1 font-semibold text-ai underline">看全部訂單 ›</Link>
+          <Link href="/orders" className="ml-1 font-semibold text-ai underline">看全部訂單</Link>
         </div>
       ) : unassignedN > 0 ? (
         <div className="mb-3" data-testid="orders-unassigned">
@@ -136,11 +136,11 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="truncate text-[15.5px] font-semibold">{o.buyer.name}</span>
                       <span className="shrink-0 text-[15px] font-semibold">
-                        {o.balanceCache > 0 ? <Twd v={o.balanceCache} className="text-bad" /> : o.refundDueCache > 0 ? <span className="text-bad">應退 {o.refundDueCache.toLocaleString()}</span> : o.confirmation === "CANCELLED" ? <span className="text-mute">—</span> : <span className="text-[13px] text-good">已收齊</span>}
+                        {o.balanceCache > 0 ? <Twd v={o.balanceCache} className="text-bad" /> : o.refundDueCache > 0 ? <span className="text-bad">應退 {o.refundDueCache.toLocaleString()}</span> : o.confirmation === "CANCELLED" ? <span className="text-mute">無</span> : <span className="text-[13px] text-good">已收齊</span>}
                       </span>
                     </div>
                     <div className="text-[12.5px] text-mute">
-                      <span className="num">{o.orderNo}</span>・{fmtDate(o.orderedAt)}・{orderSource[o.source]}{o.groupBuy ? `・${o.groupBuy.name}` : ""}{o.parentOrderId ? "・追加單" : ""}
+                      <span className="num">{o.orderNo}</span>，{fmtDate(o.orderedAt)}，{orderSource[o.source]}{o.groupBuy ? `，${o.groupBuy.name}` : ""}{o.parentOrderId ? "，追加單" : ""}
                     </div>
                     <div className="mt-1 line-clamp-2 text-[13.5px] text-ink-2">{o.items.map((i) => `${i.productNameSnapshot}×${i.qty - i.cancelledQtyCache}`).join("、")}（共 {active} 件）</div>
                     <div className="mt-1.5 flex flex-wrap gap-1">

@@ -3,13 +3,13 @@
 export type OwnerTone = { dot: string; chip: string; on: string; stripe: string };
 
 const PALETTE: OwnerTone[] = [
-  { dot: "#3b6fd8", chip: "bg-[#e3ecff] text-[#1f4fb3]", on: "border-[#3b6fd8] bg-[#3b6fd8] text-white", stripe: "border-l-[5px] border-l-[#3b6fd8]" },
-  { dot: "#e0507f", chip: "bg-[#fde4ec] text-[#b0285a]", on: "border-[#e0507f] bg-[#e0507f] text-white", stripe: "border-l-[5px] border-l-[#e0507f]" },
-  { dot: "#2f9a62", chip: "bg-[#e2f5ea] text-[#1f7a4d]", on: "border-[#2f9a62] bg-[#2f9a62] text-white", stripe: "border-l-[5px] border-l-[#2f9a62]" },
-  { dot: "#d9822b", chip: "bg-[#fdeedd] text-[#a35a12]", on: "border-[#d9822b] bg-[#d9822b] text-white", stripe: "border-l-[5px] border-l-[#d9822b]" },
+  { dot: "var(--color-tone-blue-500)", chip: "bg-tone-blue-100 text-tone-blue-600", on: "border-tone-blue-500 bg-tone-blue-500 text-white", stripe: "border-l-[5px] border-l-tone-blue-500" },
+  { dot: "var(--color-tone-pink-500)", chip: "bg-tone-pink-100 text-tone-pink-600", on: "border-tone-pink-500 bg-tone-pink-500 text-white", stripe: "border-l-[5px] border-l-tone-pink-500" },
+  { dot: "var(--color-tone-green-700)", chip: "bg-tone-green-100 text-good", on: "border-tone-green-700 bg-tone-green-700 text-white", stripe: "border-l-[5px] border-l-tone-green-700" },
+  { dot: "var(--color-tone-orange-500)", chip: "bg-tone-orange-100-2 text-tone-orange-700-2", on: "border-tone-orange-500 bg-tone-orange-500 text-white", stripe: "border-l-[5px] border-l-tone-orange-500" },
 ];
-const JOINT_TONE: OwnerTone = { dot: "#8a5cd0", chip: "bg-[#efe6fb] text-[#6b3fb0]", on: "border-[#8a5cd0] bg-[#8a5cd0] text-white", stripe: "border-l-[5px] border-l-[#8a5cd0]" };
-const NONE_TONE: OwnerTone = { dot: "#9aa1b0", chip: "bg-[#eef0f4] text-[#4a5263]", on: "border-[#7a8294] bg-[#7a8294] text-white", stripe: "border-l-[5px] border-l-[#c4c9d3]" };
+const JOINT_TONE: OwnerTone = { dot: "var(--color-tone-purple-500-2)", chip: "bg-tone-purple-100 text-tone-purple-600", on: "border-tone-purple-500-2 bg-tone-purple-500-2 text-white", stripe: "border-l-[5px] border-l-tone-purple-500-2" };
+const NONE_TONE: OwnerTone = { dot: "var(--color-owner-none)", chip: "bg-line-2 text-ink-2", on: "border-mute bg-mute text-white", stripe: "border-l-[5px] border-l-tone-blue-300-2" };
 
 /** key：經營者 id、"joint"／"JOINT"（合資）、"none"／null（未指定）；ids：依排序的經營者 id */
 export function ownerTone(key: string | null | undefined, ids: string[]): OwnerTone {

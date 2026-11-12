@@ -133,7 +133,7 @@ export function RestoreForm({ hasData }: { hasData: boolean }) {
         </div>
       )}
       {info && hasData && (
-        <div className="rounded-lg border border-[#f5c9c4] bg-bad-soft px-3 py-2 text-sm text-bad">
+        <div className="rounded-lg border border-tone-red-200-4 bg-bad-soft px-3 py-2 text-sm text-bad">
           <label className="flex items-center gap-2">
             <input type="checkbox" className="h-4 w-4" checked={wipe} onChange={(e) => setWipe(e.target.checked)} />
             目前資料庫已有資料。我了解「清空後還原」會刪除目前所有商品、買家、訂單與紀錄，改成備份檔的內容。

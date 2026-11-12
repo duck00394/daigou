@@ -16,7 +16,7 @@ function label(table: HTMLTableElement) {
       for (const td of Array.from(tr.cells)) {
         if (!td.hasAttribute("data-label")) td.setAttribute("data-label", (td.colSpan || 1) > 1 ? "" : (names[col] ?? ""));
         // 沒有內容的格（「—」或空白、也沒有按鈕或勾選框）手機上不列，卡片短一點
-        const blank = /^[—–-]?$/.test((td.textContent ?? "").trim()) && !td.querySelector("input,button,select,a,img");
+        const blank = /^([—–-]|無)?$/.test((td.textContent ?? "").trim()) && !td.querySelector("input,button,select,a,img");
         if (blank) td.setAttribute("data-empty", "");
         else td.removeAttribute("data-empty");
         col += td.colSpan || 1;

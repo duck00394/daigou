@@ -1,7 +1,7 @@
 import { prisma } from "@/server/db";
 import { currentCustomer } from "@/server/shop-auth";
 import { getContactField, isOpen } from "@/server/services/shop";
-import { BackCircle, Eyebrow, SerifTitle } from "../ui";
+import { BackCircle, SerifTitle } from "../ui";
 import { CartView } from "./view";
 
 export const metadata = { title: "購物車" };
@@ -25,7 +25,6 @@ export default async function CartPage() {
       <header className="flex items-center gap-3 px-4 py-3">
         <BackCircle href="/shop" label="繼續選購" />
         <div>
-          <Eyebrow>MY CART</Eyebrow>
           <SerifTitle size={22}>購物車</SerifTitle>
         </div>
       </header>

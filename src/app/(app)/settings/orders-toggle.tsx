@@ -20,7 +20,7 @@ export function OrdersToggle({ on }: { on: boolean }) {
         onClick={() => run(() => setOrdersEnabledAction(!on), { success: on ? "已藏起接單功能" : "已打開接單功能" })}
         className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${on ? "bg-ai" : "bg-line"}`}
       >
-        <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${on ? "left-6" : "left-1"}`} />
+        <span className={`absolute top-1 h-5 w-5 rounded-full bg-white left-1 shadow transition-transform ${on ? "translate-x-5" : ""}`} />
       </button>
     </div>
   );

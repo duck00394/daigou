@@ -62,8 +62,8 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
               {s.products.map((p) => (
                 <tr key={p.id}>
                   <td><Link href={`/products/${p.id}`} className="text-ai hover:underline">{p.name}</Link></td>
-                  <td>{p.productType?.name ?? "—"}</td>
-                  <td>{p.spec ?? "—"}</td>
+                  <td>{p.productType?.name ?? "無"}</td>
+                  <td>{p.spec ?? "無"}</td>
                   <td><StatusBadge map={productStatus} value={p.status} /></td>
                   <td className="text-right"><Twd v={p.salePriceTwd} /></td>
                 </tr>

@@ -62,7 +62,6 @@ export default async function HelpPage() {
           <span className="block text-[16px] font-semibold">新手教學</span>
           <span className="block text-[13px] opacity-85">一步一步帶你走一次，大約一分鐘</span>
         </span>
-        <span aria-hidden>›</span>
       </Link>
       {SECTIONS.map((sec) => (
         <section key={sec.title} className="rounded-xl border border-line bg-card">

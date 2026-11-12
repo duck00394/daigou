@@ -3,7 +3,7 @@ import { prisma } from "@/server/db";
 import { isOpen, shopProducts } from "@/server/services/shop";
 import { taipeiDayLabel, taipeiParts } from "@/lib/taipei";
 import { CartBar, CartButton, Countdown, Pic } from "../../cart";
-import { BackCircle, Eyebrow, groupTypes, SerifTitle, Tag, TypeCard } from "../../ui";
+import { BackCircle, groupTypes, SerifTitle, Tag, TypeCard } from "../../ui";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -27,8 +27,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
           <CartButton />
         </div>
       </div>
-      <div className={`relative mx-4 ${s.imageUrl ? "mt-3" : "-mt-16"} flex flex-col gap-2.5 rounded-[22px] bg-white p-[18px] shadow-[0_12px_30px_rgba(120,70,60,0.14)]`}>
-        <Eyebrow rose>COLLECTION</Eyebrow>
+      <div className={`relative mx-4 ${s.imageUrl ? "mt-3" : "-mt-16"} flex flex-col gap-2.5 rounded-[22px] bg-white p-[18px] shadow-lift-8`}>
         <SerifTitle size={26}>{s.category.name}</SerifTitle>
         <div className="flex flex-wrap gap-1.5">
           {open ? <Tag tone="good">販售中</Tag> : <Tag>{taipeiDayLabel(s.openAt!)} {taipeiParts(s.openAt!).time} 開賣</Tag>}
@@ -36,7 +35,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
         </div>
         {s.intro && <p className="text-[13px] leading-relaxed whitespace-pre-line text-shop-ink-2">{s.intro}</p>}
         {!open && s.openAt && (
-          <div className="flex items-center gap-2 border-t border-dashed border-[#e6dace] pt-3">
+          <div className="flex items-center gap-2 border-t border-dashed border-tone-orange-200 pt-3">
             <span className="text-[13px] text-shop-mute">距離開賣</span>
             <Countdown at={s.openAt.toISOString()} compact />
           </div>
@@ -45,7 +44,6 @@ export default async function SeriesPage({ params }: { params: Promise<{ id: str
 
       <div className="flex items-end justify-between px-4 pt-6">
         <div>
-          <Eyebrow>ITEMS</Eyebrow>
           <SerifTitle size={22}>選擇品項</SerifTitle>
         </div>
         <span className="text-[13px] text-shop-mute">{groups.length} 個品項</span>

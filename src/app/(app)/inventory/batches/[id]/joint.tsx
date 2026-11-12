@@ -37,10 +37,10 @@ export function JointPanel({ batchId, s, editable }: { batchId: string; s: Joint
   };
 
   return (
-    <section className="rounded-xl border border-[#d9c8f2] bg-[#f7f2fd] p-4" aria-label="合資分帳" data-testid="joint-panel">
+    <section className="rounded-xl border border-tone-purple-200 bg-tone-purple-50 p-4" aria-label="合資分帳" data-testid="joint-panel">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="text-[15px] font-semibold text-[#6b3fb0]">合資分帳</h2>
-        {editable && !editing && <Button small onClick={() => setEditing(true)}>改比例・誰付多少</Button>}
+        <h2 className="text-[15px] font-semibold text-tone-purple-600">合資分帳</h2>
+        {editable && !editing && <Button small onClick={() => setEditing(true)}>改比例、誰付多少</Button>}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-[14px]" aria-label="每人分多少">
@@ -53,10 +53,10 @@ export function JointPanel({ batchId, s, editable }: { batchId: string; s: Joint
           </thead>
           <tbody>
             {s.people.map((p) => (
-              <tr key={p.id} className="border-t border-[#e6dbf6]" data-testid="joint-person" data-name={p.name}>
+              <tr key={p.id} className="border-t border-tone-purple-200-2" data-testid="joint-person" data-name={p.name}>
                 <td className="py-1.5">
                   <div className="font-medium">{p.name}</div>
-                  <div className="text-[12px] text-mute">自己的 {formatTwd(p.own)}・一起的佔 {p.percent}%</div>
+                  <div className="text-[12px] text-mute">自己的 {formatTwd(p.own)}，一起的佔 {p.percent}%</div>
                 </td>
                 <td className="num py-1.5 text-right font-semibold" data-k="owed">{formatTwd(p.owed)}</td>
                 <td className={`num py-1.5 text-right ${p.paid > 0 ? "text-good" : "text-mute"}`} data-k="paid">{formatTwd(p.paid)}</td>
@@ -65,7 +65,7 @@ export function JointPanel({ batchId, s, editable }: { batchId: string; s: Joint
           </tbody>
         </table>
       </div>
-      {(s.shared > 0 || s.fee > 0) && <p className="mt-1 text-[12px] text-mute">一起的商品 {formatTwd(s.shared)}・運費等 {formatTwd(s.fee)}（{s.feeSplit === "GOODS" ? "照各自商品金額比例" : "平均分"}）</p>}
+      {(s.shared > 0 || s.fee > 0) && <p className="mt-1 text-[12px] text-mute">一起的商品 {formatTwd(s.shared)}，運費等 {formatTwd(s.fee)}（{s.feeSplit === "GOODS" ? "照各自商品金額比例" : "平均分"}）</p>}
 
       <div className="mt-3 space-y-2" data-testid="joint-debts">
         {s.debts.length === 0 ? (

@@ -27,7 +27,6 @@ export default async function Done({ searchParams }: { searchParams: Promise<{ o
           <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
         </div>
         <div>
-          <div className="text-[11px] font-bold tracking-[3px] text-shop-rose">THANK YOU</div>
           <h1 className="font-serif text-[26px] font-bold">訂單已成立</h1>
         </div>
       </div>
@@ -55,7 +54,7 @@ export default async function Done({ searchParams }: { searchParams: Promise<{ o
             <div key={v.id} className="flex flex-col gap-3 rounded-[18px] border border-shop-line bg-white p-4">
               <Lines v={v} />
               <PayBox v={v} bank={info.bankInfo} />
-              <Link href={`/shop/o/${v.id}?t=${orderToken(v.id)}`} className="flex h-11 items-center justify-center rounded-full border border-[#d8c9bc] text-[14px] text-shop-ink-2">
+              <Link href={`/shop/o/${v.id}?t=${orderToken(v.id)}`} className="flex h-11 items-center justify-center rounded-full border border-tone-orange-300 text-[14px] text-shop-ink-2">
                 查看完整訂單憑證
               </Link>
             </div>

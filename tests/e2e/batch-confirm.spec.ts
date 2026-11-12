@@ -37,7 +37,7 @@ test("對單：買到幾件、砍掉剩下的；庫存分一定／不一定有�
   await page.goto(`/inventory?tab=stock&only=unsure&q=${encodeURIComponent(product.name)}`);
   const row = page.locator(`[data-testid="stock-row"][data-name="${product.name}"]`);
   await expect(row).toHaveCount(1);
-  await expect(row.locator('[data-k="sure"]')).toHaveText("–");
+  await expect(row.locator('[data-k="sure"]')).toHaveText("0");
 
   // 「全部」時待確認排上面
   await page.goto("/inventory?tab=batches&open=0");
@@ -67,18 +67,18 @@ test("對單：買到幾件、砍掉剩下的；庫存分一定／不一定有�
   await expect(it.getByTestId("reconcile-status")).toHaveText("待確認 4");
   await it.getByRole("button", { name: /多一件/ }).click();
   await it.getByRole("button", { name: /多一件/ }).click();
-  await expect(it.getByTestId("reconcile-status")).toHaveText("買到 2・待確認 2");
+  await expect(it.getByTestId("reconcile-status")).toHaveText("買到 2，待確認 2");
   await it.getByRole("button", { name: /砍$/ }).click();
-  await expect(it.getByTestId("reconcile-status")).toHaveText("買到 2・砍 2");
+  await expect(it.getByTestId("reconcile-status")).toHaveText("買到 2，砍 2");
   await page.getByLabel("砍單原因").selectOption("AGENT_CANCEL");
-  await expect(page.getByTestId("reconcile-sum")).toHaveText("這團：買到 2・砍 2・還要等 0");
+  await expect(page.getByTestId("reconcile-sum")).toHaveText("這團：買到 2，砍 2，還要等 0");
   // 一起填付了多少：按「付清」帶入砍單後的總額
   await expect(page.getByTestId("reconcile-pay")).toContainText("NT$200");
   await page.getByTestId("reconcile-pay").getByRole("button", { name: "付清" }).click();
   await expect(page.getByLabel("總共付了多少")).toHaveValue("200");
   await expect(page.getByTestId("reconcile-pay-note")).toContainText("會多記一筆付款 NT$200");
   await page.getByRole("button", { name: /^儲存/ }).click();
-  await toast(page, /已儲存：買到 2・砍 2，這團對完了；記了付款 NT\$200/);
+  await toast(page, /已儲存：買到 2，砍 2，這團對完了；記了付款 NT\$200/);
   await expect(page).not.toHaveURL(new RegExp(`/reconcile/${batch.id}`));
 
   // 採購團卡片：已對完；庫存：一定有貨 2
@@ -97,7 +97,7 @@ test("對單：這團全部買到，一鍵完成", async ({ page }) => {
   await login(page);
   await page.goto(`/reconcile/${batch.id}`);
   await page.getByRole("button", { name: "這團全部買到" }).click();
-  await expect(page.getByTestId("reconcile-sum")).toHaveText("這團：買到 4・砍 0・還要等 0");
+  await expect(page.getByTestId("reconcile-sum")).toHaveText("這團：買到 4，砍 0，還要等 0");
   await page.getByRole("button", { name: /^儲存/ }).click();
   await toast(page, /這團對完了/);
   await page.goto("/reconcile");

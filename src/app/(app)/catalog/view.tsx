@@ -1,5 +1,6 @@
 "use client";
 // 系列目錄：上面選種類（下拉），下面是這個種類的系列；每個系列列出品項（預設售價）和角色
+import { Icon } from "@/components/icons";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button, Modal, inputCls, notify, useRun } from "@/components/client";
@@ -60,7 +61,7 @@ export function CatalogView({ tree, types, initialKind, initialOpen, initialOrde
               {[...kindOpts.entries()].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               <option value={NEW_KIND}>＋ 新種類…</option>
             </select>
-            {current && <button type="button" className="min-h-11 shrink-0 rounded-lg border border-line bg-white px-3 text-[14px] text-ai" onClick={() => setRenamingKind(current.label)}>✎ 改名</button>}
+            {current && <button type="button" className="min-h-11 shrink-0 rounded-lg border border-line bg-white px-3 text-[14px] text-ai" onClick={() => setRenamingKind(current.label)}><Icon name="pencil" /> 改名</button>}
           </div>
         ) : (
           <div className="mt-1 flex gap-2">
@@ -126,9 +127,9 @@ function SeriesCard({ s, types, kinds, open, onToggle }: { s: TreeSeries; types:
         <div className="flex items-stretch bg-ai-soft">
           <button type="button" className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2.5 text-left" aria-expanded={open} onClick={onToggle}>
             <span className="truncate font-semibold text-ai">{s.name}{!s.active && <span className="ml-1 text-[12px] font-normal text-mute">已過期</span>}</span>
-            <span className="shrink-0 text-[12px] text-ai">{s.items.length} 品項・{chars} 角色 {open ? "▾" : "▸"}</span>
+            <span className="shrink-0 text-[12px] text-ai">{s.items.length} 品項，{chars} 角色 {open ? "▾" : "▸"}</span>
           </button>
-          <button type="button" aria-label={`改「${s.name}」名稱`} className="shrink-0 border-l border-white px-3 text-[14px] text-ai" onClick={() => setRenaming(s.name)}>✎</button>
+          <button type="button" aria-label={`改「${s.name}」名稱`} className="shrink-0 border-l border-white px-3 text-[14px] text-ai" onClick={() => setRenaming(s.name)}><Icon name="pencil" /></button>
         </div>
       ) : (
         <div className="flex gap-2 bg-ai-soft p-2">
@@ -204,7 +205,7 @@ function SeriesCard({ s, types, kinds, open, onToggle }: { s: TreeSeries; types:
             <span className="flex items-center gap-3">
               <Link className="text-ai" href={`/categories/${s.id}`}>看花多少、庫存</Link>
               <DeleteButton
-                label="🗑 刪除系列"
+                label={<><Icon name="trash" /> 刪除系列</>}
                 aria={`刪除系列「${s.name}」`}
                 className="text-bad"
                 title={`刪除「${s.name}」`}
@@ -282,7 +283,7 @@ function ItemRow({ categoryId, item }: { categoryId: string; item: TreeItem }) {
         )}
         {item.typeId && (
           <DeleteButton
-            label="🗑"
+            label={<Icon name="trash" />}
             aria={`刪除品項「${item.typeName}」`}
             className="min-h-10 min-w-9 shrink-0 text-[16px]"
             title={`刪除品項「${item.typeName}」`}
@@ -308,7 +309,7 @@ function ItemRow({ categoryId, item }: { categoryId: string; item: TreeItem }) {
         {item.typeId && adding === null && <button type="button" className="rounded-full border border-dashed border-line px-3 py-1 text-[14px] text-mute" onClick={openAdd}>＋ 角色</button>}
       </div>
       {adding !== null && (
-        <div className="mt-2 rounded-lg border border-line bg-[#f6f8fb] p-2.5" data-testid="add-chars">
+        <div className="mt-2 rounded-lg border border-line bg-tone-gray-50 p-2.5" data-testid="add-chars">
           {roster === null ? (
             <p className="text-[13px] text-mute">讀取角色中…</p>
           ) : (
@@ -377,9 +378,9 @@ function ReorderList({ tree, onDone }: { tree: TreeKind[]; onDone: () => void })
   const b = "min-h-9 rounded-lg border px-2.5 text-[13px] disabled:opacity-40";
   const btns = (label: string, i: number, n: number, fn: (d: "up" | "down" | "top") => Promise<{ ok: true; data: null } | { ok: false; error: string }>, dark?: boolean) => (
     <span className="flex shrink-0 gap-1">
-      <button type="button" aria-label={`${label} 移到最上面`} disabled={pending || i === 0} className={`${b} ${dark ? "border-[#55606d] bg-[#2c3542] text-white" : "border-line bg-white"}`} onClick={() => run(() => fn("top"))}>移到最上面</button>
-      <button type="button" aria-label={`${label} 上移`} disabled={pending || i === 0} className={`${b} ${dark ? "border-[#55606d] bg-[#2c3542] text-white" : "border-line bg-white"}`} onClick={() => run(() => fn("up"))}>上</button>
-      <button type="button" aria-label={`${label} 下移`} disabled={pending || i === n - 1} className={`${b} ${dark ? "border-[#55606d] bg-[#2c3542] text-white" : "border-line bg-white"}`} onClick={() => run(() => fn("down"))}>下</button>
+      <button type="button" aria-label={`${label} 移到最上面`} disabled={pending || i === 0} className={`${b} ${dark ? "border-tone-blue-700 bg-tone-blue-800 text-white" : "border-line bg-white"}`} onClick={() => run(() => fn("top"))}>移到最上面</button>
+      <button type="button" aria-label={`${label} 上移`} disabled={pending || i === 0} className={`${b} ${dark ? "border-tone-blue-700 bg-tone-blue-800 text-white" : "border-line bg-white"}`} onClick={() => run(() => fn("up"))}>上</button>
+      <button type="button" aria-label={`${label} 下移`} disabled={pending || i === n - 1} className={`${b} ${dark ? "border-tone-blue-700 bg-tone-blue-800 text-white" : "border-line bg-white"}`} onClick={() => run(() => fn("down"))}>下</button>
     </span>
   );
   return (

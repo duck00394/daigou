@@ -45,7 +45,7 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
   const asked = data.todo.filter((r) => !!r.askedAt).sort((a, b) => a.askedAt!.getTime() - b.askedAt!.getTime());
   const row = (r: (typeof data.todo)[number], action: React.ReactNode, askedAt?: Date | null) => (
     <li key={r.id} className="flex items-center gap-2 pr-3" data-testid="reconcile-row" data-name={r.name}>
-      <Link href={`/reconcile/${r.id}${q}`} className="flex min-w-0 flex-1 items-center justify-between gap-3 py-3 pl-4 hover:bg-[#fafbfc]">
+      <Link href={`/reconcile/${r.id}${q}`} className="flex min-w-0 flex-1 items-center justify-between gap-3 py-3 pl-4 hover:bg-tone-gray-50-4">
         <div className="min-w-0">
           <div className="truncate font-semibold">{r.name}</div>
           <div className="truncate text-[12px] text-mute">{[r.supplierName, r.seriesName, r.orderNo ? `訂單 ${r.orderNo}` : null, r.orderedAt ? `${day(r.orderedAt)} 下單` : null].filter(Boolean).join("｜")}</div>
@@ -53,7 +53,7 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
         </div>
         <div className="shrink-0 text-right">
           <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[12px] text-warn">待確認 {r.pending}</span>
-          <div className="mt-0.5 text-[12px] text-mute">買到 {r.bought}・砍 {r.cut}</div>
+          <div className="mt-0.5 text-[12px] text-mute">買到 {r.bought}，砍 {r.cut}</div>
         </div>
       </Link>
       <span className="shrink-0">{action}</span>
@@ -74,7 +74,7 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
         </div>
       </div>
       {refunds.length > 0 && (
-        <details className="rounded-xl border border-[#f1b5b5] bg-card" data-testid="refund-section" open={sp.open === "refund" || undefined}>
+        <details className="rounded-xl border border-tone-red-300-2 bg-card" data-testid="refund-section" open={sp.open === "refund" || undefined}>
           <summary className="cursor-pointer px-4 py-3 text-[14px] font-semibold text-bad">已砍單，未退款（{refunds.length}）<span className="ml-1 font-normal">代購要退 {formatTwd(refunds.reduce((a, r) => a + r.owed, 0))}</span></summary>
           <ul className="divide-y divide-line-2 border-t border-line-2">
             {refunds.map((r) => (
@@ -120,7 +120,7 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
       )}
       {doneCount > 0 && (
         <details className="rounded-xl border border-line bg-card" data-testid="done-section">
-          <summary className="cursor-pointer px-4 py-3 text-[14px] font-semibold text-good">已確認・已對完（{doneCount}）<span className="ml-1 font-normal text-mute">點開可以再改</span></summary>
+          <summary className="cursor-pointer px-4 py-3 text-[14px] font-semibold text-good">已確認，已對完（{doneCount}）<span className="ml-1 font-normal text-mute">點開可以再改</span></summary>
           <div className="border-t border-line-2 px-4 py-2.5">
             <ResetButton ids={data.done.map((r) => r.id)} names={data.done.map((r) => `${r.name}（${r.supplierName}）`)} label={`這 ${doneCount} 團全部改回待確認`} />
             <p className="mt-1 text-[12px] text-mute">會照上面選的代購、系列和現在看的人，只改列出來的這些。</p>
@@ -128,12 +128,12 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
           <ul className="divide-y divide-line-2 border-t border-line-2">
             {data.done.map((r) => (
               <li key={r.id}>
-                <Link href={`/reconcile/${r.id}${q}`} className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-[#fafbfc]">
+                <Link href={`/reconcile/${r.id}${q}`} className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-tone-gray-50-4">
                   <div className="min-w-0">
                     <div className="truncate">{r.name}</div>
                     <div className="truncate text-[12px] text-mute">{r.supplierName}</div>
                   </div>
-                  <div className="shrink-0 text-[12px] text-mute">買到 {r.bought}・砍 {r.cut}</div>
+                  <div className="shrink-0 text-[12px] text-mute">買到 {r.bought}，砍 {r.cut}</div>
                 </Link>
               </li>
             ))}

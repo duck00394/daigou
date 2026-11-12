@@ -10,7 +10,7 @@ export default async function Rules() {
   const [name, info] = await Promise.all([getShopName(prisma), getShopInfo(prisma)]);
   const contact = [info.threads ? `Threads @${info.threads}` : null, info.supportEmail ? `Email ${info.supportEmail}` : null, "LINE 官方帳號"].filter(Boolean).join("、");
   return (
-    <DocPage eyebrow="TERMS" title="交易規則" updated="2026/11/3">
+    <DocPage title="交易規則" updated="2026/11/3">
       <p>在{name}下單前，請先看完以下規則。送出訂單前勾選「已閱讀」，就表示你同意這些規則。</p>
 
       <DocSection title="1. 現貨與預購">
@@ -31,14 +31,14 @@ export default async function Rules() {
       <DocSection title="3. 付款方式與期限">
         <ul className="list-disc space-y-1 pl-5">
           <li>付款使用 7-ELEVEN 賣貨便：我們會傳賣貨便連結給你，請在期限內到賣貨便下單，取貨時付款。</li>
-          <li>每個系列在訂單成立後、或到貨後開始計時，期限寫在結帳頁、成立頁和通知裡，以<b className="text-[#c8102e]">紅字</b>標示。</li>
+          <li>每個系列在訂單成立後、或到貨後開始計時，期限寫在結帳頁、成立頁和通知裡，以<b className="text-tone-red-600-2">紅字</b>標示。</li>
           <li><b>逾期沒有用賣貨便下單，訂單會自動取消，並讓給候補的人。</b></li>
         </ul>
       </DocSection>
 
       <DocSection title="3-1. 需要訂金的商品">
         <ul className="list-disc space-y-1 pl-5">
-          <li>結帳前會標示訂金金額。訂單成立後顯示匯款帳戶，請在成立後 <b className="text-[#c8102e]">1 小時</b>內匯款並回傳匯款帳號末五碼，逾時自動取消。</li>
+          <li>結帳前會標示訂金金額。訂單成立後顯示匯款帳戶，請在成立後 <b className="text-tone-red-600-2">1 小時</b>內匯款並回傳匯款帳號末五碼，逾時自動取消。</li>
           <li>我們確認收到訂金後，才會傳扣除訂金的賣貨便連結，請在通知寫的期限內下單；尾款到貨後取貨時付，不用再匯款。</li>
           <li>要付訂金的商品需要留 Threads 或 IG 帳號，方便聯絡。</li>
           <li>商品買不到時，訂金全額退還。</li>

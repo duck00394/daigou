@@ -31,13 +31,13 @@ export function StockFilters({ series, types, kind, cat, q, type, only }: { seri
         <select aria-label="顯示" className="mt-1 min-h-11 w-full rounded-lg border border-line bg-white px-2.5 text-[15px]" value={f.only} onChange={(e) => setF({ ...f, only: e.target.value })}>
           <option value="">有庫存或預購的</option>
           <option value="stock">只看現貨（現在可以賣）</option>
-          <option value="sure">預購・一定有貨（代購已確認）</option>
-          <option value="unsure">預購・不一定有貨（還沒確認）</option>
+          <option value="sure">預購，一定有貨（代購已確認）</option>
+          <option value="unsure">預購，不一定有貨（還沒確認）</option>
           <option value="short">待買清單（客人訂的比庫存多）</option>
           <option value="all">全部商品（含沒庫存的）</option>
         </select>
       </label>
-      <input type="search" aria-label="搜尋商品" placeholder="🔍 或直接搜角色、商品" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} className="w-full rounded-lg border border-line bg-white px-2.5 py-2 text-[15px]" />
+      <input type="search" aria-label="搜尋商品" placeholder="或直接搜角色、商品" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} className="w-full rounded-lg border border-line bg-white px-2.5 py-2 text-[15px]" />
       <button type="submit" className="min-h-11 w-full rounded-lg bg-ai text-[16px] font-semibold text-white">查看</button>
     </form>
   );

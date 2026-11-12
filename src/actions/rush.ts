@@ -51,7 +51,7 @@ export async function rushConflictsAction(date: string, time: string, excludeId:
     const { taipeiToUtc } = await import("@/lib/taipei");
     const at = taipeiToUtc(date, time);
     if (!at) return [];
-    return (await rs.findConflicts(prisma, at, excludeId)).map((c) => ({ id: c.id, label: `${c.supplierName}・${c.seriesName}`, startAt: c.startAt.toISOString() }));
+    return (await rs.findConflicts(prisma, at, excludeId)).map((c) => ({ id: c.id, label: `${c.supplierName}，${c.seriesName}`, startAt: c.startAt.toISOString() }));
   }, "read");
 }
 

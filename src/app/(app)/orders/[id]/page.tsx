@@ -134,7 +134,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                   ))}
                 </span>,
               ],
-              ["代購團", order.groupBuy?.name ?? "—"],
+              ["代購團", order.groupBuy?.name ?? "無"],
               ["來源訂單編號", order.externalRef],
               ["原訂單", order.parentOrder ? <Link key="p" className="text-ai hover:underline" href={`/orders/${order.parentOrder.id}`}>{order.parentOrder.orderNo}</Link> : null],
               ["追加訂單", order.appendOrders.length ? order.appendOrders.map((o) => <Link key={o.id} className="mr-2 text-ai hover:underline" href={`/orders/${o.id}`}>{o.orderNo}</Link>) : null],

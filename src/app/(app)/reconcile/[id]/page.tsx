@@ -33,12 +33,12 @@ export default async function ReconcileBatch({ params, searchParams }: { params:
       />
       {sheet.needsCheck && idx >= 0 && (
         sheet.askedAt ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#d6def5] bg-ai-soft px-3 py-2 text-[14px] text-ink" data-testid="asked-bar">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-tone-blue-200-4 bg-ai-soft px-3 py-2 text-[14px] text-ink" data-testid="asked-bar">
             <AskedText at={sheet.askedAt} />
             <span className="flex gap-2"><AskButton batchId={sheet.id} again /><NotAskedButton batchId={sheet.id} /></span>
           </div>
         ) : (
-          <div className="flex items-center justify-between gap-2 rounded-xl border border-[#f0dfa8] bg-warn-soft px-3 py-2 text-[14px] text-warn" data-testid="asked-bar">
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-tone-amber-300-2 bg-warn-soft px-3 py-2 text-[14px] text-warn" data-testid="asked-bar">
             還沒問
             <AskButton batchId={sheet.id} />
           </div>

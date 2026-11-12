@@ -73,7 +73,7 @@ export default async function Settings() {
           <TypeList items={types.filter((t) => !t.seriesOnly).map((t) => ({ id: t.id, name: t.name, active: t.active }))} />
           {types.some((t) => t.seriesOnly) && (
             <p className="mt-3 text-[12.5px] text-mute" data-testid="series-only-types">
-              只在某個系列的品項（到系列目錄改）：{types.filter((t) => t.seriesOnly).map((t) => `${t.name}${t.catPrices.length ? `（${t.catPrices.map((c) => c.category.name).join("、")}）` : ""}`).join("・")}
+              只在某個系列的品項（到系列目錄改）：{types.filter((t) => t.seriesOnly).map((t) => `${t.name}${t.catPrices.length ? `（${t.catPrices.map((c) => c.category.name).join("、")}）` : ""}`).join("、")}
             </p>
           )}
         </Section>

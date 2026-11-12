@@ -52,7 +52,7 @@ export async function orderView(db: Db, orderId: string, now = new Date()): Prom
   if (pay?.timing === "ARRIVAL" && o.payDueAt) reached.ARRIVED = true;
   let nowIdx = flow.findIndex((k) => !reached[k]);
   if (nowIdx === -1) nowIdx = flow.length;
-  const label: Record<StepKey, string> = { PLACED: "訂單成立", DEPOSIT: deposit?.reported && !deposit.confirmed ? "匯訂金（等賣家確認）" : "匯訂金", PAY: "用賣貨便下單", BUYING: "採購中", ARRIVED: "已到貨・等待出貨", SHIPPED: "已出貨" };
+  const label: Record<StepKey, string> = { PLACED: "訂單成立", DEPOSIT: deposit?.reported && !deposit.confirmed ? "匯訂金（等賣家確認）" : "匯訂金", PAY: "用賣貨便下單", BUYING: "採購中", ARRIVED: "已到貨，等待出貨", SHIPPED: "已出貨" };
   const steps = flow.map((k, i) => ({ key: k, label: label[k], state: (i < nowIdx ? "done" : i === nowIdx && !cancelled ? "now" : "todo") as "done" | "now" | "todo" }));
 
   let status: string;
@@ -62,7 +62,7 @@ export async function orderView(db: Db, orderId: string, now = new Date()): Prom
   else if (deposit && !deposit.reported) status = "等待匯訂金";
   else if (deposit && !deposit.confirmed) status = "訂金確認中";
   else if (pay && o.payDueAt && !o.myshipAt) status = "等待賣貨便下單";
-  else if (arrived) status = "已到貨・等待出貨";
+  else if (arrived) status = "已到貨，等待出貨";
   else if (buying) status = "採購中";
   else status = "已成立";
 

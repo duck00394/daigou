@@ -150,7 +150,7 @@ test("採購、到貨、分配、部分出貨與報表", async ({ page }) => {
   // 出貨紀錄：看得到扣的是誰的，可以改出貨人（這裡只打開看，不改）
   await page.goto("/shipping?tab=done");
   const shipRow = page.getByRole("row").filter({ hasText: "TW123456" });
-  await expect(shipRow.getByTestId("ship-owner")).toHaveText(/^・.+ 1$/); // 這團沒設是誰的 → 未指定
+  await expect(shipRow.getByTestId("ship-owner")).toHaveText(/^，.+ 1$/); // 這團沒設是誰的 → 未指定
   await shipRow.getByRole("button", { name: "改出貨人" }).click();
   await expect(page.getByRole("dialog")).toContainText("現在扣的是：");
   await page.getByRole("dialog").screenshot({ path: "test-results/ship_owner.png" });

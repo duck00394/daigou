@@ -9,10 +9,10 @@ import { formatJpy, formatTwd } from "@/lib/money";
 
 const toneCls: Record<Tone, string> = {
   neutral: "bg-line-2 text-ink-2 border-line",
-  info: "bg-info-soft text-info border-[#cfd9ea]",
-  good: "bg-good-soft text-good border-[#c6e6d4]",
-  warn: "bg-warn-soft text-warn border-[#f0dfa8]",
-  bad: "bg-bad-soft text-bad border-[#f5c9c4]",
+  info: "bg-info-soft text-info border-tone-blue-200-2",
+  good: "bg-good-soft text-good border-tone-green-300",
+  warn: "bg-warn-soft text-warn border-tone-amber-300-2",
+  bad: "bg-bad-soft text-bad border-tone-red-200-4",
   muted: "bg-white text-mute border-line",
 };
 
@@ -25,7 +25,7 @@ export function Badge({ tone = "neutral", children, title }: { tone?: Tone; chil
 }
 
 export function StatusBadge({ map, value }: { map: Record<string, [string, Tone]>; value: string | null | undefined }) {
-  if (!value) return <span className="text-mute">—</span>;
+  if (!value) return <span className="text-mute">無</span>;
   const [label, tone] = map[value] ?? [value, "neutral"];
   return <Badge tone={tone}>{label}</Badge>;
 }
@@ -88,7 +88,7 @@ export function Empty({ children, action }: { children: React.ReactNode; action?
 
 export function Stat({ label, value, note, href, tone }: { label: string; value: React.ReactNode; note?: React.ReactNode; href?: string; tone?: "warn" | "bad" }) {
   const body = (
-    <div className={`h-full rounded-xl border bg-card px-3.5 py-3 ${tone === "bad" ? "border-[#f5c9c4]" : tone === "warn" ? "border-[#f0dfa8]" : "border-line"} ${href ? "transition-colors hover:border-ai" : ""}`}>
+    <div className={`h-full rounded-xl border bg-card px-3.5 py-3 ${tone === "bad" ? "border-tone-red-200-4" : tone === "warn" ? "border-tone-amber-300-2" : "border-line"} ${href ? "transition-colors hover:border-ai" : ""}`}>
       <div className="text-[13px] text-mute">{label}</div>
       <div className="num mt-0.5 text-[20px] leading-7 font-semibold">{value}</div>
       {note && <div className="mt-0.5 text-[12px] text-mute">{note}</div>}
@@ -107,7 +107,7 @@ export function Stat({ label, value, note, href, tone }: { label: string; value:
 /** 表格：電腦版照舊；手機一列一張小卡片（每格前面有欄位名稱），不用往右拉 */
 export function TableWrap({ children, maxH }: { children: React.ReactNode; maxH?: string }) {
   return (
-    <StackTable maxH={maxH} className="w-full md:min-w-max border-separate border-spacing-0 text-[14px] [&_td]:border-b [&_td]:border-line-2 [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:border-b [&_th]:border-line [&_th]:bg-[#fafbfc] [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-[13px] [&_th]:font-medium [&_th]:whitespace-nowrap [&_th]:text-ink-2 [&_tbody_tr:hover_td]:bg-[#fafbfd]">
+    <StackTable maxH={maxH} className="w-full md:min-w-max border-separate border-spacing-0 text-[14px] [&_td]:border-b [&_td]:border-line-2 [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:border-b [&_th]:border-line [&_th]:bg-tone-gray-50-4 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-[13px] [&_th]:font-medium [&_th]:whitespace-nowrap [&_th]:text-ink-2 [&_tbody_tr:hover_td]:bg-tone-gray-50-5">
       {children}
     </StackTable>
   );
@@ -126,7 +126,7 @@ export function KV({ items }: { items: [string, React.ReactNode][] }) {
       {items.map(([k, v]) => (
         <div key={k} className="contents">
           <dt className="text-mute">{k}</dt>
-          <dd className="min-w-0 break-words">{v ?? "—"}</dd>
+          <dd className="min-w-0 break-words">{v ?? "無"}</dd>
         </div>
       ))}
     </dl>

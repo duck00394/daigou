@@ -1,4 +1,5 @@
 "use client";
+import { Icon } from "@/components/icons";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, ConfirmButton, useRun } from "@/components/client";
@@ -12,7 +13,7 @@ export function Countdown({ at }: { at: string }) {
     const h = setInterval(() => setNow(new Date()), 30000);
     return () => clearInterval(h);
   }, []);
-  return <div className="text-[24px] font-extrabold text-[#c2410c]" data-testid="rush-countdown">{untilText(new Date(at), now)}</div>;
+  return <div className="text-[24px] font-extrabold text-tone-orange-600" data-testid="rush-countdown">{untilText(new Date(at), now)}</div>;
 }
 
 export function RushActions({ id, status, name }: { id: string; status: string; name: string }) {
@@ -37,7 +38,7 @@ export function RushActions({ id, status, name }: { id: string; status: string; 
         <ConfirmButton
           small
           variant="danger"
-          label="🗑 刪除"
+          label={<><Icon name="trash" /> 刪除</>}
           title="刪除這筆搶購提醒"
           message={<>刪除「{name}」，排好的通知也會一起取消。</>}
           confirmLabel="刪除"

@@ -145,9 +145,9 @@ export const importBatchStatus: Record<string, [string, Tone]> = {
 export const movementKind: Record<string, string> = { RECEIVE: "到貨入庫", ADJUST: "盤點調整", RESERVE: "保留", UNRESERVE: "取消保留", SHIP: "出貨", KEEP: "自留" };
 
 export function fmtDate(d: Date | string | null | undefined, withTime = false): string {
-  if (!d) return "—";
+  if (!d) return "無";
   const date = typeof d === "string" ? new Date(d) : d;
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return "無";
   const opts: Intl.DateTimeFormatOptions = { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" };
   if (withTime) Object.assign(opts, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
   return new Intl.DateTimeFormat("zh-TW", opts).format(date);
@@ -186,7 +186,7 @@ export function parseDateTimeInput(s: string | null | undefined): Date | null {
 
 /** @db.Date 欄位以 UTC 午夜儲存，顯示時不做時區轉換 */
 export function fmtDay(d: Date | null | undefined): string {
-  if (!d) return "—";
+  if (!d) return "無";
   return d.toISOString().slice(0, 10).replace(/-/g, "/");
 }
 

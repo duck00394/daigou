@@ -1,4 +1,5 @@
 // 活動（代購系列）總覽：各採購團進度、成本、付款，以及跨團價格比較
+import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { PickBox, PickProvider, PickSpacer, PickToggle, SetButton } from "./pick";
@@ -128,7 +129,7 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
             <span>還沒付 <b className={`num ${T.dueTwd ? "text-bad" : ""}`} data-testid="cat-due">{formatTwd(T.dueTwd)}</b></span>
           </div>
           <div className="mt-0.5 flex flex-wrap justify-between gap-x-3 text-[13px] text-mute">
-            <span>{T.batches} 團・{T.qty} 隻{T.estimated ? "・有價格還沒確定" : ""}</span>
+            <span>{T.batches} 團，{T.qty} 隻{T.estimated ? "，有價格還沒確定" : ""}</span>
             <span>到貨 {T.received}／{T.qty}</span>
           </div>
         </div>
@@ -136,7 +137,7 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
         {showBatches && <>
         <div className="mt-3 space-y-3">
           {groups.filter((g) => mineKey(g.key)).map((g) => (
-            <div key={g.key} className={`rounded-xl border border-line-2 bg-[#fafbfc] p-3 ${ownerTone(g.key, ids).stripe}`} data-testid={`owner-${g.key}`}>
+            <div key={g.key} className={`rounded-xl border border-line-2 bg-tone-gray-50-4 p-3 ${ownerTone(g.key, ids).stripe}`} data-testid={`owner-${g.key}`}>
               <div className="flex items-baseline justify-between gap-2">
                 <h3 className="text-[16px] font-semibold"><OwnerBadge k={g.key} name={g.label} ids={ids} /></h3>
                 <span className="text-[13px] text-mute">總額 <span className="num font-medium text-ink">{formatTwd(g.total)}</span></span>
@@ -163,7 +164,7 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
                   )}
                 </div>
               </div>
-              {o.stock[g.key] && <p className="mt-1.5 text-[12px] text-mute">庫存：可賣 {o.stock[g.key].free}・已保留 {o.stock[g.key].reserved}・自留 {o.stock[g.key].kept}</p>}
+              {o.stock[g.key] && <p className="mt-1.5 text-[12px] text-mute">庫存：可賣 {o.stock[g.key].free}，已保留 {o.stock[g.key].reserved}，自留 {o.stock[g.key].kept}</p>}
               {g.key === JOINT && <p className="mt-1 text-[12px] text-mute">合資團賣掉的錢依各自實際付款比例分。</p>}
             </div>
           ))}
@@ -174,7 +175,7 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
           {stageOrder.filter((k) => o.byStage[k]).map((k) => (
             <li key={k} className="rounded-lg border border-line-2 px-3 py-1.5 text-[13px]">
               <StatusBadge map={batchStageLabel} value={k} /> <span className="num ml-1 font-medium">{formatTwd(o.byStage[k].amount)}</span>
-              <span className="text-mute">（{o.byStage[k].batches} 團{o.byStage[k].outstanding ? `・還沒到 ${o.byStage[k].outstanding} 件` : ""}）</span>
+              <span className="text-mute">（{o.byStage[k].batches} 團{o.byStage[k].outstanding ? `，還沒到 ${o.byStage[k].outstanding} 件` : ""}）</span>
             </li>
           ))}
         </ul>
@@ -187,23 +188,23 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
         <ul className="grid gap-2 p-3 md:grid-cols-2">
           {shownBatches.map((b) => (
             <li key={b.id}>
-              <Link href={`/inventory/batches/${b.id}`} className={`block h-full rounded-xl border p-3 hover:border-ai ${b.issues.length ? "border-[#f0dfa8]" : "border-line"} ${ownerTone(b.ownerKey, ids).stripe} ${b.status === "CANCELLED" ? "opacity-60" : ""}`}>
+              <Link href={`/inventory/batches/${b.id}`} className={`block h-full rounded-xl border p-3 hover:border-ai ${b.issues.length ? "border-tone-amber-300-2" : "border-line"} ${ownerTone(b.ownerKey, ids).stripe} ${b.status === "CANCELLED" ? "opacity-60" : ""}`}>
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-semibold">{b.name}</span>
                   <span className="flex shrink-0 items-center gap-1"><OwnerBadge k={b.ownerKey} name={nameOf(b.ownerKey)} ids={ids} />{b.store ? <span className="rounded-full bg-info-soft px-2 py-0.5 text-[12px] text-info">實體店購買</span> : <StatusBadge map={batchStageLabel} value={b.stage} />}</span>
                 </div>
                 <div className="text-[13px] text-mute">
-                  <span className="font-medium text-ink-2">{b.ownership === "JOINT" ? `合資${o.jointShares[b.id]?.length ? `（${o.jointShares[b.id].map((x) => `${who(x.key)} ${x.percent}%`).join("・")}）` : ""}` : `${b.orderedBy ?? "未指定"}的`}</span>｜{b.supplier ?? "未指定代購"}
+                  <span className="font-medium text-ink-2">{b.ownership === "JOINT" ? `合資${o.jointShares[b.id]?.length ? `（${o.jointShares[b.id].map((x) => `${who(x.key)} ${x.percent}%`).join("、")}）` : ""}` : `${b.orderedBy ?? "未指定"}的`}</span>｜{b.supplier ?? "未指定代購"}
                 </div>
                 <div className="mt-1.5 grid grid-cols-3 gap-1 text-center text-[13px]">
-                  <div className="rounded-lg bg-[#fafbfc] py-1"><div className="text-[11px] text-mute">到貨</div><span className="num">{b.received}／{b.qty}</span></div>
-                  <div className="rounded-lg bg-[#fafbfc] py-1"><div className="text-[11px] text-mute">{b.partial ? "這個系列" : "這團總額"}{b.estimated || !b.feesRecorded ? "（價格還沒確定）" : ""}</div><span className="num">{formatTwd(b.totalTwd)}</span></div>
-                  <div className="rounded-lg bg-[#fafbfc] py-1"><div className="text-[11px] text-mute">已付</div><span className="num">{b.partial ? (b.paidTwd ? formatTwd(b.paidTwd) : "—") : sums(b.paid) || "—"}</span></div>
+                  <div className="rounded-lg bg-tone-gray-50-4 py-1"><div className="text-[11px] text-mute">到貨</div><span className="num">{b.received}／{b.qty}</span></div>
+                  <div className="rounded-lg bg-tone-gray-50-4 py-1"><div className="text-[11px] text-mute">{b.partial ? "這個系列" : "這團總額"}{b.estimated || !b.feesRecorded ? "（價格還沒確定）" : ""}</div><span className="num">{formatTwd(b.totalTwd)}</span></div>
+                  <div className="rounded-lg bg-tone-gray-50-4 py-1"><div className="text-[11px] text-mute">已付</div><span className="num">{b.partial ? (b.paidTwd ? formatTwd(b.paidTwd) : "無") : sums(b.paid) || "無"}</span></div>
                 </div>
                 {b.partial && <div className="mt-1 text-[12px] text-info" data-testid="partial-note">這團也有別的系列，這裡只算這個系列的部分（運費照金額比例分）</div>}
                 {Object.keys(b.pending).length > 0 && <div className="mt-1 text-[12px] text-warn">待付款 {sums(b.pending)}</div>}
                 {b.expectedAt && <div className="mt-1 text-[12px] text-mute">預計到貨 {fmtDay(b.expectedAt)}</div>}
-                {b.issues.filter((x) => !(b.store && x === "尚未登記付款")).length > 0 && <div className="mt-1 text-[12px] text-warn">⚠ {b.issues.filter((x) => !(b.store && x === "尚未登記付款")).join("、")}</div>}
+                {b.issues.filter((x) => !(b.store && x === "尚未登記付款")).length > 0 && <div className="mt-1 text-[12px] text-warn"><Icon name="warn" /> {b.issues.filter((x) => !(b.store && x === "尚未登記付款")).join("、")}</div>}
               </Link>
             </li>
           ))}
@@ -231,7 +232,7 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
               </div>
               {typeGroups.map((g) => (
                 <div key={g.key} data-testid="pick-type" data-name={g.name}>
-                  <div className="flex min-h-9 items-center justify-between gap-2 border-b border-line-2 bg-[#f6f7f9] px-4 py-1 text-[13px] font-semibold text-ink-2">
+                  <div className="flex min-h-9 items-center justify-between gap-2 border-b border-line-2 bg-paper px-4 py-1 text-[13px] font-semibold text-ink-2">
                     <span>{g.name}</span>
                     {g.rows.length > 1 && <SetButton ids={g.rows.filter((r) => r.avg != null).map((r) => r.product.id)} label={`選整套（${g.rows.filter((r) => r.avg != null).length} 隻）`} />}
                   </div>
@@ -243,15 +244,15 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
                       <div key={r.product.id} className="flex items-start border-b border-line-2">
                         <PickBox id={r.product.id} name={r.product.name} />
                         <details className="group min-w-0 flex-1" data-testid="product-summary">
-                          <summary role="row" className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_3.25rem_4.25rem_4.5rem] items-baseline gap-2 px-4 py-2.5 hover:bg-[#fafbfd] [&::-webkit-details-marker]:hidden">
+                          <summary role="row" className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_3.25rem_4.25rem_4.5rem] items-baseline gap-2 px-4 py-2.5 hover:bg-tone-gray-50-5 [&::-webkit-details-marker]:hidden">
                             <span role="cell" className="min-w-0 truncate"><span title={r.product.name}>{name}</span></span>
                             <span role="cell" className={`num text-right ${leftOf(x) < 0 ? "font-semibold text-bad" : ""}`} data-k="left">{leftOf(x)}</span>
-                            <span role="cell" className="num text-right" data-k="avg">{(est ? r.estAvg : r.avg) == null ? <span className="text-mute">—</span> : (est ? r.estAvg : r.avg)!.toLocaleString()}</span>
-                            <span role="cell" className={`num text-right ${canProfit ? (profitOf(x) < 0 ? "text-bad" : "text-good") : "text-[13px] text-mute"}`} data-k="profit">{canProfit ? profitOf(x).toLocaleString() : x?.price == null ? "沒售價" : "—"}</span>
+                            <span role="cell" className="num text-right" data-k="avg">{(est ? r.estAvg : r.avg) == null ? <span className="text-mute">無</span> : (est ? r.estAvg : r.avg)!.toLocaleString()}</span>
+                            <span role="cell" className={`num text-right ${canProfit ? (profitOf(x) < 0 ? "text-bad" : "text-good") : "text-[13px] text-mute"}`} data-k="profit">{canProfit ? profitOf(x).toLocaleString() : x?.price == null ? "沒售價" : "無"}</span>
                           </summary>
-                          <div className="space-y-1 border-t border-line-2 bg-[#f8f9fb] px-4 py-2.5 text-[13.5px]" data-testid="product-numbers">
-                            {x && <div>手上 {x.onHand}・確定買到還沒到 {x.sure}{x.est.unsure ? `・還在等確認 ${x.est.unsure}` : ""}・客人訂 {x.ordered}・已賣 {x.sold.qty}{x.sold.qty ? `（實際已賺 ${formatTwd(x.sold.revenue - x.sold.cost)}）` : ""}</div>}
-                            <div className="text-ink-2">售價 {x?.price != null ? formatTwd(x.price) : "還沒填"}・各團{fullView ? "成本" : "買價"} {r.min === r.max ? formatTwd(r.min) : `${r.min.toLocaleString()}～${r.max.toLocaleString()}`}</div>
+                          <div className="space-y-1 border-t border-line-2 bg-tone-gray-50-3 px-4 py-2.5 text-[13.5px]" data-testid="product-numbers">
+                            {x && <div>手上 {x.onHand}，確定買到還沒到 {x.sure}{x.est.unsure ? `，還在等確認 ${x.est.unsure}` : ""}，客人訂 {x.ordered}，已賣 {x.sold.qty}{x.sold.qty ? `（實際已賺 ${formatTwd(x.sold.revenue - x.sold.cost)}）` : ""}</div>}
+                            <div className="text-ink-2">售價 {x?.price != null ? formatTwd(x.price) : "還沒填"}，各團{fullView ? "成本" : "買價"} {r.min === r.max ? formatTwd(r.min) : `${r.min.toLocaleString()}～${r.max.toLocaleString()}`}</div>
                             <ul className="space-y-0.5 pt-1">
                               {r.cells
                                 .slice()
@@ -271,9 +272,9 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
                                 })}
                             </ul>
                             <div className="flex flex-wrap gap-4 pt-1">
-                              <Link href={`/inventory?tab=stock&only=all&v=1&q=${encodeURIComponent(r.product.name)}`} className="text-ai">看庫存 ›</Link>
-                              {x && x.sold.qty > 0 && <Link href={`/sales?ym=all&q=${encodeURIComponent(r.product.name)}`} className="text-ai">看賣出紀錄 ›</Link>}
-                              <Link href={`/products/${r.product.id}`} className="text-ai">商品資料 ›</Link>
+                              <Link href={`/inventory?tab=stock&only=all&v=1&q=${encodeURIComponent(r.product.name)}`} className="text-ai">看庫存</Link>
+                              {x && x.sold.qty > 0 && <Link href={`/sales?ym=all&q=${encodeURIComponent(r.product.name)}`} className="text-ai">看賣出紀錄</Link>}
+                              <Link href={`/products/${r.product.id}`} className="text-ai">商品資料</Link>
                             </div>
                           </div>
                         </details>
@@ -284,7 +285,7 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
               ))}
               {extra.length > 0 && (
                 <div data-testid="extra-group">
-                  <div className="border-b border-line-2 bg-[#f6f7f9] px-4 py-1 text-[13px] font-semibold text-ink-2">其他（不是在這個系列的團買的）</div>
+                  <div className="border-b border-line-2 bg-paper px-4 py-1 text-[13px] font-semibold text-ink-2">其他（不是在這個系列的團買的）</div>
                   {extra.map((e) => {
                     const x = prof!.rows.get(e.id)!;
                     return (
@@ -293,8 +294,8 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
                         <Link href={`/products/${e.id}`} className="grid flex-1 grid-cols-[minmax(0,1fr)_3.25rem_4.25rem_4.5rem] items-baseline gap-2 px-4 py-2.5" data-testid="extra-row">
                           <span className="min-w-0 truncate" title={e.name}>{e.name}</span>
                           <span className={`num text-right ${leftOf(x) < 0 ? "font-semibold text-bad" : ""}`}>{leftOf(x)}</span>
-                          <span className="num text-right">{(est ? x.est.avg : x.avg) == null ? <span className="text-mute">—</span> : (est ? x.est.avg : x.avg)!.toLocaleString()}</span>
-                          <span className={`num text-right ${canProfitOf(x) ? (profitOf(x) < 0 ? "text-bad" : "text-good") : "text-[13px] text-mute"}`}>{canProfitOf(x) ? profitOf(x).toLocaleString() : x.price == null ? "沒售價" : "—"}</span>
+                          <span className="num text-right">{(est ? x.est.avg : x.avg) == null ? <span className="text-mute">無</span> : (est ? x.est.avg : x.avg)!.toLocaleString()}</span>
+                          <span className={`num text-right ${canProfitOf(x) ? (profitOf(x) < 0 ? "text-bad" : "text-good") : "text-[13px] text-mute"}`}>{canProfitOf(x) ? profitOf(x).toLocaleString() : x.price == null ? "沒售價" : "無"}</span>
                         </Link>
                       </div>
                     );
@@ -306,8 +307,8 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
                 <div className="grid flex-1 grid-cols-[minmax(0,1fr)_3.25rem_4.25rem_4.5rem] gap-2 px-4 py-2.5">
                   <span role="cell">合計</span>
                   <span role="cell" className="num text-right" data-testid="summary-left">{listed.reduce((a, id) => a + leftOf(prof?.rows.get(id)), 0)}</span>
-                  <span role="cell" className="num text-right">{est ? (allQty ? Math.round(allEstAmount / allQty).toLocaleString() : "—") : allSure ? Math.round(allAmount / allSure).toLocaleString() : "—"}</span>
-                  <span role="cell" className="num text-right text-good">{listed.some((id) => canProfitOf(prof?.rows.get(id))) ? listed.reduce((a, id) => a + (canProfitOf(prof?.rows.get(id)) ? profitOf(prof!.rows.get(id)) : 0), 0).toLocaleString() : <span className="text-mute">—</span>}</span>
+                  <span role="cell" className="num text-right">{est ? (allQty ? Math.round(allEstAmount / allQty).toLocaleString() : "無") : allSure ? Math.round(allAmount / allSure).toLocaleString() : "無"}</span>
+                  <span role="cell" className="num text-right text-good">{listed.some((id) => canProfitOf(prof?.rows.get(id))) ? listed.reduce((a, id) => a + (canProfitOf(prof?.rows.get(id)) ? profitOf(prof!.rows.get(id)) : 0), 0).toLocaleString() : <span className="text-mute">無</span>}</span>
                 </div>
               </div>
             </div>

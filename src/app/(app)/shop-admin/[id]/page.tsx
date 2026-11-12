@@ -73,7 +73,7 @@ export default async function ShopCategoryAdmin({ params }: { params: Promise<{ 
           </span>
         }
       />
-      {!cat.active && <p className="rounded-xl border border-[#f0dfa8] bg-warn-soft px-3 py-2 text-[14px] text-warn">這個系列已過期，客人看不到。要開放請先到系列頁改回進行中。</p>}
+      {!cat.active && <p className="rounded-xl border border-tone-amber-300-2 bg-warn-soft px-3 py-2 text-[14px] text-warn">這個系列已過期，客人看不到。要開放請先到系列頁改回進行中。</p>}
       <SettingsForm
         categoryId={id}
         ops={ops}

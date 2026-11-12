@@ -1,5 +1,6 @@
 "use client";
 // 採購品項批次修改：數量、預估／實際單價、幣別、對客售價。全部檢查通過才寫入。
+import { Icon } from "@/components/icons";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Button, ConfirmButton, inputCls, notify, useRun, useToast } from "@/components/client";
@@ -106,7 +107,7 @@ export function BulkEditTable({ batchId, items, editable, jointOps, batchDutyPct
   return (
     <div>
       <div role="table" aria-label="採購品項" className="space-y-2 p-3 md:space-y-0 md:p-0">
-        <div role="row" className="hidden border-b border-line bg-[#fafbfc] px-4 py-2 text-[13px] font-medium text-ink-2 md:grid md:grid-cols-[minmax(10rem,1.6fr)_4.5rem_5.5rem_6.5rem_6.5rem_5rem_6.5rem_7rem_7.5rem] md:gap-2">
+        <div role="row" className="hidden border-b border-line bg-tone-gray-50-4 px-4 py-2 text-[13px] font-medium text-ink-2 md:grid md:grid-cols-[minmax(10rem,1.6fr)_4.5rem_5.5rem_6.5rem_6.5rem_5rem_6.5rem_7rem_7.5rem] md:gap-2">
           <span role="columnheader">商品</span>
           <span role="columnheader" className="text-right">已到貨</span>
           <span role="columnheader" className="text-right">數量</span>
@@ -124,7 +125,7 @@ export function BulkEditTable({ batchId, items, editable, jointOps, batchDutyPct
           // 按「編輯」後每一列的欄位全部打開，不用一列一列點
           const x = "";
           return (
-            <div key={i.id} role="row" className={`grid grid-cols-2 gap-2 rounded-xl border p-3 md:grid-cols-[minmax(10rem,1.6fr)_4.5rem_5.5rem_6.5rem_6.5rem_5rem_6.5rem_7rem_7.5rem] md:items-start md:rounded-none md:border-0 md:border-b md:px-4 md:py-1.5 ${err ? "border-[#f5c9c4] bg-bad-soft/40" : dirty ? "border-[#cfd9ea] bg-info-soft/60" : "border-line md:border-line-2"}`}>
+            <div key={i.id} role="row" className={`grid grid-cols-2 gap-2 rounded-xl border p-3 md:grid-cols-[minmax(10rem,1.6fr)_4.5rem_5.5rem_6.5rem_6.5rem_5rem_6.5rem_7rem_7.5rem] md:items-start md:rounded-none md:border-0 md:border-b md:px-4 md:py-1.5 ${err ? "border-tone-red-200-4 bg-bad-soft/40" : dirty ? "border-tone-blue-200-2 bg-info-soft/60" : "border-line md:border-line-2"}`}>
               <div role="cell" className="col-span-2 md:col-span-1 md:pt-2">
                 <Link href={`/products/${i.productId}`} className="font-medium hover:underline">{i.name}</Link>
                 {i.specNote && <span className="ml-1 text-[12px] text-mute">{i.specNote}</span>}
@@ -191,7 +192,7 @@ export function BulkEditTable({ batchId, items, editable, jointOps, batchDutyPct
               <div role="cell" className="col-span-2 flex flex-wrap items-center justify-end gap-1 md:col-span-1 md:pt-1">
                 {editable && i.qty - i.received > 0 && (
                   <label className="flex items-center gap-1 text-[13px] text-bad">
-                    ✂ 砍
+                    <Icon name="scissors" /> 砍
                     <input aria-label={`${i.name} 砍幾件`} className={`${inputCls} num w-14 text-center`} inputMode="numeric" value={d.cut} onChange={(e) => set(i.id, { cut: e.target.value })} placeholder="0" />
                     件
                   </label>

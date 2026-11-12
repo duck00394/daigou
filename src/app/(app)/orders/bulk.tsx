@@ -46,7 +46,7 @@ export function BulkBar({ groupBuys = [], owners, acting = "" }: { groupBuys?: {
       </div>
       {/* 電腦：在上面一排；手機：勾了才從下面跳出來，不用捲回最上面 */}
       <div
-        className={`flex-wrap items-end gap-2 px-4 py-2 text-sm md:flex md:p-0 max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(env(safe-area-inset-bottom)+4.25rem)] max-md:z-30 max-md:border-t max-md:border-line max-md:bg-white max-md:shadow-[0_-4px_12px_rgba(0,0,0,0.08)] ${n ? "flex" : "hidden"}`}
+        className={`flex-wrap items-end gap-2 px-4 py-2 text-sm md:flex md:p-0 max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(env(safe-area-inset-bottom)+4.25rem)] max-md:z-30 max-md:border-t max-md:border-line max-md:bg-white max-md:shadow-lift-3 ${n ? "flex" : "hidden"}`}
         data-testid="bulk-actions"
       >
         <div className="w-full text-[13.5px] font-semibold md:hidden">已選 {n} 筆，一次改：</div>

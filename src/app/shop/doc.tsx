@@ -1,13 +1,12 @@
 // 交易規則、隱私權政策共用的版面
-import { BackCircle, Eyebrow, SerifTitle } from "./ui";
+import { BackCircle, SerifTitle } from "./ui";
 
-export function DocPage({ eyebrow, title, updated, children }: { eyebrow: string; title: string; updated: string; children: React.ReactNode }) {
+export function DocPage({ title, updated, children }: { title: string; updated: string; children: React.ReactNode }) {
   return (
     <>
       <header className="flex items-center gap-3 px-4 py-3">
         <BackCircle href="/shop" label="回商店" />
         <div className="flex-1">
-          <Eyebrow>{eyebrow}</Eyebrow>
           <SerifTitle size={22}>{title}</SerifTitle>
         </div>
       </header>

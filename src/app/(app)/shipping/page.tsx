@@ -11,7 +11,7 @@ import { getView } from "@/server/view";
 type Ops = { id: string; name: string }[];
 /** 「JING 1・合資 1」 */
 const ownersText = (m: Map<string, number> | undefined, ops: Ops) =>
-  [...(m ?? new Map<string, number>()).entries()].filter(([, q]) => q > 0).map(([k, q]) => `${k === "joint" ? "合資" : k === "none" ? "未指定" : (ops.find((o) => o.id === k)?.name ?? "未指定")} ${q}`).join("・");
+  [...(m ?? new Map<string, number>()).entries()].filter(([, q]) => q > 0).map(([k, q]) => `${k === "joint" ? "合資" : k === "none" ? "未指定" : (ops.find((o) => o.id === k)?.name ?? "未指定")} ${q}`).join("、");
 import { fmtDate } from "@/lib/labels";
 
 export const metadata = { title: "出貨" };
@@ -139,12 +139,12 @@ async function DoneTab({ vk }: { vk: string | null }) {
               <tr key={s.id}>
                 <td className="whitespace-nowrap"><span className="num font-medium">{s.shipmentNo}</span><div className="num text-[12px] text-mute">{fmtDate(s.shippedAt, true)}</div></td>
                 <td><Link href={`/buyers/${s.buyerId}`} className="hover:underline">{s.buyer.name}</Link></td>
-                <td>{s.method ?? "—"}</td>
-                <td className="num">{s.trackingNo ?? "—"}</td>
+                <td>{s.method ?? "無"}</td>
+                <td className="num">{s.trackingNo ?? "無"}</td>
                 <td className="max-w-sm text-[13px]">
                   {s.items.map((i) => {
                     const who = i.qty > 0 ? ownersText(by.get(i.id), ops) : "";
-                    return <div key={i.id} data-testid="ship-line">{i.orderItem.productNameSnapshot}×{i.qty}（{i.orderItem.order.orderNo}）{who && <span className="text-mute" data-testid="ship-owner">・{who}</span>}</div>;
+                    return <div key={i.id} data-testid="ship-line">{i.orderItem.productNameSnapshot}×{i.qty}（{i.orderItem.order.orderNo}）{who && <span className="text-mute" data-testid="ship-owner">，{who}</span>}</div>;
                   })}
                 </td>
                 <td>{s.status === "DELIVERED" ? "已送達" : "已出貨"}</td>

@@ -11,7 +11,7 @@ export async function GET() {
       id: "/shop",
       name,
       short_name: name,
-      description: `${name}・預購與現貨訂購`,
+      description: `${name}，預購與現貨訂購`,
       start_url: "/shop",
       scope: "/shop",
       display: "standalone",

@@ -34,7 +34,7 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
     receivablesSnapshot(prisma, owner),
     prisma.expense.findMany({ where: { ...(owner ? { ownerKey: owner } : {}), date: { gte: new Date(`${ym}-01T00:00:00Z`), lt: new Date(new Date(`${ym}-01T00:00:00Z`).setUTCMonth(new Date(`${ym}-01T00:00:00Z`).getUTCMonth() + 1)) } }, orderBy: { date: "asc" } }),
   ]);
-  const margin = (rev: number, cost: number) => (rev > 0 ? `${Math.round(((rev - cost) / rev) * 1000) / 10}%` : "—");
+  const margin = (rev: number, cost: number) => (rev > 0 ? `${Math.round(((rev - cost) / rev) * 1000) / 10}%` : "無");
   return (
     <div className="space-y-4">
       <PageHeader
@@ -42,7 +42,7 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
         sub="收入算在賣出（出貨）那天；收到的錢另外算。賺多少 ＝ 收入 − 賣掉的東西成本 − 其他費用。"
         actions={
           <form method="get" className="flex items-center gap-2">
-            <Link href="/operators" className="text-sm text-ai">經營者對帳 ›</Link>
+            <Link href="/operators" className="text-sm text-ai">經營者對帳</Link>
             <select name="ym" defaultValue={ym} className="rounded-lg border border-line bg-white px-2 py-2" aria-label="月份">
               {months().map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
@@ -98,7 +98,7 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
           {expenses.length === 0 && r.batchFeeItems.length === 0 ? <Empty>沒有其他費用。可在「設定」新增。</Empty> : (
             <ul className="divide-y divide-line-2 text-sm">
               {expenses.map((e) => <li key={e.id} className="flex justify-between px-4 py-2"><span>{e.date.toISOString().slice(0, 10)}｜{e.note ?? ""}</span><Twd v={e.amountTwd} /></li>)}
-              {r.batchFeeItems.map((e) => <li key={e.id} className="flex justify-between gap-2 px-4 py-2"><Link href={`/inventory/batches/${e.batch.id}`} className="hover:underline">{e.date.toISOString().slice(0, 10)}｜{costKind[e.kind]}・{e.batch.code} {e.batch.name}{e.note ? `｜${e.note}` : ""}</Link><Twd v={e.amountTwd} /></li>)}
+              {r.batchFeeItems.map((e) => <li key={e.id} className="flex justify-between gap-2 px-4 py-2"><Link href={`/inventory/batches/${e.batch.id}`} className="hover:underline">{e.date.toISOString().slice(0, 10)}｜{costKind[e.kind]}，{e.batch.code} {e.batch.name}{e.note ? `｜${e.note}` : ""}</Link><Twd v={e.amountTwd} /></li>)}
             </ul>
           )}
         </Section>

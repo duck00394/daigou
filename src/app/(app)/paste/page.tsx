@@ -31,7 +31,7 @@ export default async function PastePage({ searchParams }: { searchParams: Promis
             <ul className="divide-y divide-line-2 text-sm">
               {recent.map((b) => (
                 <li key={b.id}>
-                  <Link href={`/paste?batch=${b.id}`} className="flex items-center justify-between gap-2 px-4 py-2 hover:bg-[#fafbfd]">
+                  <Link href={`/paste?batch=${b.id}`} className="flex items-center justify-between gap-2 px-4 py-2 hover:bg-tone-gray-50-5">
                     <span className="min-w-0 truncate">{(b.rawText ?? "").split("\n").find((l) => l.trim()) ?? "（空白）"}</span>
                     <span className="flex shrink-0 items-center gap-2 text-mute">
                       <span className="num">{fmtDate(b.createdAt, true)}</span>
@@ -70,7 +70,7 @@ export default async function PastePage({ searchParams }: { searchParams: Promis
       <div className="space-y-3">
         {[...groups.entries()].map(([rowNo, rows]) => (
           <article key={rowNo} className="overflow-hidden rounded-xl border border-line bg-white">
-            <header className="flex items-start gap-3 border-b border-dashed border-line bg-[#fdf7f8] px-4 py-2.5">
+            <header className="flex items-start gap-3 border-b border-dashed border-line bg-tone-gray-50-7 px-4 py-2.5">
               <span className="num shrink-0 rounded-md bg-peach px-1.5 text-[13px] font-semibold text-peach-ink">第 {rowNo} 行</span>
               <pre className="round min-w-0 flex-1 text-[15px] leading-6 whitespace-pre-wrap">{rows[0].rawText}</pre>
             </header>
@@ -84,7 +84,7 @@ export default async function PastePage({ searchParams }: { searchParams: Promis
                     </span>
                     {r.orderNo && r.orderId && (
                       <Link href={`/orders/${r.orderId}`} className="num text-ai hover:underline">
-                        → {r.orderNo}
+                        {r.orderNo}
                       </Link>
                     )}
                   </div>

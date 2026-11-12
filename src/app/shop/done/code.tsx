@@ -14,5 +14,5 @@ export function LookupCode({ ids }: { ids: string[] }) {
   }, [ids]);
   if (code === undefined) return <span className="text-[13px] text-shop-mute">…</span>;
   if (!code) return <span className="text-[13px] text-shop-mute">已寄到 Email／LINE</span>;
-  return <span className="font-mono text-[18px] font-bold tracking-[3px] text-shop-rose-2">{code}</span>;
+  return <span className="font-mono text-[18px] font-bold text-shop-rose-2">{code}</span>;
 }

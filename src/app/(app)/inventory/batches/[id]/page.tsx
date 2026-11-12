@@ -149,7 +149,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         </div>
       )}
       {refundOwed > 0 && (
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-[#f1b5b5] bg-bad-soft px-4 py-2.5 text-[14px] text-bad" data-testid="batch-refund-owed">
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-tone-red-300-2 bg-bad-soft px-4 py-2.5 text-[14px] text-bad" data-testid="batch-refund-owed">
           <span>已砍單，未退款：代購要退 <b className="num">{formatTwd(refundOwed)}</b>{b.refundedTwd ? `（已退 ${formatTwd(b.refundedTwd)}）` : ""}</span>
           <RefundButton batchId={b.id} name={b.name} owed={refundOwed} />
         </div>
@@ -166,7 +166,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
           <div><div className="text-[12px] text-mute">已付</div><div className="num text-[20px] font-semibold text-good">{formatTwd(pay.paidTwd)}</div></div>
           <div><div className="text-[12px] text-mute">還要付</div><div className={`num text-[20px] font-semibold ${pay.dueTwd ? "text-bad" : ""}`} data-testid="batch-due">{formatTwd(pay.dueTwd)}</div></div>
         </div>
-        <div className="mt-1 text-[13px] text-mute">{totalQty} 件・已到 {received}{feeTotal > 0 ? `・含運費等 ${formatTwd(feeTotal)}` : ""}</div>
+        <div className="mt-1 text-[13px] text-mute">{totalQty} 件，已到 {received}{feeTotal > 0 ? `，含運費等 ${formatTwd(feeTotal)}` : ""}</div>
         {open && (
           <div className="mt-3 grid grid-cols-3 gap-2" aria-label="常用動作">
             <ReceiveAllButton batchId={b.id} outstanding={Math.max(0, totalQty - received)} operators={ops.filter((o) => o.active)} defaultReceiver={b.receivingResponsibleById ?? b.orderedById ?? null} doneLabel={isStoreKind(b.supplierRef?.kind) ? "實體店買的" : "全部到手了"} due={pay.dueTwd} payer={b.ownership === "JOINT" ? me : (b.orderedById ?? me)} />
@@ -234,7 +234,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         </Section>
       </div>
 
-      <Section id="costs" title="運費・代購費" pad={false} actions={open && <AddCost batchId={b.id} items={b.items.filter((i) => i.qty - i.cancelledQty > 0).map((i) => ({ id: i.id, name: i.product.name }))} operators={ops.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} owner={{ id: b.ownership === "JOINT" ? null : b.orderedById, label: ownerLabel }} presets={shippingPresets} />}>
+      <Section id="costs" title="運費、代購費" pad={false} actions={open && <AddCost batchId={b.id} items={b.items.filter((i) => i.qty - i.cancelledQty > 0).map((i) => ({ id: i.id, name: i.product.name }))} operators={ops.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} owner={{ id: b.ownership === "JOINT" ? null : b.orderedById, label: ownerLabel }} presets={shippingPresets} />}>
         {!isStoreKind(b.supplierRef?.kind) && <DutyBar batchId={b.id} pct={b.dutyBp == null ? null : b.dutyBp / 100} goods={editItems.reduce((a, i) => a + i.goodsTwd, 0)} editable={open} />}
         {b.costs.length === 0 ? (
           <Empty>還沒有記運費。國際運費、國內運費、代購費、關稅都記在這裡。</Empty>
@@ -251,11 +251,11 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
               return (
                 <li key={c.id} className="flex items-start justify-between gap-3 px-4 py-3" data-testid="fee-row">
                   <div className="min-w-0">
-                    <div className="font-medium" data-testid={c.autoDuty ? "auto-duty" : undefined}>{costKind[c.kind]}{c.autoDuty ? <span className="ml-1 text-[12px] font-normal text-mute">{b.dutyBp != null ? `${b.dutyBp / 100}%・` : ""}自動算</span> : null}{c.note ? <span className="ml-1 text-[12px] font-normal text-mute">{c.note}</span> : null}</div>
+                    <div className="font-medium" data-testid={c.autoDuty ? "auto-duty" : undefined}>{costKind[c.kind]}{c.autoDuty ? <span className="ml-1 text-[12px] font-normal text-mute">{b.dutyBp != null ? `${b.dutyBp / 100}%，` : ""}自動算</span> : null}{c.note ? <span className="ml-1 text-[12px] font-normal text-mute">{c.note}</span> : null}</div>
                     <div className="text-[13px] text-ink-2">{payerText(c)}</div>
                     <div className="text-[12px] text-mute">
                       {c.autoDuty ? "照每件的關稅 % 攤進商品成本" : c.method === "NONE" ? "不攤進商品成本，單獨記" : `攤進商品成本：${allocMethod[c.method]}${c.method === "BY_QTY" && q ? `（每件約 +${formatTwd(Math.round(twd / q))}）` : ""}`}
-                      {c.method !== "NONE" && sum !== twd && q > 0 && <span className="text-bad">・分攤合計 {sum} 和費用不符</span>}
+                      {c.method !== "NONE" && sum !== twd && q > 0 && <span className="text-bad">，分攤合計 {sum} 和費用不符</span>}
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
@@ -272,7 +272,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       </Section>
       <details className="group rounded-xl border border-line bg-card" id="more">
         <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-[15px] font-semibold [&::-webkit-details-marker]:hidden">
-          <span><span className="mr-1 inline-block text-mute transition-transform group-open:rotate-90">▸</span>負責人・基本資料</span>
+          <span><span className="mr-1 inline-block text-mute transition-transform group-open:rotate-90">▸</span>負責人、基本資料</span>
           <span className="text-[13px] font-normal text-mute group-open:hidden">點開修改</span>
         </summary>
         <div className="space-y-4 border-t border-line-2 p-3">

@@ -167,7 +167,7 @@ export default async function BuyerPage({ params, searchParams }: { params: Prom
                       <Link href={`/orders/${o.id}`} className="num text-ai hover:underline">{o.orderNo}</Link>
                       <div className="text-[12px] text-mute">{fmtDate(o.orderedAt)}</div>
                     </td>
-                    <td>{o.groupBuy?.name ?? "—"}</td>
+                    <td>{o.groupBuy?.name ?? "無"}</td>
                     <td><StatusBadge map={orderStatus} value={o.statusCache} /></td>
                     <td><StatusBadge map={paymentStatus} value={o.paymentStatusCache} /></td>
                     <td><StatusBadge map={shipStatus} value={o.shipStatusCache} /></td>
@@ -295,7 +295,7 @@ export default async function BuyerPage({ params, searchParams }: { params: Prom
                         <td><Link href={`/orders/${c.orderItem.order.id}`} className="num text-ai hover:underline">{c.orderItem.order.orderNo}</Link></td>
                         <td>{c.orderItem.productNameSnapshot}</td>
                         <td className="num text-right">{c.qty}</td>
-                        <td>{c.reason ?? "—"}</td>
+                        <td>{c.reason ?? "無"}</td>
                         <td>
                           {c.refunds.length > 0
                             ? c.refunds.map((r) => `${refundStatus[r.status][0]} NT$${r.amount}`).join("、")

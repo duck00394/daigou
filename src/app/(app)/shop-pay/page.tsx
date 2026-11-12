@@ -36,7 +36,7 @@ export default async function ShopPay({ searchParams }: { searchParams: Promise<
     <div className="space-y-4">
       <PageHeader title="訂購頁付款" sub="客人用賣貨便下單了沒；期限到了沒下單會自動取消，名額給候補" back={{ href: "/shop-admin", label: "訂購頁" }} />
       <NavSelect label="顯示" current={`/shop-pay?v=${v}`} options={(Object.keys(VIEWS) as (keyof typeof VIEWS)[]).map((k) => ({ label: `${VIEWS[k]}（${cnt[k]}）`, href: `/shop-pay?v=${k}` }))} />
-      {!mailConfigured() && <p className="rounded-xl border border-[#f0dfa8] bg-warn-soft px-3 py-2 text-[13px] text-warn">Email 寄信還沒設定（GMAIL_USER、GMAIL_APP_PASSWORD），訪客下單的客人收不到通知。設定方式見<Link href="/shop-admin" className="underline">訂購頁</Link>的「通知設定」。</p>}
+      {!mailConfigured() && <p className="rounded-xl border border-tone-amber-300-2 bg-warn-soft px-3 py-2 text-[13px] text-warn">Email 寄信還沒設定（GMAIL_USER、GMAIL_APP_PASSWORD），訪客下單的客人收不到通知。設定方式見<Link href="/shop-admin" className="underline">訂購頁</Link>的「通知設定」。</p>}
       <Section>
         <PayList
           view={v}

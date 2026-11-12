@@ -82,13 +82,13 @@ export function allocate(total: number, weights: number[]): number[] {
 }
 
 export function formatTwd(n: number | null | undefined): string {
-  if (n === null || n === undefined) return "—";
+  if (n === null || n === undefined) return "無";
   if (Object.is(n, -0)) n = 0;
   return n < 0 ? `−NT$${(-n).toLocaleString("en-US")}` : `NT$${n.toLocaleString("en-US")}`;
 }
 
 export function formatJpy(n: number | null | undefined): string {
-  if (n === null || n === undefined) return "—";
+  if (n === null || n === undefined) return "無";
   return `¥${n.toLocaleString("en-US")}`;
 }
 

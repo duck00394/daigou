@@ -1,6 +1,7 @@
 "use client";
 // 新增採購（一個畫面完成）：系列 → 這一團（代購、訂單編號、在哪訂的、誰的；其他收在「更多」）→ 買了什麼。
 // 系列選好縮成一行；代購用下拉選單（常用的排上面）；預設跟代購買、已請代購、台幣。
+import { Icon } from "@/components/icons";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { Button, TextField, inputCls, notify, useIdemKey } from "@/components/client";
@@ -189,8 +190,8 @@ export function QuickPurchase(props: {
 
   const dutyPct = () => (f.duty.trim() && Number(f.duty) > 0 ? Number(f.duty) : null);
   const jointBox = () => (
-    <div className="space-y-3 rounded-xl border border-[#d9c8f2] bg-[#f7f2fd] p-3" data-testid="joint-box">
-      <div className="text-[14px] font-semibold text-[#6b3fb0]">合資怎麼分</div>
+    <div className="space-y-3 rounded-xl border border-tone-purple-200 bg-tone-purple-50 p-3" data-testid="joint-box">
+      <div className="text-[14px] font-semibold text-tone-purple-600">合資怎麼分</div>
       <div>
         <div className="mb-1 text-[13px] font-medium text-ink-2">「一起的」商品比例（%）</div>
         <div className="grid grid-cols-2 gap-2">
@@ -222,7 +223,7 @@ export function QuickPurchase(props: {
   return (
     <div className="space-y-4">
       {!me && operators.length > 0 && (
-        <div className="rounded-xl border border-[#f0dfa8] bg-warn-soft p-3">
+        <div className="rounded-xl border border-tone-amber-300-2 bg-warn-soft p-3">
           <p className="mb-2 text-sm font-medium text-warn">這支手機是誰在用？（之後新增、出售、自留都預設是你的，可以隨時在設定改）</p>
           <div className="flex flex-wrap gap-2">
             {operators.map((o) => (
@@ -264,7 +265,7 @@ export function QuickPurchase(props: {
               extra={
                 <>
                   <button type="button" className="min-h-10 rounded-lg border border-line bg-white px-3 text-[14px] text-ai" onClick={() => setNewCat("")}>＋ 新系列</button>
-                  {categoryId && renaming === null && <button type="button" className="min-h-10 rounded-lg border border-line bg-white px-3 text-[14px] text-ai" onClick={() => setRenaming(catName ?? "")}>✎ 改名</button>}
+                  {categoryId && renaming === null && <button type="button" className="min-h-10 rounded-lg border border-line bg-white px-3 text-[14px] text-ai" onClick={() => setRenaming(catName ?? "")}><Icon name="pencil" /> 改名</button>}
                 </>
               }
             />
@@ -322,7 +323,7 @@ export function QuickPurchase(props: {
         <Choice
           label="哪一團"
           value={pick}
-          options={[{ value: NEW, label: "開新的一團" }, ...inCat.map((b) => ({ value: b.id, label: `加到：${b.label}（${(b.categoryId ?? "") !== categoryId && cats.find((c) => c.id === b.categoryId) ? `${cats.find((c) => c.id === b.categoryId)!.name}・` : ""}${b.owner}的・${b.stage}・${b.items} 項）` }))]}
+          options={[{ value: NEW, label: "開新的一團" }, ...inCat.map((b) => ({ value: b.id, label: `加到：${b.label}（${(b.categoryId ?? "") !== categoryId && cats.find((c) => c.id === b.categoryId) ? `${cats.find((c) => c.id === b.categoryId)!.name}，` : ""}${b.owner}的，${b.stage}，${b.items} 項）` }))]}
           onChange={(v) => { setPick(v); setSaved(null); if (v === NEW) created.current = null; }}
         />
 
@@ -363,11 +364,11 @@ export function QuickPurchase(props: {
                         {(supQ.trim() ? [["搜尋結果", supHits] as const] : ([["常用", favs], ["其他", shown.filter((x) => !favs.includes(x))]] as const)).map(([title, list]) =>
                           list.length ? (
                             <li key={title}>
-                              <div className="bg-[#f7f8fa] px-3 py-1 text-[12px] text-mute">{title}</div>
+                              <div className="bg-tone-gray-50-2 px-3 py-1 text-[12px] text-mute">{title}</div>
                               <ul>
                                 {list.map((x) => (
                                   <li key={x.id}>
-                                    <button type="button" role="option" aria-selected={f.supplierId === x.id} className={`flex w-full items-center justify-between px-3 py-2.5 text-left text-[15px] ${f.supplierId === x.id ? "bg-ai-soft font-semibold text-ai" : "hover:bg-[#fafbfc]"}`} onClick={() => { setF({ ...f, supplierId: x.id }); setSupOpen(false); setSupQ(""); }}>
+                                    <button type="button" role="option" aria-selected={f.supplierId === x.id} className={`flex w-full items-center justify-between px-3 py-2.5 text-left text-[15px] ${f.supplierId === x.id ? "bg-ai-soft font-semibold text-ai" : "hover:bg-tone-gray-50-4"}`} onClick={() => { setF({ ...f, supplierId: x.id }); setSupOpen(false); setSupQ(""); }}>
                                       {x.name}{f.supplierId === x.id && <span className="text-[12px]">已選</span>}
                                     </button>
                                   </li>
@@ -440,7 +441,7 @@ export function QuickPurchase(props: {
             </div>
             {f.owner === JOINT && jointBox()}
             {!store && (
-              <label className="flex items-center gap-2 rounded-xl border border-line-2 bg-[#fafbfc] px-3 py-2 text-[14px]" data-testid="buy-ship-fee">
+              <label className="flex items-center gap-2 rounded-xl border border-line-2 bg-tone-gray-50-4 px-3 py-2 text-[14px]" data-testid="buy-ship-fee">
                 <span className="shrink-0 font-medium text-ink-2">運費（賣貨便）</span>
                 <span className="text-mute">NT$</span>
                 <input aria-label="賣貨便運費" data-keep inputMode="numeric" className={`${inputCls} num min-h-10 w-24 text-right`} value={mainFee} onChange={(e) => setMainFee(e.target.value.replace(/\D/g, ""))} />
@@ -449,13 +450,13 @@ export function QuickPurchase(props: {
               </label>
             )}
             {store && (
-              <label className="flex items-center gap-2 rounded-xl border border-line-2 bg-[#fafbfc] p-3 text-[15px]">
+              <label className="flex items-center gap-2 rounded-xl border border-line-2 bg-tone-gray-50-4 p-3 text-[15px]">
                 <input type="checkbox" className="h-5 w-5" checked={paidAtStore} onChange={(e) => setPaidAtStore(e.target.checked)} />
                 在店裡已經付清了
                 <span className="text-[12px] text-mute">（存好就進庫存{paidAtStore ? "、記成已付款" : ""}）</span>
               </label>
             )}
-            <details className="rounded-xl border border-line-2 bg-[#fafbfc] px-3 py-2 text-[14px]" open={store || undefined}>
+            <details className="rounded-xl border border-line-2 bg-tone-gray-50-4 px-3 py-2 text-[14px]" open={store || undefined}>
               <summary className="cursor-pointer select-none py-1 text-ai">更多：實體店買的、到哪了、運費、訂金、團名、預計到貨</summary>
               <div className="mt-2 space-y-3">
                 <Choice

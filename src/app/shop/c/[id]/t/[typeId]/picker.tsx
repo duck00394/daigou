@@ -65,14 +65,14 @@ export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, 
 
   return (
     <>
-      <div className="overflow-hidden rounded-[20px] border border-shop-line bg-white shadow-[0_6px_18px_rgba(120,70,60,0.08)]">
-        <div className="flex items-center justify-between border-b border-[#f1e9e0] px-4 py-3.5">
+      <div className="overflow-hidden rounded-[20px] border border-shop-line bg-white shadow-lift-1">
+        <div className="flex items-center justify-between border-b border-tone-orange-200-3 px-4 py-3.5">
           <div className="text-[16px] font-bold">{rows.length > 1 ? "選擇角色與數量" : "選擇數量"}</div>
           {available.length > 1 && (
             <button
               type="button"
               onClick={() => setQty(Object.fromEntries(available.filter((r) => maxOf(r) > 0).map((r) => [r.productId, 1])))}
-              className="h-9 rounded-full border border-[#ddd0c3] bg-white px-3 text-[13px] font-bold"
+              className="h-9 rounded-full border border-tone-orange-300-3 bg-white px-3 text-[13px] font-bold"
             >
               每款各 1 個
             </button>
@@ -83,9 +83,9 @@ export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, 
             const sold = r.left <= 0;
             const max = maxOf(r);
             const ic = inCart(r.productId);
-            const note = r.price === null ? "價格待定" : sold ? `已售完${r.waiting ? `・${r.waiting} 人候補` : ""}` : `剩 ${r.left} 個${ic ? `・購物車已有 ${ic}` : ""}${r.mine ? `・你已訂 ${r.mine}` : ""}`;
+            const note = r.price === null ? "價格待定" : sold ? `已售完${r.waiting ? `，${r.waiting} 人候補` : ""}` : `剩 ${r.left} 個${ic ? `，購物車已有 ${ic}` : ""}${r.mine ? `，你已訂 ${r.mine}` : ""}`;
             return (
-              <li key={r.productId} className="flex items-center gap-3 border-b border-[#f1e9e0] px-4 py-3 last:border-b-0">
+              <li key={r.productId} className="flex items-center gap-3 border-b border-tone-orange-200-3 px-4 py-3 last:border-b-0">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
                     <span className="text-[16px] font-bold">{r.label}</span>
@@ -93,7 +93,7 @@ export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, 
                   </div>
                   <div className={`text-[12px] ${sold ? "text-shop-rose-2" : "text-shop-mute"}`}>{note}</div>
                   {r.deposit > 0 && <div className="mt-0.5 mr-1 inline-block rounded-md bg-shop-gold-soft px-1.5 py-0.5 text-[11px] font-bold text-shop-gold">要先付訂金 {money(r.deposit)}</div>}
-                  {(r.bundle > 0 || r.bundleAmount > 0) && <div className="mt-0.5 inline-block rounded-md bg-shop-gold-soft px-1.5 py-0.5 text-[11px] font-bold text-shop-gold">不能單買・每 1 個要搭{r.bundle ? ` ${r.bundle} 個可以單買的角色` : `可以單買的角色滿 ${money(r.bundleAmount)}`}</div>}
+                  {(r.bundle > 0 || r.bundleAmount > 0) && <div className="mt-0.5 inline-block rounded-md bg-shop-gold-soft px-1.5 py-0.5 text-[11px] font-bold text-shop-gold">不能單買，每 1 個要搭{r.bundle ? ` ${r.bundle} 個可以單買的角色` : `可以單買的角色滿 ${money(r.bundleAmount)}`}</div>}
                 </div>
                 {sold ? (
                   r.inWait ? (
@@ -115,7 +115,7 @@ export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, 
 
       {msg && (
         <div className="pointer-events-none fixed inset-x-0 bottom-[calc(max(12px,env(safe-area-inset-bottom))+72px)] z-30 px-3">
-          <div role="status" className={`pointer-events-auto mx-auto flex max-w-md items-center justify-between gap-3 rounded-[14px] border px-3.5 py-3 text-[14px] font-bold shadow-[0_6px_18px_rgba(59,47,42,0.15)] ${msg.ok ? "border-[#cfe9d4] bg-[#eaf6ec] text-shop-good" : "border-[#f1c9cc] bg-[#fdf0f1] text-shop-rose-2"}`}>
+          <div role="status" className={`pointer-events-auto mx-auto flex max-w-md items-center justify-between gap-3 rounded-[14px] border px-3.5 py-3 text-[14px] font-bold shadow-lift-10 ${msg.ok ? "border-tone-green-200 bg-tone-green-100-2 text-shop-good" : "border-tone-red-200 bg-tone-red-50 text-shop-rose-2"}`}>
             <span>{msg.text}</span>
             <span className="flex shrink-0 items-center gap-3">
               {msg.ok && cart.count > 0 && <Link href="/shop/cart" className="underline">去結帳</Link>}
@@ -126,17 +126,17 @@ export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, 
       )}
 
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-3 pb-[max(12px,env(safe-area-inset-bottom))]">
-        <div className="pointer-events-auto mx-auto flex max-w-md items-center justify-between gap-3 rounded-[26px] bg-shop-ink py-2 pr-2 pl-5 text-white shadow-[0_10px_24px_rgba(59,47,42,0.3)]">
+        <div className="pointer-events-auto mx-auto flex max-w-md items-center justify-between gap-3 rounded-[26px] bg-shop-ink py-2 pr-2 pl-5 text-white shadow-lift-2">
           <div className="min-w-0">
             <div className="truncate text-[12px] opacity-85">{summary}</div>
-            <div className="text-[18px] font-bold">{count ? `共 ${count} 件・${money(total)}` : cart.count ? `購物車 ${cart.count} 件` : "NT$ 0"}</div>
+            <div className="text-[18px] font-bold">{count ? `共 ${count} 件，${money(total)}` : cart.count ? `購物車 ${cart.count} 件` : "NT$ 0"}</div>
           </div>
           {count ? (
             <button type="button" onClick={addAll} className="h-12 shrink-0 rounded-full bg-shop-rose px-[18px] text-[15px] font-bold text-white">加入購物車</button>
           ) : cart.count ? (
-            <Link href="/shop/cart" className="flex h-12 shrink-0 items-center rounded-full bg-shop-rose px-[18px] text-[15px] font-bold text-white">前往結帳 →</Link>
+            <Link href="/shop/cart" className="flex h-12 shrink-0 items-center rounded-full bg-shop-rose px-[18px] text-[15px] font-bold text-white">前往結帳</Link>
           ) : (
-            <span className="flex h-12 shrink-0 items-center rounded-full bg-[#8a7a70] px-[18px] text-[15px] font-bold text-white">請先選數量</span>
+            <span className="flex h-12 shrink-0 items-center rounded-full bg-tone-sand-600 px-[18px] text-[15px] font-bold text-white">請先選數量</span>
           )}
         </div>
       </div>

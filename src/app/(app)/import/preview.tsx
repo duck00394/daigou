@@ -95,7 +95,7 @@ export function ExcelPreview({ batchId, rows, lookup, locked }: { batchId: strin
       </div>
       <div ref={parent} className="relative h-[65vh] overflow-auto" role="table" aria-rowcount={view.length}>
         <div style={{ width, minWidth: "100%" }}>
-          <div role="row" className="sticky top-0 z-10 flex border-b border-line bg-[#fafbfc] text-[13px] font-medium text-ink-2">
+          <div role="row" className="sticky top-0 z-10 flex border-b border-line bg-tone-gray-50-4 text-[13px] font-medium text-ink-2">
             <div className="flex w-10 shrink-0 items-center justify-center">
               {!locked && (
                 <input
@@ -160,7 +160,7 @@ export function ExcelPreview({ batchId, rows, lookup, locked }: { batchId: strin
                           <RowStatus s={r.status} />
                         ) : (
                           <span className={`truncate ${c.key === "msg" ? (bad ? "text-bad" : "text-warn") + " text-[13px]" : ""}`}>
-                            {c.key === "price" || c.key === "paid" ? (val === null ? "—" : formatTwd(val as number)) : (val ?? "—")}
+                            {c.key === "price" || c.key === "paid" ? (val === null ? "無" : formatTwd(val as number)) : (val ?? "無")}
                           </span>
                         )}
                       </div>

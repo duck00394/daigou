@@ -59,7 +59,7 @@ export function Waitlist({ lists, moves }: { lists: List[]; moves: Move[] }) {
               <li key={i} className="space-y-0.5 px-3 py-2">
                 <div className="flex justify-between gap-2"><b className="min-w-0 truncate">{x.product}</b><span className="shrink-0 text-mute">{x.at}</span></div>
                 <div>{x.buyer}：第 {x.from} → 第 {x.to}</div>
-                <div className="text-mute">{x.by}・{x.reason}</div>
+                <div className="text-mute">{x.by}，{x.reason}</div>
               </li>
             ))}
           </ul>

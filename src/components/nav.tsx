@@ -1,4 +1,5 @@
 "use client";
+import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -11,9 +12,9 @@ export const NAV: { href: string; label: string; group: string; hint?: string }[
   { href: "/sell", label: "賣給客人", group: "常用", hint: "選系列、填數量，沒貨記預訂" },
   { href: "/rush", label: "搶購提醒", group: "常用", hint: "什麼時候開搶，開始前通知手機" },
   { href: "/categories", label: "系列", group: "常用", hint: "每個系列買了什麼、花多少、品項售價" },
-  { href: "/inventory?tab=batches", label: "採購團・收貨", group: "常用", hint: "東西到了沒、登記收到" },
+  { href: "/inventory?tab=batches", label: "採購團、收貨", group: "常用", hint: "東西到了沒、登記收到" },
   { href: "/reconcile", label: "對單", group: "常用", hint: "跟代購確認買到多少、砍了哪些" },
-  { href: "/inventory?tab=stock", label: "庫存・賣出・自留", group: "常用", hint: "手上有什麼、成本多少" },
+  { href: "/inventory?tab=stock", label: "庫存、賣出、自留", group: "常用", hint: "手上有什麼、成本多少" },
   { href: "/sales", label: "賺多少", group: "常用", hint: "賣出的收入、成本、毛利" },
   { href: "/orders", label: "訂單", group: "常用", hint: "客人的訂單、預訂，可以多選一次改代購團" },
   { href: "/shipping", label: "出貨", group: "常用", hint: "預訂到貨了交給客人、改出貨人" },
@@ -29,7 +30,7 @@ export const NAV: { href: string; label: string; group: string; hint?: string }[
   { href: "/catalog", label: "種類與系列管理", group: "資料與設定" },
   { href: "/products", label: "商品", group: "資料與設定" },
   { href: "/series", label: "系列與角色", group: "資料與設定" },
-  { href: "/suppliers", label: "供應商・代購", group: "資料與設定" },
+  { href: "/suppliers", label: "供應商、代購", group: "資料與設定" },
   { href: "/reports", label: "完整報表", group: "資料與設定" },
   { href: "/tags", label: "標籤", group: "資料與設定" },
   { href: "/settings", label: "匯出、備份與設定", group: "資料與設定" },
@@ -74,7 +75,7 @@ export function Sidebar({ ordersOn = true, view }: { ordersOn?: boolean; view?: 
         代購帳房
       </Link>
       <form action="/search" method="get" role="search" className="mb-4 px-1">
-        <input type="search" name="q" placeholder="🔍 搜尋角色、商品" aria-label="搜尋" className="w-full rounded-lg border border-line px-2.5 py-1.5 text-[14px]" />
+        <input type="search" name="q" placeholder="搜尋角色、商品" aria-label="搜尋" className="w-full rounded-lg border border-line px-2.5 py-1.5 text-[14px]" />
       </form>
       {view && <div className="px-1"><ViewSwitch v={view} /></div>}
       {groups.map((g) => (
@@ -116,7 +117,7 @@ export function MobileBar({ ordersOn = true, view }: { ordersOn?: boolean; view?
           {view && view.me && <button type="button" onClick={() => setOpen(true)} aria-label={`現在看：${view.name}，按這裡切換`}><ViewChip v={view} /></button>}
         </span>
         <span className="flex items-center gap-2">
-          <Link href="/search" aria-label="搜尋" className="rounded-lg border border-line px-2.5 py-1 text-[14px]">🔍 搜尋</Link>
+          <Link href="/search" aria-label="搜尋" className="rounded-lg border border-line px-2.5 py-1 text-[14px]"><Icon name="search" /> 搜尋</Link>
           <button type="button" onClick={() => setOpen(true)} className="rounded-lg border border-line px-3 py-1 text-[14px]" aria-expanded={open}>
             全部功能
           </button>

@@ -155,7 +155,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
       success: (d) => `已登記${buyer.trim() ? `「${buyer.trim()}」` : ""}：${[d.sold ? `賣出 ${d.sold} 件` : "", d.preordered ? `預訂 ${d.preordered} 件` : ""].filter(Boolean).join("、")}`,
       onOk: async (d) => {
         setConfirming(false);
-        setDone(`${sellerName && d.sold ? `${sellerName}賣的・` : ""}${channel ? `${channel}・` : ""}${buyer.trim() || "客人"}：${[d.sold ? `賣出 ${d.sold} 件` : "", d.preordered ? `預訂 ${d.preordered} 件（到貨再給）` : ""].filter(Boolean).join("、")}，共 ${formatTwd(d.total)}`);
+        setDone(`${sellerName && d.sold ? `${sellerName}賣的，` : ""}${channel ? `${channel}，` : ""}${buyer.trim() || "客人"}：${[d.sold ? `賣出 ${d.sold} 件` : "", d.preordered ? `預訂 ${d.preordered} 件（到貨再給）` : ""].filter(Boolean).join("、")}，共 ${formatTwd(d.total)}`);
         idem.renew();
         setQty({});
         setPrice({});
@@ -189,7 +189,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
         {groupBuys.length > 0 && (
           <Choice label="代購團（選填）" value={groupBuy} onChange={setGroupBuy} placeholder="不指定" options={groupBuys.map((g) => ({ value: g.id, label: g.name }))} hint="選了系列，那個系列只有一個代購團時會自動帶。" />
         )}
-        <label className="flex items-center gap-2 rounded-lg border border-line-2 bg-[#fafbfc] px-3 py-2 text-[14px]" data-testid="ship-fee">
+        <label className="flex items-center gap-2 rounded-lg border border-line-2 bg-tone-gray-50-4 px-3 py-2 text-[14px]" data-testid="ship-fee">
           <span className="shrink-0 font-medium text-ink-2">運費</span>
           <span className="text-mute">NT$</span>
           <input aria-label="運費" data-keep inputMode="numeric" className={`${inputCls} num min-h-10 w-24 text-right`} value={shipFee} onChange={(e) => setShipFee(e.target.value.replace(/\D/g, ""))} />
@@ -238,7 +238,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
           ) : (
             sheet.items.map((it) => (
               <div key={it.typeId || "none"}>
-                <div className="flex items-baseline justify-between bg-[#f7f8fa] px-3 py-2">
+                <div className="flex items-baseline justify-between bg-tone-gray-50-2 px-3 py-2">
                   <span className="font-semibold">{it.typeName}</span>
                   <span className="text-[12px] text-mute">{it.price != null ? `預設 ${formatTwd(it.price)}` : "還沒設預設售價"}</span>
                 </div>
@@ -302,7 +302,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
             </label>
           )}
           <Button variant="primary" className="w-full" loading={pending} disabled={!lines.length} onClick={check}>
-            {lines.length ? `登記：${now + pre} 件 ${formatTwd(total + fee)}${pre ? `（現貨 ${now}・預訂 ${pre}）` : ""}` : "填數量後登記"}
+            {lines.length ? `登記：${now + pre} 件 ${formatTwd(total + fee)}${pre ? `（現貨 ${now}，預訂 ${pre}）` : ""}` : "填數量後登記"}
           </Button>
           <Modal
             open={confirming}
@@ -329,7 +329,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
                     <li key={`${x.categoryId}:${x.r.productId}`} className="flex items-baseline justify-between gap-2 px-3 py-1.5">
                       <span className="min-w-0">
                         <span className="text-[12px] text-mute">{x.series}</span> {x.r.name} × {x.q}
-                        <span className="ml-1 text-[12px] text-mute">{[nowQ ? `現貨 ${nowQ}` : "", x.q > nowQ ? `預訂 ${x.q - nowQ}` : ""].filter(Boolean).join("・")}</span>
+                        <span className="ml-1 text-[12px] text-mute">{[nowQ ? `現貨 ${nowQ}` : "", x.q > nowQ ? `預訂 ${x.q - nowQ}` : ""].filter(Boolean).join("、")}</span>
                       </span>
                       <span className="num shrink-0">{formatTwd(x.q * Number(x.p))}</span>
                     </li>
@@ -345,7 +345,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
       )}
       {waiting > 0 && (
         <p className="text-[13px] text-mute">
-          客人預訂還沒給的有 {waiting} 件。<Link className="text-ai underline" href="/shipping">到貨了去出貨</Link>・<Link className="text-ai underline" href="/orders">看預訂</Link>
+          客人預訂還沒給的有 {waiting} 件。<Link className="text-ai underline" href="/shipping">到貨了去出貨</Link>，<Link className="text-ai underline" href="/orders">看預訂</Link>
         </p>
       )}
     </div>

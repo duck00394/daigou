@@ -147,16 +147,16 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
             </thead>
             <tbody>
               {batches.map((b) => {
-                const money = (v: number | null) => (v == null ? "—" : b.currency === "JPY" ? formatJpy(v) : formatTwd(v));
+                const money = (v: number | null) => (v == null ? "無" : b.currency === "JPY" ? formatJpy(v) : formatTwd(v));
                 return (
                   <tr key={b.id} className={b.batch.status === "CANCELLED" ? "opacity-60" : ""}>
                     <td><Link href={`/inventory/batches/${b.batchId}`} className="text-ai hover:underline">{b.batch.code} {b.batch.name}</Link><div className="text-[12px] text-mute">{fmtDate(b.batch.orderedAt)}</div></td>
-                    <td>{b.batch.supplierRef?.name ?? b.batch.supplier ?? "—"}</td>
+                    <td>{b.batch.supplierRef?.name ?? b.batch.supplier ?? "無"}</td>
                     <td className="num text-right">{b.qty - b.cancelledQty}</td>
                     <td className="num text-right">{b.movements.reduce((x, m) => x + m.onHandDelta, 0)}</td>
                     <td className="num text-right">{money(b.estUnitCost)}</td>
                     <td className="num text-right">{money(b.actualUnitCost)}</td>
-                    <td className="num text-right">{b.currency === "JPY" ? formatRate(b.batch.rateMicro) : "—"}</td>
+                    <td className="num text-right">{b.currency === "JPY" ? formatRate(b.batch.rateMicro) : "無"}</td>
                     <td className="text-right"><Twd v={b.salePriceTwd} /></td>
                   </tr>
                 );
@@ -224,7 +224,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
                 {lots.map((l, i) => (
                   <li key={i} className="flex justify-between px-4 py-2">
                     <span>{l.batchItemId ? (batchName.get(l.batchItemId) ?? "採購團") : "手動入庫"}</span>
-                    <span className="num text-mute">在庫 {l.onHand}・保留 {l.reserved}</span>
+                    <span className="num text-mute">在庫 {l.onHand}，保留 {l.reserved}</span>
                   </li>
                 ))}
               </ul>
@@ -255,7 +255,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
                   <td>{movementKind[m.kind]}</td>
                   <td className="num text-right">{m.onHandDelta ? (m.onHandDelta > 0 ? `+${m.onHandDelta}` : m.onHandDelta) : ""}</td>
                   <td className="num text-right">{m.reservedDelta ? (m.reservedDelta > 0 ? `+${m.reservedDelta}` : m.reservedDelta) : ""}</td>
-                  <td>{m.orderItem ? <Link className="num text-ai hover:underline" href={`/orders/${m.orderItem.order.id}`}>{m.orderItem.order.orderNo}</Link> : "—"}</td>
+                  <td>{m.orderItem ? <Link className="num text-ai hover:underline" href={`/orders/${m.orderItem.order.id}`}>{m.orderItem.order.orderNo}</Link> : "無"}</td>
                   <td>{m.reason}</td>
                 </tr>
               ))}

@@ -92,7 +92,7 @@ export function RowEditor({ batchId, row, lookup, locked }: { batchId: string; r
           <span className="font-medium text-ink-2">買家{row.parsed.buyerText ? `（原文：${row.parsed.buyerText}）` : ""}</span>
         </div>
         {buyer ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[#c6e6d4] bg-good-soft px-3 py-2 text-sm">
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-tone-green-300 bg-good-soft px-3 py-2 text-sm">
             <b>{buyer.name}</b>
             <span className="text-[12px] text-mute">{buyer.code}</span>
             {buyer.tags.map((t) => (
@@ -108,7 +108,7 @@ export function RowEditor({ batchId, row, lookup, locked }: { batchId: string; r
             )}
           </div>
         ) : r.newBuyerName ? (
-          <div className="flex items-center gap-2 rounded-lg border border-[#cfd9ea] bg-info-soft px-3 py-2 text-sm">
+          <div className="flex items-center gap-2 rounded-lg border border-tone-blue-200-2 bg-info-soft px-3 py-2 text-sm">
             將新增買家「<b>{r.newBuyerName}</b>」
             {!disabled && (
               <button type="button" className="ml-auto text-ai" onClick={() => save({ newBuyerName: null })}>
@@ -122,7 +122,7 @@ export function RowEditor({ batchId, row, lookup, locked }: { batchId: string; r
               <div className="flex flex-wrap gap-1.5">
                 {cands.buyers.map((c) => (
                   <button key={c.id} type="button" disabled={disabled} onClick={() => save({ buyerId: c.id })} className="rounded-lg border border-line bg-white px-2.5 py-1 text-[13px] hover:border-ai disabled:opacity-50">
-                    {c.name} <span className="text-mute">{c.code}・{c.via}</span>
+                    {c.name} <span className="text-mute">{c.code}，{c.via}</span>
                   </button>
                 ))}
               </div>
@@ -151,7 +151,7 @@ export function RowEditor({ batchId, row, lookup, locked }: { batchId: string; r
       <div>
         <div className="mb-1 text-[13px] font-medium text-ink-2">商品{row.parsed.productText ? `（原文：${row.parsed.productText}）` : ""}</div>
         {product ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[#c6e6d4] bg-good-soft px-3 py-2 text-sm">
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-tone-green-300 bg-good-soft px-3 py-2 text-sm">
             <b>{product.name}</b>
             <span className="text-[12px] text-mute">{product.code}</span>
             {!disabled && (

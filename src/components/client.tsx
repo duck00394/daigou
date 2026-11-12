@@ -93,7 +93,7 @@ export function Button({ variant = "default", small, loading, children, classNam
     variant === "primary"
       ? "border-ai bg-ai text-white hover:bg-ai-2"
       : variant === "danger"
-        ? "border-[#f0c4bf] bg-white text-bad hover:bg-bad-soft"
+        ? "border-tone-red-300 bg-white text-bad hover:bg-bad-soft"
         : variant === "ghost"
           ? "border-transparent bg-transparent text-ai hover:bg-ai-soft"
           : "border-line bg-white text-ink hover:border-ai";
@@ -219,7 +219,7 @@ export function ConfirmButton({
 
 // ── 欄位 ──
 export const inputCls =
-  "w-full rounded-lg border border-line bg-white px-3 py-2 text-[15px] text-ink placeholder:text-[#a3a9b6] focus:border-ai focus:outline-none disabled:bg-line-2";
+  "w-full rounded-lg border border-line bg-white px-3 py-2 text-[15px] text-ink placeholder:text-tone-gray-400 focus:border-ai focus:outline-none disabled:bg-line-2";
 
 export function Field({ label, hint, error, children, className = "" }: { label: string; hint?: React.ReactNode; error?: string | null; children: (id: string) => React.ReactNode; className?: string }) {
   const id = useId();

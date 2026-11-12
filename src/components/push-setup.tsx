@@ -1,5 +1,6 @@
 "use client";
 // 這支手機的通知：檢查支不支援、有沒有加到主畫面、權限、有沒有在伺服器登記；只顯示真實狀態，不假裝成功
+import { Icon } from "@/components/icons";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Button, notify, useRun } from "./client";
@@ -55,10 +56,10 @@ export function PushStatusChip({ vapidKey }: { vapidKey: string }) {
   const { s } = usePushState(vapidKey);
   if (s.k === "checking") return <span className="rounded-full bg-line-2 px-2.5 py-1 text-[12px] text-mute">檢查通知中…</span>;
   const [cls, text] =
-    s.k === "on" ? [chip.on, "🔔 這支手機：通知已開啟"] : s.k === "denied" ? [chip.bad, "🔕 通知被關掉了"] : s.k === "server-off" ? [chip.bad, "⚠ 推播服務還沒設定"] : s.k === "need-home" ? [chip.off, "要先加到主畫面才能通知"] : s.k === "unsupported" ? [chip.bad, "這個瀏覽器不支援通知"] : [chip.off, "🔔 還沒開啟通知"];
+    s.k === "on" ? [chip.on, "這支手機：通知已開啟"] : s.k === "denied" ? [chip.bad, "通知被關掉了"] : s.k === "server-off" ? [chip.bad, "推播服務還沒設定"] : s.k === "need-home" ? [chip.off, "要先加到主畫面才能通知"] : s.k === "unsupported" ? [chip.bad, "這個瀏覽器不支援通知"] : [chip.off, "還沒開啟通知"];
   return (
     <Link href="/rush/notify" className={`inline-block rounded-full px-2.5 py-1 text-[12px] ${cls}`} data-testid="push-chip">
-      {text} ›
+      {text}
     </Link>
   );
 }
@@ -116,13 +117,13 @@ export function PushSetup({ vapidKey }: { vapidKey: string }) {
   const home = !(s.k === "need-home");
   return (
     <div className="space-y-3" data-testid="push-setup" data-state={s.k}>
-      {s.k === "server-off" && <p className="rounded-xl border border-[#f5c2bd] bg-bad-soft p-3 text-[14px] text-bad">推播服務還沒設定好（要在 Vercel 加環境變數），現在開不了通知。</p>}
-      {s.k === "unsupported" && <p className="rounded-xl border border-[#f5c2bd] bg-bad-soft p-3 text-[14px] text-bad">這個瀏覽器不支援推播通知。iPhone 請用 Safari 加到主畫面（iOS 16.4 以上）；Android 請用 Chrome。</p>}
+      {s.k === "server-off" && <p className="rounded-xl border border-tone-red-200-3 bg-bad-soft p-3 text-[14px] text-bad">推播服務還沒設定好（要在 Vercel 加環境變數），現在開不了通知。</p>}
+      {s.k === "unsupported" && <p className="rounded-xl border border-tone-red-200-3 bg-bad-soft p-3 text-[14px] text-bad">這個瀏覽器不支援推播通知。iPhone 請用 Safari 加到主畫面（iOS 16.4 以上）；Android 請用 Chrome。</p>}
       {step(1, home, "加到主畫面（iPhone 一定要）", s.k === "need-home" ? <>你現在是在瀏覽器裡開的。請在 Safari 按下方「分享」→「加入主畫面」，之後<b className="text-ink">從主畫面的圖示打開</b>再回到這頁。</> : "已經從主畫面打開（或不是 iPhone）。")}
       {step(2, s.k === "on", "允許通知", s.k === "denied" ? <span className="text-bad">通知被關掉了。iPhone 不會再問一次：要把主畫面的圖示刪掉、重新加入主畫面，再按一次開啟。</span> : "按下面的按鈕，跳出視窗選「允許」。")}
       {s.k === "off" && (
         <Button variant="primary" className="w-full" loading={busy} onClick={enable}>
-          🔔 開啟這支手機的通知
+          <Icon name="bell" /> 開啟這支手機的通知
         </Button>
       )}
       {step(3, false, "傳一則測試通知", "收到了才算設定成功。")}

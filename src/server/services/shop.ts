@@ -298,7 +298,7 @@ async function notifySellers(
     const series = await seriesNames(t, order.items.filter((i) => e.ids.has(i.id)).map((i) => i.categoryId));
     const total = ls.reduce((a, l) => a + (l.amount ?? 0), 0);
     const qty = ls.reduce((a, l) => a + l.qty, 0);
-    await enqueueLine(t, e.line, [orderCard({ tone: "seller", eyebrow: "NEW ORDER", title: `新訂單｜${buyerName}・${qty} 件`, orderNo: order.orderNo, series, lines: ls, total, url: `${appUrl()}/orders/${order.id}`, buttonLabel: "到後台看這筆訂單" })]);
+    await enqueueLine(t, e.line, [orderCard({ tone: "seller", eyebrow: "NEW ORDER", title: `新訂單｜${buyerName}，${qty} 件`, orderNo: order.orderNo, series, lines: ls, total, url: `${appUrl()}/orders/${order.id}`, buttonLabel: "到後台看這筆訂單" })]);
   }
 }
 

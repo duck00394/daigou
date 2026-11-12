@@ -54,7 +54,7 @@ export default async function GroupBuys({ searchParams }: { searchParams: Promis
                       <div className="text-[12px] text-mute">{g.code}</div>
                     </td>
                     <td><StatusBadge map={groupBuyStatus} value={g.status} /></td>
-                    <td>{g.category?.name ?? "—"}</td>
+                    <td>{g.category?.name ?? "無"}</td>
                     <td className="num whitespace-nowrap">{fmtDate(g.openAt, true)}</td>
                     <td className="num whitespace-nowrap">{fmtDate(g.closeAt, true)}</td>
                     <td className="num text-right">{s?._count ?? 0}</td>

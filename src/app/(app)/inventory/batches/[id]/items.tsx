@@ -96,8 +96,8 @@ export function ItemsPanel(props: {
                   </div>
                   <div className="text-[12px] text-mute">
                     {i.received > 0 ? `已到 ${i.received}` : "還沒到"}
-                    {props.jointOps && <span data-testid="item-owner">・{props.jointOps.find((o) => o.id === i.ownerId)?.name ? `${props.jointOps.find((o) => o.id === i.ownerId)!.name}的` : "大家一起"}</span>}
-                    {i.cancelledQty > 0 && <span className="text-bad">・已砍 {i.cancelledQty}{i.cancelReason ? `（${i.cancelReason}）` : ""}</span>}
+                    {props.jointOps && <span data-testid="item-owner">，{props.jointOps.find((o) => o.id === i.ownerId)?.name ? `${props.jointOps.find((o) => o.id === i.ownerId)!.name}的` : "大家一起"}</span>}
+                    {i.cancelledQty > 0 && <span className="text-bad">，已砍 {i.cancelledQty}{i.cancelReason ? `（${i.cancelReason}）` : ""}</span>}
                   </div>
                 </div>
                 <div className="num shrink-0 text-right">

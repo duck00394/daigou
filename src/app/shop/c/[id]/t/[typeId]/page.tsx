@@ -4,7 +4,7 @@ import { currentCustomer } from "@/server/shop-auth";
 import { isOpen, shopProducts, soldMap } from "@/server/services/shop";
 import { taipeiDayLabel, taipeiParts } from "@/lib/taipei";
 import { CartButton, Pic } from "../../../../cart";
-import { BackCircle, Eyebrow, groupTypes, Tag } from "../../../../ui";
+import { BackCircle, groupTypes, Tag } from "../../../../ui";
 import { Picker } from "./picker";
 
 export default async function TypePage({ params }: { params: Promise<{ id: string; typeId: string }> }) {
@@ -32,13 +32,13 @@ export default async function TypePage({ params }: { params: Promise<{ id: strin
       </div>
       <div className={`relative ${g.image ? "mt-0 pt-4" : "-mt-9 pt-[22px]"} flex flex-col gap-4 rounded-t-[28px] bg-shop-bg px-4`}>
         <div className="flex flex-col gap-1.5">
-          <Eyebrow rose>{s.category.name}</Eyebrow>
           <h1 className="font-serif text-[26px] leading-snug font-bold">{g.typeName}</h1>
+          <p className="-mt-1 text-[13px] text-shop-mute">{s.category.name}</p>
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
             <span className="text-[24px] font-bold text-shop-rose">{prices.length === 0 ? "價格待定" : prices.length === 1 ? `NT$ ${prices[0].toLocaleString("en-US")}` : `NT$ ${Math.min(...prices).toLocaleString("en-US")} 起`}</span>
-            <span className="text-[13px] text-shop-mute">{g.products.length > 1 && prices.length === 1 ? "每款同價" : ""}{s.perPersonLimit ? `${g.products.length > 1 && prices.length === 1 ? "・" : ""}每款限購 ${s.perPersonLimit} 個` : ""}</span>
+            <span className="text-[13px] text-shop-mute">{g.products.length > 1 && prices.length === 1 ? "每款同價" : ""}{s.perPersonLimit ? `${g.products.length > 1 && prices.length === 1 ? "，" : ""}每款限購 ${s.perPersonLimit} 個` : ""}</span>
           </div>
-          {!open && s.openAt && <div><Tag>{taipeiDayLabel(s.openAt)} {taipeiParts(s.openAt).time} 開賣・可以先放購物車</Tag></div>}
+          {!open && s.openAt && <div><Tag>{taipeiDayLabel(s.openAt)} {taipeiParts(s.openAt).time} 開賣，可以先放購物車</Tag></div>}
         </div>
         <Picker
           categoryId={id}

@@ -10,7 +10,7 @@ import { dueLabel } from "@/server/services/shop-pay";
 const DueText = ({ at }: { at: Date }) => <>{dueLabel(at)}</>;
 import { taipeiParts } from "@/lib/taipei";
 import { Pic } from "../cart";
-import { BackCircle, Eyebrow, SerifTitle } from "../ui";
+import { BackCircle, SerifTitle } from "../ui";
 import { CancelWait, LookupForm, MailMeForm, OrderFilter } from "./parts";
 
 export const metadata = { title: "我的訂單" };
@@ -23,7 +23,7 @@ const STAGE: Record<CustomerOrder["stage"], { label: string; step: number; cls: 
   ARRIVED: { label: "已到貨", step: 2, cls: "bg-shop-gold-soft text-shop-gold" },
   SHIPPED: { label: "已出貨", step: 3, cls: "bg-shop-good-soft text-shop-good" },
   DONE: { label: "已完成", step: 3, cls: "bg-shop-good-soft text-shop-good" },
-  CANCELLED: { label: "已取消", step: -1, cls: "bg-[#ece5dd] text-shop-ink-2" },
+  CANCELLED: { label: "已取消", step: -1, cls: "bg-tone-orange-200-2 text-shop-ink-2" },
 };
 
 export default async function MyOrders({ searchParams }: { searchParams: Promise<{ show?: string; expired?: string }> }) {
@@ -40,30 +40,29 @@ export default async function MyOrders({ searchParams }: { searchParams: Promise
         <header className="flex items-center gap-3 px-4 py-3">
           <BackCircle href="/shop" label="回商店" />
           <div className="flex-1">
-            <Eyebrow>MY ORDERS</Eyebrow>
             <SerifTitle size={22}>我的訂單</SerifTitle>
           </div>
         </header>
         <div className="flex flex-col gap-4 px-4 pt-2 pb-6">
-          {expired && <p role="alert" className="rounded-[14px] bg-[#f8e1dd] px-3.5 py-2.5 text-[13px] font-bold text-[#a63a2e]">信裡的連結已經過期了，請在下面重新寄一次。</p>}
+          {expired && <p role="alert" className="rounded-[14px] bg-tone-red-200-5 px-3.5 py-2.5 text-[13px] font-bold text-tone-red-600">信裡的連結已經過期了，請在下面重新寄一次。</p>}
           {views.length > 0 && <p className="text-[13px] text-shop-mute">這支手機下過或查過的訂單</p>}
           {views.map((v) => (
-            <div key={v.id} className="flex flex-col gap-3 rounded-[20px] border border-shop-line bg-white p-4 shadow-[0_6px_18px_rgba(120,70,60,0.08)]">
+            <div key={v.id} className="flex flex-col gap-3 rounded-[20px] border border-shop-line bg-white p-4 shadow-lift-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="num text-[15px] font-bold">訂單 {v.orderNo}</span>
                 <StatusTag v={v} />
               </div>
               <Lines v={v} />
               <PayBox v={v} bank={bank} />
-              <Link href={`/shop/o/${v.id}?t=${orderToken(v.id)}`} className="flex h-11 items-center justify-center rounded-full border border-[#d8c9bc] text-[14px] text-shop-ink-2">查看貨況與訂單憑證</Link>
+              <Link href={`/shop/o/${v.id}?t=${orderToken(v.id)}`} className="flex h-11 items-center justify-center rounded-full border border-tone-orange-300 text-[14px] text-shop-ink-2">查看貨況與訂單憑證</Link>
             </div>
           ))}
           <LookupForm />
           <MailMeForm />
           <div className="flex flex-col items-center gap-2 rounded-[20px] border border-shop-line bg-white p-4 text-center">
             <p className="text-[13px] text-shop-mute">用 LINE 下單的話，登入就能看到所有訂單</p>
-            <a href="/shop/login?next=/shop/orders" className="flex h-11 items-center gap-2 rounded-full bg-[#078a3e] px-5 text-[15px] font-bold text-white">
-              <span className="rounded-full bg-white px-1.5 py-0.5 text-[11px] font-bold text-[#078a3e]">LINE</span>用 LINE 登入
+            <a href="/shop/login?next=/shop/orders" className="flex h-11 items-center gap-2 rounded-full bg-tone-green-800 px-5 text-[15px] font-bold text-white">
+              <span className="rounded-full bg-white px-1.5 py-0.5 text-[11px] font-bold text-tone-green-800">LINE</span>用 LINE 登入
             </a>
           </div>
         </div>
@@ -83,7 +82,6 @@ export default async function MyOrders({ searchParams }: { searchParams: Promise
       <header className="flex items-center gap-3 px-4 py-3">
         <BackCircle href="/shop" label="回商店" />
         <div className="flex-1">
-          <Eyebrow>MY ORDERS</Eyebrow>
           <SerifTitle size={22}>我的訂單</SerifTitle>
         </div>
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -97,9 +95,8 @@ export default async function MyOrders({ searchParams }: { searchParams: Promise
             <p className="rounded-[18px] border border-shop-line bg-white p-5 text-center text-[14px] text-shop-mute">沒有候補中的商品</p>
           ) : (
             waits.map((w, i) => (
-              <div key={w.id} className="flex flex-col gap-2.5 rounded-[20px] border-[1.5px] border-dashed border-[#d9c8b8] bg-white p-4">
+              <div key={w.id} className="flex flex-col gap-2.5 rounded-[20px] border-[1.5px] border-dashed border-tone-orange-300-2 bg-white p-4">
                 <div className="flex items-center justify-between">
-                  <Eyebrow>WAITING LIST</Eyebrow>
                   <span className="rounded-[14px] bg-shop-rose-soft px-3 py-1 text-[13px] font-bold text-shop-rose-2">第 {w.position} 順位</span>
                 </div>
                 <div className="flex items-center gap-2.5">
@@ -120,11 +117,11 @@ export default async function MyOrders({ searchParams }: { searchParams: Promise
             const st = STAGE[o.stage];
             const at = taipeiParts(o.at);
             return (
-              <div key={o.id} className="overflow-hidden rounded-[20px] border border-shop-line bg-white shadow-[0_6px_18px_rgba(120,70,60,0.08)]">
-                <div className="flex items-center justify-between border-b border-[#f1e9e0] px-4 py-3.5">
+              <div key={o.id} className="overflow-hidden rounded-[20px] border border-shop-line bg-white shadow-lift-1">
+                <div className="flex items-center justify-between border-b border-tone-orange-200-3 px-4 py-3.5">
                   <div>
                     <div className="text-[12px] text-shop-mute">{at.date.slice(5).replace("-", "/")} {at.time}</div>
-                    <Link href={`/shop/o/${o.id}?t=${orderToken(o.id)}`} className="text-[15px] font-bold underline decoration-[#e6dace] underline-offset-4">訂單 {o.orderNo}</Link>
+                    <Link href={`/shop/o/${o.id}?t=${orderToken(o.id)}`} className="text-[15px] font-bold underline decoration-tone-orange-200 underline-offset-4">訂單 {o.orderNo}</Link>
                   </div>
                   <span className={`rounded-[14px] px-3 py-1 text-[13px] font-bold ${st.cls}`}>{st.label}</span>
                 </div>
@@ -141,22 +138,22 @@ export default async function MyOrders({ searchParams }: { searchParams: Promise
                   ))}
                   {o.depositPending && (
                     <Link href={`/shop/o/${o.id}?t=${orderToken(o.id)}`} className="flex h-11 items-center justify-center rounded-[14px] bg-shop-gold-soft text-[14px] font-bold text-shop-gold">
-                      匯訂金・回傳末五碼
+                      匯訂金，回傳末五碼
                     </Link>
                   )}
                   {o.pay && (
                     <a href={o.pay.url} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-0.5 rounded-[14px] bg-shop-rose px-3 py-2.5 text-center text-white">
                       <span className="text-[15px] font-bold">前往賣貨便下單</span>
-                      <span className="text-[12px]">請在 <b className="rounded bg-white px-1 text-[#c8102e]"><DueText at={o.pay.dueAt} /></b> 前使用賣貨便下單完成</span>
+                      <span className="text-[12px]">請在 <b className="rounded bg-white px-1 text-tone-red-600-2"><DueText at={o.pay.dueAt} /></b> 前使用賣貨便下單完成</span>
                     </a>
                   )}
-                  <div className="flex items-baseline justify-between border-t border-dashed border-[#e6dace] pt-2.5">
+                  <div className="flex items-baseline justify-between border-t border-dashed border-tone-orange-200 pt-2.5">
                     <span className="text-[14px] text-shop-mute">合計</span>
                     <span className="text-[19px] font-bold text-shop-rose">NT$ {o.total.toLocaleString("en-US")}</span>
                   </div>
                 </div>
                 {st.step >= 0 && (
-                  <div className="bg-[#fdfaf6] px-4 pt-3.5 pb-4">
+                  <div className="bg-tone-sand-50 px-4 pt-3.5 pb-4">
                     <div className="flex items-center">
                       {STEPS.map((s, i) => (
                         <span key={s} className={`flex items-center ${i < STEPS.length - 1 ? "flex-1" : ""}`}>

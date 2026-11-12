@@ -55,13 +55,13 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await page.getByLabel(/系列名稱/).fill(`幽靈${tag}`);
   await page.getByRole("button", { name: "新增", exact: true }).click();
   await toast(page, `已新增系列「幽靈${tag}」`);
-  // 種類、系列改名：按 ✎ 就能改
-  await page.getByRole("button", { name: "✎ 改名" }).click();
+  // 種類、系列改名：按「改名」就能改
+  await page.getByRole("button", { name: "改名" }).click();
   await page.getByLabel("種類新名稱").fill(`${kind}店`);
   await page.getByRole("button", { name: "存", exact: true }).click();
   await toast(page, `種類改成「${kind}店」`);
   await expect(page.getByLabel("種類", { exact: true }).locator("option:checked")).toHaveText(`${kind}店`);
-  await page.getByRole("button", { name: "✎ 改名" }).click();
+  await page.getByRole("button", { name: "改名" }).click();
   await page.getByLabel("種類新名稱").fill(kind);
   await page.getByRole("button", { name: "存", exact: true }).click();
   await toast(page, `種類改成「${kind}」`);
@@ -136,18 +136,18 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await choose(page, "販售平台", "賣貨便");
   await page.getByLabel("客人", { exact: true }).fill(`小美${tag}`);
   await page.screenshot({ path: "test-results/mobile_sell.png", fullPage: true });
-  await page.getByRole("button", { name: /登記：3 件 NT\$1,600（現貨 2・預訂 1）/ }).click();
+  await page.getByRole("button", { name: /登記：3 件 NT\$1,600（現貨 2，預訂 1）/ }).click();
   // 送出前有確認表：看得到每一項、合計；按「確認送出」才送
   await expect(page.getByTestId("sell-confirm")).toContainText(`小美${tag}`);
   await expect(page.getByTestId("sell-confirm-total")).toHaveText("NT$1,600");
   await page.screenshot({ path: "test-results/mobile_sell_confirm.png" });
   await page.getByRole("button", { name: "確認送出" }).click();
   await expect(page.getByTestId("sell-done")).toContainText("賣出 2 件、預訂 1 件");
-  await expect(page.getByTestId("sell-done")).toContainText(`賣貨便・小美${tag}`);
+  await expect(page.getByTestId("sell-done")).toContainText(`賣貨便，小美${tag}`);
   // 平台記住了；賺多少看得到是哪個平台賣的，也可以用平台搜尋
   await expect(page.getByLabel("販售平台", { exact: true }).locator("option:checked")).toHaveText("賣貨便");
   await page.goto(`/sales?ym=all&q=小美${tag}`);
-  await expect(page.getByTestId("sale-row").first()).toContainText(`賣貨便・小美${tag}`);
+  await expect(page.getByTestId("sale-row").first()).toContainText(`賣貨便，小美${tag}`);
   // 以前的客人：到買家基本資料改平台，以前的單一起改
   await page.goto(`/buyers?q=${encodeURIComponent(`小美${tag}`)}`);
   await page.getByRole("link", { name: `小美${tag}` }).first().click();
@@ -159,7 +159,7 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await toast(page, "已儲存買家");
   await expect(page.getByTestId("buyer-channel")).toHaveText("蝦皮");
   await page.goto(`/sales?ym=all&q=小美${tag}`);
-  await expect(page.getByTestId("sale-row").first()).toContainText(`蝦皮・小美${tag}`);
+  await expect(page.getByTestId("sale-row").first()).toContainText(`蝦皮，小美${tag}`);
   await page.goto("/sell");
   await expect(page.locator("main")).toContainText("客人預訂還沒給");
   // 賺多少：客人預訂預估可賺，看得到每位客人

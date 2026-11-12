@@ -33,7 +33,7 @@ export default async function ImportPage({ searchParams }: { searchParams: Promi
             <ul className="divide-y divide-line-2 text-sm">
               {recent.map((b) => (
                 <li key={b.id}>
-                  <Link href={`/import?batch=${b.id}`} className="flex items-center justify-between gap-2 px-4 py-2 hover:bg-[#fafbfd]">
+                  <Link href={`/import?batch=${b.id}`} className="flex items-center justify-between gap-2 px-4 py-2 hover:bg-tone-gray-50-5">
                     <span className="min-w-0 truncate">
                       {b.fileName}｜{b.sheetName}｜{b._count.rows} 列
                     </span>
@@ -72,7 +72,7 @@ export default async function ImportPage({ searchParams }: { searchParams: Promi
         actions={<LinkButton href={`/api/export/import?batchId=${v.batch.id}`}>下載匯入結果</LinkButton>}
       />
       {prev.length > 0 && (
-        <div role="alert" className="rounded-xl border border-[#f0dfa8] bg-warn-soft px-4 py-3 text-sm">
+        <div role="alert" className="rounded-xl border border-tone-amber-300-2 bg-warn-soft px-4 py-3 text-sm">
           這份檔案先前已經匯入過（{prev.map((p) => fmtDate(p.createdAt, true)).join("、")}）。有來源訂單編號的列已自動擋下；沒有編號的列若內容相同會標示「可能重複」。
         </div>
       )}

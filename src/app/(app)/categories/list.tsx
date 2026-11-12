@@ -14,7 +14,7 @@ function Row({ r }: { r: SeriesRow }) {
   const pct = r.ordered ? Math.min(100, Math.round((r.received / r.ordered) * 100)) : 0;
   return (
     <li>
-      <Link href={`/categories/${r.id}`} className="block px-3 py-2.5 hover:bg-[#fafbfc]" data-testid={`cat-card-${r.name}`}>
+      <Link href={`/categories/${r.id}`} className="block px-3 py-2.5 hover:bg-tone-gray-50-4" data-testid={`cat-card-${r.name}`}>
         <div className="flex items-baseline justify-between gap-2">
           <span className="min-w-0 truncate font-semibold">{r.name}{!r.active && <span className="ml-1 text-[12px] font-normal text-mute">已過期</span>}</span>
           {r.refundTwd > 0 ? (
@@ -26,7 +26,7 @@ function Row({ r }: { r: SeriesRow }) {
           ) : null}
         </div>
         <div className="text-[12px] text-mute">
-          {r.batches ? [`${r.batches} 團`, `花了 ${formatTwd(r.totalTwd)}`, `到了 ${r.received}／${r.ordered} 件`, r.pendingBatches ? `待對單 ${r.pendingBatches} 團` : null].filter(Boolean).join("・") : "還沒有採購"}
+          {r.batches ? [`${r.batches} 團`, `花了 ${formatTwd(r.totalTwd)}`, `到了 ${r.received}／${r.ordered} 件`, r.pendingBatches ? `待對單 ${r.pendingBatches} 團` : null].filter(Boolean).join("、") : "還沒有採購"}
         </div>
         {r.ordered > 0 && <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-line-2" aria-hidden><div className="h-full rounded-full bg-good" style={{ width: `${pct}%` }} /></div>}
       </Link>
@@ -63,7 +63,7 @@ function KindBody({ g, all, idx, kinds }: { g: KindGroup; all: KindGroup[]; idx:
   const moveOpts = [...others.map((x) => ({ value: x.key, label: `移到「${x.label}」` })), ...(others.some((x) => x.key === "GENERAL") ? [] : [{ value: "GENERAL", label: "移到「一般分類」" }]), { value: "~delete", label: "連系列一起刪掉（有採購或賣出紀錄的不能刪）" }];
   return (
     <div className="border-t border-line-2">
-      <div className="flex flex-wrap gap-1.5 bg-[#fafbfc] px-3 py-2" data-testid="kind-tools">
+      <div className="flex flex-wrap gap-1.5 bg-tone-gray-50-4 px-3 py-2" data-testid="kind-tools">
         <Button small variant={mode === "sort" ? "primary" : "default"} onClick={() => setMode(mode === "sort" ? "view" : "sort")}>{mode === "sort" ? "排好了" : "排順序"}</Button>
         <Button small onClick={() => { setName(g.label); setMode("rename"); }}>改名稱</Button>
         <Button small variant="danger" onClick={() => setMode("delete")}>刪除</Button>

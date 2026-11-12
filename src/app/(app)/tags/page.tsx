@@ -36,7 +36,7 @@ export default async function Tags() {
                   <tr key={t.id}>
                     <td><TagChip name={t.name} color={t.color} /></td>
                     <td>{tagKind[t.kind]}</td>
-                    <td>{t.warnOnOrder ? <Badge tone="warn">會提醒</Badge> : "—"}</td>
+                    <td>{t.warnOnOrder ? <Badge tone="warn">會提醒</Badge> : "無"}</td>
                     <td>{t.active ? <Badge tone="good">啟用</Badge> : <Badge tone="muted">停用</Badge>}</td>
                     <td className="num text-right">
                       <Link href={`/buyers?tagId=${t.id}`} className="text-ai hover:underline">{activeRefs}</Link>

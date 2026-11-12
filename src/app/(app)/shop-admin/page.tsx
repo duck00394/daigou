@@ -101,12 +101,11 @@ export default async function ShopAdmin() {
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[15px] font-medium">{s.category.name}</div>
                     <div className="text-[12px] text-mute">
-                      {qc.get(s.categoryId) ?? 0} 個商品開放・{s.owner?.name ?? "還沒選負責人"}
-                      {s.openAt ? `・${taipeiDayLabel(s.openAt)} ${taipeiParts(s.openAt).time} 開賣` : ""}
+                      {qc.get(s.categoryId) ?? 0} 個商品開放，{s.owner?.name ?? "還沒選負責人"}
+                      {s.openAt ? `，${taipeiDayLabel(s.openAt)} ${taipeiParts(s.openAt).time} 開賣` : ""}
                     </div>
                   </div>
                   {!s.enabled ? <Badge tone="muted">沒開放</Badge> : isOpen(s) ? <Badge tone="good">販售中</Badge> : <Badge tone="warn">等開賣</Badge>}
-                  <span className="text-mute">›</span>
                 </Link>
               </li>
             ))}

@@ -10,7 +10,7 @@ export function AssignAll({ n, operators, acting, counted, unit = "件以前記�
   const { run, pending } = useRun();
   const name = operators.find((o) => o.id === who)?.name ?? "";
   return (
-    <div className="mt-2 rounded-lg border border-[#f0dfa8] bg-warn-soft px-3 py-2 text-[14px] text-warn" data-testid="pre-unassigned">
+    <div className="mt-2 rounded-lg border border-tone-amber-300-2 bg-warn-soft px-3 py-2 text-[14px] text-warn" data-testid="pre-unassigned">
       <p>
         還有 <b>{n}</b> {unit}還沒分是跟誰訂的，{counted ? "上面有算進去" : "這裡先不列"}。現貨賣掉的會照扣到誰的貨自動分，其他的分給下面選的人。
       </p>
@@ -32,7 +32,7 @@ export function AssignAll({ n, operators, acting, counted, unit = "件以前記�
         >
           全部分給{who === "joint" ? "合資" : name}
         </Button>
-        <Link href={moreHref} className="text-[13px] text-ai underline">一筆一筆分 ›</Link>
+        <Link href={moreHref} className="text-[13px] text-ai underline">一筆一筆分</Link>
       </div>
     </div>
   );

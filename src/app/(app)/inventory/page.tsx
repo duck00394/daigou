@@ -1,3 +1,4 @@
+import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { Fragment } from "react";
 import { StockFilters } from "./stock-filters";
@@ -37,7 +38,7 @@ export const metadata = { title: "庫存與採購" };
 
 const TABS = [
   ["stock", "庫存"],
-  ["batches", "採購團・收貨"],
+  ["batches", "採購團、收貨"],
   ["receive", "依商品收貨"],
   ["adjust", "盤點調整"],
   ["demand", "待下單"],
@@ -51,7 +52,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
   const owner = view.key === "all" ? "" : view.key; // 現在看誰的（全部功能裡切換）
   return (
     <div className="space-y-4">
-      <PageHeader title={tab === "batches" ? "採購團・收貨" : "庫存"} sub={tab === "batches" ? "每一次跟代購下單、付款、到貨" : tab === "stock" ? "手上有多少、還會到多少、客人訂了多少" : undefined} actions={<><LinkButton href="/purchase" primary small>＋ 新增採購</LinkButton><LinkButton href="/api/export/inventory" small>匯出</LinkButton></>} />
+      <PageHeader title={tab === "batches" ? "採購團、收貨" : "庫存"} sub={tab === "batches" ? "每一次跟代購下單、付款、到貨" : tab === "stock" ? "手上有多少、還會到多少、客人訂了多少" : undefined} actions={<><LinkButton href="/purchase" primary small>＋ 新增採購</LinkButton><LinkButton href="/api/export/inventory" small>匯出</LinkButton></>} />
       <NavSelect label="頁面" hideLabel options={TABS.map(([k, l]) => ({ label: l, href: `/inventory?tab=${k}` }))} current={`/inventory?tab=${tab}`} />
       {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} owner={owner} kind={sp.kind} v={sp.v} hideUnsure={sp.unsure === "0"} />}
       {tab === "demand" && <DemandTab owner={owner} />}
@@ -262,11 +263,11 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
       <datalist id="buyer-names">{buyerNames.map((b) => <option key={b.name} value={b.name} />)}</datalist>
       {head}
       {unassignedTotal > 0 && only !== "unassigned" && (
-        <p className="rounded-xl border border-[#f0dfa8] bg-warn-soft px-3 py-2 text-[14px] text-warn" data-testid="demand-unassigned">
-          還有 {unassignedTotal} 件客人訂還沒分是跟誰訂的（以前記的）。<Link className="font-semibold text-ai underline" href={unassignedHref}>去分 ›</Link>
+        <p className="rounded-xl border border-tone-amber-300-2 bg-warn-soft px-3 py-2 text-[14px] text-warn" data-testid="demand-unassigned">
+          還有 {unassignedTotal} 件客人訂還沒分是跟誰訂的（以前記的）。<Link className="font-semibold text-ai underline" href={unassignedHref}>去分</Link>
         </p>
       )}
-      {only === "short" && <p className="rounded-xl border border-[#f5c2bd] bg-bad-soft px-3 py-2 text-[14px] text-bad" data-testid="stock-short-note">只列客人訂的比庫存多的（庫存是負的）：要再買，或跟客人說少了。補貨或取消預訂後就會自動消失。</p>}
+      {only === "short" && <p className="rounded-xl border border-tone-red-200-3 bg-bad-soft px-3 py-2 text-[14px] text-bad" data-testid="stock-short-note">只列客人訂的比庫存多的（庫存是負的）：要再買，或跟客人說少了。補貨或取消預訂後就會自動消失。</p>}
       {only === "unassigned" && <p className="rounded-xl border border-line bg-white px-3 py-2 text-[14px] text-ink-2">只列還有預訂沒分是跟誰訂的角色。點「客人訂」的數字，每一筆選跟誰訂的。</p>}
       {rows.length > 0 && (
         <div className="flex justify-end">
@@ -279,7 +280,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
         <div className="overflow-hidden rounded-xl border border-line bg-card">
           <table className="w-full text-[15px]" aria-label="庫存表">
             <thead>
-              <tr className="border-b border-line bg-[#fafbfc] text-[12px] text-mute">
+              <tr className="border-b border-line bg-tone-gray-50-4 text-[12px] text-mute">
                 <th className="px-3 py-2 text-left font-medium">角色</th>
                 <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium">現有</th>
                 <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium text-good">一定到</th>
@@ -308,18 +309,18 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                           <td colSpan={COLS} className="px-3 py-1.5 text-[14px] font-semibold text-ai" data-testid="stock-series">
                             {sg.key !== "none" ? <Link href={`/categories/${sg.key}`} className="hover:underline">{sg.name}</Link> : sg.name}
                             {!sg.active && <span className="ml-1 text-[12px] font-normal text-mute">已過期</span>}
-                            <span className="ml-2 text-[12px] font-normal">現有 {gs.onHand}・一定到 {gs.incoming - gs.unsure}{!hideUnsure && gs.unsure ? `・不一定 ${gs.unsure}` : ""}・客人訂 {gs.ordered}・庫存 {gs.left}{gs.cost ? `・成本 ${formatTwd(gs.cost)}` : ""}</span>
+                            <span className="ml-2 text-[12px] font-normal">現有 {gs.onHand}，一定到 {gs.incoming - gs.unsure}{!hideUnsure && gs.unsure ? `，不一定 ${gs.unsure}` : ""}，客人訂 {gs.ordered}，庫存 {gs.left}{gs.cost ? `，成本 ${formatTwd(gs.cost)}` : ""}</span>
                           </td>
                         </tr>
                         {sg.types.map((tg) => (
                           <Fragment key={tg.key}>
-                            <tr className="border-t border-line-2 bg-[#f7f8fa]">
+                            <tr className="border-t border-line-2 bg-tone-gray-50-2">
                               <td colSpan={COLS} className="py-1 pr-3 pl-5 text-[13px] font-semibold text-ink-2" data-testid="stock-type">
                                 {tg.name}
                                 {(() => {
                                   const si = setInfo.get(`${sg.key}|${tg.key}`);
                                   if (!si) return null;
-                                  const extra = si.extras.map((x) => `${x.name} ${x.qty}`).join("・");
+                                  const extra = si.extras.map((x) => `${x.name} ${x.qty}`).join("、");
                                   return (
                                     <span className="font-normal text-mute max-md:block md:ml-2" data-testid="stock-sets">
                                       {si.sets ? <><b className="text-good">{si.sets} 套</b>{extra ? `，多 ${extra}` : ""}</> : "不成套"}
@@ -332,24 +333,24 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                               const dup = tg.rows.filter((x) => label(x) === label(r)).length > 1;
                               const owners = ownersOf(r.p.id);
                               const product = { id: r.p.id, name: r.p.name, salePriceTwd: r.p.salePriceTwd, available: r.s.available, avgCost: r.v?.avgUnitCost ?? null, owners };
-                              const meta = [avgOf(r) ? `平均成本 ${formatTwd(avgOf(r)!.avg)}${avgOf(r)!.tentative ? "*" : ""}` : null, r.s.kept ? `自留 ${r.s.kept}` : null, r.s.reserved ? `保留 ${r.s.reserved}` : null, owners.length > 1 ? owners.map((o) => `${o.label} ${o.free}`).join("／") : null].filter(Boolean).join("・");
+                              const meta = [avgOf(r) ? `平均成本 ${formatTwd(avgOf(r)!.avg)}${avgOf(r)!.tentative ? "*" : ""}` : null, r.s.kept ? `自留 ${r.s.kept}` : null, r.s.reserved ? `保留 ${r.s.reserved}` : null, owners.length > 1 ? owners.map((o) => `${o.label} ${o.free}`).join("／") : null].filter(Boolean).join("、");
                               return (
                                 <Fragment key={r.p.id}>
                                 <tr className={meta ? "max-md:border-0 md:border-b md:border-line-2" : "border-b border-line-2"} data-testid="stock-row" data-name={r.p.name} data-incoming={r.s.incoming}>
                                   <td className="py-2 pr-3 pl-7 align-top">
                                     <Link href={`/products/${r.p.id}`} className="font-medium hover:underline" title={r.p.name}>{label(r)}</Link>
-                                    {dup && sg.key !== "none" && <Link href={`/categories/${sg.key}#merge`} className="ml-1.5 rounded-full bg-warn-soft px-2 py-0.5 text-[11px] text-warn" data-testid="dup-badge">⚠ 重複了，按這裡合併</Link>}
+                                    {dup && sg.key !== "none" && <Link href={`/categories/${sg.key}#merge`} className="ml-1.5 rounded-full bg-warn-soft px-2 py-0.5 text-[11px] text-warn" data-testid="dup-badge"><Icon name="warn" /> 重複了，按這裡合併</Link>}
                                     {meta && <div className="hidden text-[11.5px] leading-snug text-mute md:block">{meta}</div>}
                                   </td>
                                   <td className={`num px-1.5 py-2 text-right align-top ${r.s.onHand ? "" : "text-mute"}`} data-k="onhand">{r.s.onHand}</td>
-                                  <td className={`num px-1.5 py-2 text-right align-top ${r.s.incoming - unsureOf(r) ? "font-semibold text-good" : "text-mute"}`} data-k="sure">{r.s.incoming - unsureOf(r) || "–"}</td>
-                                  {!hideUnsure && <td className={`num px-1.5 py-2 text-right align-top ${unsureOf(r) ? "text-warn" : "text-mute"}`} data-k="unsure">{unsureOf(r) || "–"}</td>}
+                                  <td className={`num px-1.5 py-2 text-right align-top ${r.s.incoming - unsureOf(r) ? "font-semibold text-good" : "text-mute"}`} data-k="sure">{r.s.incoming - unsureOf(r) || 0}</td>
+                                  {!hideUnsure && <td className={`num px-1.5 py-2 text-right align-top ${unsureOf(r) ? "text-warn" : "text-mute"}`} data-k="unsure">{unsureOf(r) || 0}</td>}
                                   <td className="num px-1.5 py-2 text-right align-top" data-k="ordered">
                                     <DemandButton name={label(r)} shown={r.s.openDemand} cls={r.s.openDemand ? (left(r) < 0 ? "font-semibold text-bad" : "font-semibold text-info") : "text-mute"} operators={activeOps} viewer={owner} rows={(demandAll.get(r.p.id) ?? []).map((d) => ({ ...d, at: fmtMonthDay(d.at) }))} />
                                   </td>
                                   <td className={`num px-1.5 py-2 text-right align-top ${left(r) < 0 ? "font-semibold text-bad" : left(r) ? "font-semibold" : "text-mute"}`} data-k="free">{left(r)}</td>
                                   <td className="num hidden px-2 py-2 text-right align-top md:table-cell" data-k="kept">{r.s.kept}</td>
-                                  <td className="num hidden px-2 py-2 text-right align-top md:table-cell" data-k="avg">{avgOf(r) ? `${formatTwd(avgOf(r)!.avg)}${avgOf(r)!.tentative ? "*" : ""}` : "—"}</td>
+                                  <td className="num hidden px-2 py-2 text-right align-top md:table-cell" data-k="avg">{avgOf(r) ? `${formatTwd(avgOf(r)!.avg)}${avgOf(r)!.tentative ? "*" : ""}` : "無"}</td>
                                   <td className="whitespace-nowrap px-2 py-1.5 text-right align-top">
                                     <SellButton small primary={r.s.available > 0} label="賣" me={owner || me} product={product} />
                                     <KeepButton tiny productId={r.p.id} name={r.p.name} available={r.s.available} kept={r.s.kept} owners={owners} me={owner || me} />
@@ -371,7 +372,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                   })}
                 </Fragment>
               ))}
-              <tr className="border-t border-line bg-[#fafbfc] font-semibold">
+              <tr className="border-t border-line bg-tone-gray-50-4 font-semibold">
                 <td className="px-3 py-2">合計<span className="ml-1 text-[12px] font-normal text-mute">成本 {formatTwd(all.cost)}</span></td>
                 <td className="num px-1.5 py-2 text-right" data-testid="stock-total-onhand">{all.onHand}</td>
                 <td className="num px-1.5 py-2 text-right text-good">{all.incoming - all.unsure}</td>
@@ -578,11 +579,11 @@ async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, lat
                         {p && p.totalTwd > 0 && (
                           <div className="mt-1 flex items-baseline justify-between text-[13px]" data-testid="batch-card-money">
                             <span className="text-ink-2">總額 <span className="num font-semibold">{formatTwd(p.totalTwd)}</span></span>
-                            {b.status === "CANCELLED" ? <span className={p.paidTwd > 0 ? "font-semibold text-bad" : "text-mute"}>已取消{p.paidTwd > 0 ? `・代購要退 ${formatTwd(p.paidTwd)}` : ""}</span> : p.paidTwd > p.totalTwd ? <span className="num font-semibold text-bad" data-testid="batch-refund">代購要退 {formatTwd(p.paidTwd - p.totalTwd)}</span> : p.dueTwd > 0 ? <span className="num font-semibold text-bad">還要付 {formatTwd(p.dueTwd)}</span> : <span className="text-good">✓ 已付清</span>}
+                            {b.status === "CANCELLED" ? <span className={p.paidTwd > 0 ? "font-semibold text-bad" : "text-mute"}>已取消{p.paidTwd > 0 ? `，代購要退 ${formatTwd(p.paidTwd)}` : ""}</span> : p.paidTwd > p.totalTwd ? <span className="num font-semibold text-bad" data-testid="batch-refund">代購要退 {formatTwd(p.paidTwd - p.totalTwd)}</span> : p.dueTwd > 0 ? <span className="num font-semibold text-bad">還要付 {formatTwd(p.dueTwd)}</span> : <span className="text-good">✓ 已付清</span>}
                           </div>
                         )}
                         <div className="mt-0.5 text-[12px] text-mute">
-                          {isStoreKind(b.supplierRef?.kind) ? `實體店買的・${ordered} 件` : `到貨 ${rec}／${ordered}`}
+                          {isStoreKind(b.supplierRef?.kind) ? `實體店買的，${ordered} 件` : `到貨 ${rec}／${ordered}`}
                           {cut > 0 && <span className="ml-1.5 rounded bg-bad-soft px-1.5 text-bad">砍單 {cut} 件</span>}
                         </div>
                       </>
@@ -636,11 +637,11 @@ async function PurchasedSummary({ batchIds }: { batchIds: string[] }) {
       <p className="px-4 pt-3 text-[13px] text-mute">上面選的這 {batchIds.length} 團加起來（已扣掉砍單）。「一定」＝已確認的團還沒到的；「不一定」＝還沒確認的團。</p>
       <table className="mt-2 w-full text-[14px]">
         <thead>
-          <tr className="border-b border-line bg-[#fafbfc] text-[12px] text-mute">
+          <tr className="border-b border-line bg-tone-gray-50-4 text-[12px] text-mute">
             <th className="px-3 py-2 text-left font-medium">角色</th>
             <th className="px-2 py-2 text-right font-medium">買了</th>
             <th className="px-2 py-2 text-right font-medium">到了</th>
-            <th className="px-2 py-2 text-right font-medium text-good">還沒到・一定</th>
+            <th className="px-2 py-2 text-right font-medium text-good">還沒到，一定</th>
             <th className="px-2 py-2 text-right font-medium text-warn">不一定</th>
             <th className="px-2 py-2 text-right font-medium">砍單</th>
           </tr>
@@ -651,7 +652,7 @@ async function PurchasedSummary({ batchIds }: { batchIds: string[] }) {
               <tr className="bg-ai-soft"><td colSpan={6} className="px-3 py-1.5 font-semibold text-ai">{sName(sk === "-" ? null : sk)}</td></tr>
               {[...types.entries()].sort(([, a], [, b]) => a[0].typeSort - b[0].typeSort).map(([tn, list]) => (
                 <Fragment key={tn}>
-                  <tr className="bg-[#f7f8fa]"><td colSpan={6} className="py-1 pl-5 text-[13px] font-semibold text-ink-2">{tn}</td></tr>
+                  <tr className="bg-tone-gray-50-2"><td colSpan={6} className="py-1 pl-5 text-[13px] font-semibold text-ink-2">{tn}</td></tr>
                   {list.sort((a, b) => ord(a) - ord(b) || byText(a.name, b.name)).map((r) => {
                     const out = Math.max(0, r.ordered - r.received);
                     return (
@@ -659,8 +660,8 @@ async function PurchasedSummary({ batchIds }: { batchIds: string[] }) {
                         <td className="py-1.5 pr-3 pl-7">{r.name}{r.batches > 1 && <span className="ml-1 text-[11px] text-mute">（{r.batches} 團）</span>}</td>
                         <td className="num px-2 text-right font-semibold">{r.ordered}</td>
                         <td className="num px-2 text-right">{r.received}</td>
-                        <td className={`num px-2 text-right ${out - r.unsure > 0 ? "text-good" : "text-mute"}`}>{Math.max(0, out - r.unsure) || "–"}</td>
-                        <td className={`num px-2 text-right ${r.unsure ? "font-semibold text-warn" : "text-mute"}`} data-k="unsure">{r.unsure || "–"}</td>
+                        <td className={`num px-2 text-right ${out - r.unsure > 0 ? "text-good" : "text-mute"}`}>{Math.max(0, out - r.unsure) || 0}</td>
+                        <td className={`num px-2 text-right ${r.unsure ? "font-semibold text-warn" : "text-mute"}`} data-k="unsure">{r.unsure || 0}</td>
                         <td className={`num px-2 text-right ${r.cancelled ? "text-bad" : "text-mute"}`}>{r.cancelled}</td>
                       </tr>
                     );
@@ -669,7 +670,7 @@ async function PurchasedSummary({ batchIds }: { batchIds: string[] }) {
               ))}
             </Fragment>
           ))}
-          <tr className="bg-[#fafbfc] font-semibold">
+          <tr className="bg-tone-gray-50-4 font-semibold">
             <td className="px-3 py-2">合計</td>
             <td className="num px-2 text-right" data-testid="summary-total">{total.ordered}</td>
             <td className="num px-2 text-right">{total.received}</td>

@@ -67,7 +67,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
       />
       {(c.startDate || c.notes) && (
         <Section>
-          <KV items={[["活動期間", `${fmtDay(c.startDate)} – ${fmtDay(c.endDate)}`], ["備註", c.notes]]} />
+          <KV items={[["活動期間", `${fmtDay(c.startDate)}～${fmtDay(c.endDate)}`], ["備註", c.notes]]} />
         </Section>
       )}
       <RenameNames categoryId={c.id} plan={plan} />

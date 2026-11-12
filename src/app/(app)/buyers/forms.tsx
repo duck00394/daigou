@@ -119,7 +119,7 @@ export function TagManager({ buyerId, tags, available }: { buyerId: string; tags
           </button>
           {showHistory && (
             <ul className="mt-1 space-y-0.5 text-[13px] text-mute">
-              {removed.map((t) => <li key={t.id} className="line-through">{t.name}｜{t.createdAt.slice(0, 10)} – {t.removedAt!.slice(0, 10)}{t.reason ? `｜${t.reason}` : ""}</li>)}
+              {removed.map((t) => <li key={t.id} className="line-through">{t.name}｜{t.createdAt.slice(0, 10)}～{t.removedAt!.slice(0, 10)}{t.reason ? `｜${t.reason}` : ""}</li>)}
             </ul>
           )}
         </div>

@@ -43,7 +43,7 @@ export default async function Search({ searchParams }: { searchParams: Promise<{
     <div className="space-y-3">
       <PageHeader title="搜尋" />
       <form method="get" role="search">
-        <input type="search" name="q" defaultValue={q} autoFocus placeholder="🔍 角色、商品、訂單編號、團名" aria-label="搜尋商品" className="w-full rounded-xl border border-line bg-white px-4 py-3 text-[16px]" />
+        <input type="search" name="q" defaultValue={q} autoFocus placeholder="角色、商品、訂單編號、團名" aria-label="搜尋商品" className="w-full rounded-xl border border-line bg-white px-4 py-3 text-[16px]" />
       </form>
       {!q ? (
         <p className="text-sm text-mute">可以打多個字，用空白分開，例：「ANA 兔兔」。</p>
@@ -57,7 +57,7 @@ export default async function Search({ searchParams }: { searchParams: Promise<{
             <ul className="divide-y divide-line-2 overflow-hidden rounded-xl border border-line bg-card">
               {batches.map((b) => (
                 <li key={b.id}>
-                  <Link href={`/inventory/batches/${b.id}`} className="block px-4 py-2.5 hover:bg-[#fafbfc]">
+                  <Link href={`/inventory/batches/${b.id}`} className="block px-4 py-2.5 hover:bg-tone-gray-50-4">
                     <div className="font-semibold">{b.name}{b.status === "CANCELLED" && <span className="ml-1 text-[12px] font-normal text-mute">已取消</span>}</div>
                     <div className="text-[12px] text-mute">{[b.supplierRef?.name ?? b.supplier, b.supplierOrderNo ? `訂單 ${b.supplierOrderNo}` : null, b.notes].filter(Boolean).join("｜")}</div>
                   </Link>
@@ -77,10 +77,10 @@ export default async function Search({ searchParams }: { searchParams: Promise<{
             for (const k of batches.values()) byOwner.set(k, (byOwner.get(k) ?? 0) + 1);
             return (
               <li key={p.id} data-testid="search-row">
-                <Link href={`/products/${p.id}`} className="block px-4 py-3 hover:bg-[#fafbfd]">
+                <Link href={`/products/${p.id}`} className="block px-4 py-3 hover:bg-tone-gray-50-5">
                   <div className="flex items-baseline justify-between gap-2">
                     <b className="min-w-0">{p.name}</b>
-                    <span className="num shrink-0 text-[14px]">庫存 <b>{s?.available ?? 0}</b>・未到 {s?.incoming ?? 0}</span>
+                    <span className="num shrink-0 text-[14px]">庫存 <b>{s?.available ?? 0}</b>，未到 {s?.incoming ?? 0}</span>
                   </div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12.5px] text-mute">
                     {v?.avgUnitCost != null && <span>平均 {formatTwd(v.avgUnitCost)}</span>}

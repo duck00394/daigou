@@ -65,9 +65,9 @@ export function SeriesPicker({
           <ul className="absolute inset-x-0 top-full z-30 mt-1 max-h-72 divide-y divide-line-2 overflow-y-auto rounded-lg border border-line bg-white shadow-lg" data-testid="series-hits">
             {hits.map((s) => (
               <li key={s.id}>
-                <button type="button" className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-[15px] hover:bg-[#fafbfc]" onClick={() => { setKind(s.kindKey); onChange(s.id); setQ(""); }}>
+                <button type="button" className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-[15px] hover:bg-tone-gray-50-4" onClick={() => { setKind(s.kindKey); onChange(s.id); setQ(""); }}>
                   <span>{s.name}</span>
-                  <span className="shrink-0 text-[12px] text-mute">{s.kindLabel}{s.active ? "" : "・已過期"}</span>
+                  <span className="shrink-0 text-[12px] text-mute">{s.kindLabel}{s.active ? "" : "，已過期"}</span>
                 </button>
               </li>
             ))}

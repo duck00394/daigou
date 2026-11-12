@@ -5,19 +5,19 @@ import { DepositForm } from "./deposit-form";
 import { taipeiDayLabel, taipeiParts } from "@/lib/taipei";
 
 const money = (n: number) => `NT$ ${n.toLocaleString("en-US")}`;
-export const Due = ({ at }: { at: Date }) => <b className="font-bold text-[#c8102e]">{dueLabel(at)}</b>;
+export const Due = ({ at }: { at: Date }) => <b className="font-bold text-tone-red-600-2">{dueLabel(at)}</b>;
 
 export function StatusTag({ v }: { v: OrderView }) {
-  const cls = v.cancelled ? "bg-[#ece5dd] text-shop-ink-2" : ["等待賣貨便下單", "等待匯訂金", "訂金確認中"].includes(v.status) ? "bg-shop-gold-soft text-shop-gold" : v.status.includes("出貨") ? "bg-shop-good-soft text-shop-good" : "bg-shop-rose-soft text-shop-rose-2";
+  const cls = v.cancelled ? "bg-tone-orange-200-2 text-shop-ink-2" : ["等待賣貨便下單", "等待匯訂金", "訂金確認中"].includes(v.status) ? "bg-shop-gold-soft text-shop-gold" : v.status.includes("出貨") ? "bg-shop-good-soft text-shop-good" : "bg-shop-rose-soft text-shop-rose-2";
   return <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-bold ${cls}`}>{v.status}</span>;
 }
 
 /** 訂金：匯款帳戶、金額、期限、回傳末五碼 */
 function DepositBox({ v, bank }: { v: OrderView; bank: string }) {
   const d = v.deposit!;
-  if (d.overdue) return <p className="rounded-[14px] bg-[#f8e1dd] px-3.5 py-2.5 text-[13px] font-bold text-[#a63a2e]">已經超過回傳末五碼的時間，這筆會自動取消。</p>;
+  if (d.overdue) return <p className="rounded-[14px] bg-tone-red-200-5 px-3.5 py-2.5 text-[13px] font-bold text-tone-red-600">已經超過回傳末五碼的時間，這筆會自動取消。</p>;
   return (
-    <div className="flex flex-col gap-2.5 rounded-[16px] border border-[#ecd9a8] bg-shop-gold-soft p-3.5 text-[14px] text-shop-ink">
+    <div className="flex flex-col gap-2.5 rounded-[16px] border border-tone-amber-300 bg-shop-gold-soft p-3.5 text-[14px] text-shop-ink">
       <div className="flex items-baseline justify-between gap-3">
         <span className="font-bold">應匯訂金</span>
         <span className="num shrink-0 whitespace-nowrap text-[18px] font-bold text-shop-rose-2">{money(d.amount)}</span>
@@ -27,7 +27,7 @@ function DepositBox({ v, bank }: { v: OrderView; bank: string }) {
         <div className="select-all whitespace-pre-line font-medium">{bank || "賣家還沒設定，請聯絡客服"}</div>
       </div>
       {d.reported ? (
-        <p className="text-[13px] text-shop-good">已回傳末五碼 <b className="font-mono tracking-[2px]">{d.ref}</b>，等賣家確認後會傳賣貨便連結給你。</p>
+        <p className="text-[13px] text-shop-good">已回傳末五碼 <b className="font-mono">{d.ref}</b>，等賣家確認後會傳賣貨便連結給你。</p>
       ) : (
         d.dueAt && (
           <p className="text-[13px] leading-relaxed">
@@ -49,11 +49,11 @@ export function PayBox({ v, bank = "" }: { v: OrderView; bank?: string }) {
   if (!v.pay.dueAt)
     return v.pay.timing === "ARRIVAL" ? (
       <p className="rounded-[14px] bg-shop-sand px-3.5 py-2.5 text-[13px] text-shop-ink-2">
-        到貨後會通知你，收到通知 <b className="text-[#c8102e]">{v.pay.hours} 小時</b>內用賣貨便下單。
+        到貨後會通知你，收到通知 <b className="text-tone-red-600-2">{v.pay.hours} 小時</b>內用賣貨便下單。
       </p>
     ) : null;
   if (v.pay.overdue)
-    return <p className="rounded-[14px] bg-[#f8e1dd] px-3.5 py-2.5 text-[13px] font-bold text-[#a63a2e]">{v.deposit ? "已經超過賣貨便下單期限，請盡快下單或聯絡客服。" : "已經超過下單期限，這筆會自動取消。"}</p>;
+    return <p className="rounded-[14px] bg-tone-red-200-5 px-3.5 py-2.5 text-[13px] font-bold text-tone-red-600">{v.deposit ? "已經超過賣貨便下單期限，請盡快下單或聯絡客服。" : "已經超過下單期限，這筆會自動取消。"}</p>;
   return (
     <div className="flex flex-col gap-2">
       <a href={v.pay.url} target="_blank" rel="noopener noreferrer" className="flex h-12 items-center justify-center rounded-full bg-shop-rose text-[16px] font-bold text-white">
@@ -80,8 +80,8 @@ export function Steps({ v }: { v: OrderView }) {
       {v.steps.map((s, i) => (
         <li key={s.key} className="grid grid-cols-[18px_1fr] gap-2.5">
           <span className="flex flex-col items-center">
-            <span className={`mt-1 h-3 w-3 rounded-full border-2 ${s.state === "done" ? "border-shop-good bg-shop-good" : s.state === "now" ? "border-shop-rose bg-shop-rose" : "border-[#d8c9bc] bg-white"}`} />
-            {i < v.steps.length - 1 && <span className="w-px flex-1 bg-[#e6dace]" />}
+            <span className={`mt-1 h-3 w-3 rounded-full border-2 ${s.state === "done" ? "border-shop-good bg-shop-good" : s.state === "now" ? "border-shop-rose bg-shop-rose" : "border-tone-orange-300 bg-white"}`} />
+            {i < v.steps.length - 1 && <span className="w-px flex-1 bg-tone-orange-200" />}
           </span>
           <span className={`pb-2.5 text-[14px] ${s.state === "now" ? "font-bold text-shop-ink" : s.state === "done" ? "text-shop-ink-2" : "text-shop-mute"}`}>
             {s.label}
@@ -111,19 +111,19 @@ export function Lines({ v }: { v: OrderView }) {
         <div key={i} className="flex items-baseline justify-between gap-3">
           <span className={`min-w-0 ${l.cancelled >= l.qty ? "text-shop-mute line-through" : ""}`}>
             {l.name} × {l.qty}
-            {l.cancelled > 0 && l.cancelled < l.qty && <span className="ml-1 text-[12px] text-[#a63a2e]">（取消 {l.cancelled}）</span>}
+            {l.cancelled > 0 && l.cancelled < l.qty && <span className="ml-1 text-[12px] text-tone-red-600">（取消 {l.cancelled}）</span>}
           </span>
           <span className="num shrink-0 whitespace-nowrap">{l.amount.toLocaleString("en-US")}</span>
         </div>
       ))}
-      <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-dashed border-[#e6dace] pt-2 font-bold">
+      <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-dashed border-tone-orange-200 pt-2 font-bold">
         <span>合計</span>
         <span className="num shrink-0 whitespace-nowrap text-shop-rose">{money(v.total)}</span>
       </div>
       {v.deposit && (
         <>
           <div className="flex items-baseline justify-between gap-3 text-[13px] text-shop-ink-2">
-            <span>訂金（匯款）{v.deposit.confirmed ? "・已收到" : ""}</span>
+            <span>訂金（匯款）{v.deposit.confirmed ? "，已收到" : ""}</span>
             <span className="num shrink-0 whitespace-nowrap">{money(v.deposit.amount)}</span>
           </div>
           <div className="flex items-baseline justify-between gap-3 text-[13px] text-shop-ink-2">
@@ -145,15 +145,15 @@ export function ContactButtons({ line, threads }: { line: string; threads: strin
   if (!line && !threads) return null;
   return (
     <div className={`grid gap-2 ${line && threads ? "grid-cols-2" : "grid-cols-1"}`}>
-      {line && <a href={line} className="flex h-10 items-center justify-center rounded-full bg-[#06c755] text-[14px] font-bold text-white">LINE 客服</a>}
-      {threads && <a href={threads} target="_blank" rel="noopener noreferrer" className="flex h-10 items-center justify-center rounded-full bg-[#2a2220] text-[14px] font-bold text-white">Threads 客服</a>}
+      {line && <a href={line} className="flex h-10 items-center justify-center rounded-full bg-tone-green-600 text-[14px] font-bold text-white">LINE 客服</a>}
+      {threads && <a href={threads} target="_blank" rel="noopener noreferrer" className="flex h-10 items-center justify-center rounded-full bg-tone-gray-900 text-[14px] font-bold text-white">Threads 客服</a>}
     </div>
   );
 }
 
 export function ScreenshotNote({ line, threads }: { line: string; threads: string }) {
   return (
-    <div className="flex flex-col gap-2.5 rounded-[18px] border border-[#ecd9a8] bg-shop-gold-soft p-4 text-[14px] leading-relaxed text-shop-gold">
+    <div className="flex flex-col gap-2.5 rounded-[18px] border border-tone-amber-300 bg-shop-gold-soft p-4 text-[14px] leading-relaxed text-shop-gold">
       <p>
         <b>請自行截圖保存。</b>
         <br />

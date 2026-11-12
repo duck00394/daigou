@@ -43,7 +43,7 @@ export function PickBox({ id, name }: { id: string; name: string }) {
   if (!c.on) return null;
   return (
     <span className="flex w-11 shrink-0 flex-col items-center gap-1 py-2.5 pl-2">
-      <input type="checkbox" className="h-5 w-5 accent-[#2f4b7c]" aria-label={`選 ${name}`} checked={q > 0} onChange={(e) => c.set(id, e.target.checked ? 1 : 0)} />
+      <input type="checkbox" className="h-5 w-5 accent-ai" aria-label={`選 ${name}`} checked={q > 0} onChange={(e) => c.set(id, e.target.checked ? 1 : 0)} />
       {q > 0 && <input aria-label={`${name} 件數`} inputMode="numeric" className="num h-7 w-9 rounded-md border border-line text-center text-[13px]" onFocus={(e) => e.target.select()} value={q} onChange={(e) => c.set(id, Math.max(1, Math.min(999, Number(e.target.value.replace(/\D/g, "")) || 1)))} />}
     </span>
   );
@@ -106,8 +106,8 @@ function PickBar({ categoryId }: { categoryId?: string }) {
         </span>
       </div>
       <div className="text-[12.5px] opacity-85">
-        {price > 0 ? <span data-testid="pick-profit">照售價賣 {formatTwd(price)}・可賺 {formatTwd(price - priced)}</span> : "還沒填售價，算不出可賺多少"}
-        {noCost > 0 && `・${noCost} 隻沒成本沒算`}
+        {price > 0 ? <span data-testid="pick-profit">照售價賣 {formatTwd(price)}，可賺 {formatTwd(price - priced)}</span> : "還沒填售價，算不出可賺多少"}
+        {noCost > 0 && `，${noCost} 隻沒成本沒算`}
       </div>
     </div>
   );

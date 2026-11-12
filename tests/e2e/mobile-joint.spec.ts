@@ -69,7 +69,7 @@ test("手機：合資團分帳", async ({ page }) => {
   await expect(panel.getByTestId("joint-debts")).toContainText(`${b}要給${a} NT$250`);
 
   // 改比例與誰付多少（在同一頁填，不用出去）
-  await panel.getByRole("button", { name: "改比例・誰付多少" }).click();
+  await panel.getByRole("button", { name: "改比例、誰付多少" }).click();
   await panel.getByLabel(`${b} 付了多少`).fill("0");
   await panel.getByRole("button", { name: "儲存" }).click();
   await toast(page, "已更新合資分帳");

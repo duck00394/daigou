@@ -8,7 +8,7 @@ import { getShopName } from "@/server/services/shop";
 import { checkOrderToken, getShopInfo, sweepShopPay, threadsUrl } from "@/server/services/shop-pay";
 import { orderView } from "@/server/services/shop-view";
 import { taipeiDayLabel, taipeiParts } from "@/lib/taipei";
-import { BackCircle, Eyebrow, SerifTitle } from "../../ui";
+import { BackCircle, SerifTitle } from "../../ui";
 import { ContactButtons, Lines, PayBox, StatusTag, Steps } from "../parts";
 
 export const metadata = { title: "訂單憑證" };
@@ -39,7 +39,6 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
       <header className="flex items-center gap-3 px-4 py-3">
         <BackCircle href="/shop/orders" label="我的訂單" />
         <div className="flex-1">
-          <Eyebrow>ORDER</Eyebrow>
           <SerifTitle size={22}>訂單憑證</SerifTitle>
         </div>
       </header>
@@ -65,7 +64,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
           {row("付款方式", v.pay ? (v.pay.timing === "ORDER" ? "成立後用賣貨便下單" : "到貨後用賣貨便下單") : "另行通知")}
           {v.shipping && row("取貨方式", v.shipping)}
           {v.pay?.done && row("賣貨便", "已下單")}
-          {v.shipments.map((s, i) => row(`出貨 ${i + 1}`, `${taipeiDayLabel(s.at)}${s.method ? `・${s.method}` : ""}${s.trackingNo ? `・單號 ${s.trackingNo}` : ""}`))}
+          {v.shipments.map((s, i) => row(`出貨 ${i + 1}`, `${taipeiDayLabel(s.at)}${s.method ? `，${s.method}` : ""}${s.trackingNo ? `，單號 ${s.trackingNo}` : ""}`))}
           {v.intro && <p className="mt-1 whitespace-pre-line rounded-[12px] bg-shop-sand p-3 text-[13px] text-shop-ink-2">{v.intro}</p>}
         </div>
 

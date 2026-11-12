@@ -153,10 +153,10 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
                   <input aria-label={`${r.label} 訂金`} inputMode="numeric" className={`h-10 w-full rounded-md border px-2 text-[15px] ${dirty && c.d !== (saved[r.productId]?.d ?? "") ? "border-ai bg-ai-soft" : "border-line bg-white"}`} value={c.d} onChange={(e) => set(r.productId, { d: e.target.value.replace(/[^\d]/g, "") })} />
                   <input aria-label={`${r.label} 開放數量`} inputMode="numeric" className={`h-10 w-full rounded-md border px-2 text-[15px] ${dirty && c.q !== (saved[r.productId]?.q ?? "") ? "border-ai bg-ai-soft" : "border-line bg-white"}`} value={c.q} onChange={(e) => set(r.productId, { q: e.target.value.replace(/[^\d]/g, "") })} />
                   <span className={`num text-center text-[15px] ${r.quota !== null && r.sold >= r.quota ? "font-semibold text-bad" : ""}`}>{r.sold}</span>
-                  <span className="num text-center text-[15px]">{r.waiting || "–"}</span>
+                  <span className="num text-center text-[15px]">{r.waiting || 0}</span>
                   {c.q !== "" && list.length > 1 && (
                     <span className="col-span-full -mt-0.5 flex flex-wrap items-center gap-1 pb-0.5">
-                      <select aria-label={`${r.label} 能不能單買`} className={`h-7 rounded border px-1 text-[12px] ${c.m ? "border-[#f0dfa8] bg-warn-soft text-warn" : "border-line bg-white text-ink-2"}`} value={c.m} onChange={(e) => set(r.productId, { m: e.target.value as Cell["m"], bv: e.target.value ? c.bv : "" })}>
+                      <select aria-label={`${r.label} 能不能單買`} className={`h-7 rounded border px-1 text-[12px] ${c.m ? "border-tone-amber-300-2 bg-warn-soft text-warn" : "border-line bg-white text-ink-2"}`} value={c.m} onChange={(e) => set(r.productId, { m: e.target.value as Cell["m"], bv: e.target.value ? c.bv : "" })}>
                         <option value="">可以單買</option>
                         <option value="n">要搭其他角色（個數）</option>
                         <option value="a">要搭其他角色（金額）</option>
@@ -213,7 +213,7 @@ function TypePhoto({ categoryId, typeId, typeName, value }: { categoryId: string
   const bad = url.trim() !== "" && !/^https:\/\/\S+$/.test(url.trim()) && url.trim() !== value;
   return (
     <span className="flex w-full items-center gap-1.5">
-      {url.trim() ? <Preview key={url.trim()} url={url.trim()} className="h-10 w-10 shrink-0 rounded-md border border-line" /> : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border-[1.5px] border-dashed border-[#b8bfcc] bg-white text-[10px] text-mute">全體照</span>}
+      {url.trim() ? <Preview key={url.trim()} url={url.trim()} className="h-10 w-10 shrink-0 rounded-md border border-line" /> : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border-[1.5px] border-dashed border-tone-blue-300 bg-white text-[10px] text-mute">全體照</span>}
       <input type="url" aria-label={`${typeName}全體照網址`} placeholder="全體照網址 https://…" className={`h-9 min-w-0 flex-1 rounded-md border bg-white px-2 text-[14px] ${bad ? "border-bad" : "border-line"}`} value={url} onChange={(e) => setUrl(e.target.value)} />
       <Button small loading={pending} disabled={!dirty || bad} onClick={() => run(() => setTypeImageAction(categoryId, typeId, url.trim() || null), { success: url.trim() ? `${typeName}的全體照已更新` : `已拿掉${typeName}的全體照` })}>存</Button>
     </span>

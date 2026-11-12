@@ -1,4 +1,5 @@
 "use client";
+import { Icon } from "@/components/icons";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, ConfirmButton, Modal, TextField, TextArea, SelectField, useRun, inputCls, notify } from "@/components/client";
@@ -54,10 +55,10 @@ export function RosterEditor({ seriesId, roster, allCharacters, otherSeries }: {
             <span className="num mr-1 text-[12px] text-mute">{i + 1}</span>
             {c.name}
             <button type="button" aria-label={`把 ${c.name} 往前移`} disabled={i === 0} className="rounded px-1 text-mute hover:bg-line-2 disabled:opacity-30" onClick={() => run(() => moveSeriesCharacterAction(seriesId, c.id, -1), {})}>
-              ‹
+              <Icon name="chevronLeft" />
             </button>
             <button type="button" aria-label={`把 ${c.name} 往後移`} disabled={i === roster.length - 1} className="rounded px-1 text-mute hover:bg-line-2 disabled:opacity-30" onClick={() => run(() => moveSeriesCharacterAction(seriesId, c.id, 1), {})}>
-              ›
+              <Icon name="chevronRight" />
             </button>
             <button type="button" aria-label={`從名單移除 ${c.name}`} className="rounded-full px-1.5 text-mute hover:bg-bad-soft hover:text-bad" onClick={() => run(() => removeSeriesCharacterAction(seriesId, c.id), { success: `已從名單移除「${c.name}」` })}>
               ✕

@@ -28,7 +28,7 @@ export function DepositForm({ orderId, token, current }: { orderId: string; toke
           aria-label="匯款帳號末五碼"
           inputMode="numeric"
           maxLength={5}
-          className="h-[46px] min-w-0 rounded-[14px] border border-[#e6dace] bg-[#fdfaf6] px-3.5 font-mono text-[18px] tracking-[4px] text-shop-ink"
+          className="h-[46px] min-w-0 rounded-[14px] border border-tone-orange-200 bg-tone-sand-50 px-3.5 font-mono text-[18px] text-shop-ink"
           value={v}
           onChange={(e) => setV(e.target.value.replace(/\D/g, "").slice(0, 5))}
           placeholder="末五碼"

@@ -24,10 +24,6 @@ export function groupTypes(products: ShopProduct[]): TypeGroup[] {
   return [...m.values()];
 }
 
-export function Eyebrow({ children, rose }: { children: React.ReactNode; rose?: boolean }) {
-  return <div className={`text-[11px] font-bold tracking-[3px] ${rose ? "text-shop-rose" : "text-shop-mute"}`}>{children}</div>;
-}
-
 export function SerifTitle({ children, size = 24 }: { children: React.ReactNode; size?: number }) {
   return <h2 className="font-serif font-bold leading-snug" style={{ fontSize: size }}>{children}</h2>;
 }
@@ -35,25 +31,25 @@ export function SerifTitle({ children, size = 24 }: { children: React.ReactNode;
 export function LoginPill({ customer, next }: { customer: ShopCustomer | null; next: string }) {
   if (customer)
     return (
-      <Link href="/shop/orders" className="flex h-10 items-center gap-1.5 rounded-full border border-[#cfe9d4] bg-[#eaf6ec] pr-3 pl-1 text-[13px] font-medium text-shop-good">
+      <Link href="/shop/orders" className="flex h-10 items-center gap-1.5 rounded-full border border-tone-green-200 bg-tone-green-100-2 pr-3 pl-1 text-[13px] font-medium text-shop-good">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        {customer.picture ? <img src={customer.picture} alt="" referrerPolicy="no-referrer" className="h-8 w-8 rounded-full object-cover" /> : <span className="rounded-full bg-[#078a3e] px-1.5 py-0.5 text-[10px] font-bold text-white">LINE</span>}
+        {customer.picture ? <img src={customer.picture} alt="" referrerPolicy="no-referrer" className="h-8 w-8 rounded-full object-cover" /> : <span className="rounded-full bg-tone-green-800 px-1.5 py-0.5 text-[10px] font-bold text-white">LINE</span>}
         <span className="max-w-[5.5em] truncate">{customer.name}</span>
       </Link>
     );
   return (
-    <a href={`/shop/login?next=${encodeURIComponent(next)}`} className="flex h-10 items-center gap-1.5 rounded-full bg-[#078a3e] px-3 text-[13px] font-bold text-white">
-      <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-bold text-[#078a3e]">LINE</span>登入
+    <a href={`/shop/login?next=${encodeURIComponent(next)}`} className="flex h-10 items-center gap-1.5 rounded-full bg-tone-green-800 px-3 text-[13px] font-bold text-white">
+      <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-bold text-tone-green-800">LINE</span>登入
     </a>
   );
 }
 
 export function ShopHeader({ name, customer, next }: { name: string; customer: ShopCustomer | null; next: string }) {
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-shop-line bg-white/90 px-4 py-3 backdrop-blur">
+    <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-shop-line bg-white px-4 py-3">
       <Link href="/shop" className="flex min-w-0 items-center gap-2.5">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-shop-rose font-serif text-[19px] font-bold text-white">{[...name][0]}</span>
-        <span className="truncate font-serif text-[18px] font-bold tracking-[2px]">{name}</span>
+        <span className="truncate font-serif text-[18px] font-bold">{name}</span>
       </Link>
       <div className="flex shrink-0 items-center gap-2">
         <LoginPill customer={customer} next={next} />
@@ -74,7 +70,7 @@ export function BackCircle({ href, label }: { href: string; label: string }) {
 }
 
 export function Tag({ children, tone = "rose" }: { children: React.ReactNode; tone?: "rose" | "good" | "plain" }) {
-  const cls = tone === "good" ? "bg-shop-good-soft text-shop-good" : tone === "plain" ? "bg-[#f3ede6] text-shop-ink-2" : "bg-shop-rose-soft text-shop-rose-2";
+  const cls = tone === "good" ? "bg-shop-good-soft text-shop-good" : tone === "plain" ? "bg-tone-orange-100 text-shop-ink-2" : "bg-shop-rose-soft text-shop-rose-2";
   return <span className={`inline-block rounded-[10px] px-2.5 py-1 text-[12px] font-bold ${cls}`}>{children}</span>;
 }
 
@@ -82,7 +78,7 @@ export function TypeCard({ g, href, seed }: { g: TypeGroup; href: string; seed: 
   const soldOut = g.left === 0;
   const single = g.products.length === 1;
   return (
-    <Link href={href} className="flex flex-col overflow-hidden rounded-[18px] border border-shop-line bg-white shadow-[0_6px_16px_rgba(120,70,60,0.07)]">
+    <Link href={href} className="flex flex-col overflow-hidden rounded-[18px] border border-shop-line bg-white shadow-lift-9">
       <div className="relative">
         <Pic src={g.image} alt={g.typeName} seed={seed} className="h-40 w-full" label="商品圖片" fit="contain" />
         {soldOut ? (
@@ -93,10 +89,10 @@ export function TypeCard({ g, href, seed }: { g: TypeGroup; href: string; seed: 
       </div>
       <div className="flex flex-1 flex-col gap-1.5 p-3">
         <div className="text-[15px] leading-snug font-bold">{g.typeName}</div>
-        <div className="line-clamp-1 text-[12px] text-shop-mute">{single ? (g.chars[0] ?? "單一款式") : `${g.chars.slice(0, 3).join("・")}${g.chars.length > 3 ? "…" : ""}　${g.products.length} 款`}</div>
+        <div className="line-clamp-1 text-[12px] text-shop-mute">{single ? (g.chars[0] ?? "單一款式") : `${g.chars.slice(0, 3).join("、")}${g.chars.length > 3 ? "…" : ""}　${g.products.length} 款`}</div>
         <div className={`mt-auto text-[18px] font-bold ${soldOut ? "text-shop-mute" : "text-shop-rose"}`}>{g.price === null ? "價格待定" : `NT$ ${g.price.toLocaleString("en-US")}`}</div>
-        <span className={`flex h-10 items-center justify-center rounded-full text-[13px] font-bold ${soldOut ? "bg-shop-rose-soft text-shop-rose-2" : single ? "border border-[#ddd0c3]" : "bg-shop-rose text-white"}`}>
-          {soldOut ? "排候補 →" : single ? "查看商品 →" : "選角色 →"}
+        <span className={`flex h-10 items-center justify-center rounded-full text-[13px] font-bold ${soldOut ? "bg-shop-rose-soft text-shop-rose-2" : single ? "border border-tone-orange-300-3" : "bg-shop-rose text-white"}`}>
+          {soldOut ? "排候補" : single ? "查看商品" : "選角色"}
         </span>
       </div>
     </Link>
@@ -104,5 +100,5 @@ export function TypeCard({ g, href, seed }: { g: TypeGroup; href: string; seed: 
 }
 
 export function Notice({ children, tone = "warn" }: { children: React.ReactNode; tone?: "warn" | "good" }) {
-  return <div className={`rounded-[14px] border px-3.5 py-3 text-[14px] ${tone === "good" ? "border-[#cfe9d4] bg-[#eaf6ec] text-shop-good" : "border-[#f0d9b0] bg-[#fdf6e6] text-shop-gold"}`}>{children}</div>;
+  return <div className={`rounded-[14px] border px-3.5 py-3 text-[14px] ${tone === "good" ? "border-tone-green-200 bg-tone-green-100-2 text-shop-good" : "border-tone-orange-300-5 bg-tone-amber-100 text-shop-gold"}`}>{children}</div>;
 }

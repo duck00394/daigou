@@ -88,7 +88,7 @@ export async function reconcileSheet(t: Tx, batchId: string) {
       productId: i.product.id,
       name: ch?.name ?? i.product.name,
       fullName: i.product.name,
-      group: [seriesName(i.categoryId), i.product.productType?.name].filter(Boolean).join("・") || "其他",
+      group: [seriesName(i.categoryId), i.product.productType?.name].filter(Boolean).join("、") || "其他",
       sort: [i.product.productType?.sortOrder ?? 9999, ch?.sortOrder ?? 9999] as const,
       cancelReason: i.cancelReason,
       unitTwd: itemGoodsTwd({ ...i, qty: 1, cancelledQty: 0 }, b.rateMicro),

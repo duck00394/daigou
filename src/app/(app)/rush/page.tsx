@@ -1,3 +1,4 @@
+import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
@@ -41,14 +42,14 @@ export default async function RushPage({ searchParams }: { searchParams: Promise
               const near = clash.get(r.id);
               return (
                 <li key={r.id}>
-                  <Link href={`/rush/${r.id}`} className={`flex gap-3 rounded-xl border bg-white p-3 ${near ? "border-[#fdba74] bg-[#fff7ed]" : "border-line"}`} data-testid="rush-row" data-name={`${r.supplierName}｜${r.seriesName}`}>
+                  <Link href={`/rush/${r.id}`} className={`flex gap-3 rounded-xl border bg-white p-3 ${near ? "border-tone-orange-400-2 bg-tone-orange-50" : "border-line"}`} data-testid="rush-row" data-name={`${r.supplierName}｜${r.seriesName}`}>
                     <span className="w-14 shrink-0 text-[18px] font-extrabold">{taipeiParts(r.startAt).time}</span>
                     <span className="min-w-0 flex-1">
                       <b className="block truncate text-[15px]">{r.supplierName}</b>
                       <span className="block truncate text-[13px] text-mute">{r.seriesName}</span>
                       <span className="mt-1 flex flex-wrap gap-1 text-[12px]">
                         <span className={`rounded-full px-2 py-0.5 ${toneCls[b.tone]}`}>{b.text}</span>
-                        {near && <span className="rounded-full bg-warn-soft px-2 py-0.5 text-warn">⚠ 時間衝突：{near.map((x) => x.supplierName).join("、")}</span>}
+                        {near && <span className="rounded-full bg-warn-soft px-2 py-0.5 text-warn"><Icon name="warn" /> 時間衝突：{near.map((x) => x.supplierName).join("、")}</span>}
                       </span>
                     </span>
                   </Link>

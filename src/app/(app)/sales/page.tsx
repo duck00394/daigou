@@ -72,9 +72,9 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
         <Section title="誰賺多少">
           <ul className="grid gap-2 sm:grid-cols-3">
             {ownerEntries.map(([k, v]) => (
-              <li key={k} className={`rounded-xl border border-line-2 bg-[#fafbfc] p-3 text-sm ${ownerTone(k, ids).stripe}`} data-testid={`sale-owner-${k}`}>
+              <li key={k} className={`rounded-xl border border-line-2 bg-tone-gray-50-4 p-3 text-sm ${ownerTone(k, ids).stripe}`} data-testid={`sale-owner-${k}`}>
                 <div className="font-semibold"><OwnerBadge k={k} name={who(k)} ids={ids} /></div>
-                <div>收入 <span className="num font-medium">{formatTwd(v.revenue)}</span>・成本 <span className="num">{formatTwd(v.cost)}</span></div>
+                <div>收入 <span className="num font-medium">{formatTwd(v.revenue)}</span>，成本 <span className="num">{formatTwd(v.cost)}</span></div>
                 <div className={v.revenue - v.cost < 0 ? "text-bad" : "text-good"}>毛利 <span className="num font-semibold">{formatTwd(v.revenue - v.cost)}</span></div>
               </li>
             ))}
@@ -108,7 +108,7 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
                       {r.voided && <span className="ml-2 rounded bg-line-2 px-1.5 text-[12px] text-mute">已作廢</span>}
                     </div>
                     <div className="text-[13px] text-mute">
-                      {fmtDate(r.soldAt)}｜{r.channel ? `${r.channel}・` : ""}{r.buyer.name}｜每件 {formatTwd(r.unitPrice)}
+                      {fmtDate(r.soldAt)}｜{r.channel ? `${r.channel}，` : ""}{r.buyer.name}｜每件 {formatTwd(r.unitPrice)}
                       {!r.voided && r.owners.filter((x) => x.qty > 0).map((x) => <span key={x.key} className="ml-1"><OwnerBadge k={x.key} name={x.key === JOINT ? "合資" : who(x.key)} ids={ids} /></span>)}
                       {!r.voided && (r.paid >= r.revenue ? "｜已收款" : `｜未收 ${formatTwd(r.revenue - r.paid)}`)}
                       {r.note ? `｜${r.note}` : ""}

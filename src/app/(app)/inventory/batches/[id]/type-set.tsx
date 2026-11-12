@@ -29,7 +29,7 @@ export function TypeSetLine({ categoryId, typeId, typeName, catName, roster, sel
     const names = new Map([...roster, ...set].map((c) => [c.id, c.name]));
     setSet(ids.map((id) => ({ id, name: names.get(id) ?? "" })));
     setEdit(null);
-    toast(ids.length ? `「${catName}・${typeName}」一整套 ${ids.length} 隻` : "已取消一整套設定");
+    toast(ids.length ? `「${catName}，${typeName}」一整套 ${ids.length} 隻` : "已取消一整套設定");
   };
   const box = "mt-3 border-t border-line-2 pt-2.5 text-[14px]";
 
@@ -37,7 +37,7 @@ export function TypeSetLine({ categoryId, typeId, typeName, catName, roster, sel
     const opts = [...roster, ...set.filter((c) => !roster.some((r) => r.id === c.id))];
     return (
       <div className={box} data-testid="type-set-edit">
-        <div className="mb-2 text-[13px] font-medium text-ink-2">{catName}・{typeName} 一整套有哪些（點一下加或拿掉）</div>
+        <div className="mb-2 text-[13px] font-medium text-ink-2">{catName}，{typeName} 一整套有哪些（點一下加或拿掉）</div>
         <div className="flex flex-wrap gap-1.5">
           {opts.map((c) => {
             const on = edit.includes(c.id);
@@ -83,7 +83,7 @@ export function TypeSetLine({ categoryId, typeId, typeName, catName, roster, sel
     <div className={`${box} flex items-center justify-between gap-2`} data-testid="type-set">
       <span className="min-w-0">
         {typeName}一整套 <b className="text-good">{set.length} 隻</b>
-        <span className="block text-[12.5px] text-mute">{set.map((c) => c.name).join("・")}</span>
+        <span className="block text-[12.5px] text-mute">{set.map((c) => c.name).join("、")}</span>
       </span>
       <Button small onClick={() => setEdit(set.map((c) => c.id))}>改</Button>
     </div>
