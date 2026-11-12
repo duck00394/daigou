@@ -1,3 +1,4 @@
+import { getPlatformFees } from "@/server/services/settings";
 import { prisma } from "@/server/db";
 import { getView } from "@/server/view";
 import { requireUser } from "@/server/auth";
@@ -36,7 +37,7 @@ export default async function SellPage({ searchParams }: { searchParams: Promise
   return (
     <div className="space-y-4">
       <PageHeader title="賣給客人" sub="選誰賣的、選系列，填每個角色的數量；超過他現貨的自動記成預訂，到貨再給。" />
-      <SellForm series={series} buyers={buyers.map((b) => b.name).filter((n) => n !== "散客")} initialCategory={initial} waiting={waiting} channels={usedChannels.map((c) => c.salesChannel!).filter(Boolean)} buyerChannels={Object.fromEntries(buyers.filter((b) => b.salesChannel).map((b) => [b.name, b.salesChannel!]))} operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} me={me} acting={acting} groupBuys={groupBuys} initialQty={initialQty} />
+      <SellForm series={series} buyers={buyers.map((b) => b.name).filter((n) => n !== "散客")} initialCategory={initial} waiting={waiting} channels={usedChannels.map((c) => c.salesChannel!).filter(Boolean)} platformFees={await getPlatformFees(prisma)} buyerChannels={Object.fromEntries(buyers.filter((b) => b.salesChannel).map((b) => [b.name, b.salesChannel!]))} operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} me={me} acting={acting} groupBuys={groupBuys} initialQty={initialQty} />
     </div>
   );
 }

@@ -273,3 +273,9 @@ export async function switchShipmentOwnerAction(shipmentId: string, owner: strin
   const o = z.string().min(1).max(64).parse(owner);
   return run((a) => tx(async (t) => (await import("@/server/services/ship-owner")).switchShipmentOwner(t, a, z.string().min(1).parse(shipmentId), o), { timeout: 60_000 }));
 }
+
+/** 販售平台抽成（%）；pct 空白／0＝不抽 */
+export async function setPlatformFeeAction(channel: string, pct: number | null) {
+  const { setPlatformFee } = await import("@/server/services/settings");
+  return run((a) => tx((t) => setPlatformFee(t, a, z.string().max(40).parse(channel), z.number().nullable().parse(pct))));
+}

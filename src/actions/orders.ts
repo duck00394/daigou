@@ -94,7 +94,7 @@ export async function cancelOrderAction(orderId: string, reason: string | null) 
   return run((a) => tx((t) => o.cancelOrder(t, a, { orderId, reason }), { timeout: 60_000 }).then((r) => ({ refundUnscheduled: r.refundUnscheduled })));
 }
 
-export async function updateOrderMetaAction(orderId: string, input: { shippingFee?: number; orderDiscount?: number; notes?: string | null; groupBuyId?: string | null; confirmation?: "PENDING" | "CONFIRMED" }) {
+export async function updateOrderMetaAction(orderId: string, input: { shippingFee?: number; platformFee?: number; orderDiscount?: number; notes?: string | null; groupBuyId?: string | null; confirmation?: "PENDING" | "CONFIRMED" }) {
   return run((a) => tx((t) => o.updateOrderMeta(t, a, orderId, input)).then(() => null));
 }
 

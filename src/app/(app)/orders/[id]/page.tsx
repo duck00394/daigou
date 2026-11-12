@@ -29,7 +29,7 @@ const EVENT: Record<string, string> = {
   CATEGORY_CHANGED: "修改歸屬分類",
 };
 
-const META: Record<string, string> = { groupBuyId: "改代購團", shippingFee: "改運費", orderDiscount: "改整單折扣", notes: "改備註", confirmation: "確認訂單" };
+const META: Record<string, string> = { groupBuyId: "改代購團", shippingFee: "改運費", platformFee: "改平台費", orderDiscount: "改整單折扣", notes: "改備註", confirmation: "確認訂單" };
 
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   await requireUser();
@@ -125,6 +125,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         const o = prof.orders[0];
         const rev = o.shipped.revenue + o.open.revenue;
         const cost = o.shipped.cost + o.open.cost;
+        const fee = o.shipped.fee + o.open.fee;
         const line = (label: string, part: typeof o.shipped, est = false) =>
           part.qty > 0 && (
             <div className="flex justify-between gap-2 border-t border-line-2 py-1.5 text-[14px]">
@@ -138,11 +139,17 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             <div className="mt-2 grid grid-cols-3 gap-2">
               <div><div className="text-[12px] text-mute">收入</div><div className="num text-[17px] font-semibold">{formatTwd(rev)}</div></div>
               <div><div className="text-[12px] text-mute">成本</div><div className="num text-[17px] font-semibold">{formatTwd(cost)}</div></div>
-              <div><div className="text-[12px] text-mute">賺</div><div className={`num text-[17px] font-semibold ${rev - cost < 0 ? "text-bad" : "text-good"}`} data-testid="order-profit-sum">{formatTwd(rev - cost)}</div></div>
+              <div><div className="text-[12px] text-mute">賺</div><div className={`num text-[17px] font-semibold ${rev - cost - fee < 0 ? "text-bad" : "text-good"}`} data-testid="order-profit-sum">{formatTwd(rev - cost - fee)}</div></div>
             </div>
             <div className="mt-2">
               {line("已出貨", o.shipped)}
               {line("還沒給", o.open, true)}
+              {fee > 0 && (
+                <div className="flex justify-between gap-2 border-t border-line-2 py-1.5 text-[14px]" data-testid="order-profit-fee">
+                  <span>平台抽成{o.channel ? `（${o.channel}）` : ""}</span>
+                  <span className="num text-bad">−{fee.toLocaleString()}</span>
+                </div>
+              )}
             </div>
             <p className="text-[12px] text-mute">收入是商品售價，不含運費。還沒給的成本用預購平均成本（含運費、關稅）。{o.open.uncosted ? `${o.open.uncosted} 件還沒有成本，先不算。` : ""}</p>
           </section>
@@ -175,7 +182,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           />
           {!cancelled && (
             <div className="mt-3">
-              <EditMetaButton orderId={id} shippingFee={order.shippingFee} orderDiscount={order.orderDiscount} notes={order.notes} groupBuyId={order.groupBuyId} groupBuys={groupBuys.map((g) => ({ id: g.id, name: g.name }))} />
+              <EditMetaButton orderId={id} shippingFee={order.shippingFee} platformFee={order.platformFee} channel={order.salesChannel} orderDiscount={order.orderDiscount} notes={order.notes} groupBuyId={order.groupBuyId} groupBuys={groupBuys.map((g) => ({ id: g.id, name: g.name }))} />
             </div>
           )}
         </Section>

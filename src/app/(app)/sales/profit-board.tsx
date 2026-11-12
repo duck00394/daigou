@@ -15,7 +15,7 @@ const earn = (p: Part) => {
 };
 
 export function ProfitBoard({ p, series, cat, show, href }: { p: P; series: SeriesOpt[]; cat: string; show: string; href: (o: Record<string, string | undefined>) => string }) {
-  const all = { revenue: p.total.shipped.revenue + p.total.open.revenue, cost: p.total.shipped.cost + p.total.open.cost };
+  const all = { revenue: p.total.shipped.revenue + p.total.open.revenue, cost: p.total.shipped.cost + p.total.open.cost, fee: p.total.shipped.fee + p.total.open.fee };
   const uncosted = p.total.open.uncosted;
   const tentative = p.total.shipped.tentative || p.total.open.tentative;
   const list = p.orders.filter((o) => (show === "shipped" ? o.shipped.qty > 0 : show === "open" ? o.open.qty + o.open.uncosted > 0 : true));
@@ -27,10 +27,11 @@ export function ProfitBoard({ p, series, cat, show, href }: { p: P; series: Seri
         <div className="mt-3 grid grid-cols-3 gap-2">
           <div><div className="text-[12px] text-mute">收入</div><div className="num text-[18px] font-semibold" data-testid="pb-revenue">{formatTwd(all.revenue)}</div></div>
           <div><div className="text-[12px] text-mute">成本</div><div className="num text-[18px] font-semibold">{formatTwd(all.cost)}{tentative && <span className="text-warn">*</span>}</div></div>
-          <div><div className="text-[12px] text-mute">賺多少</div><div className={`num text-[18px] font-semibold ${all.revenue - all.cost < 0 ? "text-bad" : "text-good"}`} data-testid="pb-profit">{formatTwd(all.revenue - all.cost)}</div></div>
+          <div><div className="text-[12px] text-mute">賺多少</div><div className={`num text-[18px] font-semibold ${all.revenue - all.cost - all.fee < 0 ? "text-bad" : "text-good"}`} data-testid="pb-profit">{formatTwd(all.revenue - all.cost - all.fee)}</div></div>
         </div>
         <div className="mt-2 divide-y divide-line-2 border-t border-line-2 text-[14px]">
           <div className="flex justify-between py-2" data-testid="pb-shipped"><span>已出貨 {p.total.shipped.qty} 件</span>{earn(p.total.shipped)}</div>
+          {all.fee > 0 && <div className="flex justify-between py-2" data-testid="pb-fee"><span>平台抽成（已從賺多少扣掉）</span><span className="num text-bad">−{formatTwd(all.fee)}</span></div>}
           <div className="flex justify-between py-2" data-testid="pb-open"><span>客人預訂（還沒給，預估）{p.total.open.qty} 件</span>{earn(p.total.open)}</div>
         </div>
         <p className="text-[12px] text-mute">
@@ -80,7 +81,7 @@ export function ProfitBoard({ p, series, cat, show, href }: { p: P; series: Seri
       ) : (
         <ul className="divide-y divide-line-2 border-t border-line-2" data-testid="pb-orders">
           {list.slice(0, 100).map((o) => {
-            const sum: Part = { qty: o.shipped.qty + o.open.qty, revenue: o.shipped.revenue + o.open.revenue, cost: o.shipped.cost + o.open.cost, uncosted: o.open.uncosted, tentative: o.shipped.tentative || o.open.tentative };
+            const sum: Part = { qty: o.shipped.qty + o.open.qty, revenue: o.shipped.revenue + o.open.revenue, cost: o.shipped.cost + o.open.cost, fee: o.shipped.fee + o.open.fee, uncosted: o.open.uncosted, tentative: o.shipped.tentative || o.open.tentative };
             return (
               <li key={o.id} className="flex items-start justify-between gap-2 px-4 py-2.5 text-[14px]" data-testid="pb-order" data-no={o.orderNo}>
                 <div className="min-w-0">
@@ -88,8 +89,9 @@ export function ProfitBoard({ p, series, cat, show, href }: { p: P; series: Seri
                   {o.open.qty + o.open.uncosted > 0 ? <span className="ml-1 rounded-full bg-warn-soft px-2 py-0.5 text-[11.5px] text-warn">{o.shipped.qty ? "部分預訂" : "預訂"}</span> : <span className="ml-1 rounded-full bg-good-soft px-2 py-0.5 text-[11.5px] text-good">已出貨</span>}
                   {o.balance > 0 && <span className="ml-1 rounded-full bg-bad-soft px-2 py-0.5 text-[11.5px] text-bad">還沒收</span>}
                   <div className="text-[12.5px] text-mute">
-                    {fmtDate(o.orderedAt).slice(0, 10)}，{orderSource[o.source] ?? o.source}，{sum.qty} 件，{formatTwd(sum.revenue)}
+                    {fmtDate(o.orderedAt).slice(0, 10)}，{o.channel ?? orderSource[o.source] ?? o.source}，{sum.qty} 件，{formatTwd(sum.revenue)}
                     {o.open.qty ? "（含預估）" : ""}
+                    {sum.fee ? `，平台抽 ${sum.fee}` : ""}
                     {o.open.uncosted ? `，${o.open.uncosted} 件沒成本` : ""}
                   </div>
                 </div>

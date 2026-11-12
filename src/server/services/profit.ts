@@ -6,18 +6,19 @@ import { costOfMove } from "./reports";
 import { lotOwners } from "./ownership";
 import { preorderDetail } from "./preorder";
 
-export type Part = { qty: number; revenue: number; cost: number; uncosted: number; tentative: boolean };
-const zero = (): Part => ({ qty: 0, revenue: 0, cost: 0, uncosted: 0, tentative: false });
+export type Part = { qty: number; revenue: number; cost: number; fee: number; uncosted: number; tentative: boolean }; // fee＝販售平台抽成
+const zero = (): Part => ({ qty: 0, revenue: 0, cost: 0, fee: 0, uncosted: 0, tentative: false });
 const add = (a: Part, b: Part) => {
   a.qty += b.qty;
   a.revenue += b.revenue;
   a.cost += b.cost;
+  a.fee += b.fee;
   a.uncosted += b.uncosted;
   a.tentative ||= b.tentative;
 };
-export const profitOf = (p: Part) => p.revenue - p.cost;
+export const profitOf = (p: Part) => p.revenue - p.cost - p.fee;
 
-export type OrderProfit = { id: string; orderNo: string; buyer: string; source: string; orderedAt: Date; balance: number; shipped: Part; open: Part };
+export type OrderProfit = { id: string; orderNo: string; buyer: string; source: string; channel: string | null; orderedAt: Date; balance: number; shipped: Part; open: Part };
 export type SeriesRow = { id: string | null; name: string; shipped: Part; open: Part };
 
 /** owner：看某個人（出貨的照貨是誰的，還沒給的照跟誰訂的；含合資）；categoryId：只看這個系列的商品 */
@@ -39,7 +40,7 @@ export async function orderProfits(t: Tx, opts: { owner?: string | null; categor
       ownerKey: true,
       category: { select: { id: true, name: true } },
       product: { select: { categories: { select: { category: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" }, take: 1 } } },
-      order: { select: { id: true, orderNo: true, source: true, orderedAt: true, balanceCache: true, buyer: { select: { name: true } } } },
+      order: { select: { id: true, orderNo: true, source: true, orderedAt: true, balanceCache: true, platformFee: true, salesChannel: true, buyer: { select: { name: true } } } },
     },
   });
   const ids = items.map((i) => i.id);
@@ -58,6 +59,16 @@ export async function orderProfits(t: Tx, opts: { owner?: string | null; categor
     ? (await preorderDetail(t, openIds, { owner: opts.owner, itemWhere: { batch: { OR: [{ ownership: "JOINT" }, { orderedById: null }, { ownership: "PERSONAL", orderedById: opts.owner }] } } })).costs
     : (await preorderDetail(t, openIds)).costs;
 
+  // 平台抽成：整張單一筆，照商品金額分到每件（選系列、看某人時只算到的那幾件）
+  const feeOrders = [...new Set(items.filter((i) => i.order.platformFee > 0).map((i) => i.orderId))];
+  const goodsOf = new Map<string, number>();
+  if (feeOrders.length) {
+    for (const g of await t.orderItem.findMany({ where: { orderId: { in: feeOrders } }, select: { orderId: true, qty: true, cancelledQtyCache: true, unitPrice: true } })) goodsOf.set(g.orderId, (goodsOf.get(g.orderId) ?? 0) + Math.max(0, g.qty - g.cancelledQtyCache) * g.unitPrice);
+  }
+  const feeFor = (it: (typeof items)[number], qty: number) => {
+    const g = goodsOf.get(it.orderId);
+    return g ? Math.round((it.order.platformFee * qty * it.unitPrice) / g) : 0;
+  };
   const byItem = new Map<string, typeof moves>();
   for (const m of moves) byItem.set(m.orderItemId!, [...(byItem.get(m.orderItemId!) ?? []), m]);
   const orders = new Map<string, OrderProfit>();
@@ -70,17 +81,17 @@ export async function orderProfits(t: Tx, opts: { owner?: string | null; categor
       const key = m.purchaseBatchItemId ? (owners.get(m.purchaseBatchItemId)?.key ?? "none") : "none";
       if (keys && !keys.includes(key)) continue;
       const c = costOfMove(landed, { qty, purchaseBatchItemId: m.purchaseBatchItemId, unitCostTwd: m.unitCostTwd, estUnitCostTwd: it.estUnitCostTwd });
-      add(shipped, { qty, revenue: qty * it.unitPrice, cost: c.cost, uncosted: 0, tentative: c.estimatedUnits > 0 || (!!m.purchaseBatchItemId && tentativeLots.has(m.purchaseBatchItemId)) });
+      add(shipped, { qty, revenue: qty * it.unitPrice, cost: c.cost, fee: feeFor(it, qty), uncosted: 0, tentative: c.estimatedUnits > 0 || (!!m.purchaseBatchItemId && tentativeLots.has(m.purchaseBatchItemId)) });
     }
     const open = zero();
     const n = Math.max(0, it.qty - it.cancelledQtyCache - it.shippedQtyCache);
     if (n > 0 && (!keys || (!!it.ownerKey && keys.includes(it.ownerKey)))) {
       const c = costs.get(it.productId);
       // 沒有成本的（還沒買、不一定到）只記件數，不算進收入，免得賺多少虛高
-      add(open, c ? { qty: n, revenue: n * it.unitPrice, cost: c.avg * n, uncosted: 0, tentative: c.tentative } : { qty: 0, revenue: 0, cost: 0, uncosted: n, tentative: false });
+      add(open, c ? { qty: n, revenue: n * it.unitPrice, cost: c.avg * n, fee: feeFor(it, n), uncosted: 0, tentative: c.tentative } : { qty: 0, revenue: 0, cost: 0, fee: 0, uncosted: n, tentative: false });
     }
     if (!shipped.qty && !open.qty && !open.uncosted) continue;
-    const o = orders.get(it.orderId) ?? { id: it.order.id, orderNo: it.order.orderNo, buyer: it.order.buyer.name, source: it.order.source, orderedAt: it.order.orderedAt, balance: it.order.balanceCache, shipped: zero(), open: zero() };
+    const o = orders.get(it.orderId) ?? { id: it.order.id, orderNo: it.order.orderNo, buyer: it.order.buyer.name, source: it.order.source, channel: it.order.salesChannel, orderedAt: it.order.orderedAt, balance: it.order.balanceCache, shipped: zero(), open: zero() };
     add(o.shipped, shipped);
     add(o.open, open);
     orders.set(it.orderId, o);

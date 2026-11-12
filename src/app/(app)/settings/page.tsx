@@ -1,7 +1,9 @@
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { viewOwner } from "@/server/view";
-import { getDefaultRateMicro, getOrdersEnabled } from "@/server/services/settings";
+import { getDefaultRateMicro, getOrdersEnabled, getPlatformFees } from "@/server/services/settings";
+import { PlatformFees } from "./platform-fees";
+import { DEFAULT_CHANNELS } from "@/lib/channels";
 import { OrdersToggle } from "./orders-toggle";
 import { businessDataCount } from "@/server/services/backup";
 import { listOperators } from "@/server/services/operators";
@@ -43,6 +45,7 @@ export default async function Settings() {
   ]);
   const shipping = await listShippingMethods(prisma, { includeInactive: true });
   const ordersOn = await getOrdersEnabled(prisma);
+  const [fees, used] = await Promise.all([getPlatformFees(prisma), prisma.order.groupBy({ by: ["salesChannel"], where: { salesChannel: { not: null } }, _count: true, orderBy: { _count: { salesChannel: "desc" } }, take: 20 })]);
   const me = await getMe();
   return (
     <div className="space-y-4">
@@ -53,6 +56,9 @@ export default async function Settings() {
         </Section>
         <Section title="常用運費方式">
           <ShippingMethods rows={shipping.map((x) => ({ id: x.id, name: x.name, kind: x.kind, currency: x.currency, amount: x.amount, active: x.active }))} />
+        </Section>
+        <Section title="販售平台抽成">
+          <PlatformFees fees={fees} channels={[...new Set([...used.map((u) => u.salesChannel!).filter(Boolean), ...DEFAULT_CHANNELS])]} />
         </Section>
         <Section title="預設匯率（日幣才會用到）">
           <RateForm current={formatRate(rate)} />

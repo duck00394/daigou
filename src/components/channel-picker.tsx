@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Choice } from "./choice";
 import { inputCls } from "./client";
 
-export const DEFAULT_CHANNELS = ["賣貨便", "蝦皮", "IG", "Threads", "LINE", "Facebook", "面交"];
+import { DEFAULT_CHANNELS } from "@/lib/channels";
+export { DEFAULT_CHANNELS };
 
 export function ChannelPicker({ value, onChange, extra = [], label = "販售平台" }: { value: string; onChange: (v: string) => void; extra?: string[]; label?: string }) {
   const [typing, setTyping] = useState<string | null>(null);

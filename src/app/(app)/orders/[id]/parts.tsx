@@ -51,9 +51,9 @@ export function ConfirmOrderButton({ orderId }: { orderId: string }) {
   );
 }
 
-export function EditMetaButton({ orderId, shippingFee, orderDiscount, notes, groupBuyId, groupBuys }: { orderId: string; shippingFee: number; orderDiscount: number; notes: string | null; groupBuyId: string | null; groupBuys: { id: string; name: string }[] }) {
+export function EditMetaButton({ orderId, shippingFee, platformFee = 0, channel = null, orderDiscount, notes, groupBuyId, groupBuys }: { orderId: string; shippingFee: number; platformFee?: number; channel?: string | null; orderDiscount: number; notes: string | null; groupBuyId: string | null; groupBuys: { id: string; name: string }[] }) {
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState({ shippingFee: String(shippingFee), orderDiscount: String(orderDiscount), notes: notes ?? "", groupBuyId: groupBuyId ?? "" });
+  const [f, setF] = useState({ shippingFee: String(shippingFee), platformFee: String(platformFee), orderDiscount: String(orderDiscount), notes: notes ?? "", groupBuyId: groupBuyId ?? "" });
   const { run, pending } = useRun();
   return (
     <>
@@ -71,8 +71,9 @@ export function EditMetaButton({ orderId, shippingFee, orderDiscount, notes, gro
             onClick={() => {
               const sf = int(f.shippingFee);
               const od = int(f.orderDiscount || "0");
-              if (!Number.isInteger(sf) || sf < 0 || !Number.isInteger(od)) return notify("運費與折扣必須是整數");
-              run(() => updateOrderMetaAction(orderId, { shippingFee: sf, orderDiscount: od, notes: f.notes, groupBuyId: f.groupBuyId || null }), { success: "已儲存訂單", onOk: () => setOpen(false) });
+              const pf = int(f.platformFee || "0");
+              if (!Number.isInteger(sf) || sf < 0 || !Number.isInteger(od) || !Number.isInteger(pf) || pf < 0) return notify("運費、平台費與折扣必須是整數");
+              run(() => updateOrderMetaAction(orderId, { shippingFee: sf, platformFee: pf, orderDiscount: od, notes: f.notes, groupBuyId: f.groupBuyId || null }), { success: "已儲存訂單", onOk: () => setOpen(false) });
             }}
           >
             儲存
@@ -81,6 +82,7 @@ export function EditMetaButton({ orderId, shippingFee, orderDiscount, notes, gro
       >
         <div className="grid gap-3 sm:grid-cols-2">
           <TextField label="運費" inputMode="numeric" value={f.shippingFee} onChange={(e) => setF({ ...f, shippingFee: e.target.value })} />
+          <TextField label={`平台費${channel ? `（${channel}）` : ""}`} inputMode="numeric" value={f.platformFee} onChange={(e) => setF({ ...f, platformFee: e.target.value })} hint="販售平台抽的錢，算賺多少會扣掉" />
           <TextField label="整單折扣" inputMode="numeric" value={f.orderDiscount} onChange={(e) => setF({ ...f, orderDiscount: e.target.value })} hint="負數代表加價；取消部分商品時依剩餘金額比例調整" />
           <SelectField label="代購團" value={f.groupBuyId} onChange={(e) => setF({ ...f, groupBuyId: e.target.value })} options={[["", "不指定"], ...groupBuys.map((g) => [g.id, g.name] as [string, string])]} className="sm:col-span-2" />
           <TextArea label="備註" rows={3} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} className="sm:col-span-2" />

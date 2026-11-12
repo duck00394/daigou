@@ -1,6 +1,7 @@
 // 賣給客人（一次登記一位客人買的好幾樣）：
 // - 有現貨的部分：直接出售（沿用現貨出售：建單、出貨、收款一次完成）
 // - 超過現貨的部分：記成「預訂」（一般訂單），到貨後在「出貨」交給客人
+import { getPlatformFees, platformFeeOf } from "./settings";
 import { BizError, lockRows, type Tx } from "@/server/db";
 import { filterLotsByOwner } from "./ownership";
 import { audit, type Actor } from "./common";
@@ -16,7 +17,7 @@ export interface SellLine {
   categoryId?: string | null; // 這個商品是哪個系列（一位客人可以一次買好幾個系列）
 }
 
-export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: string | null; channel?: string | null; categoryId?: string | null; lines: SellLine[]; idemKey: string; paid?: boolean; owner?: string | null; groupBuyId?: string | null; shippingFee?: number | null }) {
+export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: string | null; channel?: string | null; categoryId?: string | null; lines: SellLine[]; idemKey: string; paid?: boolean; owner?: string | null; groupBuyId?: string | null; shippingFee?: number | null; platformFee?: number | null }) {
   const channel = input.channel?.trim() ? input.channel.trim().slice(0, 40) : null;
   if (!input.idemKey || input.idemKey.length < 8) throw new BizError("缺少送出識別碼");
   const lines = input.lines.filter((l) => l.qty > 0);
@@ -56,6 +57,7 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
   let sold = 0;
   let total = 0;
   const quickOrders: string[] = [];
+  const goodsOf = new Map<string, number>(); // 每張單的商品金額（算平台抽成用）
   const preLines: SellLine[] = [];
   const buyer = await resolveBuyer(t, actor, input.buyerName);
   // 記住這位客人的平台（還沒記過、或這次換了）
@@ -66,6 +68,7 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
       if (channel || groupBuyId) await t.order.update({ where: { id: q.orderId }, data: { ...(channel ? { salesChannel: channel } : {}), ...(groupBuyId ? { groupBuyId } : {}) } });
       sold += now;
       quickOrders.push(q.orderId);
+      goodsOf.set(q.orderId, (goodsOf.get(q.orderId) ?? 0) + now * l.unitPrice);
     }
     if (l.qty > now) preLines.push({ ...l, qty: l.qty - now });
     total += l.qty * l.unitPrice;
@@ -90,6 +93,20 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
     if (input.owner) await t.orderItem.updateMany({ where: { orderId: pre.id }, data: { ownerKey: input.owner } });
     preordered = preLines.reduce((s, l) => s + l.qty, 0);
     preOrderId = pre.id;
+    goodsOf.set(pre.id, preLines.reduce((a, l) => a + l.qty * l.unitPrice, 0));
+  }
+  // 販售平台抽成（例：KOCA 2%）：用商品金額算（不含運費）；有自己打實際扣的就用那個。分到這次成立的各張單
+  const goods = [...goodsOf.values()].reduce((a, v) => a + v, 0);
+  const feeTotal = input.platformFee ?? (channel ? platformFeeOf(goods, (await getPlatformFees(t))[channel]) : 0);
+  if (!Number.isInteger(feeTotal) || feeTotal < 0 || feeTotal > 9_999_999) throw new BizError("平台費請填 0 以上的整數");
+  if (feeTotal > 0 && goods > 0) {
+    const ids = [...goodsOf.keys()];
+    let left = feeTotal;
+    for (const [i, id] of ids.entries()) {
+      const part = i === ids.length - 1 ? left : Math.floor((feeTotal * goodsOf.get(id)!) / goods);
+      left -= part;
+      if (part) await t.order.update({ where: { id }, data: { platformFee: part } });
+    }
   }
   if (shippingFee > 0) {
     const target = preOrderId ?? quickOrders[0];
@@ -98,7 +115,7 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
     if (!preOrderId && input.paid !== false) await addPayment(t, actor, { orderId: target, amount: shippingFee, paidAt: new Date(), method: null, note: "運費", dedupeKey: `${key}:ship` });
     total += shippingFee;
   }
-  const result = { sold, preordered, total };
+  const result = { sold, preordered, total, platformFee: goods > 0 ? feeTotal : 0 };
   await audit(t, actor, "sell.create", "Sell", key, result);
   return { ...result, duplicated: false };
 }

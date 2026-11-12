@@ -35,6 +35,7 @@ const sellSchema = z.object({
   owner: z.string().max(64).nullish(),
   groupBuyId: z.string().max(64).nullish(),
   shippingFee: z.number().int().min(0).max(99999).nullish(),
+  platformFee: z.number().int().min(0).max(9_999_999).nullish(),
   lines: z.array(z.object({ productId: z.string(), qty: z.number().int(), unitPrice: z.number().int(), categoryId: z.string().nullish() })).max(300),
 });
 export async function sellToCustomerAction(input: z.infer<typeof sellSchema>) {

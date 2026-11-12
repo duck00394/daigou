@@ -16,7 +16,7 @@ type Sheet = { id: string; name: string; items: { typeId: string; typeName: stri
 
 const DEFAULT_SHIP = 0; // 賣東西預設不加運費，要收再填
 
-export function SellForm({ series, buyers, initialCategory, waiting, channels = [], buyerChannels = {}, operators = [], me = null, acting = null, groupBuys = [], initialQty = {} }: { series: SeriesOpt[]; buyers: string[]; initialCategory: string; waiting: number; channels?: string[]; buyerChannels?: Record<string, string>; operators?: { id: string; name: string }[]; me?: string | null; acting?: string | null; groupBuys?: { id: string; name: string; categoryId: string | null }[]; initialQty?: Record<string, string> }) {
+export function SellForm({ series, buyers, initialCategory, waiting, channels = [], platformFees = {}, buyerChannels = {}, operators = [], me = null, acting = null, groupBuys = [], initialQty = {} }: { series: SeriesOpt[]; buyers: string[]; initialCategory: string; waiting: number; channels?: string[]; platformFees?: Record<string, number>; buyerChannels?: Record<string, string>; operators?: { id: string; name: string }[]; me?: string | null; acting?: string | null; groupBuys?: { id: string; name: string; categoryId: string | null }[]; initialQty?: Record<string, string> }) {
   // 誰賣的：只賣、只扣這個人的現貨，兩個人的庫存才對得上（預設是這支手機的人）
   // 預設＝左邊「現在看誰的」選的人（選「全部」時用這支手機的人）
   const [seller, setSeller] = useState<string>(acting ?? me ?? "");
@@ -124,6 +124,12 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
   );
   const total = lines.reduce((s, x) => s + x.q * (Number(x.p) || 0), 0);
   const now = lines.reduce((s, x) => s + Math.min(x.q, freeOf(x.r)), 0);
+  // 販售平台抽成（例：KOCA 2%）：用商品金額算、小數捨去；平台有優惠時可以改成實際扣的
+  const rate = channel ? platformFees[channel] : undefined;
+  const [feeEdit, setFeeEdit] = useState<string | null>(null);
+  const autoFee = rate ? Math.floor((total * rate) / 100) : 0;
+  const pFee = feeEdit !== null && /^\d+$/.test(feeEdit.trim()) ? Number(feeEdit) : autoFee;
+  const showFee = !!rate || feeEdit !== null;
   const pre = lines.reduce((s, x) => s + Math.max(0, x.q - freeOf(x.r)), 0);
 
   const check = () => {
@@ -151,13 +157,14 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
       if (m) m.qty += x.q;
       else merged.set(x.r.productId, { productId: x.r.productId, qty: x.q, unitPrice: Number(x.p), categoryId: x.categoryId });
     }
-    run(() => sellToCustomerAction({ buyerName: buyer.trim() || null, channel: channel || null, idemKey: idem.key, paid, owner: seller || null, groupBuyId: groupBuy || null, shippingFee: fee || null, lines: [...merged.values()] }), {
+    run(() => sellToCustomerAction({ buyerName: buyer.trim() || null, channel: channel || null, idemKey: idem.key, paid, owner: seller || null, groupBuyId: groupBuy || null, shippingFee: fee || null, platformFee: showFee ? pFee : null, lines: [...merged.values()] }), {
       success: (d) => `已登記${buyer.trim() ? `「${buyer.trim()}」` : ""}：${[d.sold ? `賣出 ${d.sold} 件` : "", d.preordered ? `預訂 ${d.preordered} 件` : ""].filter(Boolean).join("、")}`,
       onOk: async (d) => {
         setConfirming(false);
         setDone(`${sellerName && d.sold ? `${sellerName}賣的，` : ""}${channel ? `${channel}，` : ""}${buyer.trim() || "客人"}：${[d.sold ? `賣出 ${d.sold} 件` : "", d.preordered ? `預訂 ${d.preordered} 件（到貨再給）` : ""].filter(Boolean).join("、")}，共 ${formatTwd(d.total)}`);
         idem.renew();
         setQty({});
+        setFeeEdit(null);
         setPrice({});
         setBuyer("");
         setShipFee(String(DEFAULT_SHIP));
@@ -301,6 +308,21 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
               現貨的錢已經收了
             </label>
           )}
+          {showFee && lines.length > 0 && (
+            <div className="rounded-lg bg-tone-gray-50-4 px-3 py-2.5 text-[14px]" data-testid="sell-platform-fee">
+              <div className="flex justify-between py-0.5"><span>客人付</span><span className="num">{formatTwd(total + fee)}</span></div>
+              {fee > 0 && <div className="flex justify-between py-0.5"><span>運費</span><span className="num text-bad">−{formatTwd(fee)}</span></div>}
+              <div className="flex items-center justify-between gap-2 py-0.5">
+                <span>{channel} 抽{rate ? ` ${rate}%` : ""}</span>
+                {feeEdit === null ? (
+                  <span><span className="num text-bad">−{formatTwd(pFee)}</span> <button type="button" className="ml-1 text-ai underline" onClick={() => setFeeEdit(String(autoFee))}>改</button></span>
+                ) : (
+                  <span className="flex items-center gap-1">−<input aria-label="平台實際扣多少" inputMode="numeric" className="num h-9 w-20 rounded-lg border border-line bg-white px-2 text-right" value={feeEdit} onChange={(e) => setFeeEdit(e.target.value)} /></span>
+                )}
+              </div>
+              <div className="mt-1 flex justify-between border-t border-line pt-1.5 font-semibold"><span>實拿</span><span className="num" data-testid="sell-net">{formatTwd(total - pFee)}</span></div>
+            </div>
+          )}
           <Button variant="primary" className="w-full" loading={pending} disabled={!lines.length} onClick={check}>
             {lines.length ? `登記：${now + pre} 件 ${formatTwd(total + fee)}${pre ? `（現貨 ${now}，預訂 ${pre}）` : ""}` : "填數量後登記"}
           </Button>
@@ -337,6 +359,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
                 })}
                 {fee > 0 && <li className="flex justify-between px-3 py-1.5"><span>運費</span><span className="num">{formatTwd(fee)}</span></li>}
               </ul>
+              {showFee && pFee > 0 && <div className="flex justify-between text-[13.5px] text-mute"><span>{channel} 抽（算賺多少會扣掉）</span><span className="num">−{formatTwd(pFee)}</span></div>}
               <div className="flex items-baseline justify-between text-[16px] font-semibold"><span>合計</span><span className="num" data-testid="sell-confirm-total">{formatTwd(total + fee)}</span></div>
               {now > 0 && <p className="text-[13px] text-mute">{paid ? "現貨的錢已經收了" : "現貨的錢還沒收"}{pre ? "；預訂的到貨再收" : ""}</p>}
             </div>

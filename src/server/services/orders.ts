@@ -233,7 +233,7 @@ export async function updateOrderMeta(
   t: Tx,
   actor: Actor,
   orderId: string,
-  input: { shippingFee?: number; orderDiscount?: number; notes?: string | null; groupBuyId?: string | null; confirmation?: "PENDING" | "CONFIRMED"; externalRef?: string | null },
+  input: { shippingFee?: number; platformFee?: number; orderDiscount?: number; notes?: string | null; groupBuyId?: string | null; confirmation?: "PENDING" | "CONFIRMED"; externalRef?: string | null },
 ) {
   await lockRows(t, "Order", [orderId]);
   const order = await t.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true } });
@@ -244,6 +244,11 @@ export async function updateOrderMeta(
     checkInt(input.shippingFee, "運費");
     data.shippingFee = input.shippingFee;
     changes.shippingFee = [order.shippingFee, input.shippingFee];
+  }
+  if (input.platformFee !== undefined && input.platformFee !== order.platformFee) {
+    if (!Number.isInteger(input.platformFee) || input.platformFee < 0 || input.platformFee > 9_999_999) throw new BizError("平台費請填 0 以上的整數");
+    data.platformFee = input.platformFee;
+    changes.platformFee = [order.platformFee, input.platformFee];
   }
   if (input.orderDiscount !== undefined && input.orderDiscount !== order.orderDiscount) {
     if (!Number.isInteger(input.orderDiscount)) throw new BizError("整單折扣必須是整數");

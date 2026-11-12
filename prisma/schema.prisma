@@ -519,6 +519,7 @@ model Order {
   orderedAt          DateTime          @default(now())
   confirmation       OrderConfirmation @default(CONFIRMED)
   shippingFee        Int               @default(0)
+  platformFee        Int               @default(0) // 販售平台抽成（例：KOCA 2%），成立時算好存起來；費率之後改也不影響
   orderDiscount      Int               @default(0) // 整單折扣（正數＝折扣，負數＝加價）
   notes              String?
   cancelledAt        DateTime?
