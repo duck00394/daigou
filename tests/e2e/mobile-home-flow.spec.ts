@@ -1,7 +1,7 @@
 // 手機：首頁待辦按了直接處理——代購寄出的團一鍵收貨 → 採購團頁提醒可以出貨 → 訂單列表只列可出貨的 → 一次出貨；還沒收齊的一次收款
 import { test, expect } from "@playwright/test";
 import { execFileSync } from "node:child_process";
-import { login, toast } from "./helpers";
+import { login, openAllTodos, toast } from "./helpers";
 
 const dbUrl = process.env.TEST_DATABASE_URL ?? "postgresql://daigou:daigou_dev@localhost:5432/daigou_test";
 
@@ -22,6 +22,7 @@ test("手機：首頁待辦直接處理（收貨 → 出貨 → 收款）", asyn
 
   // 代購寄出了的團：在清單上直接按「全部到了」
   await page.goto("/");
+  await openAllTodos(page);
   await todo.getByRole("link", { name: /團代購寄出了，到了記得登記收到/ }).click();
   await expect(page.getByTestId("batch-filter-chip")).toContainText("代購寄出了、還沒登記收到的團");
   const card = page.locator("li, article, div").filter({ hasText: d.b2 }).filter({ has: page.getByRole("button", { name: "全部到了" }) }).last();

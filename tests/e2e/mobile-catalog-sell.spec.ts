@@ -1,7 +1,7 @@
 // 手機：系列目錄（種類 › 系列 › 品項 › 角色、預設售價）→ 實體店買進 → 賣給客人（現貨＋預訂）→ 庫存選了才看
 import { test, expect } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import { login, toast, pickIp, newSupplierPick, openSeries, openMore, choose, chosen } from "./helpers";
+import { openAllTodos, login, toast, pickIp, newSupplierPick, openSeries, openMore, choose, chosen } from "./helpers";
 
 const dbUrl = process.env.TEST_DATABASE_URL ?? "postgresql://daigou:daigou_dev@localhost:5432/daigou_test";
 
@@ -191,6 +191,7 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   // 首頁待辦「客人訂的比庫存多」→ 點進去只列庫存是負的
   const stockUrl = page.url();
   await page.goto("/");
+  await openAllTodos(page);
   const shortTodo = page.getByTestId("home-todo").getByRole("link", { name: /項商品客人訂的比庫存多/ });
   await expect(shortTodo).toBeVisible();
   await shortTodo.click();

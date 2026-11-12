@@ -5,39 +5,49 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ViewChip, ViewSwitch, type ViewInfo } from "./view-switch";
 
-// 常用：收藏轉售每天會用到的；其他：接單（LINE／訂單）與資料設定
+// 選單分三組：每天用、偶爾用、設定與資料
 export const NAV: { href: string; label: string; group: string; hint?: string; orders?: true }[] = [
-  // 依做事的順序分組：常用 → 採購與收貨 → 訂單與出貨 → 訂購頁 → 資料與設定（每個頁面都還在，只是換位置）
-  { href: "/", label: "首頁", group: "常用", hint: "今天要做什麼、還要付多少" },
-  { href: "/purchase", label: "＋ 新增採購", group: "常用", hint: "買了什麼、哪一團" },
-  { href: "/sell", label: "賣給客人", group: "常用", hint: "選系列、填數量，沒貨記預訂" },
-  { href: "/inventory?tab=stock", label: "庫存、賣出、自留", group: "常用", hint: "手上有什麼、成本多少" },
-  { href: "/sales", label: "賺多少", group: "常用", hint: "照系列看已出貨＋預訂賺多少" },
-  { href: "/inventory?tab=batches", label: "採購團、收貨", group: "採購與收貨", hint: "東西到了沒、登記收到" },
-  { href: "/reconcile", label: "對單", group: "採購與收貨", hint: "跟代購確認買到多少、砍了哪些" },
-  { href: "/categories", label: "系列", group: "採購與收貨", hint: "每個系列買了什麼、花多少、品項售價" },
-  { href: "/rush", label: "搶購提醒", group: "採購與收貨", hint: "什麼時候開搶，開始前通知手機" },
-  { href: "/suppliers", label: "供應商、代購", group: "採購與收貨" },
-  { href: "/orders", label: "訂單", group: "訂單與出貨", hint: "客人的訂單、預訂；可以多選一次出貨、收款" },
-  { href: "/shipping", label: "出貨", group: "訂單與出貨", hint: "預訂到貨了交給客人、改出貨人" },
-  { href: "/payments", label: "收款與退款", group: "訂單與出貨", orders: true },
-  { href: "/paste", label: "貼上加單", group: "訂單與出貨", orders: true },
-  { href: "/buyers", label: "買家", group: "訂單與出貨", orders: true },
-  { href: "/groupbuys", label: "開團（接單用）", group: "訂單與出貨", orders: true },
-  { href: "/import", label: "Excel 匯入", group: "訂單與出貨", orders: true },
-  { href: "/shop-admin", label: "訂購頁（客人下單）", group: "訂購頁", hint: "開放系列給客人下單（訪客或 LINE）、限量、候補" },
-  { href: "/shop-pay", label: "訂購頁付款", group: "訂購頁", hint: "客人用賣貨便下單了沒、逾期、補發通知" },
-  { href: "/catalog", label: "種類與系列管理", group: "資料與設定" },
-  { href: "/series", label: "系列與角色", group: "資料與設定" },
-  { href: "/products", label: "商品", group: "資料與設定" },
-  { href: "/reports", label: "完整報表", group: "資料與設定" },
-  { href: "/tags", label: "標籤", group: "資料與設定" },
-  { href: "/settings", label: "匯出、備份與設定", group: "資料與設定" },
-  { href: "/?tour=1", label: "新手教學", group: "幫助", hint: "一步一步帶你走一次" },
-  { href: "/help", label: "名詞說明", group: "幫助", hint: "有幾隻、每隻成本、對單是什麼" },
+  // 三組：每天用（直接看得到）→ 偶爾用 → 設定與資料（電腦版收起來，點開才看；每個頁面都還在）
+  { href: "/", label: "首頁", group: "每天用", hint: "今天要做什麼、還要付多少" },
+  { href: "/orders", label: "訂單", group: "每天用", hint: "客人的訂單、預訂；可以多選一次出貨、收款" },
+  { href: "/shipping", label: "出貨", group: "每天用", hint: "預訂到貨了交給客人、改出貨人" },
+  { href: "/purchase", label: "＋ 新增採購", group: "每天用", hint: "買了什麼、哪一團" },
+  { href: "/inventory?tab=batches", label: "採購團、收貨", group: "每天用", hint: "東西到了沒、登記收到" },
+  { href: "/inventory?tab=stock", label: "庫存、賣出、自留", group: "每天用", hint: "手上有什麼、成本多少" },
+  { href: "/sell", label: "賣給客人", group: "每天用", hint: "選系列、填數量，沒貨記預訂" },
+  { href: "/sales", label: "賺多少", group: "每天用", hint: "照系列看已出貨＋預訂賺多少" },
+  { href: "/buyers", label: "買家", group: "偶爾用", orders: true },
+  { href: "/categories", label: "系列", group: "偶爾用", hint: "每個系列買了什麼、花多少、品項售價" },
+  { href: "/reconcile", label: "對單", group: "偶爾用", hint: "跟代購確認買到多少、砍了哪些" },
+  { href: "/payments", label: "收款與退款", group: "偶爾用", orders: true },
+  { href: "/paste", label: "貼上加單", group: "偶爾用", orders: true },
+  { href: "/rush", label: "搶購提醒", group: "偶爾用", hint: "什麼時候開搶，開始前通知手機" },
+  { href: "/groupbuys", label: "開團（接單用）", group: "偶爾用", orders: true },
+  { href: "/shop-admin", label: "訂購頁（客人下單）", group: "偶爾用", hint: "開放系列給客人下單（訪客或 LINE）、限量、候補" },
+  { href: "/shop-pay", label: "訂購頁付款", group: "偶爾用", hint: "客人用賣貨便下單了沒、逾期、補發通知" },
+  { href: "/products", label: "商品", group: "設定與資料" },
+  { href: "/suppliers", label: "供應商、代購", group: "設定與資料" },
+  { href: "/import", label: "Excel 匯入", group: "設定與資料", orders: true },
+  { href: "/catalog", label: "種類與系列管理", group: "設定與資料" },
+  { href: "/series", label: "系列與角色", group: "設定與資料" },
+  { href: "/reports", label: "完整報表", group: "設定與資料" },
+  { href: "/tags", label: "標籤", group: "設定與資料" },
+  { href: "/settings", label: "匯出、備份與設定", group: "設定與資料" },
+  { href: "/?tour=1", label: "新手教學", group: "設定與資料", hint: "一步一步帶你走一次" },
+  { href: "/help", label: "名詞說明", group: "設定與資料", hint: "有幾隻、每隻成本、對單是什麼" },
 ];
 
-const BOTTOM: { href: string; label: string; icon: IconName; main?: true }[] = [
+type Tab = { href: string; label: string; icon: IconName; main?: true };
+// 手機底部：每天最常用的直接一下到。有接單時多放「訂單」「出貨」（賺多少在首頁的數字點進去、或「全部功能」）
+const BOTTOM_ORDERS: Tab[] = [
+  { href: "/", label: "首頁", icon: "home" },
+  { href: "/orders", label: "訂單", icon: "list" },
+  { href: "/shipping", label: "出貨", icon: "truck" },
+  { href: "/purchase", label: "採購", icon: "plus", main: true },
+  { href: "/inventory?tab=stock", label: "庫存", icon: "box" },
+  { href: "/categories", label: "系列", icon: "layers" },
+];
+const BOTTOM_PLAIN: Tab[] = [
   { href: "/", label: "首頁", icon: "home" },
   { href: "/categories", label: "系列", icon: "layers" },
   { href: "/purchase", label: "採購", icon: "plus", main: true },
@@ -76,24 +86,33 @@ export function Sidebar({ ordersOn = true, view }: { ordersOn?: boolean; view?: 
         代購帳房
       </Link>
       <form action="/search" method="get" role="search" className="mb-4 px-1">
-        <input type="search" name="q" placeholder="搜尋角色、商品" aria-label="搜尋" className="w-full rounded-lg border border-field bg-card px-2.5 py-1.5 text-[14px] text-ink placeholder:text-mute" />
+        <input type="search" name="q" placeholder="搜尋客人、訂單、商品" aria-label="搜尋" className="w-full rounded-lg border border-field bg-card px-2.5 py-1.5 text-[14px] text-ink placeholder:text-mute" />
       </form>
       {view && <div className="px-1"><ViewSwitch v={view} /></div>}
-      {groups.map((g) => (
-        <div key={g} className="mb-4">
-          <div className="mb-1 px-2 text-[12px] text-mute">{g}</div>
-          {nav.filter((n) => n.group === g).map((n) => (
-            <Link
-              key={n.href}
-              href={n.href}
-              aria-current={active(path, n.href, tab) ? "page" : undefined}
-              className={`block rounded-lg px-2.5 py-1.5 text-[14px] transition-colors duration-150 ${active(path, n.href, tab) ? "bg-ai-soft font-medium text-ink" : "text-ink-2 hover:bg-line-2 hover:text-ink"}`}
-            >
-              {n.label}
-            </Link>
-          ))}
-        </div>
-      ))}
+      {groups.map((g, gi) => {
+        const links = nav.filter((n) => n.group === g).map((n) => (
+          <Link
+            key={n.href}
+            href={n.href}
+            aria-current={active(path, n.href, tab) ? "page" : undefined}
+            className={`block rounded-lg px-2.5 py-1.5 text-[14px] transition-colors duration-150 ${active(path, n.href, tab) ? "bg-ai-soft font-medium text-ink" : "text-ink-2 hover:bg-line-2 hover:text-ink"}`}
+          >
+            {n.label}
+          </Link>
+        ));
+        // 每天用的直接列；偶爾用、設定與資料收起來（正在看的頁在裡面就自動打開）
+        if (gi === 0) return <div key={g} className="mb-3">{links}</div>;
+        const here = nav.some((n) => n.group === g && active(path, n.href, tab));
+        return (
+          <details key={g} open={here} className="group mb-1">
+            <summary className="flex cursor-pointer list-none items-center justify-between rounded-lg px-2.5 py-1.5 text-[13px] text-mute hover:bg-line-2 [&::-webkit-details-marker]:hidden">
+              {g}
+              <span aria-hidden className="transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none">›</span>
+            </summary>
+            <div className="mt-0.5 mb-2">{links}</div>
+          </details>
+        );
+      })}
       <form action="/logout" method="post" className="mt-auto px-2">
         <button className="text-[13px] text-mute hover:text-ink">登出</button>
       </form>
@@ -142,7 +161,7 @@ export function MobileBar({ ordersOn = true, view }: { ordersOn?: boolean; view?
                     <Link
                       key={n.href}
                       href={n.href}
-                      className={`rounded-lg border px-3 py-2 text-[15px] ${active(path, n.href, tab) ? "border-ai-soft bg-ai-soft text-ink" : "border-line"} ${g === "常用" ? "font-medium" : "text-ink-2"}`}
+                      className={`rounded-lg border px-3 py-2 text-[15px] ${active(path, n.href, tab) ? "border-ai-soft bg-ai-soft text-ink" : "border-line"} ${g === "每天用" ? "font-medium" : "text-ink-2"}`}
                     >
                       {n.label}
                       {n.hint && <span className="block text-[11.5px] font-normal text-mute">{n.hint}</span>}
@@ -157,8 +176,8 @@ export function MobileBar({ ordersOn = true, view }: { ordersOn?: boolean; view?
           </div>
         </div>
       )}
-      <nav aria-label="常用功能" className="no-print safe-bottom fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-paper/95 backdrop-blur md:hidden">
-        {BOTTOM.map((b) => (
+      <nav aria-label="常用功能" className={`no-print safe-bottom fixed inset-x-0 bottom-0 z-40 grid ${ordersOn ? "grid-cols-6" : "grid-cols-5"} border-t border-line bg-paper/95 backdrop-blur md:hidden`}>
+        {(ordersOn ? BOTTOM_ORDERS : BOTTOM_PLAIN).map((b) => (
           <Link
             key={b.href}
             href={b.href}

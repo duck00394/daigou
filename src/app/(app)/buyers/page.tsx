@@ -20,7 +20,14 @@ export default async function Buyers({ searchParams }: { searchParams: Promise<R
     ...(sp.q ? { OR: [{ name: { contains: sp.q, mode: "insensitive" } }, { lineName: { contains: sp.q, mode: "insensitive" } }, { code: { contains: sp.q, mode: "insensitive" } }, { aliases: { some: { alias: { contains: sp.q, mode: "insensitive" } } } }] } : {}),
     ...(sp.tagId ? { tags: { some: { tagId: sp.tagId, removedAt: null } } } : {}),
     ...(sp.due ? { orders: { some: { balanceCache: { gt: 0 }, confirmation: "CONFIRMED" } } } : {}),
+    ...(sp.open ? { orders: { some: { confirmation: "CONFIRMED", shipStatusCache: { notIn: ["SHIPPED", "DELIVERED", "CANCELLED"] } } } } : {}),
   };
+  // 上面的快捷分頁：有待收、有東西還沒出貨的客人各幾位
+  const base: Prisma.BuyerWhereInput = { mergedIntoId: null };
+  const [dueN, openN] = await Promise.all([
+    prisma.buyer.count({ where: { ...base, orders: { some: { balanceCache: { gt: 0 }, confirmation: "CONFIRMED" } } } }),
+    prisma.buyer.count({ where: { ...base, orders: { some: { confirmation: "CONFIRMED", shipStatusCache: { notIn: ["SHIPPED", "DELIVERED", "CANCELLED"] } } } } }),
+  ]);
   const [buyers, total, tags] = await Promise.all([
     prisma.buyer.findMany({
       where,
@@ -33,16 +40,28 @@ export default async function Buyers({ searchParams }: { searchParams: Promise<R
     prisma.tag.findMany({ orderBy: { name: "asc" } }),
   ]);
   const ids = buyers.map((b) => b.id);
-  const [agg, last] = await Promise.all([
+  const [agg, last, openAgg] = await Promise.all([
     prisma.order.groupBy({ by: ["buyerId"], where: { buyerId: { in: ids }, confirmation: "CONFIRMED", ...(owner ? { items: { some: { ownerKey: { in: [owner, "joint", "none"] } } } } : {}) }, _count: true, _sum: { receivableCache: true, balanceCache: true } }),
     prisma.order.groupBy({ by: ["buyerId"], where: { buyerId: { in: ids }, ...(owner ? { items: { some: { ownerKey: { in: [owner, "joint", "none"] } } } } : {}) }, _max: { orderedAt: true } }),
+    prisma.order.groupBy({ by: ["buyerId"], where: { buyerId: { in: ids }, confirmation: "CONFIRMED", shipStatusCache: { notIn: ["SHIPPED", "DELIVERED", "CANCELLED"] }, ...(owner ? { items: { some: { ownerKey: { in: [owner, "joint", "none"] } } } } : {}) }, _count: true }),
   ]);
+  const om = new Map(openAgg.map((a) => [a.buyerId, a._count]));
+  const quick: [string, string, boolean][] = [
+    ["全部", "/buyers", !sp.due && !sp.open],
+    [`有待收 ${dueN}`, "/buyers?due=1", !!sp.due && !sp.open],
+    [`有東西還沒出貨 ${openN}`, "/buyers?open=1", !!sp.open && !sp.due],
+  ];
   const am = new Map(agg.map((a) => [a.buyerId, a]));
   const lm = new Map(last.map((a) => [a.buyerId, a._max.orderedAt]));
   return (
     <div>
-      <PageHeader title="買家" actions={<><LinkButton href="/api/export/buyers">匯出（不含收件資料）</LinkButton><LinkButton href="/buyers/new" primary>新增買家</LinkButton></>} />
+      <PageHeader title="買家" actions={<LinkButton href="/buyers/new" primary>新增買家</LinkButton>} />
       <Section pad={false}>
+        <nav aria-label="快捷篩選" className="flex gap-1.5 overflow-x-auto border-b border-line-2 px-4 py-2.5" data-testid="buyers-quick">
+          {quick.map(([l, h, on]) => (
+            <Link key={h} href={h} aria-current={on ? "page" : undefined} className={`flex min-h-9 shrink-0 items-center rounded-full border px-3.5 text-[13.5px] transition-colors duration-150 ${on ? "border-ai bg-ai font-medium text-on-fill" : "border-line bg-card text-ink-2 hover:bg-line-2"}`}>{l}</Link>
+          ))}
+        </nav>
         <FilterBar action="/buyers">
           <FSearch data-search value={sp.q} placeholder="名稱、LINE 暱稱、別名、編號" />
           <FSelect name="tagId" label="標籤" value={sp.tagId} options={tags.map((t) => [t.id, t.name + (t.active ? "" : "（停用）")])} />
@@ -59,7 +78,9 @@ export default async function Buyers({ searchParams }: { searchParams: Promise<R
                 <th className="text-right">有效訂單</th>
                 <th className="text-right">累計應收</th>
                 <th className="text-right">待收</th>
+                <th className="text-right">還沒出貨</th>
                 <th>最近下單</th>
+                <th><span className="sr-only">操作</span></th>
               </tr>
             </thead>
             <tbody>
@@ -79,7 +100,15 @@ export default async function Buyers({ searchParams }: { searchParams: Promise<R
                     <td className="num text-right">{a?._count ?? 0}</td>
                     <td className="text-right"><Twd v={a?._sum.receivableCache ?? 0} /></td>
                     <td className="text-right">{(a?._sum.balanceCache ?? 0) > 0 ? <Twd v={a?._sum.balanceCache} className="text-warn" /> : <span className="text-mute">0</span>}</td>
+                    <td className="num text-right">{om.get(b.id) ? <Link href={`/buyers/${b.id}?tab=items`} className="text-ai hover:underline">{om.get(b.id)} 張</Link> : <span className="text-mute">0</span>}</td>
                     <td className="num text-mute">{fmtDate(lm.get(b.id))}</td>
+                    <td>
+                      {/* 常做的兩件事直接在這一列：看他的訂單、幫他開新訂單 */}
+                      <span className="flex gap-1.5">
+                        <Link href={`/orders?buyerId=${b.id}`} className="inline-flex min-h-8 items-center rounded-lg border border-line px-2.5 text-[13px] whitespace-nowrap hover:bg-line-2">訂單</Link>
+                        <Link href={`/orders/new?buyerId=${b.id}`} className="inline-flex min-h-8 items-center rounded-lg border border-line px-2.5 text-[13px] whitespace-nowrap hover:bg-line-2">新增訂單</Link>
+                      </span>
+                    </td>
                   </tr>
                 );
               })}
@@ -88,6 +117,7 @@ export default async function Buyers({ searchParams }: { searchParams: Promise<R
         )}
         <Pager page={page} total={total} size={SIZE} base={`/buyers${qs({ ...sp, page: undefined })}`} />
       </Section>
+      <div className="mt-3 flex justify-end"><LinkButton small href="/api/export/buyers">匯出（不含收件資料）</LinkButton></div>
     </div>
   );
 }

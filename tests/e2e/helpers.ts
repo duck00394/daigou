@@ -115,3 +115,9 @@ export async function pickChar(page: Page, name: string) {
   if (!(await btn.isVisible()) && (await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
   await btn.click();
 }
+
+/** 首頁「要處理的事」只先秀最急的 3 件，其他收在「還有幾件不急的」：要點的那一項可能在裡面，先打開 */
+export async function openAllTodos(page: Page) {
+  const more = page.getByTestId("home-todo-more");
+  if ((await more.count()) && !(await more.evaluate((d) => (d as HTMLDetailsElement).open))) await more.locator("summary").click();
+}

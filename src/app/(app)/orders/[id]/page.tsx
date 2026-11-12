@@ -11,7 +11,7 @@ import { orderProfits, profitOf } from "@/server/services/profit";
 import { formatTwd } from "@/lib/money";
 import { SendLineLink } from "./line-link";
 import { PageHeader, Section, TableWrap, StatusBadge, Twd, Badge, TagChip, KV, LinkButton, Empty } from "@/components/ui";
-import { CancelOrderButton, ConfirmOrderButton, EditMetaButton, ItemActions, ReserveButtons, PaymentForm, VoidPaymentButton, RefundForm, RefundRowActions } from "./parts";
+import { CancelOrderButton, ConfirmOrderButton, EditMetaButton, ItemActions, ReserveButtons, PaymentForm, VoidPaymentButton, RefundForm, RefundRowActions, QuickCollect } from "./parts";
 import { fmtDate, orderStatus, paymentStatus, procurementStatus, shipStatus, orderSource, refundStatus, flagLabel } from "@/lib/labels";
 
 const EVENT: Record<string, string> = {
@@ -101,6 +101,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           !cancelled && (
             <>
               {order.confirmation === "PENDING" && <ConfirmOrderButton orderId={id} />}
+              {order.confirmation === "CONFIRMED" && <QuickCollect orderId={id} balance={r.balance} />}
               <LinkButton href={`/orders/new?buyerId=${order.buyerId}`}>追加商品</LinkButton>
               <CancelOrderButton orderId={id} orderNo={order.orderNo} />
             </>

@@ -34,8 +34,7 @@ export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, availa
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-[12px] text-mute">
-            <th className="py-1 font-normal">商品</th>
-            <th className="font-normal">訂單</th>
+            <th className="py-1 font-normal">商品／訂單</th>
             <th className="px-1 text-right font-normal whitespace-nowrap">未出</th>
             <th className="px-1 text-right font-normal whitespace-nowrap" title="已到貨、排給這一項可以出的數量（先下單的先分）">可出</th>
             <th className="w-16 text-right font-normal">本次</th>
@@ -48,9 +47,10 @@ export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, availa
                 {i.name}
                 {i.spec && <span className="text-[12px] text-mute">｜{i.spec}</span>}
                 {i.packFlag !== "NONE" && <span className="ml-1 text-[12px] text-info">（{i.packFlag === "READY" ? "已備妥" : "備貨中"}）</span>}
+                {/* 訂單編號放在商品下面：手機上不用多擠一欄 */}
+                <div className="num mt-0.5 flex flex-wrap items-center gap-1 text-[12.5px]"><a href={`/orders/${i.orderId}`} className="whitespace-nowrap text-ai hover:underline">{i.orderNo}</a>{i.wholeOrder && <span className="inline-block rounded-full bg-good-soft px-1.5 text-[11px] whitespace-nowrap text-good" data-testid="whole-order">整張可出</span>}</div>
                 {i.reservedBy && <div className="text-[12px] text-mute" data-testid="reserved-by">保留的是：{i.reservedBy}</div>}
               </td>
-              <td className="num text-[13px]"><a href={`/orders/${i.orderId}`} className="whitespace-nowrap text-ai hover:underline">{i.orderNo}</a>{i.wholeOrder && <span className="ml-1 inline-block rounded-full bg-good-soft px-1.5 text-[11px] whitespace-nowrap text-good" data-testid="whole-order">整張可出</span>}</td>
               <td className="num text-right">{i.pending}</td>
               <td className={`num text-right ${canOf(i) === 0 ? "text-mute" : "font-medium"}`} data-k="can">{canOf(i)}</td>
               <td className="text-right">
@@ -60,8 +60,8 @@ export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, availa
           ))}
         </tbody>
       </table>
-      <div className="mt-2 flex flex-wrap gap-2">
-        <Button small variant="primary" disabled={total === 0} onClick={() => setOpen(true)}>出貨 {total} 件</Button>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button variant="primary" disabled={total === 0} onClick={() => setOpen(true)}>出貨 {total} 件</Button>
         <Button small loading={pending} onClick={() => run(() => bulkFlagsAction(items.map((i) => i.id), { packFlag: "PREPARING" }), { success: "已標記備貨中" })}>標記備貨中</Button>
         <Button small loading={pending} onClick={() => run(() => bulkFlagsAction(items.filter((i) => canOf(i) > 0).map((i) => i.id), { packFlag: "READY" }), { success: "已標記已備妥" })}>標記已備妥</Button>
         <a href={`/shipping/pack?buyerId=${buyerId}`} target="_blank" rel="noopener" className="self-center text-[13px] text-ai hover:underline">包貨核對清單</a>

@@ -29,7 +29,6 @@ export default async function Shipping({ searchParams }: { searchParams: Promise
       <PageHeader
         title="出貨"
         sub="把到貨的預訂交給客人"
-        actions={<><LinkButton href="/api/export/to-ship">匯出待出貨清單</LinkButton><LinkButton href="/api/export/shipments">匯出出貨紀錄</LinkButton></>}
       />
       <nav className="flex flex-wrap gap-1" aria-label="分頁">
         {[["todo", "待出貨（依買家）"], ["order", "待出貨（依訂單）"], ["done", "出貨紀錄"]].map(([k, l]) => (
@@ -37,6 +36,11 @@ export default async function Shipping({ searchParams }: { searchParams: Promise
         ))}
       </nav>
       {tab === "done" ? <DoneTab vk={vk} /> : <TodoTab byOrder={tab === "order"} sp={sp} vk={vk} />}
+      {/* 不常用的放頁尾 */}
+      <div className="flex flex-wrap justify-end gap-2">
+        <LinkButton small href="/api/export/to-ship">匯出待出貨清單</LinkButton>
+        <LinkButton small href="/api/export/shipments">匯出出貨紀錄</LinkButton>
+      </div>
     </div>
   );
 }
@@ -84,6 +88,32 @@ async function TodoTab({ byOrder, sp, vk }: { byOrder: boolean; sp: Record<strin
   }
   const canOf = (g: { items: typeof items }) => g.items.reduce((s, i) => s + (canShip.get(i.id) ?? 0), 0);
   const list = [...groups.values()].sort((a, b) => canOf(b) - canOf(a));
+  // 分兩段：現在就可以出的在上面；一件都還沒到的收在「還在等貨」
+  const readyGroups = list.filter((g) => canOf(g) > 0);
+  const waitGroups = list.filter((g) => canOf(g) === 0);
+  const readyQty = readyGroups.reduce((a, g) => a + canOf(g), 0);
+  const wholeN = new Set(list.flatMap((g) => g.items.filter((i) => readyOrders.has(i.orderId)).map((i) => i.orderId))).size;
+  const card = (g: (typeof list)[number]) => (
+    <Section
+      key={g.key}
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          <Link href={byOrder ? `/orders/${g.key}` : `/buyers/${g.buyer.id}`} className="hover:underline">{g.title}</Link>
+          {g.buyer.tags.map((t) => <TagChip key={t.id} name={t.tag.name} color={t.tag.color} />)}
+        </span>
+      }
+      actions={<span className="text-[13px] text-mute">{g.sub ? `${g.sub}｜` : ""}可出 {canOf(g)} 件</span>}
+    >
+      <BuyerShipCard
+        buyerId={g.buyer.id}
+        buyerName={g.buyer.name}
+        defaultMethod={g.buyer.shippingMethod}
+        items={g.items.map(toView)}
+        available={Object.fromEntries(g.items.map((i) => [i.id, Math.max(0, inv.get(i.productId)?.available ?? 0)]))}
+        operators={activeOps}
+      />
+    </Section>
+  );
   return (
     <>
       <form method="get" className="flex flex-wrap items-end gap-2">
@@ -100,32 +130,30 @@ async function TodoTab({ byOrder, sp, vk }: { byOrder: boolean; sp: Record<strin
       {list.length === 0 ? (
         <Section><Empty action={<LinkButton href="/sell">賣給客人</LinkButton>}>沒有要給客人的東西。客人預訂的商品到貨後，會出現在這裡。</Empty></Section>
       ) : (
-        <div className="space-y-3">
-          {list.map((g) => {
-            const ready = canOf(g);
-            return (
-              <Section
-                key={g.key}
-                title={
-                  <span className="flex flex-wrap items-center gap-2">
-                    <Link href={byOrder ? `/orders/${g.key}` : `/buyers/${g.buyer.id}`} className="hover:underline">{g.title}</Link>
-                    {g.buyer.tags.map((t) => <TagChip key={t.id} name={t.tag.name} color={t.tag.color} />)}
-                  </span>
-                }
-                actions={<span className="text-[13px] text-mute">{g.sub ? `${g.sub}｜` : ""}可出 {ready} 件</span>}
-              >
-                <BuyerShipCard
-                  buyerId={g.buyer.id}
-                  buyerName={g.buyer.name}
-                  defaultMethod={g.buyer.shippingMethod}
-                  items={g.items.map(toView)}
-                  available={Object.fromEntries(g.items.map((i) => [i.id, Math.max(0, inv.get(i.productId)?.available ?? 0)]))}
-                  operators={activeOps}
-                />
-              </Section>
-            );
-          })}
-        </div>
+        <>
+          {/* 一眼看出：可以出的幾位、幾件（其中整張可出幾張）、還在等貨的幾位 */}
+          <div className="stat-grid grid grid-cols-2 sm:grid-cols-4" data-testid="ship-summary">
+            <div className="bg-card px-3.5 py-2.5"><div className="text-[12.5px] text-mute">可以出貨的客人</div><div className="num text-[18px] font-semibold text-good">{readyGroups.length} 位</div></div>
+            <div className="bg-card px-3.5 py-2.5"><div className="text-[12.5px] text-mute">可以出幾件</div><div className="num text-[18px] font-semibold">{readyQty} 件</div></div>
+            <div className="bg-card px-3.5 py-2.5"><div className="text-[12.5px] text-mute">整張可出</div><div className="num text-[18px] font-semibold">{wholeN} 張</div></div>
+            <div className="bg-card px-3.5 py-2.5"><div className="text-[12.5px] text-mute">還在等貨</div><div className={`num text-[18px] font-semibold ${waitGroups.length ? "text-warn" : ""}`}>{waitGroups.length} 位</div></div>
+          </div>
+          {readyGroups.length > 0 && <div className="space-y-3">{readyGroups.map(card)}</div>}
+          {waitGroups.length > 0 && (
+            // 還不能出的（一件都還沒到）收在下面：先看名字和缺什麼，要硬出再點開
+            <details className="group rounded-xl border border-line bg-card" data-testid="ship-waiting">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                <span className="min-w-0">
+                  <span className="text-[15px] font-semibold">還在等貨（{waitGroups.length} 位）</span>
+                  <span className="mt-0.5 block truncate text-[13px] text-mute">{waitGroups.map((g) => `${g.buyer.name} ${g.items.reduce((a, i) => a + i.qty - i.cancelledQtyCache - i.shippedQtyCache, 0)} 件`).join("、")}</span>
+                </span>
+                <span className="shrink-0 text-[13px] text-ai group-open:hidden">點開</span>
+                <span className="hidden shrink-0 text-[13px] text-ai group-open:inline">收起</span>
+              </summary>
+              <div className="space-y-3 border-t border-line-2 p-3">{waitGroups.map(card)}</div>
+            </details>
+          )}
+        </>
       )}
     </>
   );

@@ -42,11 +42,11 @@ export function CancelOrderButton({ orderId, orderNo }: { orderId: string; order
   );
 }
 
-export function ConfirmOrderButton({ orderId }: { orderId: string }) {
+export function ConfirmOrderButton({ orderId, small, label = "確認訂單" }: { orderId: string; small?: boolean; label?: string }) {
   const { run, pending } = useRun();
   return (
-    <Button variant="primary" loading={pending} onClick={() => run(() => updateOrderMetaAction(orderId, { confirmation: "CONFIRMED" }), { success: "已確認訂單" })}>
-      確認訂單
+    <Button variant="primary" small={small} loading={pending} onClick={() => run(() => updateOrderMetaAction(orderId, { confirmation: "CONFIRMED" }), { success: "已確認訂單" })}>
+      {label}
     </Button>
   );
 }
@@ -358,5 +358,48 @@ export function RefundRowActions({ id, status }: { id: string; status: string })
         onConfirm={() => (reason.trim() ? run(() => voidRefundAction(id, reason), { success: "已作廢退款" }) : notify("請填寫作廢原因"))}
       />
     </div>
+  );
+}
+
+/** 標題列的「記收款」：待收一次收齊，選付款方式按確定就好（不用捲到下面的收款表單打金額） */
+export function QuickCollect({ orderId, balance }: { orderId: string; balance: number }) {
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ method: "轉帳", paidAt: toDateTimeInput(new Date()), reference: "" });
+  const { run, pending } = useRun();
+  const idem = useIdemKey();
+  if (balance <= 0) return null;
+  return (
+    <>
+      <Button variant="primary" onClick={() => setOpen(true)} data-testid="quick-collect">記收款 {formatTwd(balance)}</Button>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={`收齊 ${formatTwd(balance)}`}
+        footer={
+          <Button
+            variant="primary"
+            loading={pending}
+            onClick={() =>
+              run(() => addPaymentAction({ orderId, amount: balance, paidAt: f.paidAt, method: f.method, reference: f.reference || null, note: null, dedupeKey: idem.key }), {
+                success: `已登記收款 ${formatTwd(balance)}`,
+                onOk: () => {
+                  idem.renew();
+                  setOpen(false);
+                },
+              })
+            }
+          >
+            確定收款 {formatTwd(balance)}
+          </Button>
+        }
+      >
+        <div className="grid gap-3">
+          <SelectField label="方式" value={f.method} onChange={(e) => setF({ ...f, method: e.target.value })} options={[["轉帳", "轉帳"], ["現金", "現金"], ["LINE Pay", "LINE Pay"], ["街口", "街口"], ["其他", "其他"]]} />
+          <DateTimeField label="付款時間" value={f.paidAt} onChange={(v) => setF({ ...f, paidAt: v })} />
+          <TextField label="識別資訊／備註（選填）" value={f.reference} placeholder="例：末五碼 12345" onChange={(e) => setF({ ...f, reference: e.target.value })} />
+          <p className="text-[12.5px] text-mute">只收一部分？到下面「收款紀錄」填實際金額。</p>
+        </div>
+      </Modal>
+    </>
   );
 }

@@ -50,6 +50,7 @@ export default async function BuyerPage({ params, searchParams }: { params: Prom
   const balance = confirmed.reduce((s, o) => s + o.balanceCache, 0);
   const refundDue = orders.reduce((s, o) => s + o.refundDueCache, 0);
   const receivable = confirmed.reduce((s, o) => s + o.receivableCache, 0);
+  const openOrders = confirmed.filter((o) => o.statusCache !== "CANCELLED" && (o.balanceCache > 0 || !["SHIPPED", "DELIVERED", "CANCELLED"].includes(o.shipStatusCache)));
 
   const timeline = [
     ...orders.map((o) => ({ at: o.orderedAt, text: `建立訂單 ${o.orderNo}（${o.items.map((i) => `${i.productNameSnapshot}×${i.qty}`).join("、")}）`, href: `/orders/${o.id}` })),
@@ -96,12 +97,12 @@ export default async function BuyerPage({ params, searchParams }: { params: Prom
         </p>
       )}
       <div className="stat-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-        <Stat label="有效訂單" value={confirmed.filter((o) => o.statusCache !== "CANCELLED").length} />
-        <Stat label="已取消訂單" value={cancelledOrders.length} />
-        <Stat label="累計應收" value={<Twd v={receivable} />} />
-        <Stat label="待收款" value={<Twd v={balance} />} tone={balance > 0 ? "warn" : undefined} />
-        <Stat label="待出貨件數" value={pendingShip} />
-        <Stat label="已出貨件數" value={shipped} />
+        <Stat label="有效訂單" value={confirmed.filter((o) => o.statusCache !== "CANCELLED").length} href={`/buyers/${id}?tab=orders`} />
+        <Stat label="已取消訂單" value={cancelledOrders.length} href={`/buyers/${id}?tab=orders`} />
+        <Stat label="累計應收" value={<Twd v={receivable} />} href={`/buyers/${id}?tab=money`} />
+        <Stat label="待收款" value={<Twd v={balance} />} tone={balance > 0 ? "warn" : undefined} href={`/buyers/${id}?tab=money`} />
+        <Stat label="待出貨件數" value={pendingShip} href={`/buyers/${id}?tab=items`} />
+        <Stat label="已出貨件數" value={shipped} href={`/buyers/${id}?tab=items`} />
       </div>
       {refundDue > 0 && <p className="rounded-lg bg-warn-soft px-4 py-2 text-sm text-warn">需退還這位買家 NT${refundDue.toLocaleString()}。</p>}
 
@@ -112,6 +113,29 @@ export default async function BuyerPage({ params, searchParams }: { params: Prom
           </Link>
         ))}
       </nav>
+
+      {tab === "overview" && openOrders.length > 0 && (
+        // 總覽最上面：還沒完成的訂單（還沒收齊錢或還沒出完貨），點了直接到那張單處理
+        <Section title={`還沒完成的訂單（${openOrders.length}）`} pad={false} actions={<LinkButton small href={`/orders?buyerId=${id}`}>在訂單列表看</LinkButton>}>
+          <ul className="divide-y divide-line-2" data-testid="buyer-open-orders">
+            {openOrders.map((o) => (
+              <li key={o.id}>
+                <Link href={`/orders/${o.id}`} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2.5 hover:bg-line-2">
+                  <span className="min-w-0">
+                    <span className="num font-medium text-ai">{o.orderNo}</span>
+                    <span className="ml-2 text-[13px] text-mute">{fmtDate(o.orderedAt)}</span>
+                    <span className="block truncate text-[13px] text-ink-2">{o.items.map((i) => `${i.productNameSnapshot}×${i.qty - i.cancelledQtyCache}`).join("、")}</span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    <StatusBadge map={shipStatus} value={o.shipStatusCache} />
+                    {o.balanceCache > 0 ? <span className="num text-[14px] font-medium text-warn">待收 {o.balanceCache.toLocaleString()}</span> : <span className="text-[13px] text-good">已收齊</span>}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
 
       {tab === "overview" && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[22rem_1fr]">

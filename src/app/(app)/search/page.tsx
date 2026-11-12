@@ -34,6 +34,23 @@ export default async function Search({ searchParams }: { searchParams: Promise<{
         select: { id: true, name: true, status: true, supplier: true, supplierOrderNo: true, notes: true, supplierRef: { select: { name: true } } },
       })
     : [];
+  // 客人與訂單：名稱、LINE 暱稱、別名、編號；訂單編號、來源單號（找客人不用先進買家頁）
+  const [buyersFound, ordersFound] = q
+    ? await Promise.all([
+        prisma.buyer.findMany({
+          where: { mergedIntoId: null, AND: words.map((w) => ({ OR: [{ name: { contains: w, mode: "insensitive" as const } }, { lineName: { contains: w, mode: "insensitive" as const } }, { code: { contains: w, mode: "insensitive" as const } }, { aliases: { some: { alias: { contains: w, mode: "insensitive" as const } } } }] })) },
+          orderBy: { updatedAt: "desc" },
+          take: 12,
+          select: { id: true, name: true, code: true, lineName: true, orders: { where: { confirmation: { not: "CANCELLED" } }, select: { balanceCache: true, shipStatusCache: true } } },
+        }),
+        prisma.order.findMany({
+          where: { OR: [{ orderNo: { contains: q, mode: "insensitive" } }, { externalRef: { contains: q, mode: "insensitive" } }] },
+          orderBy: { orderedAt: "desc" },
+          take: 12,
+          select: { id: true, orderNo: true, orderedAt: true, balanceCache: true, statusCache: true, buyer: { select: { name: true } } },
+        }),
+      ])
+    : [[], []];
   const ids = products.map((p) => p.id);
   const owner = await viewOwner();
   const [inv, val, operators] = await Promise.all([ids.length ? tx((t) => inventoryFor(t, ids, owner)) : new Map(), ids.length ? stockValuation(prisma, ids, owner) : null, tx((t) => listOperators(t, { includeInactive: true }))]);
@@ -43,14 +60,50 @@ export default async function Search({ searchParams }: { searchParams: Promise<{
     <div className="space-y-3">
       <PageHeader title="搜尋" />
       <form method="get" role="search">
-        <input type="search" name="q" defaultValue={q} autoFocus placeholder="角色、商品、訂單編號、團名" aria-label="搜尋商品" className="w-full rounded-xl border border-field bg-card px-4 py-3 text-[16px]" />
+        <input type="search" name="q" defaultValue={q} autoFocus placeholder="客人、訂單編號、角色、商品、團名" aria-label="搜尋商品" className="w-full rounded-xl border border-field bg-card px-4 py-3 text-[16px]" />
       </form>
       {!q ? (
         <p className="text-sm text-mute">可以打多個字，用空白分開，例：「ANA 兔兔」。</p>
-      ) : products.length === 0 && batches.length === 0 ? (
+      ) : products.length === 0 && batches.length === 0 && buyersFound.length === 0 && ordersFound.length === 0 ? (
         <Empty>找不到「{q}」。</Empty>
       ) : (
         <>
+        {buyersFound.length > 0 && (
+          <section aria-label="客人" data-testid="search-buyers">
+            <h2 className="mb-1 text-[13px] font-semibold text-mute">客人（{buyersFound.length}）</h2>
+            <ul className="divide-y divide-line-2 overflow-hidden rounded-xl border border-line bg-card">
+              {buyersFound.map((b) => {
+                const due = b.orders.reduce((a, o) => a + Math.max(0, o.balanceCache), 0);
+                const open = b.orders.filter((o) => !["SHIPPED", "DELIVERED", "CANCELLED"].includes(o.shipStatusCache)).length;
+                return (
+                  <li key={b.id} className="flex items-center gap-2 pr-3">
+                    <Link href={`/buyers/${b.id}`} className="min-w-0 flex-1 px-4 py-2.5 hover:bg-line-2">
+                      <div className="font-semibold">{b.name}</div>
+                      <div className="text-[12px] text-mute">{b.code}{b.lineName ? `｜LINE：${b.lineName}` : ""}{open ? `｜${open} 張還沒出貨` : ""}</div>
+                    </Link>
+                    {due > 0 && <span className="num shrink-0 text-[14px] font-medium text-warn">待收 {formatTwd(due)}</span>}
+                    <Link href={`/orders/new?buyerId=${b.id}`} className="shrink-0 rounded-lg border border-line px-2.5 py-1.5 text-[13px] hover:bg-line-2">新增訂單</Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+        {ordersFound.length > 0 && (
+          <section aria-label="訂單" data-testid="search-orders">
+            <h2 className="mb-1 text-[13px] font-semibold text-mute">訂單（{ordersFound.length}）</h2>
+            <ul className="divide-y divide-line-2 overflow-hidden rounded-xl border border-line bg-card">
+              {ordersFound.map((o) => (
+                <li key={o.id}>
+                  <Link href={`/orders/${o.id}`} className="flex items-center justify-between gap-2 px-4 py-2.5 hover:bg-line-2">
+                    <span><span className="num font-semibold">{o.orderNo}</span><span className="ml-2 text-[13px] text-ink-2">{o.buyer.name}</span></span>
+                    <span className="text-[13px]">{o.balanceCache > 0 ? <span className="num text-warn">待收 {formatTwd(o.balanceCache)}</span> : <span className="text-mute">{o.statusCache === "CANCELLED" ? "已取消" : "已收齊"}</span>}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         {batches.length > 0 && (
           <section aria-label="採購團" data-testid="search-batches">
             <h2 className="mb-1 text-[13px] font-semibold text-mute">採購團（{batches.length}）</h2>

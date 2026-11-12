@@ -1,4 +1,5 @@
 "use client";
+import { ConfirmOrderButton } from "./[id]/parts";
 import { createContext, useContext, useState } from "react";
 import { DateTimeField, Modal, SelectField, useIdemKey } from "@/components/client";
 import { toDateTimeInput } from "@/lib/labels";
@@ -109,8 +110,8 @@ export function RowCheck({ id, label = "選取訂單" }: { id: string; label?: s
 
 type ShipGroup = { buyerId: string; buyer: string; ok: { id: string; orderNo: string; qty: number }[]; skip: { id: string; orderNo: string; reason: string }[] };
 
-/** 勾好的訂單一次出貨：同一位客人併成一包；貨不夠的先不出 */
-function BulkShip({ ids, methods, onDone }: { ids: string[]; methods: string[]; onDone: () => void }) {
+/** 勾好的訂單一次出貨：同一位客人併成一包；貨不夠的先不出。label／primary：首頁「可以出貨」那一列直接出用 */
+export function BulkShip({ ids, methods, onDone, label = "出貨", primary }: { ids: string[]; methods: string[]; onDone?: () => void; label?: string; primary?: boolean }) {
   const { run, pending } = useRun();
   const idem = useIdemKey();
   const [groups, setGroups] = useState<ShipGroup[] | null>(null);
@@ -123,7 +124,7 @@ function BulkShip({ ids, methods, onDone }: { ids: string[]; methods: string[]; 
   const okQty = okBuyers.reduce((a, g) => a + g.ok.reduce((b, o) => b + o.qty, 0), 0);
   return (
     <>
-      <Button small disabled={!ids.length} onClick={open}>出貨</Button>
+      <Button small variant={primary ? "primary" : "default"} disabled={!ids.length} onClick={open}>{label}</Button>
       <Modal
         open={groups !== null}
         onClose={() => setGroups(null)}
@@ -139,7 +140,7 @@ function BulkShip({ ids, methods, onDone }: { ids: string[]; methods: string[]; 
                 onOk: () => {
                   setGroups(null);
                   idem.renew();
-                  onDone();
+                  onDone?.();
                 },
               })
             }
@@ -176,7 +177,7 @@ function BulkShip({ ids, methods, onDone }: { ids: string[]; methods: string[]; 
 type PayRow = { id: string; orderNo: string; buyer: string; amount: number; reason: string | null };
 
 /** 勾好的訂單一次收款：每張的待收記一筆；已付清的跳過 */
-function BulkPay({ ids, onDone }: { ids: string[]; onDone: () => void }) {
+export function BulkPay({ ids, onDone, label = "收款", primary }: { ids: string[]; onDone?: () => void; label?: string; primary?: boolean }) {
   const { run, pending } = useRun();
   const idem = useIdemKey();
   const [rows, setRows] = useState<PayRow[] | null>(null);
@@ -189,7 +190,7 @@ function BulkPay({ ids, onDone }: { ids: string[]; onDone: () => void }) {
   const total = due.reduce((a, r) => a + r.amount, 0);
   return (
     <>
-      <Button small disabled={!ids.length} onClick={open}>收款</Button>
+      <Button small variant={primary ? "primary" : "default"} disabled={!ids.length} onClick={open}>{label}</Button>
       <Modal
         open={rows !== null}
         onClose={() => setRows(null)}
@@ -205,7 +206,7 @@ function BulkPay({ ids, onDone }: { ids: string[]; onDone: () => void }) {
                 onOk: () => {
                   setRows(null);
                   idem.renew();
-                  onDone();
+                  onDone?.();
                 },
               })
             }
@@ -229,5 +230,17 @@ function BulkPay({ ids, onDone }: { ids: string[]; onDone: () => void }) {
         </div>
       </Modal>
     </>
+  );
+}
+
+/** 訂單列表每一張的「下一步」：待確認 → 確認；到貨可以出 → 出貨；還沒收齊 → 收款（跟勾選後一次出貨、收款同一套） */
+export function RowActions({ id, pendingConfirm, ready, due, methods }: { id: string; pendingConfirm: boolean; ready: boolean; due: boolean; methods: string[] }) {
+  if (!pendingConfirm && !ready && !due) return null;
+  return (
+    <span className="flex flex-wrap justify-end gap-1.5" data-testid="row-actions">
+      {due && !pendingConfirm && <BulkPay ids={[id]} label="收款" />}
+      {ready && <BulkShip ids={[id]} methods={methods} label="出貨" primary />}
+      {pendingConfirm && <ConfirmOrderButton orderId={id} small label="確認" />}
+    </span>
   );
 }

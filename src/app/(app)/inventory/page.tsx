@@ -55,7 +55,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
     <div className="space-y-4">
       <PageHeader title={tab === "batches" ? "採購團、收貨" : "庫存"} sub={tab === "batches" ? "每一次跟代購下單、付款、到貨" : tab === "stock" ? "手上有多少、還會到多少、客人訂了多少" : undefined} actions={<><LinkButton href="/purchase" primary small>＋ 新增採購</LinkButton><LinkButton href="/api/export/inventory" small>匯出</LinkButton></>} />
       <NavSelect label="頁面" hideLabel options={TABS.map(([k, l]) => ({ label: l, href: `/inventory?tab=${k}` }))} current={`/inventory?tab=${tab}`} />
-      {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} owner={owner} kind={sp.kind} v={sp.v} hideUnsure={sp.unsure === "0"} />}
+      {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} owner={owner} kind={sp.kind} v={sp.v} hideUnsure={sp.only === "unsure" ? sp.unsure === "0" : sp.unsure !== "1"} />}
       {tab === "demand" && <DemandTab owner={owner} />}
       {tab === "batches" && <BatchesTab cat={sp.cat} open={sp.open} owner={owner} confirm={sp.confirm} view={sp.view} pay={sp.pay} late={sp.late} settle={sp.settle} transit={sp.transit} />}
       {tab === "receive" && <ReceiveTab productId={sp.productId} />}
@@ -249,12 +249,12 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
     for (const [key, val] of Object.entries({ kind, cat, type, q })) if (val) sp.set(key, val);
     return `/inventory?${sp.toString()}`;
   })();
-  // 「不一定」欄（還在等代購確認的）：預設顯示，按一下可以藏起來（只在這次網址有效）
+  // 「不一定」欄（還在等代購確認的）：預設藏起來，只看確定的；按一下可以顯示（只在這次網址有效）。篩選「預購・不一定」時才預設顯示
   const COLS = hideUnsure ? 8 : 9;
   const unsureHref = (() => {
     const sp = new URLSearchParams({ tab: "stock", v: "1" });
     for (const [key, val] of Object.entries({ kind, cat, type, q, only })) if (val) sp.set(key, val);
-    if (!hideUnsure) sp.set("unsure", "0");
+    sp.set("unsure", hideUnsure ? "1" : "0");
     return `/inventory?${sp.toString()}`;
   })();
   const buyerNames = await prisma.buyer.findMany({ where: { mergedIntoId: null }, orderBy: { updatedAt: "desc" }, take: 200, select: { name: true } });
@@ -297,7 +297,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
               {tree.map((k) => (
                 <Fragment key={k.key}>
                   {showKind && (
-                    <tr className="bg-ink text-on-fill">
+                    <tr className="bg-line-2 text-ink">
                       <td colSpan={COLS} className="px-3 py-1.5 text-[14px] font-semibold" data-testid="stock-kind">{k.label}</td>
                     </tr>
                   )}
@@ -551,7 +551,8 @@ async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, lat
                 {b.status !== "CANCELLED" && (
                   <span className="absolute bottom-2 left-2 z-10 flex gap-1.5" data-testid="card-actions">
                     {(pay.get(b.id)?.dueTwd ?? 0) > 0 && <PayOffButton batchId={b.id} due={pay.get(b.id)!.dueTwd} operators={opOpts} defaultPayer={b.ownership === "JOINT" ? meId : (b.orderedById ?? meId)} />}
-                    {(lateFilter === "1" || transit === "1") && rec < ordered && <span className="w-24"><ReceiveAllButton batchId={b.id} outstanding={ordered - rec} operators={opOpts} defaultReceiver={b.orderedById ?? meId} /></span>}
+                    {/* 代購寄出了、已經到一部分、或超過預計到貨的團：卡片上直接「全部到了」（不用先篩選、也不用點進團裡） */}
+                    {rec < ordered && !isStoreKind(b.supplierRef?.kind) && (lateFilter === "1" || transit === "1" || b.progress === "SHIPPED" || rec > 0 || late) && <span className="w-24"><ReceiveAllButton batchId={b.id} outstanding={ordered - rec} operators={opOpts} defaultReceiver={b.orderedById ?? meId} /></span>}
                   </span>
                 )}
                 <span className="absolute right-2 bottom-2 z-10"><DeleteBatchButton batchId={b.id} name={b.name} paid={pay.get(b.id)?.paidTwd ?? 0} received={rec} items={b.items.length} qty={b.items.reduce((x, i) => x + i.qty - i.cancelledQty, 0)} /></span>
@@ -589,7 +590,7 @@ async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, lat
                         {p && p.totalTwd > 0 && (
                           <div className="mt-1 flex items-baseline justify-between text-[13px]" data-testid="batch-card-money">
                             <span className="text-ink-2">總額 <span className="num font-semibold">{formatTwd(p.totalTwd)}</span></span>
-                            {b.status === "CANCELLED" ? <span className={p.paidTwd > 0 ? "font-semibold text-bad" : "text-mute"}>已取消{p.paidTwd > 0 ? `，代購要退 ${formatTwd(p.paidTwd)}` : ""}</span> : p.paidTwd > p.totalTwd ? <span className="num font-semibold text-bad" data-testid="batch-refund">代購要退 {formatTwd(p.paidTwd - p.totalTwd)}</span> : p.dueTwd > 0 ? <span className="num font-semibold text-bad">還要付 {formatTwd(p.dueTwd)}</span> : <span className="text-good">✓ 已付清</span>}
+                            {b.status === "CANCELLED" ? <span className={p.paidTwd > 0 ? "font-semibold text-bad" : "text-mute"}>已取消{p.paidTwd > 0 ? `，代購要退 ${formatTwd(p.paidTwd)}` : ""}</span> : p.paidTwd > p.totalTwd ? <span className="num font-semibold text-bad" data-testid="batch-refund">代購要退 {formatTwd(p.paidTwd - p.totalTwd)}</span> : p.dueTwd > 0 ? <span className="num font-semibold text-warn">還要付 {formatTwd(p.dueTwd)}</span> : <span className="text-good">✓ 已付清</span>}
                           </div>
                         )}
                         <div className="mt-0.5 text-[12px] text-mute">
@@ -599,7 +600,7 @@ async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, lat
                       </>
                     );
                   })()}
-                  {b.expectedAt && <div className={`mt-1 text-[12px] ${late ? "text-bad" : "text-mute"}`}>預計到貨 {fmtDay(b.expectedAt)}{late ? "（已超過）" : ""}</div>}
+                  {b.expectedAt && <div className={`mt-1 text-[12px] ${late ? "text-warn" : "text-mute"}`}>預計到貨 {fmtDay(b.expectedAt)}{late ? "（已超過）" : ""}</div>}
                 </Link>
               </li>
               </Fragment>

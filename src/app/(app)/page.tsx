@@ -17,6 +17,8 @@ import { formatTwd } from "@/lib/money";
 import { PushStatusChip } from "@/components/push-setup";
 import { vapidPublicKey } from "@/server/push";
 import { relativeDay, taipeiParts } from "@/lib/taipei";
+import { BulkShip } from "./orders/bulk";
+import { listShippingMethods } from "@/server/services/shipping-methods";
 
 export const metadata = { title: "首頁" };
 
@@ -52,27 +54,35 @@ export default async function Home() {
   const refundTotal = refunds.reduce((s, r) => s + r.owed, 0);
   const m = vk === "all" ? sales.total : (() => { const x = sales.byOwner[vk] ?? { qty: 0, revenue: 0, cost: 0 }; return { profit: x.revenue - x.cost }; })();
 
-  const todo = [
-    { n: rec.todo.length, text: "團還沒對單", href: "/reconcile?open=todo" },
-    { n: refunds.length, text: "團被砍單、代購還沒退錢", href: "/reconcile?open=refund" },
-    { n: dueBatches.length, text: "團還沒付清", href: "/inventory?tab=batches&open=0&pay=due" },
-    { n: unsettled.length, text: "團合資還沒結清", href: unsettled.length === 1 ? `/inventory/batches/${unsettled[0].id}` : "/inventory?tab=batches&settle=1" },
-    { n: overdue, text: "團超過預計到貨日", href: "/inventory?tab=batches&late=1" },
-    { n: transit, text: "團代購寄出了，到了記得登記收到", href: "/inventory?tab=batches&transit=1" },
-    { n: ready.orderIds.length, text: "張訂單到貨了，可以出貨", href: "/orders?ready=1" },
-    { n: short.length, text: "項商品客人訂的比庫存多", href: "/inventory?tab=stock&v=1&only=short" },
-    { n: pre.unassigned, text: "件客人預訂還沒分是跟誰訂的", href: "/inventory?tab=stock&v=1&only=unassigned" },
+  // 要處理的事：照做事的地方分三組；每一項點了直接到那份清單（「可以出貨」在這裡就能一次出）
+  type Todo = { n: number; text: string; href: string; group: "buy" | "order" | "stock"; ship?: true };
+  const todoAll: Todo[] = [
+    { n: rec.todo.length, text: "團還沒對單", href: "/reconcile?open=todo", group: "buy" },
+    { n: refunds.length, text: "團被砍單、代購還沒退錢", href: "/reconcile?open=refund", group: "buy" },
+    { n: dueBatches.length, text: "團還沒付清", href: "/inventory?tab=batches&open=0&pay=due", group: "buy" },
+    { n: unsettled.length, text: "團合資還沒結清", href: unsettled.length === 1 ? `/inventory/batches/${unsettled[0].id}` : "/inventory?tab=batches&settle=1", group: "buy" },
+    { n: overdue, text: "團超過預計到貨日", href: "/inventory?tab=batches&late=1", group: "buy" },
+    { n: transit, text: "團代購寄出了，到了記得登記收到", href: "/inventory?tab=batches&transit=1", group: "buy" },
+    { n: ready.orderIds.length, text: "張訂單到貨了，可以出貨", href: "/orders?ready=1", group: "order", ship: true },
+    { n: short.length, text: "項商品客人訂的比庫存多", href: "/inventory?tab=stock&v=1&only=short", group: "stock" },
+    { n: pre.unassigned, text: "件客人預訂還沒分是跟誰訂的", href: "/inventory?tab=stock&v=1&only=unassigned", group: "stock" },
     // 有接單時「張訂單還沒收款」已經包含現貨出售的，不重複列
-    ...(usesOrders ? [] : [{ n: unpaidSales._count, text: "筆賣出還沒收到錢", href: "/orders?due=1&source=QUICK" }]),
+    ...(usesOrders ? [] : [{ n: unpaidSales._count, text: "筆賣出還沒收到錢", href: "/orders?due=1&source=QUICK", group: "order" as const }]),
     ...(usesOrders
       ? [
-          { n: d.pendingConfirm, text: "張訂單待確認", href: "/orders?status=PENDING_CONFIRM" },
-          { n: d.unpaidOrders, text: "張訂單還沒收款", href: "/orders?due=1" },
-          { n: d.refundPending + d.refundUnscheduled, text: "筆退款要處理", href: "/payments?tab=refunds" },
-          { n: d.needProducts, text: "項商品客人訂了還沒買", href: "/inventory?tab=demand" },
+          { n: d.pendingConfirm, text: "張訂單待確認", href: "/orders?status=PENDING_CONFIRM", group: "order" as const },
+          { n: d.unpaidOrders, text: "張訂單還沒收款", href: "/orders?due=1", group: "order" as const },
+          { n: d.refundPending + d.refundUnscheduled, text: "筆退款要處理", href: "/payments?tab=refunds", group: "order" as const },
+          { n: d.needProducts, text: "項商品客人訂了還沒買", href: "/inventory?tab=demand", group: "stock" as const },
         ]
       : []),
-  ].filter((x) => x.n > 0);
+  ];
+  const todo = todoAll.filter((x) => x.n > 0);
+  // 先做的排前面：可以出貨 → 收錢 → 確認訂單 → 付代購 → 收貨 → 其他；只先秀最急的 3 件，其他收在「還有幾件不急的」
+  const PRIORITY = ["張訂單到貨了，可以出貨", "張訂單還沒收款", "筆賣出還沒收到錢", "張訂單待確認", "團還沒付清", "團代購寄出了，到了記得登記收到", "團超過預計到貨日", "筆退款要處理", "團被砍單、代購還沒退錢", "團還沒對單", "團合資還沒結清", "項商品客人訂的比庫存多", "項商品客人訂了還沒買", "件客人預訂還沒分是跟誰訂的"];
+  todo.sort((a, b) => PRIORITY.indexOf(a.text) - PRIORITY.indexOf(b.text));
+  const TOP = 3;
+  const methods = ready.orderIds.length ? (await listShippingMethods(prisma)).map((x) => x.name) : [];
 
   // 金額：一排共用一個外框（細線分格）；還欠的用杏色，賺的用綠色，紅色只留給賠錢
   const stat = (label: string, value: number, href: string, tone: "owe" | "good", testid: string) => (
@@ -85,39 +95,68 @@ export default async function Home() {
   return (
     <div className="space-y-4">
       <h1 className="sr-only">首頁</h1>
+      {/* 找客人、訂單、商品、採購團：在首頁直接打 */}
+      <form action="/search" method="get" role="search" className="relative">
+        <span aria-hidden className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-mute"><Icon name="search" /></span>
+        <input type="search" name="q" aria-label="搜尋客人、訂單、商品" placeholder="找客人、訂單編號、商品、採購團" className="min-h-12 w-full rounded-xl border border-field bg-card pr-3 pl-10 text-[16px] text-ink placeholder:text-mute" />
+      </form>
       <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap" data-tour="home-actions">
         <Link href="/purchase" className="inline-flex min-h-12 items-center justify-center rounded-xl bg-ai px-5 text-[16px] font-semibold text-on-fill transition-colors duration-150 hover:bg-ai-2 md:min-h-11">＋ 新增採購</Link>
         <Link href="/sell" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-line bg-card px-5 text-[16px] font-semibold transition-colors duration-150 hover:bg-line-2 md:min-h-11">賣給客人</Link>
       </div>
-      {/* 手機：金額 → 要處理的事 → 搶購；電腦：左邊要處理的事，右邊金額與搶購 */}
+      {/* 手機：要處理的事 → 錢 → 搶購；電腦：左邊要處理的事，右邊錢與搶購 */}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-[auto_1fr] lg:items-start">
-        <div className="stat-grid grid grid-cols-2 lg:col-start-2 lg:row-start-1" data-tour="home-stats">
-          {stat("還要付代購", dueTotal, "/inventory?tab=batches&open=0&pay=due", "owe", "home-due")}
-          {stat("代購要退", refundTotal, "/reconcile?open=refund", "owe", "home-refund")}
-          {stat("本月賺", m.profit, "/sales", "good", "home-profit")}
-          {stat("預訂預估可賺", pre.profit, "/sales#preorder", "good", "home-preorder")}
-        </div>
-
         <section aria-label="要處理的事" className="lg:col-start-1 lg:row-span-2 lg:row-start-1">
-          <h2 className="mb-2 flex items-baseline gap-2 text-[15px] font-semibold">
+          <h2 className="mb-2 flex items-baseline justify-between gap-2 text-[15px] font-semibold">
             要處理的事
-            {todo.length > 0 && <span className="num text-[13px] font-normal text-mute">{todo.length} 項</span>}
+            {todo.length > TOP && <span className="text-[13px] font-normal text-mute">最急的 {TOP} 件</span>}
           </h2>
           {todo.length === 0 ? (
             <p className="rounded-xl border border-line bg-card px-4 py-4 text-center text-[14px] text-good" data-testid="home-todo-empty">都處理好了</p>
           ) : (
-            <ul className="divide-y divide-line-2 overflow-hidden rounded-xl border border-line bg-card" data-testid="home-todo" data-tour="home-todo">
-              {todo.map((t) => (
-                <li key={t.href + t.text}>
-                  <Link href={t.href} className="flex min-h-12 items-center gap-3 px-3.5 py-2.5 transition-colors duration-150 hover:bg-line-2">
-                    <span className="num w-8 shrink-0 text-right text-[17px] font-semibold text-ink">{t.n}</span>
-                    <span className="flex-1 text-[15px] text-ink-2">{t.text}</span>
-                    <span aria-hidden className="text-mute"><Icon name="chevronRight" /></span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <div className="overflow-hidden rounded-xl border border-line bg-card" data-testid="home-todo" data-tour="home-todo">
+              {(() => {
+                const row = (t: Todo) => (
+                  <li key={t.href + t.text} className="flex items-center">
+                    <Link href={t.href} className="flex min-h-13 min-w-0 flex-1 items-center gap-3 px-3.5 py-3 transition-colors duration-150 hover:bg-line-2">
+                      <span className="num w-8 shrink-0 text-right text-[19px] font-semibold text-ink">{t.n}</span>
+                      <span className="min-w-0 flex-1 text-[15px] text-ink-2">{t.text}</span>
+                      {!t.ship && <span aria-hidden className="text-mute"><Icon name="chevronRight" /></span>}
+                    </Link>
+                    {/* 可以出貨：在首頁直接一次出（同一位客人併一包，先看一下再按確定） */}
+                    {t.ship && <span className="shrink-0 pr-3"><BulkShip ids={ready.orderIds} methods={methods} label="出貨" primary /></span>}
+                  </li>
+                );
+                const rest = todo.slice(TOP);
+                return (
+                  <>
+                    <ul className="divide-y divide-line-2">{todo.slice(0, TOP).map(row)}</ul>
+                    {rest.length > 0 && (
+                      <details className="group border-t border-line-2" data-testid="home-todo-more">
+                        <summary className="flex min-h-11 cursor-pointer list-none items-center px-3.5 text-[14px] text-ai hover:bg-line-2 [&::-webkit-details-marker]:hidden">
+                          <span className="group-open:hidden">還有 {rest.length} 件不急的</span>
+                          <span className="hidden group-open:inline">收起</span>
+                        </summary>
+                        <ul className="divide-y divide-line-2 border-t border-line-2">{rest.map(row)}</ul>
+                      </details>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
           )}
+        </section>
+
+        {/* 錢：最常看的兩個放大；代購要退、預訂預估可賺放下面一行小字（點了一樣到明細） */}
+        <section aria-label="錢" className="lg:col-start-2 lg:row-start-1" data-tour="home-stats">
+          <div className="stat-grid grid grid-cols-2">
+            {stat("還要付代購", dueTotal, "/inventory?tab=batches&open=0&pay=due", "owe", "home-due")}
+            {stat("本月賺", m.profit, "/sales", "good", "home-profit")}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 px-1 text-[13px] text-mute">
+            <Link href="/reconcile?open=refund" className="hover:text-ink">代購要退 <span className={`num font-medium ${refundTotal ? "text-warn" : "text-ink-2"}`} data-testid="home-refund">{formatTwd(refundTotal)}</span></Link>
+            <Link href="/sales#preorder" className="hover:text-ink">預訂預估可賺 <span className={`num font-medium ${pre.profit < 0 ? "text-bad" : "text-good"}`} data-testid="home-preorder">{formatTwd(pre.profit)}</span></Link>
+          </div>
         </section>
 
         <section className="flex items-center justify-between gap-2 rounded-xl border border-line bg-card px-3.5 py-2.5 lg:col-start-2 lg:row-start-2" aria-label="搶購提醒" data-testid="home-rush">

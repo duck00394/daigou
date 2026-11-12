@@ -1,6 +1,6 @@
 // 手機：一個畫面新增採購（活動 → 哪一團 → 買了什麼），三團分別是我的、對方的、合資；活動總表看總額、各團與誰買的
 import { test, expect, type Page } from "@playwright/test";
-import { login, toast, pickIp, newSupplierPick, openSeries, openMore, pickSupplier, openSeriesPage, choose, chosen, pickChar } from "./helpers";
+import { openAllTodos, login, toast, pickIp, newSupplierPick, openSeries, openMore, pickSupplier, openSeriesPage, choose, chosen, pickChar } from "./helpers";
 
 async function addRow(page: Page, character: string, price: string, qty: string, paid?: string) {
   await pickIp(page);
@@ -111,6 +111,7 @@ test("手機：同一活動開三團（我的、對方的、合資），總表�
   // 首頁：還要付代購（三團都還沒付）；待辦「還沒付清」按了到篩好的採購團
   await page.goto("/");
   await expect(page.getByTestId("home-due")).not.toHaveText("NT$0");
+  await openAllTodos(page);
   await page.getByTestId("home-todo").getByRole("link", { name: /團還沒付清/ }).click();
   await expect(page.getByTestId("batch-filter-chip")).toContainText("還沒付清");
   await expect(page.getByTestId("batch-card").filter({ hasText: `YUANS ${tag}` })).toBeVisible();
