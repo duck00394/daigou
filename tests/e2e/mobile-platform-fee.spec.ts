@@ -18,7 +18,10 @@ test("手機：販售平台抽成設定", async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId("platform-fees").getByLabel(`${name} 抽幾 %`)).toHaveValue("2");
   // 清空＝不抽
-  await page.getByTestId("platform-fees").getByLabel(`${name} 抽幾 %`).fill("");
-  await page.getByTestId("platform-fees").getByLabel(`${name} 抽幾 %`).press("Enter");
+  await page.waitForLoadState("networkidle"); // 重新整理後等畫面接好再打字
+  const p2 = page.getByTestId("platform-fees").getByLabel(`${name} 抽幾 %`);
+  await p2.fill("");
+  await p2.press("Enter");
   await toast(page, `${name} 不抽`);
+  await expect(page.getByTestId("platform-fees").getByLabel(`${name} 抽幾 %`)).toHaveValue("0"); // 留在清單裡
 });

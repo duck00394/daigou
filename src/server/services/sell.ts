@@ -32,7 +32,7 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
   const key = `sell:${input.idemKey}`;
   const done = async () => {
     const dup = await t.auditLog.findFirst({ where: { action: "sell.create", entityId: key } });
-    return dup ? { ...(dup.data as { sold: number; preordered: number; total: number }), duplicated: true } : null;
+    return dup ? { platformFee: 0, ...(dup.data as { sold: number; preordered: number; total: number; platformFee?: number }), duplicated: true } : null;
   };
   const groupBuyId = input.groupBuyId || null;
   // 運費（例：賣貨便 38）：整筆只收一次，記在預訂那張；沒有預訂就記在第一張現貨單
