@@ -89,3 +89,85 @@ export async function pickedUp(t: Tx, actor: Actor, input: { orderId: string; at
   }
   return { paid };
 }
+
+/** 多張訂單一次出貨（看一下）：同一位客人併成一包；貨不夠的那張先不出 */
+export async function bulkShipPreview(t: Tx, orderIds: string[]) {
+  const orders = await t.order.findMany({ where: { id: { in: orderIds } }, orderBy: { orderedAt: "asc" }, select: { id: true, orderNo: true, confirmation: true, buyerId: true, buyer: { select: { name: true } } } });
+  const groups = new Map<string, { buyerId: string; buyer: string; ok: { id: string; orderNo: string; qty: number }[]; skip: { id: string; orderNo: string; reason: string }[] }>();
+  for (const o of orders) {
+    const g = groups.get(o.buyerId) ?? { buyerId: o.buyerId, buyer: o.buyer.name, ok: [], skip: [] };
+    groups.set(o.buyerId, g);
+    if (o.confirmation !== "CONFIRMED") {
+      g.skip.push({ id: o.id, orderNo: o.orderNo, reason: o.confirmation === "CANCELLED" ? "已取消" : "還沒確認" });
+      continue;
+    }
+    const st = await packState(t, o.id);
+    if (!st.length) {
+      g.skip.push({ id: o.id, orderNo: o.orderNo, reason: "沒有要出的" });
+      continue;
+    }
+    const short = st.filter((l) => !l.canPack);
+    if (short.length) g.skip.push({ id: o.id, orderNo: o.orderNo, reason: short.map((l) => `${l.name}還差 ${l.short} 件`).join("、") });
+    else g.ok.push({ id: o.id, orderNo: o.orderNo, qty: st.reduce((a, l) => a + l.pending, 0) });
+  }
+  return [...groups.values()];
+}
+
+/** 多張訂單一次出貨：可以出的照客人併成一包（勾到的算備齊）；貨不夠的跳過 */
+export async function bulkShip(t: Tx, actor: Actor, input: { orderIds: string[]; method?: string | null; shippedAt?: Date; dedupeKey: string }) {
+  const groups = await bulkShipPreview(t, input.orderIds);
+  let buyers = 0;
+  let qty = 0;
+  const skipped = groups.flatMap((g) => g.skip);
+  for (const g of groups) {
+    if (!g.ok.length) continue;
+    const key = `${input.dedupeKey}:${g.buyerId}`;
+    if (await t.shipment.findUnique({ where: { dedupeKey: key } })) continue;
+    const lines: { orderItemId: string; qty: number }[] = [];
+    for (const o of g.ok) {
+      // 前面的單已經用掉貨了：再看一次，不夠的這張先不出
+      const st = await packState(t, o.id);
+      const short = st.filter((l) => !l.canPack);
+      if (short.length) {
+        skipped.push({ id: o.id, orderNo: o.orderNo, reason: short.map((l) => `${l.name}還差 ${l.short} 件`).join("、") });
+        continue;
+      }
+      for (const l of st) {
+        if (!l.packed) await updateItem(t, actor, l.id, { packFlag: "READY" });
+        const need = l.pending - l.reserved;
+        if (need > 0) await reserveForItem(t, actor, { orderItemId: l.id, qty: need, owner: l.ownerKey });
+        lines.push({ orderItemId: l.id, qty: l.pending });
+      }
+    }
+    if (!lines.length) continue;
+    await createShipment(t, actor, { buyerId: g.buyerId, method: input.method, shippedAt: input.shippedAt, items: lines, autoReserve: false, dedupeKey: key });
+    buyers++;
+    qty += lines.reduce((a, l) => a + l.qty, 0);
+  }
+  if (!buyers && !groups.some((g) => g.ok.length)) throw new BizError("勾的訂單都沒辦法出貨（貨不夠、已取消或沒有要出的）");
+  return { buyers, qty, skipped };
+}
+
+/** 多張訂單一次收款（看一下）：每張的待收；已付清、已取消的跳過 */
+export async function bulkPayPreview(t: Tx, orderIds: string[]) {
+  const orders = await t.order.findMany({ where: { id: { in: orderIds } }, orderBy: { orderedAt: "asc" }, select: { id: true, orderNo: true, confirmation: true, balanceCache: true, buyer: { select: { name: true } } } });
+  return orders.map((o) => ({ id: o.id, orderNo: o.orderNo, buyer: o.buyer.name, amount: o.confirmation === "CANCELLED" ? 0 : o.balanceCache, reason: o.confirmation === "CANCELLED" ? "已取消" : o.balanceCache <= 0 ? "已付清" : null }));
+}
+
+/** 多張訂單一次收款：每張記一筆「待收」的金額 */
+export async function bulkPay(t: Tx, actor: Actor, input: { orderIds: string[]; method?: string | null; paidAt?: Date; dedupeKey: string }) {
+  let count = 0;
+  let total = 0;
+  for (const o of await t.order.findMany({ where: { id: { in: input.orderIds } }, select: { id: true } })) {
+    const key = `${input.dedupeKey}:${o.id}`;
+    if (await t.payment.findUnique({ where: { dedupeKey: key } })) continue;
+    const r = await recomputeOrder(t, o.id);
+    const ord = await t.order.findUniqueOrThrow({ where: { id: o.id }, select: { confirmation: true } });
+    if (ord.confirmation === "CANCELLED" || r.balance <= 0) continue;
+    await addPayment(t, actor, { orderId: o.id, amount: r.balance, paidAt: input.paidAt ?? new Date(), method: input.method ?? null, dedupeKey: key });
+    count++;
+    total += r.balance;
+  }
+  if (!count) throw new BizError("勾的訂單都不用收款（已付清或已取消）");
+  return { count, total };
+}

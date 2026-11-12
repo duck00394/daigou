@@ -8,7 +8,7 @@ import { addBatchItem, createBatch } from "@/server/services/purchase";
 import { createReceivingRecord } from "@/server/services/receiving";
 import { createOrder, cancelItemQty, updateItem } from "@/server/services/orders";
 import { addPayment } from "@/server/services/payments";
-import { packState, setPacked, shipOrder, pickedUp } from "@/server/services/order-flow";
+import { packState, setPacked, shipOrder, pickedUp, bulkShip, bulkShipPreview, bulkPay, bulkPayPreview } from "@/server/services/order-flow";
 
 const A = "op_a";
 const B = "op_b";
@@ -94,5 +94,44 @@ describe("訂單：備齊、出貨、客人取貨", () => {
     await tx((t) => shipOrder(t, actor, { orderId: o.id, dedupeKey: "ship-key-0004" }));
     const mv = await prisma.inventoryMovement.findMany({ where: { kind: "SHIP", orderItemId: it.id }, include: { purchaseBatchItem: { include: { batch: true } } } });
     expect(mv.map((m) => m.purchaseBatchItem?.batch.orderedById)).toEqual([B]);
+  });
+});
+
+describe("訂單列表：一次出貨、一次收款", () => {
+  it("同一位客人併成一包；貨不夠的那張先不出；收款每張記待收、已付清跳過；重送不重複", async () => {
+    await stock(A, s.p1.id, 2);
+    const o1 = await tx((t) => createOrder(t, actor, { buyerId: s.b1.id, items: [{ productId: s.p1.id, qty: 1 }] }));
+    const o2 = await tx((t) => createOrder(t, actor, { buyerId: s.b1.id, items: [{ productId: s.p1.id, qty: 1 }], shippingFee: 60 }));
+    const o3 = await tx((t) => createOrder(t, actor, { buyerId: s.b2.id, items: [{ productId: s.p1.id, qty: 1 }] })); // 吉伊只有 2 件，第三張不夠
+    const o4 = await tx((t) => createOrder(t, actor, { buyerId: s.b2.id, items: [{ productId: s.p2.id, qty: 1 }] })); // 小八沒貨
+    const ids = [o1.id, o2.id, o3.id, o4.id];
+
+    const pv = await tx((t) => bulkShipPreview(t, ids));
+    const mei = pv.find((g) => g.buyerId === s.b1.id)!;
+    expect(mei.ok.map((o) => o.qty)).toEqual([1, 1]);
+    const ting = pv.find((g) => g.buyerId === s.b2.id)!;
+    expect(ting.skip.map((x) => x.reason)).toEqual(["小八 S 娃還差 1 件"]);
+
+    const r = await tx((t) => bulkShip(t, actor, { orderIds: ids, method: "賣貨便", dedupeKey: "bulk-ship-0001" }));
+    // 小美兩張併一包；阿婷那張吉伊在預覽時看起來夠，但前面兩張用掉了 → 先不出
+    expect([r.buyers, r.qty]).toEqual([1, 2]);
+    expect(r.skipped.map((x) => x.orderNo).sort()).toEqual([o3.orderNo, o4.orderNo].sort());
+    const ships = await prisma.shipment.findMany({ include: { items: true } });
+    expect(ships.map((x) => [x.buyerId, x.items.length])).toEqual([[s.b1.id, 2]]);
+    // 重送同一個識別碼不會多一包
+    await tx((t) => bulkShip(t, actor, { orderIds: ids, method: "賣貨便", dedupeKey: "bulk-ship-0001" })).catch(() => null);
+    expect(await prisma.shipment.count()).toBe(1);
+
+    // 收款：o1 500、o2 560；先把 o3 付清 → 跳過
+    await tx((t) => addPayment(t, actor, { orderId: o3.id, amount: 500 }));
+    const pp = await tx((t) => bulkPayPreview(t, ids));
+    expect(pp.map((x) => [x.amount, x.reason])).toEqual([[500, null], [560, null], [0, "已付清"], [300, null]]);
+    const pay = await tx((t) => bulkPay(t, actor, { orderIds: ids, method: "轉帳", dedupeKey: "bulk-pay-0001" }));
+    expect([pay.count, pay.total]).toEqual([3, 1360]);
+    // 重送：不會多記
+    await tx((t) => bulkPay(t, actor, { orderIds: ids, method: "轉帳", dedupeKey: "bulk-pay-0001" })).catch(() => null);
+    expect(await prisma.payment.count()).toBe(4);
+    const after = await prisma.order.findMany({ where: { id: { in: ids } }, select: { paymentStatusCache: true } });
+    expect(after.every((o) => o.paymentStatusCache === "PAID")).toBe(true);
   });
 });

@@ -8,6 +8,7 @@ import { fmtDate, orderStatus, paymentStatus, shipStatus, orderSource } from "@/
 import type { Prisma } from "@prisma/client";
 import { getView } from "@/server/view";
 import { AssignAll } from "../sales/assign";
+import { listShippingMethods } from "@/server/services/shipping-methods";
 
 export const metadata = { title: "訂單" };
 const SIZE = 50;
@@ -121,7 +122,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
           ))}
         </div>
         <Selection ids={orders.map((o) => o.id)}>
-        <BulkBar groupBuys={gbs.filter((g) => g.status !== "CANCELLED").map((g) => ({ id: g.id, name: g.name }))} owners={onlyUnassigned ? view.ops : undefined} acting={vk ?? ""} />
+        <BulkBar groupBuys={gbs.filter((g) => g.status !== "CANCELLED").map((g) => ({ id: g.id, name: g.name }))} owners={onlyUnassigned ? view.ops : undefined} acting={vk ?? ""} pendingIds={orders.filter((o) => o.confirmation === "PENDING").map((o) => o.id)} methods={(await listShippingMethods(prisma)).map((m) => m.name)} />
         {orders.length === 0 ? (
           <Empty action={<LinkButton href="/orders/new" primary>新增訂單</LinkButton>}>沒有符合條件的訂單。</Empty>
         ) : (

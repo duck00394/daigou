@@ -1,7 +1,9 @@
 "use client";
 import { createContext, useContext, useState } from "react";
+import { DateTimeField, Modal, SelectField, useIdemKey } from "@/components/client";
+import { toDateTimeInput } from "@/lib/labels";
 import { Button, useRun } from "@/components/client";
-import { assignUnassignedDemandAction, bulkConfirmAction, bulkGroupBuyAction } from "@/actions/orders";
+import { assignUnassignedDemandAction, bulkConfirmAction, bulkGroupBuyAction, bulkPayAction, bulkPayPreviewAction, bulkShipAction, bulkShipPreviewAction } from "@/actions/orders";
 import { Choice } from "@/components/choice";
 
 type Ctx = { sel: Set<string>; toggle: (id: string, on: boolean) => void; setAll: (on: boolean) => void; ids: string[]; clear: () => void };
@@ -28,7 +30,7 @@ export function Selection({ ids, children }: { ids: string[]; children: React.Re
 const KEEP = "__keep";
 const NONE_GB = "__none";
 
-export function BulkBar({ groupBuys = [], owners, acting = "" }: { groupBuys?: { id: string; name: string }[]; owners?: { id: string; name: string }[]; acting?: string }) {
+export function BulkBar({ groupBuys = [], owners, acting = "", pendingIds = [], methods = [] }: { groupBuys?: { id: string; name: string }[]; owners?: { id: string; name: string }[]; acting?: string; pendingIds?: string[]; methods?: string[] }) {
   const c = useContext(SelCtx)!;
   const { run, pending } = useRun();
   const [gb, setGb] = useState(KEEP);
@@ -85,10 +87,14 @@ export function BulkBar({ groupBuys = [], owners, acting = "" }: { groupBuys?: {
             </Button>
           </span>
         )}
-        <span className="flex items-center gap-3">
-          <Button small disabled={n === 0} loading={pending} onClick={() => run(() => bulkConfirmAction([...c.sel]), { success: (k) => `已確認 ${k} 張待確認訂單`, onOk: c.clear })}>
-            批次確認待確認訂單
-          </Button>
+        <span className="flex flex-wrap items-center gap-2">
+          {!owners && <BulkShip ids={[...c.sel]} methods={methods} onDone={c.clear} />}
+          {!owners && <BulkPay ids={[...c.sel]} onDone={c.clear} />}
+          {[...c.sel].some((id) => pendingIds.includes(id)) && (
+            <Button small loading={pending} onClick={() => run(() => bulkConfirmAction([...c.sel]), { success: (k) => `已確認 ${k} 張待確認訂單`, onOk: c.clear })}>
+              確認
+            </Button>
+          )}
           <button type="button" className="text-[13px] text-ai md:hidden" onClick={c.clear}>取消勾選</button>
         </span>
       </div>
@@ -99,4 +105,129 @@ export function BulkBar({ groupBuys = [], owners, acting = "" }: { groupBuys?: {
 export function RowCheck({ id }: { id: string }) {
   const c = useContext(SelCtx)!;
   return <input type="checkbox" aria-label="選取訂單" className="h-4 w-4" checked={c.sel.has(id)} onChange={(e) => c.toggle(id, e.target.checked)} />;
+}
+
+type ShipGroup = { buyerId: string; buyer: string; ok: { id: string; orderNo: string; qty: number }[]; skip: { id: string; orderNo: string; reason: string }[] };
+
+/** 勾好的訂單一次出貨：同一位客人併成一包；貨不夠的先不出 */
+function BulkShip({ ids, methods, onDone }: { ids: string[]; methods: string[]; onDone: () => void }) {
+  const { run, pending } = useRun();
+  const idem = useIdemKey();
+  const [groups, setGroups] = useState<ShipGroup[] | null>(null);
+  const [f, setF] = useState({ method: methods[0] ?? "", at: "" });
+  const open = async () => {
+    const r = await bulkShipPreviewAction(ids);
+    if (r.ok) setGroups(r.data);
+  };
+  const okBuyers = (groups ?? []).filter((g) => g.ok.length);
+  const okQty = okBuyers.reduce((a, g) => a + g.ok.reduce((b, o) => b + o.qty, 0), 0);
+  return (
+    <>
+      <Button small disabled={!ids.length} onClick={open}>出貨</Button>
+      <Modal
+        open={groups !== null}
+        onClose={() => setGroups(null)}
+        title={`出貨 ${ids.length} 張（${groups?.length ?? 0} 位客人）`}
+        footer={
+          <Button
+            variant="primary"
+            disabled={!okBuyers.length}
+            loading={pending}
+            onClick={() =>
+              run(() => bulkShipAction({ orderIds: ids, method: f.method || null, shippedAt: f.at || null, dedupeKey: idem.key }), {
+                success: (d) => `已出貨 ${d.buyers} 位客人（${d.qty} 件）${d.skipped.length ? `，${d.skipped.length} 張先不出` : ""}`,
+                onOk: () => {
+                  setGroups(null);
+                  idem.renew();
+                  onDone();
+                },
+              })
+            }
+          >
+            出貨 {okBuyers.length} 位（{okQty} 件）
+          </Button>
+        }
+      >
+        <div className="grid gap-3" data-testid="bulk-ship">
+          <ul className="divide-y divide-line-2 text-[14px]">
+            {(groups ?? []).map((g) => (
+              <li key={g.buyerId} className="py-2">
+                <div className="flex justify-between gap-2">
+                  <span>{g.buyer}　{g.ok.length + g.skip.length} 張</span>
+                  {g.ok.length > 0 && <span className="text-good">{g.ok.reduce((a, o) => a + o.qty, 0)} 件，可以出</span>}
+                </div>
+                {g.skip.map((x) => (
+                  <div key={x.id} className="text-[13px] text-bad">{x.orderNo}：{x.reason}，這張先不出</div>
+                ))}
+              </li>
+            ))}
+          </ul>
+          {methods.length > 0 ? (
+            <SelectField label="寄送方式" value={f.method} onChange={(e) => setF({ ...f, method: e.target.value })} options={[...methods.map((m) => [m, m] as [string, string]), ["", "其他／不填"]]} />
+          ) : null}
+          <DateTimeField label="出貨時間" value={f.at || toDateTimeInput(new Date())} onChange={(v) => setF({ ...f, at: v })} />
+          <p className="text-[12.5px] text-mute">單號要填的，到訂單裡再補。</p>
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+type PayRow = { id: string; orderNo: string; buyer: string; amount: number; reason: string | null };
+
+/** 勾好的訂單一次收款：每張的待收記一筆；已付清的跳過 */
+function BulkPay({ ids, onDone }: { ids: string[]; onDone: () => void }) {
+  const { run, pending } = useRun();
+  const idem = useIdemKey();
+  const [rows, setRows] = useState<PayRow[] | null>(null);
+  const [f, setF] = useState({ method: "轉帳", at: "" });
+  const open = async () => {
+    const r = await bulkPayPreviewAction(ids);
+    if (r.ok) setRows(r.data);
+  };
+  const due = (rows ?? []).filter((r) => !r.reason);
+  const total = due.reduce((a, r) => a + r.amount, 0);
+  return (
+    <>
+      <Button small disabled={!ids.length} onClick={open}>收款</Button>
+      <Modal
+        open={rows !== null}
+        onClose={() => setRows(null)}
+        title={`收款 ${ids.length} 張`}
+        footer={
+          <Button
+            variant="primary"
+            disabled={!due.length}
+            loading={pending}
+            onClick={() =>
+              run(() => bulkPayAction({ orderIds: ids, method: f.method || null, paidAt: f.at || null, dedupeKey: idem.key }), {
+                success: (d) => `已收款 ${d.count} 張，共 NT$${d.total.toLocaleString()}`,
+                onOk: () => {
+                  setRows(null);
+                  idem.renew();
+                  onDone();
+                },
+              })
+            }
+          >
+            收齊 {due.length} 張 NT${total.toLocaleString()}
+          </Button>
+        }
+      >
+        <div className="grid gap-3" data-testid="bulk-pay">
+          <ul className="divide-y divide-line-2 text-[14px]">
+            {(rows ?? []).map((r) => (
+              <li key={r.id} className={`flex justify-between gap-2 py-1.5 ${r.reason ? "text-mute" : ""}`}>
+                <span>{r.orderNo}　{r.buyer}</span>
+                <span className="num">{r.reason ? `${r.reason}，跳過` : `NT$${r.amount.toLocaleString()}`}</span>
+              </li>
+            ))}
+            <li className="flex justify-between py-1.5 font-semibold"><span>合計</span><span className="num">NT${total.toLocaleString()}</span></li>
+          </ul>
+          <SelectField label="付款方式" value={f.method} onChange={(e) => setF({ ...f, method: e.target.value })} options={[["轉帳", "轉帳"], ["現金", "現金"], ["賣貨便", "賣貨便"], ["LINE Pay", "LINE Pay"], ["街口", "街口"], ["其他", "其他"]]} />
+          <DateTimeField label="收款時間" value={f.at || toDateTimeInput(new Date())} onChange={(v) => setF({ ...f, at: v })} />
+        </div>
+      </Modal>
+    </>
+  );
 }

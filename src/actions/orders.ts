@@ -245,3 +245,19 @@ export async function pickedUpAction(input: { orderId: string; at: string | null
   const f = z.object({ orderId: z.string(), at: z.string().nullable(), collect: z.boolean(), dedupeKey: z.string().min(8).max(100) }).parse(input);
   return run((a) => tx((t) => flow.pickedUp(t, a, { ...f, at: parseDateTimeInput(f.at) ?? undefined }), { timeout: 120_000 }));
 }
+
+// 訂單列表多選：一次出貨、一次收款
+export async function bulkShipPreviewAction(orderIds: string[]) {
+  return run(() => tx((t) => flow.bulkShipPreview(t, z.array(z.string()).max(500).parse(orderIds))), "read");
+}
+export async function bulkShipAction(input: { orderIds: string[]; method: string | null; shippedAt: string | null; dedupeKey: string }) {
+  const f = z.object({ orderIds: z.array(z.string()).min(1).max(500), method: z.string().max(60).nullable(), shippedAt: z.string().nullable(), dedupeKey: z.string().min(8).max(100) }).parse(input);
+  return run((a) => tx((t) => flow.bulkShip(t, a, { ...f, shippedAt: parseDateTimeInput(f.shippedAt) ?? undefined }), { timeout: 180_000 }));
+}
+export async function bulkPayPreviewAction(orderIds: string[]) {
+  return run(() => tx((t) => flow.bulkPayPreview(t, z.array(z.string()).max(500).parse(orderIds))), "read");
+}
+export async function bulkPayAction(input: { orderIds: string[]; method: string | null; paidAt: string | null; dedupeKey: string }) {
+  const f = z.object({ orderIds: z.array(z.string()).min(1).max(500), method: z.string().max(60).nullable(), paidAt: z.string().nullable(), dedupeKey: z.string().min(8).max(100) }).parse(input);
+  return run((a) => tx((t) => flow.bulkPay(t, a, { ...f, paidAt: parseDateTimeInput(f.paidAt) ?? undefined }), { timeout: 180_000 }));
+}
