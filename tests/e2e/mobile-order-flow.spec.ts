@@ -49,4 +49,12 @@ test("手機：訂單備齊、出貨、客人取貨", async ({ page }) => {
   await expect(flow).toContainText(/已取貨 \d+\/\d+/);
   await expect(flow.getByRole("button", { name: "客人取貨了" })).toHaveCount(0);
   await expect(page.locator("section", { hasText: "收款紀錄" }).getByText(/取貨付款/)).toHaveCount(1);
+
+  // 這單賺多少：吉伊 1 件，賣 500、成本 300 → 賺 200
+  await expect(page.getByTestId("order-profit-sum")).toHaveText("NT$200");
+  // 賺多少頁：照系列算，每張單都列出來
+  await page.goto("/sales");
+  const board = page.getByTestId("profit-board");
+  await expect(board.locator(`[data-testid="pb-order"]`).filter({ hasText: `流程客${tag}` })).toContainText("賺 200");
+  await page.screenshot({ path: "test-results/mobile_profit_board.png", fullPage: false });
 });

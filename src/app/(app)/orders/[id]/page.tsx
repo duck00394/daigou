@@ -7,6 +7,8 @@ import { inventorySummary } from "@/server/services/inventory";
 import { packState } from "@/server/services/order-flow";
 import { listShippingMethods } from "@/server/services/shipping-methods";
 import { OrderFlow } from "./flow";
+import { orderProfits, profitOf } from "@/server/services/profit";
+import { formatTwd } from "@/lib/money";
 import { SendLineLink } from "./line-link";
 import { PageHeader, Section, TableWrap, StatusBadge, Twd, Badge, TagChip, KV, LinkButton, Empty } from "@/components/ui";
 import { CancelOrderButton, ConfirmOrderButton, EditMetaButton, ItemActions, ReserveButtons, PaymentForm, VoidPaymentButton, RefundForm, RefundRowActions } from "./parts";
@@ -54,12 +56,13 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
     },
   });
   if (!order) notFound();
-  const [{ result: r }, inv, groupBuys, audits, packLines, shipMethods] = await Promise.all([
+  const [{ result: r }, inv, groupBuys, audits, packLines, prof, shipMethods] = await Promise.all([
     tx((t) => loadOrderCalc(t, id)),
     tx((t) => inventorySummary(t, order.items.map((i) => i.productId))),
     prisma.groupBuy.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.auditLog.findMany({ where: { entity: "Order", entityId: id }, orderBy: { createdAt: "asc" } }),
     tx((t) => packState(t, id)),
+    tx((t) => orderProfits(t, { orderId: id })),
     listShippingMethods(prisma),
   ]);
   const cancelled = order.confirmation === "CANCELLED";
@@ -117,6 +120,34 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
       )}
 
       {!cancelled && order.buyer.lineUserId && <SendLineLink orderId={id} buyer={order.buyer.name} />}
+
+      {prof.orders[0] && (() => {
+        const o = prof.orders[0];
+        const rev = o.shipped.revenue + o.open.revenue;
+        const cost = o.shipped.cost + o.open.cost;
+        const line = (label: string, part: typeof o.shipped, est = false) =>
+          part.qty > 0 && (
+            <div className="flex justify-between gap-2 border-t border-line-2 py-1.5 text-[14px]">
+              <span>{label} {part.qty} 件{est && <span className="ml-1 rounded-full bg-warn-soft px-2 py-0.5 text-[11.5px] text-warn">預估</span>}</span>
+              <span>成本 <span className="num">{part.cost.toLocaleString()}</span>　<span className={profitOf(part) < 0 ? "text-bad" : "text-good"}>{profitOf(part) < 0 ? "賠" : "賺"} <span className="num">{Math.abs(profitOf(part)).toLocaleString()}</span></span></span>
+            </div>
+          );
+        return (
+          <section className="rounded-xl border border-line bg-card p-3.5" data-testid="order-profit">
+            <h2 className="text-[15px] font-semibold">這單賺多少</h2>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <div><div className="text-[12px] text-mute">收入</div><div className="num text-[17px] font-semibold">{formatTwd(rev)}</div></div>
+              <div><div className="text-[12px] text-mute">成本</div><div className="num text-[17px] font-semibold">{formatTwd(cost)}</div></div>
+              <div><div className="text-[12px] text-mute">賺</div><div className={`num text-[17px] font-semibold ${rev - cost < 0 ? "text-bad" : "text-good"}`} data-testid="order-profit-sum">{formatTwd(rev - cost)}</div></div>
+            </div>
+            <div className="mt-2">
+              {line("已出貨", o.shipped)}
+              {line("還沒給", o.open, true)}
+            </div>
+            <p className="text-[12px] text-mute">收入是商品售價，不含運費。還沒給的成本用預購平均成本（含運費、關稅）。{o.open.uncosted ? `${o.open.uncosted} 件還沒有成本，先不算。` : ""}</p>
+          </section>
+        );
+      })()}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_22rem]">
         <Section title="買家與訂單資料">
