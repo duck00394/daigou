@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { run } from "@/server/action";
 import { tx } from "@/server/db";
+import { getMe } from "@/server/me";
 import * as ct from "@/server/services/catalog-tree";
 import { sellToCustomer } from "@/server/services/sell";
 
@@ -67,4 +68,16 @@ export async function moveSeriesOrderAction(categoryId: string, d: "up" | "down"
 
 export async function setHideSharedAction(categoryId: string, hide: boolean) {
   return run((a) => tx((t) => ct.setHideShared(t, a, z.string().min(1).parse(categoryId), z.boolean().parse(hide))));
+}
+export async function setSeriesPinAction(categoryId: string, rank: number | null) {
+  return run(async () => {
+    const me = await getMe();
+    return tx((t) => ct.setSeriesPin(t, me, z.string().parse(categoryId), z.number().int().nullable().parse(rank)));
+  });
+}
+export async function clearSeriesPinsAction() {
+  return run(async () => {
+    const me = await getMe();
+    return tx((t) => ct.clearSeriesPins(t, me));
+  });
 }

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { byText } from "@/lib/sort";
 
-export type SeriesOpt = { id: string; name: string; kindKey: string; kindLabel: string; active: boolean; kindSort?: number };
+export type SeriesOpt = { id: string; name: string; kindKey: string; kindLabel: string; active: boolean; kindSort?: number; pin?: number | null };
 
 const selCls = "min-h-11 w-full rounded-lg border border-line bg-white px-2.5 text-[15px]";
 
@@ -41,7 +41,13 @@ export function SeriesPicker({
   const setKind = (k: string) => (onKind ? onKind(k) : setKindState(k));
   const [q, setQ] = useState("");
   const kinds = useMemo(() => kindsOf(series), [series]);
-  const inKind = series.filter((s) => s.active && (!kind || s.kindKey === kind));
+  // 常用（自己打 1、2、3 的）：選單最上面，也有一排按一下就選
+  const pinned = series.filter((s) => s.active && s.pin != null).sort((a, b) => a.pin! - b.pin!);
+  const inKind = series.filter((s) => s.active && (!kind || s.kindKey === kind) && s.pin == null);
+  const pick = (s: SeriesOpt) => {
+    setKind(s.kindKey);
+    onChange(s.id);
+  };
   // 打關鍵字：系列名稱或種類名稱有這幾個字就列出來（已過期的也找得到）
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const hits = words.length
@@ -75,6 +81,16 @@ export function SeriesPicker({
           </ul>
         )}
       </div>
+      {pinned.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5" data-testid="pinned-series">
+          <span className="text-[13px] text-mute">常用</span>
+          {pinned.map((s) => (
+            <button key={s.id} type="button" aria-pressed={value === s.id} onClick={() => pick(s)} className={`rounded-full border px-3 py-1 text-[14px] ${value === s.id ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`}>
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-2">
         <label className="text-[13px] font-medium text-ink-2">
           {prefix}種類
@@ -85,12 +101,19 @@ export function SeriesPicker({
         </label>
         <label className="text-[13px] font-medium text-ink-2">
           {prefix}系列
-          <select aria-label={`${prefix}系列`} className={`${selCls} mt-1`} value={value} onChange={(e) => { const s = series.find((x) => x.id === e.target.value); if (s && !kind) setKind(s.kindKey); onChange(e.target.value); }}>
+          <select aria-label={`${prefix}系列`} className={`${selCls} mt-1`} value={value} onChange={(e) => { const s = series.find((x) => x.id === e.target.value); if (s && kind !== s.kindKey && (!kind || s.pin != null)) setKind(s.kindKey); onChange(e.target.value); }}>
             {allLabel !== undefined && <option value="">{allLabel}</option>}
             {noneLabel !== undefined && <option value="">{noneLabel}</option>}
             {allLabel === undefined && noneLabel === undefined && <option value="">請選系列</option>}
             {current && !current.active && <option value={current.id}>{current.name}（已過期）</option>}
-            {inKind.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {pinned.length > 0 ? (
+              <>
+                <optgroup label="常用">{pinned.map((s) => <option key={s.id} value={s.id}>{s.pin}. {s.name}</option>)}</optgroup>
+                <optgroup label={kinds.find(([k]) => k === kind)?.[1] ?? "其他"}>{inKind.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</optgroup>
+              </>
+            ) : (
+              inKind.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)
+            )}
           </select>
         </label>
       </div>

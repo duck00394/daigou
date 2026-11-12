@@ -69,7 +69,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
 
 async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v, hideUnsure = false }: { q?: string; only?: string; cat?: string; type?: string; owner?: string; kind?: string; v?: string; hideUnsure?: boolean }) {
   const [seriesOpts, types, operators] = await Promise.all([
-    seriesOptions(prisma),
+    seriesOptions(prisma, await getMe()),
     prisma.productType.findMany({ where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
     tx((t) => listOperators(t, { includeInactive: true })),
   ]);

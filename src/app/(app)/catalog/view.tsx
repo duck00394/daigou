@@ -3,10 +3,11 @@
 import { Icon } from "@/components/icons";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Button, Modal, inputCls, notify, useRun } from "@/components/client";
-import { addCatalogCharacterAction, addCatalogCharactersAction, catalogRosterAction, addCatalogItemAction, deleteCatalogCharacterAction, deleteCatalogItemAction, deleteSeriesAction, moveKindAction, moveSeriesKindAction, moveSeriesOrderAction, renameKindAction, setCatalogPriceAction, setHideSharedAction } from "@/actions/catalog-tree";
+import { Button, ConfirmButton, Modal, inputCls, notify, useRun } from "@/components/client";
+import { addCatalogCharacterAction, addCatalogCharactersAction, catalogRosterAction, addCatalogItemAction, deleteCatalogCharacterAction, deleteCatalogItemAction, deleteSeriesAction, moveKindAction, moveSeriesKindAction, moveSeriesOrderAction, renameKindAction, setSeriesPinAction, clearSeriesPinsAction, setCatalogPriceAction, setHideSharedAction } from "@/actions/catalog-tree";
 import { renameCategoryAction, saveCategoryAction, setCategoryActiveAction } from "@/actions/catalog";
 import { keepInSeriesAction, seriesLeaksAction } from "@/actions/series";
+import { setMeAction } from "@/actions/operators";
 import type { TreeKind, TreeSeries, TreeItem } from "@/server/services/catalog-tree";
 
 type Opt = { id: string; name: string; only?: string[] | null };
@@ -19,7 +20,7 @@ function kindToType(key: string, custom: string) {
   return { type: (key || "GENERAL") as "GENERAL", customType: null };
 }
 
-export function CatalogView({ tree, types, initialKind, initialOpen, initialOrdering = false }: { tree: TreeKind[]; types: Opt[]; initialKind: string | null; initialOpen: string | null; initialOrdering?: boolean }) {
+export function CatalogView({ tree, types, initialKind, initialOpen, initialOrdering = false, pins = [], me = null, operators = [] }: { tree: TreeKind[]; types: Opt[]; initialKind: string | null; initialOpen: string | null; initialOrdering?: boolean; pins?: { categoryId: string; rank: number }[]; me?: string | null; operators?: Opt[] }) {
   const openKind = initialOpen ? tree.find((k) => k.series.some((s) => s.id === initialOpen))?.key : null;
   const [kind, setKind] = useState(openKind ?? (initialKind && tree.some((k) => k.key === initialKind) ? initialKind : (tree[0]?.key ?? NEW_KIND)));
   const [open, setOpen] = useState<Set<string>>(() => new Set(initialOpen ? [initialOpen] : []));
@@ -46,7 +47,7 @@ export function CatalogView({ tree, types, initialKind, initialOpen, initialOrde
     });
   };
 
-  if (ordering) return <ReorderList tree={tree} onDone={() => setOrdering(false)} />;
+  if (ordering) return <ReorderList tree={tree} pins={pins} me={me} operators={operators} onDone={() => setOrdering(false)} />;
 
   return (
     <div className="space-y-3">
@@ -373,8 +374,34 @@ function DeleteButton({ label, aria, title, message, onConfirm, className }: { l
 }
 
 /** 調整順序：種類、系列都可以上移、下移、移到最上面；下拉選單照這個順序 */
-function ReorderList({ tree, onDone }: { tree: TreeKind[]; onDone: () => void }) {
+function ReorderList({ tree, pins, me, operators, onDone }: { tree: TreeKind[]; pins: { categoryId: string; rank: number }[]; me: string | null; operators: Opt[]; onDone: () => void }) {
   const { run, pending } = useRun();
+  const rankOf = new Map(pins.map((p) => [p.categoryId, p.rank]));
+  const all = tree.flatMap((k) => k.series);
+  const pinned = pins.map((p) => all.find((s) => s.id === p.categoryId)).filter((s): s is TreeSeries => !!s && s.active);
+  // 常用順序：打數字離開格子就存，有數字的自動跳到最上面的「常用」
+  const pinBox = (s: TreeSeries) => (
+    <input
+      key={`${s.id}:${rankOf.get(s.id) ?? ""}`}
+      aria-label={`${s.name} 常用順序`}
+      inputMode="numeric"
+      disabled={!me}
+      defaultValue={rankOf.get(s.id) ?? ""}
+      placeholder=""
+      className={`num h-9 w-12 shrink-0 rounded-lg border text-center text-[15px] ${rankOf.has(s.id) ? "border-warn bg-warn-soft font-semibold" : "border-line bg-white"}`}
+      onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+      onBlur={(e) => {
+        const raw = e.currentTarget.value.trim();
+        const v = raw === "" ? null : Number(raw);
+        if (v === (rankOf.get(s.id) ?? null)) return;
+        if (v !== null && (!Number.isInteger(v) || v < 1)) {
+          e.currentTarget.value = String(rankOf.get(s.id) ?? "");
+          return notify("常用順序請打 1、2、3…");
+        }
+        run(() => setSeriesPinAction(s.id, v), { success: v === null ? `「${s.name}」拿出常用` : `「${s.name}」放在常用第 ${v}` });
+      }}
+    />
+  );
   const b = "min-h-9 rounded-lg border px-2.5 text-[13px] disabled:opacity-40";
   const btns = (label: string, i: number, n: number, fn: (d: "up" | "down" | "top") => Promise<{ ok: true; data: null } | { ok: false; error: string }>, dark?: boolean) => (
     <span className="flex shrink-0 gap-1">
@@ -389,9 +416,30 @@ function ReorderList({ tree, onDone }: { tree: TreeKind[]; onDone: () => void })
         <p className="text-[13px] text-mute">排好之後，所有選系列的下拉選單都照這個順序。已過期的自動排在最後。</p>
         <Button variant="primary" onClick={onDone}>完成</Button>
       </div>
+      <div className="overflow-hidden rounded-xl border border-line bg-white" data-testid="pinned-box">
+        <div className="flex items-center justify-between gap-2 bg-warn-soft px-3 py-2 font-semibold text-warn">
+          <span>常用{me ? `（${operators.find((o) => o.id === me)?.name ?? ""}的）` : ""}</span>
+          {pinned.length > 0 && (
+            <ConfirmButton small variant="danger" label="清空常用" title="清空常用" message="常用的數字全部拿掉，系列本身和原本的排序都不變。之後再自己重打。" confirmLabel="清空" onConfirm={() => run(() => clearSeriesPinsAction(), { success: "已清空常用" })} />
+          )}
+        </div>
+        {pinned.map((s) => (
+          <div key={s.id} className="flex items-center justify-between gap-2 border-t border-line-2 px-3 py-2 text-[15px]" data-testid="pinned-row">
+            <span className="min-w-0 truncate">{s.name}</span>
+            {pinBox(s)}
+          </div>
+        ))}
+        {!me && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-line-2 px-3 py-2.5 text-[13px]">
+            <span className="text-mute">常用是各自的，先選你是誰：</span>
+            {operators.map((o) => <Button key={o.id} small onClick={() => run(() => setMeAction(o.id), {})}>我是{o.name}</Button>)}
+          </div>
+        )}
+        {me && !pinned.length && <p className="border-t border-line-2 px-3 py-2.5 text-[13px] text-mute">在下面系列後面的格子打 1、2、3，就會排到這裡，選系列的下拉也會列在最上面。</p>}
+      </div>
       <div className="overflow-hidden rounded-xl border border-line bg-white">
         {tree.map((k, ki) => {
-          const live = k.series.filter((s) => s.active);
+          const live = k.series.filter((s) => s.active && !rankOf.has(s.id));
           return (
             <div key={k.key}>
               <div className="flex items-center justify-between gap-2 bg-ink px-3 py-2 font-semibold text-white" data-testid="reorder-kind">
@@ -400,7 +448,8 @@ function ReorderList({ tree, onDone }: { tree: TreeKind[]; onDone: () => void })
               </div>
               {live.map((s, si) => (
                 <div key={s.id} className="flex items-center justify-between gap-2 border-b border-line-2 px-3 py-2 text-[15px]" data-testid="reorder-series">
-                  <span className="min-w-0 truncate">{s.name}</span>
+                  <span className="min-w-0 flex-1 truncate">{s.name}</span>
+                  {pinBox(s)}
                   {btns(s.name, si, live.length, (d) => moveSeriesOrderAction(s.id, d))}
                 </div>
               ))}

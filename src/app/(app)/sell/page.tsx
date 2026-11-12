@@ -21,7 +21,7 @@ export default async function SellPage({ searchParams }: { searchParams: Promise
   ]);
   const acting = view.key !== "all" ? view.key : me;
   const [series, buyers, lastOrder, usedChannels] = await Promise.all([
-    seriesOptions(prisma),
+    seriesOptions(prisma, await getMe()),
     prisma.buyer.findMany({ where: { mergedIntoId: null }, orderBy: { updatedAt: "desc" }, take: 300, select: { name: true, salesChannel: true } }),
     prisma.orderItem.findFirst({ where: { categoryId: { not: null }, ...(view.key !== "all" ? { ownerKey: view.key } : {}) }, orderBy: { createdAt: "desc" }, select: { categoryId: true } }),
     prisma.order.groupBy({ by: ["salesChannel"], where: { salesChannel: { not: null } }, _count: true, orderBy: { _count: { salesChannel: "desc" } }, take: 20 }),

@@ -35,7 +35,8 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
           ],
         }
       : {}),
-    ...(sp.status ? { statusCache: sp.status as never } : {}),
+    // 已取消的平常不列（對帳、出貨看不到）；訂單狀態選「已取消」才看得到
+    ...(sp.status ? { statusCache: sp.status as never } : { statusCache: { not: "CANCELLED" as const } }),
     ...(sp.payment ? { paymentStatusCache: sp.payment as never } : {}),
     ...(sp.ship ? { shipStatusCache: sp.ship as never } : {}),
     ...(sp.groupBuyId ? { groupBuyId: sp.groupBuyId } : {}),
@@ -45,7 +46,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
     ...(sp.from || sp.to ? { orderedAt: { ...(sp.from ? { gte: new Date(`${sp.from}T00:00:00+08:00`) } : {}), ...(sp.to ? { lt: new Date(new Date(`${sp.to}T00:00:00+08:00`).getTime() + 86400000) } : {}) } } : {}),
   };
   const orderBy: Prisma.OrderOrderByWithRelationInput =
-    sp.sort === "old" ? { orderedAt: "asc" } : sp.sort === "balance" ? { balanceCache: "desc" } : sp.sort === "amount" ? { receivableCache: "desc" } : { orderedAt: "desc" };
+    sp.sort === "old" ? { orderedAt: "asc" } : sp.sort === "balance" ? { balanceCache: "desc" } : sp.sort === "amount" ? { receivableCache: "desc" } : sp.sort === "amountAsc" ? { receivableCache: "asc" } : { orderedAt: "desc" };
   const [orders, total, gbs, cats, unpaidN, pendingN] = await Promise.all([
     prisma.order.findMany({
       where,
@@ -97,7 +98,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
       <Section pad={false}>
         <FilterBar action="/orders">
           <FSearch data-search value={sp.q} placeholder="訂單編號、買家、商品" />
-          <FSelect name="status" label="訂單狀態" value={sp.status} options={Object.entries(orderStatus).map(([k, v]) => [k, v[0]])} />
+          <FSelect name="status" label="訂單狀態" value={sp.status} allLabel="全部（不含已取消）" options={Object.entries(orderStatus).map(([k, v]) => [k, v[0]])} />
           <FSelect name="payment" label="付款" value={sp.payment} options={Object.entries(paymentStatus).map(([k, v]) => [k, v[0]])} />
           <FSelect name="ship" label="出貨" value={sp.ship} options={Object.entries(shipStatus).map(([k, v]) => [k, v[0]])} />
           <FSelect name="groupBuyId" label="代購團" value={sp.groupBuyId} options={gbs.map((g) => [g.id, g.name])} />
@@ -111,7 +112,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
             <span className="mb-0.5 block">迄日</span>
             <input type="date" name="to" defaultValue={sp.to} className="rounded-lg border border-line px-2 py-2" />
           </label>
-          <FSelect name="sort" label="排序" value={sp.sort} options={[["old", "日期舊→新"], ["balance", "待收多→少"], ["amount", "金額大→小"]]} />
+          <FSelect name="sort" label="排序" value={sp.sort} allLabel="訂購時間：新到舊" options={[["old", "訂購時間：舊到新"], ["amount", "金額：高到低"], ["amountAsc", "金額：低到高"], ["balance", "待收：多到少"]]} />
           {sp.buyerId && <input type="hidden" name="buyerId" value={sp.buyerId} />}
         </FilterBar>
         <div className="flex gap-1.5 overflow-x-auto px-4 pt-2 md:hidden" data-testid="orders-quick">

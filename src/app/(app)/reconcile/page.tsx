@@ -7,6 +7,7 @@ import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { reconcileList } from "@/server/services/reconcile";
+import { getMe } from "@/server/me";
 import { seriesOptions } from "@/server/services/catalog-tree";
 import { PageHeader, Empty } from "@/components/ui";
 import { NavSelect } from "@/components/nav-select";
@@ -21,7 +22,7 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
   const vk = (await getView()).key;
   const supplier = sp.supplier ?? "";
   const cat = sp.cat ?? "";
-  const [data, allSeries] = await Promise.all([tx((t) => reconcileList(t, { supplier, cat, view: vk })), seriesOptions(prisma)]);
+  const [data, allSeries] = await Promise.all([tx((t) => reconcileList(t, { supplier, cat, view: vk })), seriesOptions(prisma, await getMe())]);
   const full = cat || supplier ? await tx((t) => reconcileList(t, { view: vk })) : data;
   const href = (o: { supplier?: string; cat?: string }) => {
     const u = new URLSearchParams();

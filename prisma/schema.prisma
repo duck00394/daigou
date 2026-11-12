@@ -299,6 +299,7 @@ model Category {
   batchItems      PurchaseBatchItem[]
   shop            ShopCategory?
   shopQuotas      ShopQuota[]
+  pins            SeriesPin[]
 }
 
 model ProductCategory {
@@ -793,6 +794,7 @@ model Operator {
   batchesReceiving PurchaseBatch[]     @relation("BatchReceivingResponsible")
   supplierPayments SupplierPayment[]
   receivings       ReceivingRecord[]
+  seriesPins       SeriesPin[]
   batchItemsOwned  PurchaseBatchItem[] @relation("BatchItemOwner")
   // 訂購頁有新訂單時通知這個 LINE（經營者自己用 LINE 登入訂購頁一次後，在設定綁定）
   lineUserId       String?
@@ -1182,21 +1184,21 @@ model PushSubscription {
 
 // 系列開放訂購的設定：打開就出現在訂購頁
 model ShopCategory {
-  categoryId     String    @id
-  category       Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  enabled        Boolean   @default(false)
+  categoryId     String        @id
+  category       Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  enabled        Boolean       @default(false)
   openAt         DateTime? // 開賣時間（UTC；空白＝打開就能買）
   perPersonLimit Int? // 每人每款限購幾個；空白＝不限
   ownerId        String? // 這個系列的訂單是誰的（扣誰的庫存、通知誰）
-  owner          Operator? @relation(fields: [ownerId], references: [id])
+  owner          Operator?     @relation(fields: [ownerId], references: [id])
   imageUrl       String? // 系列主圖網址
   intro          String? // 給客人看的說明（預計到貨等）
   payUrl         String? // 賣貨便賣場連結（這個系列共用一個通用賣場）
   payTiming      ShopPayTiming @default(ORDER) // 什麼時候要客人用賣貨便下單
   payHours       Int           @default(1) // 幾小時內要下單；逾期自動取消並遞補候補
-  sortOrder      Int       @default(0)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  sortOrder      Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 }
 
 enum ShopPayTiming {
@@ -1284,4 +1286,17 @@ model MailOutbox {
   createdAt DateTime  @default(now())
 
   @@index([sentAt, createdAt])
+}
+
+/// 常用系列：每個人自己的（打 1、2、3 排在選系列下拉的最上面）
+model SeriesPin {
+  operatorId String
+  categoryId String
+  rank       Int
+  createdAt  DateTime @default(now())
+  operator   Operator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([operatorId, categoryId])
+  @@index([operatorId, rank])
 }

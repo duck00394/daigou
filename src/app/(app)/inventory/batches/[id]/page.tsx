@@ -79,7 +79,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
   }));
   const [suppliersList, categoriesList, otherBatches] = await Promise.all([
     prisma.supplier.findMany({ where: { OR: [{ active: true }, { id: b.supplierId ?? "" }] }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    seriesOptions(prisma),
+    seriesOptions(prisma, await getMe()),
     prisma.purchaseBatch.findMany({ where: { id: { not: b.id }, items: { some: {} } }, orderBy: { createdAt: "desc" }, take: 50, select: { id: true, code: true, name: true, supplierRef: { select: { name: true } } } }),
   ]);
   const [landed, series, types] = await Promise.all([

@@ -1,3 +1,4 @@
+import { getMe } from "@/server/me";
 import { seriesOptions } from "@/server/services/catalog-tree";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
@@ -17,7 +18,7 @@ export default async function NewBatch({ searchParams }: { searchParams: Promise
     getDefaultRateMicro(prisma),
     tx((t) => listOperators(t)),
     prisma.purchaseBatch.findMany({ where: { status: { not: "CANCELLED" } }, orderBy: { createdAt: "desc" }, take: 15, select: { id: true } }),
-    seriesOptions(prisma),
+    seriesOptions(prisma, await getMe()),
   ]);
   const ids = [...new Set([...(sp.from ? [sp.from] : []), ...recent.map((r) => r.id)])];
   const templates = (await Promise.all(ids.map((id) => tx((t) => responsibilityDefaults(t, id))))).filter((x) => x !== null);

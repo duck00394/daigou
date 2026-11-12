@@ -20,7 +20,7 @@ export default async function PurchasePage({ searchParams }: { searchParams: Pro
   const [me, operators, categories, suppliers, batches, series, types, rate] = await Promise.all([
     getMe(),
     tx((t) => listOperators(t)),
-    seriesOptions(prisma),
+    seriesOptions(prisma, await getMe()),
     prisma.supplier.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, defaultCurrency: true, kind: true, favorite: true } }),
     prisma.purchaseBatch.findMany({
       // 「哪一團」只列自己的團（＋合資、未指定的），別人的不顯示

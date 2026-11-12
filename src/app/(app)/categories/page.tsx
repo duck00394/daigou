@@ -4,6 +4,7 @@ import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { getView } from "@/server/view";
 import { seriesSummary } from "@/server/services/batch-ops";
+import { getMe } from "@/server/me";
 import { seriesOptions } from "@/server/services/catalog-tree";
 import { listCustomCategoryTypes } from "@/server/services/catalog";
 import { PageHeader } from "@/components/ui";
@@ -15,7 +16,7 @@ export const metadata = { title: "系列" };
 export default async function Categories() {
   await requireUser();
   const vk = (await getView()).key;
-  const [sum, opts, customTypes] = await Promise.all([tx((t) => seriesSummary(t, vk)), seriesOptions(prisma), tx((t) => listCustomCategoryTypes(t))]);
+  const [sum, opts, customTypes] = await Promise.all([tx((t) => seriesSummary(t, vk)), seriesOptions(prisma, await getMe()), tx((t) => listCustomCategoryTypes(t))]);
   const zero = { batches: 0, totalTwd: 0, dueTwd: 0, refundTwd: 0, ordered: 0, received: 0, pendingBatches: 0 };
   // 照「調整順序」排的；已過期的放在最後一組
   const groups: KindGroup[] = [];

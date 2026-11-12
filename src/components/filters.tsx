@@ -20,12 +20,12 @@ export function FSearch({ name = "q", value, placeholder }: { name?: string; val
   );
 }
 
-export function FSelect({ name, value, label, options }: { name: string; value?: string; label: string; options: [string, string][] }) {
+export function FSelect({ name, value, label, options, allLabel = "全部" }: { name: string; value?: string; label: string; options: [string, string][]; allLabel?: string }) {
   return (
     <label className="text-[12px] text-mute">
       <span className="mb-0.5 block">{label}</span>
       <select name={name} defaultValue={value ?? ""} className={cls}>
-        <option value="">全部</option>
+        <option value="">{allLabel}</option>
         {options.map(([v, l]) => (
           <option key={v} value={v}>
             {l}

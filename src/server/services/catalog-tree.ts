@@ -208,12 +208,14 @@ export async function sellSheet(t: Tx, categoryId: string) {
   };
 }
 
-/** 下拉選單用：所有系列（含已過期）＋它的種類 */
-export async function seriesOptions(db: Db) {
-  const [cats, order] = await Promise.all([
+/** 下拉選單用：所有系列（含已過期）＋它的種類；給 me 就帶上這個人的常用順序（pin） */
+export async function seriesOptions(db: Db, me: string | null = null) {
+  const [cats, order, pins] = await Promise.all([
     db.category.findMany({ select: { id: true, name: true, type: true, customType: true, active: true, sortOrder: true } }),
     getKindOrder(db),
+    seriesPins(db, me),
   ]);
+  const pinOf = new Map(pins.map((p) => [p.categoryId, p.rank]));
   const ko = kindRank(order);
   return cats
     .map((c) => {
@@ -221,7 +223,7 @@ export async function seriesOptions(db: Db) {
       return { id: c.id, name: c.name, kindKey: k.key, kindLabel: k.label, active: c.active, sortOrder: c.sortOrder, kindSort: ko(k.key) };
     })
     .sort((a, b) => a.kindSort - b.kindSort || byText(a.kindLabel, b.kindLabel) || Number(b.active) - Number(a.active) || a.sortOrder - b.sortOrder || byText(a.name, b.name))
-    .map((x, i) => ({ id: x.id, name: x.name, kindKey: x.kindKey, kindLabel: x.kindLabel, active: x.active, kindSort: x.kindSort, order: i }));
+    .map((x, i) => ({ id: x.id, name: x.name, kindKey: x.kindKey, kindLabel: x.kindLabel, active: x.active, kindSort: x.kindSort, pin: pinOf.get(x.id) ?? null, order: i }));
 }
 
 function kindWhere(kindKey: string) {
@@ -524,4 +526,30 @@ export async function addCatalogCharacters(t: Tx, actor: Actor, input: { categor
   const byId = new Map(chars.map((c) => [c.id, c.name]));
   for (const id of input.characterIds) await addCatalogCharacter(t, actor, { categoryId: input.categoryId, typeId: input.typeId, characterName: byId.get(id)! });
   return { count: input.characterIds.length };
+}
+
+/** 常用系列（每個人自己的）：照 1、2、3 的順序 */
+export async function seriesPins(db: Db, me: string | null) {
+  if (!me) return [] as { categoryId: string; rank: number }[];
+  return db.seriesPin.findMany({ where: { operatorId: me }, orderBy: [{ rank: "asc" }, { createdAt: "asc" }], select: { categoryId: true, rank: true } });
+}
+
+/** 設常用順序：rank＝null 拿掉；打的號碼已經有人用，新的排在這個號碼、原本的往後退；存完重新編成 1、2、3… */
+export async function setSeriesPin(t: Tx, me: string | null, categoryId: string, rank: number | null) {
+  if (!me) throw new BizError("先在上面選「我是誰」，常用是各自的");
+  if (rank !== null && (!Number.isInteger(rank) || rank < 1 || rank > 999)) throw new BizError("常用順序請打 1 以上的整數");
+  const cat = await t.category.findUnique({ where: { id: categoryId }, select: { id: true } });
+  if (!cat) throw new BizError("找不到系列");
+  const others = (await t.seriesPin.findMany({ where: { operatorId: me, NOT: { categoryId } }, orderBy: [{ rank: "asc" }, { createdAt: "asc" }], select: { categoryId: true } })).map((x) => x.categoryId);
+  if (rank !== null) others.splice(Math.min(rank - 1, others.length), 0, categoryId);
+  await t.seriesPin.deleteMany({ where: { operatorId: me } });
+  if (others.length) await t.seriesPin.createMany({ data: others.map((id, i) => ({ operatorId: me, categoryId: id, rank: i + 1 })) });
+  return others.length;
+}
+
+/** 清空自己的常用 */
+export async function clearSeriesPins(t: Tx, me: string | null) {
+  if (!me) throw new BizError("先在上面選「我是誰」，常用是各自的");
+  const r = await t.seriesPin.deleteMany({ where: { operatorId: me } });
+  return r.count;
 }
