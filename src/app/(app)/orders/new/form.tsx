@@ -141,7 +141,7 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
               ["NEW_LINKED", "獨立追加訂單（連結原訂單）"],
             ] as const
           ).map(([v, l]) => (
-            <label key={v} className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 ${mode === v ? "border-ai bg-ai-soft" : "border-line bg-white"}`}>
+            <label key={v} className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 ${mode === v ? "border-ai bg-ai-soft" : "border-line bg-card"}`}>
               <input type="radio" name="mode" checked={mode === v} onChange={() => setMode(v)} />
               {l}
             </label>
@@ -168,7 +168,7 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
         <div className="mb-1 text-[13px] font-medium text-ink-2">商品明細</div>
         <div className="space-y-3">
           {lines.map((l, i) => (
-            <div key={l.key} className="rounded-xl border border-line bg-tone-gray-50-6 p-3">
+            <div key={l.key} className="rounded-xl border border-line bg-paper p-3">
               <div className="grid gap-2 sm:grid-cols-[1fr_6rem_8rem_7rem]">
                 <ProductPicker value={l.product} onPick={(p) => upd(l.key, { product: p, categoryId: "" })} label={`商品 ${i + 1}`} />
                 <TextField label="數量" inputMode="numeric" value={l.qty} onChange={(e) => upd(l.key, { qty: e.target.value })} />
@@ -212,7 +212,7 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
         </div>
       )}
       <TextArea label={mode === "APPEND" ? "追加備註" : "訂單備註"} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
-      <div className="sticky bottom-16 z-20 flex items-center justify-between gap-3 rounded-xl border border-line bg-white px-4 py-3 shadow-sm md:bottom-4">
+      <div className="sticky bottom-16 z-20 flex items-center justify-between gap-3 rounded-xl border border-line bg-card px-4 py-3 shadow-sm md:bottom-4">
         <span className="text-sm">
           {mode === "APPEND" ? "追加金額" : "應收"}：<b className="num text-[17px]">{formatTwd(total)}</b>
         </span>

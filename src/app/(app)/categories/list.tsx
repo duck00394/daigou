@@ -14,13 +14,13 @@ function Row({ r }: { r: SeriesRow }) {
   const pct = r.ordered ? Math.min(100, Math.round((r.received / r.ordered) * 100)) : 0;
   return (
     <li>
-      <Link href={`/categories/${r.id}`} className="block px-3 py-2.5 hover:bg-tone-gray-50-4" data-testid={`cat-card-${r.name}`}>
+      <Link href={`/categories/${r.id}`} className="block px-3 py-2.5 hover:bg-line-2" data-testid={`cat-card-${r.name}`}>
         <div className="flex items-baseline justify-between gap-2">
           <span className="min-w-0 truncate font-semibold">{r.name}{!r.active && <span className="ml-1 text-[12px] font-normal text-mute">已過期</span>}</span>
           {r.refundTwd > 0 ? (
             <span className="num shrink-0 text-[14px] font-semibold text-bad">代購要退 {formatTwd(r.refundTwd)}</span>
           ) : r.dueTwd > 0 ? (
-            <span className="num shrink-0 text-[14px] font-semibold text-bad">還要付 {formatTwd(r.dueTwd)}</span>
+            <span className="num shrink-0 text-[14px] font-semibold text-warn">還要付 {formatTwd(r.dueTwd)}</span>
           ) : r.batches > 0 ? (
             <span className="shrink-0 text-[13px] text-good">已付清</span>
           ) : null}
@@ -38,7 +38,7 @@ function Row({ r }: { r: SeriesRow }) {
 function SortRow({ r, i, n }: { r: SeriesRow; i: number; n: number }) {
   const { run, pending } = useRun();
   const mv = (d: "up" | "down" | "top") => run(() => moveSeriesOrderAction(r.id, d));
-  const btn = "h-9 min-w-9 rounded-lg border border-line bg-white px-2 text-[14px] disabled:opacity-30";
+  const btn = "h-9 min-w-9 rounded-lg border border-line bg-card px-2 text-[14px] disabled:opacity-30";
   return (
     <li className="flex items-center justify-between gap-2 px-3 py-2" data-testid="sort-row" data-name={r.name}>
       <span className="min-w-0 truncate font-medium">{r.name}</span>
@@ -63,7 +63,7 @@ function KindBody({ g, all, idx, kinds }: { g: KindGroup; all: KindGroup[]; idx:
   const moveOpts = [...others.map((x) => ({ value: x.key, label: `移到「${x.label}」` })), ...(others.some((x) => x.key === "GENERAL") ? [] : [{ value: "GENERAL", label: "移到「一般分類」" }]), { value: "~delete", label: "連系列一起刪掉（有採購或賣出紀錄的不能刪）" }];
   return (
     <div className="border-t border-line-2">
-      <div className="flex flex-wrap gap-1.5 bg-tone-gray-50-4 px-3 py-2" data-testid="kind-tools">
+      <div className="flex flex-wrap gap-1.5 bg-paper px-3 py-2" data-testid="kind-tools">
         <Button small variant={mode === "sort" ? "primary" : "default"} onClick={() => setMode(mode === "sort" ? "view" : "sort")}>{mode === "sort" ? "排好了" : "排順序"}</Button>
         <Button small onClick={() => { setName(g.label); setMode("rename"); }}>改名稱</Button>
         <Button small variant="danger" onClick={() => setMode("delete")}>刪除</Button>
@@ -73,8 +73,8 @@ function KindBody({ g, all, idx, kinds }: { g: KindGroup; all: KindGroup[]; idx:
           <div className="flex items-center justify-between gap-2 border-t border-line-2 px-3 py-2 text-[13px]">
             <span className="text-mute">「{g.label}」整個種類</span>
             <span className="flex gap-1">
-              <button type="button" className="h-9 rounded-lg border border-line bg-white px-2 disabled:opacity-30" disabled={pending || idx === 0} onClick={() => run(() => moveKindAction(g.key, "up"))} aria-label="種類上移">種類上移</button>
-              <button type="button" className="h-9 rounded-lg border border-line bg-white px-2 disabled:opacity-30" disabled={pending || idx >= kinds - 1} onClick={() => run(() => moveKindAction(g.key, "down"))} aria-label="種類下移">種類下移</button>
+              <button type="button" className="h-9 rounded-lg border border-line bg-card px-2 disabled:opacity-30" disabled={pending || idx === 0} onClick={() => run(() => moveKindAction(g.key, "up"))} aria-label="種類上移">種類上移</button>
+              <button type="button" className="h-9 rounded-lg border border-line bg-card px-2 disabled:opacity-30" disabled={pending || idx >= kinds - 1} onClick={() => run(() => moveKindAction(g.key, "down"))} aria-label="種類下移">種類下移</button>
             </span>
           </div>
           <ul className="divide-y divide-line-2 border-t border-line-2" aria-label={`${g.label} 排順序`}>{g.rows.map((r, i) => <SortRow key={r.id} r={r} i={i} n={g.rows.length} />)}</ul>
@@ -101,7 +101,7 @@ export function SeriesList({ groups }: { groups: KindGroup[] }) {
   if (!groups.length) return <p className="rounded-xl border border-line bg-card px-4 py-8 text-center text-[14px] text-mute" data-testid="series-empty">還沒有系列。按上面「＋ 新系列」建立第一個（例：ANA、萬聖節），之後採購、賣給客人都會用到。</p>;
   return (
     <div className="space-y-2">
-      <input type="search" aria-label="找系列" placeholder="找系列：打關鍵字" className="min-h-11 w-full rounded-xl border border-line bg-white px-3 text-[15px]" value={q} onChange={(e) => setQ(e.target.value)} />
+      <input type="search" aria-label="找系列" placeholder="找系列：打關鍵字" className="min-h-11 w-full rounded-xl border border-field bg-card px-3 text-[15px]" value={q} onChange={(e) => setQ(e.target.value)} />
       {words.length > 0 ? (
         <ul className="divide-y divide-line-2 overflow-hidden rounded-xl border border-line bg-card" data-testid="series-search-hits">
           {hits.map((r) => <Row key={r.id} r={r} />)}
@@ -115,7 +115,7 @@ export function SeriesList({ groups }: { groups: KindGroup[] }) {
             <details key={g.key} className="overflow-hidden rounded-xl border border-line bg-card" data-testid="series-kind">
               <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-3 text-[15px] font-semibold">
                 <span>{g.label}<span className="ml-1.5 text-[13px] font-normal text-mute">{g.rows.length} 個系列</span></span>
-                <span className="text-[13px] font-normal">{refund > 0 ? <span className="text-bad">要退 {formatTwd(refund)}</span> : due > 0 ? <span className="text-bad">還要付 {formatTwd(due)}</span> : null}</span>
+                <span className="text-[13px] font-normal">{refund > 0 ? <span className="text-warn">要退 {formatTwd(refund)}</span> : due > 0 ? <span className="text-warn">還要付 {formatTwd(due)}</span> : null}</span>
               </summary>
               <KindBody g={g} all={groups} idx={gi} kinds={groups.filter((x) => x.key !== "~expired").length} />
             </details>

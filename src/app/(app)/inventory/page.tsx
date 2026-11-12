@@ -80,7 +80,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
     return (
       <div className="space-y-3">
         {head}
-        <p className="rounded-xl border border-dashed border-line bg-white p-6 text-center text-[14px] text-mute">選好種類、系列、品項（或直接搜尋），按「查看」才列出來。</p>
+        <p className="rounded-xl border border-dashed border-line bg-card p-6 text-center text-[14px] text-mute">選好種類、系列、品項（或直接搜尋），按「查看」才列出來。</p>
       </div>
     );
   }
@@ -269,10 +269,10 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
         </p>
       )}
       {only === "short" && <p className="rounded-xl border border-tone-red-200-3 bg-bad-soft px-3 py-2 text-[14px] text-bad" data-testid="stock-short-note">只列客人訂的比庫存多的（庫存是負的）：要再買，或跟客人說少了。補貨或取消預訂後就會自動消失。</p>}
-      {only === "unassigned" && <p className="rounded-xl border border-line bg-white px-3 py-2 text-[14px] text-ink-2">只列還有預訂沒分是跟誰訂的角色。點「客人訂」的數字，每一筆選跟誰訂的。</p>}
+      {only === "unassigned" && <p className="rounded-xl border border-line bg-card px-3 py-2 text-[14px] text-ink-2">只列還有預訂沒分是跟誰訂的角色。點「客人訂」的數字，每一筆選跟誰訂的。</p>}
       {rows.length > 0 && (
         <div className="flex justify-end">
-          <Link href={unsureHref} scroll={false} className="rounded-lg border border-line bg-white px-3 py-1.5 text-[13px] text-ai" data-testid="unsure-toggle">{hideUnsure ? "顯示「不一定」" : "隱藏「不一定」"}</Link>
+          <Link href={unsureHref} scroll={false} className="rounded-lg border border-line bg-card px-3 py-1.5 text-[13px] text-ai" data-testid="unsure-toggle">{hideUnsure ? "顯示「不一定」" : "隱藏「不一定」"}</Link>
         </div>
       )}
       {rows.length === 0 ? (
@@ -281,7 +281,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
         <div className="overflow-hidden rounded-xl border border-line bg-card">
           <table className="w-full text-[15px]" aria-label="庫存表">
             <thead>
-              <tr className="border-b border-line bg-tone-gray-50-4 text-[12px] text-mute">
+              <tr className="border-b border-line bg-paper text-[12px] text-mute">
                 <th className="px-3 py-2 text-left font-medium">角色</th>
                 <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium">現有</th>
                 <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium text-good">一定到</th>
@@ -297,7 +297,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
               {tree.map((k) => (
                 <Fragment key={k.key}>
                   {showKind && (
-                    <tr className="bg-ink text-white">
+                    <tr className="bg-ink text-on-fill">
                       <td colSpan={COLS} className="px-3 py-1.5 text-[14px] font-semibold" data-testid="stock-kind">{k.label}</td>
                     </tr>
                   )}
@@ -315,7 +315,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                         </tr>
                         {sg.types.map((tg) => (
                           <Fragment key={tg.key}>
-                            <tr className="border-t border-line-2 bg-tone-gray-50-2">
+                            <tr className="border-t border-line-2 bg-paper">
                               <td colSpan={COLS} className="py-1 pr-3 pl-5 text-[13px] font-semibold text-ink-2" data-testid="stock-type">
                                 {tg.name}
                                 {(() => {
@@ -373,7 +373,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                   })}
                 </Fragment>
               ))}
-              <tr className="border-t border-line bg-tone-gray-50-4 font-semibold">
+              <tr className="border-t border-line bg-paper font-semibold">
                 <td className="px-3 py-2">合計<span className="ml-1 text-[12px] font-normal text-mute">成本 {formatTwd(all.cost)}</span></td>
                 <td className="num px-1.5 py-2 text-right" data-testid="stock-total-onhand">{all.onHand}</td>
                 <td className="num px-1.5 py-2 text-right text-good">{all.incoming - all.unsure}</td>
@@ -555,7 +555,7 @@ async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, lat
                   </span>
                 )}
                 <span className="absolute right-2 bottom-2 z-10"><DeleteBatchButton batchId={b.id} name={b.name} paid={pay.get(b.id)?.paidTwd ?? 0} received={rec} items={b.items.length} qty={b.items.reduce((x, i) => x + i.qty - i.cancelledQty, 0)} /></span>
-                <Link href={`/inventory/batches/${b.id}`} className={`block h-full rounded-xl border border-line bg-white p-3 pb-12 hover:border-ai ${ownerTone(b.ownership === "JOINT" ? "joint" : b.orderedById, ids).stripe}`} data-testid="batch-card">
+                <Link href={`/inventory/batches/${b.id}`} className={`block h-full rounded-xl border border-line bg-card p-3 pb-12 hover:border-ai ${ownerTone(b.ownership === "JOINT" ? "joint" : b.orderedById, ids).stripe}`} data-testid="batch-card">
                   <div className="flex items-start justify-between gap-2">
                     <span className="font-semibold">{b.name}</span>
                     {b.status !== "CANCELLED" && !isStoreKind(b.supplierRef?.kind) && (() => {
@@ -647,7 +647,7 @@ async function PurchasedSummary({ batchIds }: { batchIds: string[] }) {
       <p className="px-4 pt-3 text-[13px] text-mute">上面選的這 {batchIds.length} 團加起來（已扣掉砍單）。「一定」＝已確認的團還沒到的；「不一定」＝還沒確認的團。</p>
       <table className="mt-2 w-full text-[14px]">
         <thead>
-          <tr className="border-b border-line bg-tone-gray-50-4 text-[12px] text-mute">
+          <tr className="border-b border-line bg-paper text-[12px] text-mute">
             <th className="px-3 py-2 text-left font-medium">角色</th>
             <th className="px-2 py-2 text-right font-medium">買了</th>
             <th className="px-2 py-2 text-right font-medium">到了</th>
@@ -662,7 +662,7 @@ async function PurchasedSummary({ batchIds }: { batchIds: string[] }) {
               <tr className="bg-ai-soft"><td colSpan={6} className="px-3 py-1.5 font-semibold text-ai">{sName(sk === "-" ? null : sk)}</td></tr>
               {[...types.entries()].sort(([, a], [, b]) => a[0].typeSort - b[0].typeSort).map(([tn, list]) => (
                 <Fragment key={tn}>
-                  <tr className="bg-tone-gray-50-2"><td colSpan={6} className="py-1 pl-5 text-[13px] font-semibold text-ink-2">{tn}</td></tr>
+                  <tr className="bg-paper"><td colSpan={6} className="py-1 pl-5 text-[13px] font-semibold text-ink-2">{tn}</td></tr>
                   {list.sort((a, b) => ord(a) - ord(b) || byText(a.name, b.name)).map((r) => {
                     const out = Math.max(0, r.ordered - r.received);
                     return (
@@ -680,7 +680,7 @@ async function PurchasedSummary({ batchIds }: { batchIds: string[] }) {
               ))}
             </Fragment>
           ))}
-          <tr className="bg-tone-gray-50-4 font-semibold">
+          <tr className="bg-paper font-semibold">
             <td className="px-3 py-2">合計</td>
             <td className="num px-2 text-right" data-testid="summary-total">{total.ordered}</td>
             <td className="num px-2 text-right">{total.received}</td>

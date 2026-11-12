@@ -197,7 +197,7 @@ export function FlagSelect({ itemId, kind, value, disabled }: { itemId: string; 
       aria-label={kind === "purchase" ? "採購狀態" : "備貨狀態"}
       disabled={disabled || pending}
       value={value}
-      className="rounded-md border border-line bg-white px-1.5 py-1 text-[13px]"
+      className="rounded-md border border-line bg-card px-1.5 py-1 text-[13px]"
       onChange={(e) =>
         run(() => updateItemAction(itemId, kind === "purchase" ? { purchaseFlag: e.target.value as never } : { packFlag: e.target.value as never }), { success: "已更新狀態" })
       }

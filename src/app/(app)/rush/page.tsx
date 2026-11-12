@@ -22,7 +22,7 @@ export default async function RushPage({ searchParams }: { searchParams: Promise
     const k = relativeDay(r.startAt);
     days.set(k, [...(days.get(k) ?? []), r]);
   }
-  const tab = (on: boolean) => `flex-1 rounded-lg py-2 text-center text-[14px] ${on ? "bg-white font-semibold text-ink shadow-sm" : "text-ink-2"}`;
+  const tab = (on: boolean) => `flex-1 rounded-lg py-2 text-center text-[14px] ${on ? "bg-card font-semibold text-ink shadow-sm" : "text-ink-2"}`;
   return (
     <div className="space-y-3">
       <PageHeader title="搶購提醒" />
@@ -31,8 +31,8 @@ export default async function RushPage({ searchParams }: { searchParams: Promise
         <Link href="/rush?tab=history" className={tab(history)} aria-current={history ? "page" : undefined}>歷史紀錄</Link>
       </nav>
       <PushStatusChip vapidKey={vapidPublicKey()} />
-      <Link href="/rush/new" className="block rounded-xl bg-ai py-3 text-center text-[16px] font-semibold text-white">＋ 新增搶購提醒</Link>
-      {rows.length === 0 && <p className="rounded-xl border border-dashed border-line bg-white p-6 text-center text-[14px] text-mute">{history ? "還沒有結束的搶購。" : "接下來沒有搶購。按上面「新增搶購提醒」記一筆。"}</p>}
+      <Link href="/rush/new" className="block rounded-xl bg-ai py-3 text-center text-[16px] font-semibold text-on-fill">＋ 新增搶購提醒</Link>
+      {rows.length === 0 && <p className="rounded-xl border border-dashed border-line bg-card p-6 text-center text-[14px] text-mute">{history ? "還沒有結束的搶購。" : "接下來沒有搶購。按上面「新增搶購提醒」記一筆。"}</p>}
       {[...days.entries()].map(([day, list]) => (
         <section key={day}>
           <h2 className="mt-2 mb-1 text-[13px] font-bold text-ink-2">{day}</h2>
@@ -42,7 +42,7 @@ export default async function RushPage({ searchParams }: { searchParams: Promise
               const near = clash.get(r.id);
               return (
                 <li key={r.id}>
-                  <Link href={`/rush/${r.id}`} className={`flex gap-3 rounded-xl border bg-white p-3 ${near ? "border-tone-orange-400-2 bg-tone-orange-50" : "border-line"}`} data-testid="rush-row" data-name={`${r.supplierName}｜${r.seriesName}`}>
+                  <Link href={`/rush/${r.id}`} className={`flex gap-3 rounded-xl border bg-card p-3 ${near ? "border-tone-orange-400-2 bg-tone-orange-50" : "border-line"}`} data-testid="rush-row" data-name={`${r.supplierName}｜${r.seriesName}`}>
                     <span className="w-14 shrink-0 text-[18px] font-extrabold">{taipeiParts(r.startAt).time}</span>
                     <span className="min-w-0 flex-1">
                       <b className="block truncate text-[15px]">{r.supplierName}</b>

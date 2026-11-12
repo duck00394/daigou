@@ -10,6 +10,8 @@ import { ViewBanner } from "@/components/view-switch";
 import { NavStack } from "@/components/back";
 import { Tour } from "@/components/tour";
 import { getView } from "@/server/view";
+import { MODE_SCRIPT } from "@/lib/mode-script";
+import { ModeSync } from "@/components/mode";
 
 export const dynamic = "force-dynamic";
 // 大量匯入、還原等操作可能較久（Vercel 免費方案上限 60 秒）
@@ -20,6 +22,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const [ordersOn, view] = await Promise.all([getOrdersEnabled(prisma), getView()]);
   return (
     <ToastProvider>
+      {/* 外觀（深色預設）：畫面出來前先設定，不會閃一下淺色 */}
+      <script dangerouslySetInnerHTML={{ __html: MODE_SCRIPT }} />
+      <ModeSync />
       <NumberFocusClear />
       <SwRegister />
       <Suspense><NavStack /></Suspense>

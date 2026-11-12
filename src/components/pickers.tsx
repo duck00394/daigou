@@ -64,7 +64,7 @@ function Picker<T extends { id: string }>({
     <div ref={box} className="relative">
       <span className="mb-1 block text-[13px] font-medium text-ink-2">{label}</span>
       {value && !open ? (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-line bg-white px-3 py-2">
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-line bg-card px-3 py-2">
           <span className="min-w-0 truncate">{display(value)}</span>
           <button type="button" className="shrink-0 text-sm text-ai" onClick={() => setOpen(true)}>
             更換
@@ -74,7 +74,7 @@ function Picker<T extends { id: string }>({
         <input autoFocus={open} className={inputCls} value={q} placeholder={placeholder} onFocus={() => setOpen(true)} onChange={(e) => setQ(e.target.value)} aria-label={label} />
       )}
       {open && (
-        <div className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-line bg-white shadow-lg">
+        <div className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-line bg-card shadow-lg">
           {loading && <div className="px-3 py-2 text-sm text-mute">搜尋中…</div>}
           {!loading && items.length === 0 && <div className="px-3 py-2 text-sm text-mute">找不到符合的資料</div>}
           {items.map((it) => (

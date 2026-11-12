@@ -150,7 +150,7 @@ export function Chip({ on, onClick, children }: { on: boolean; onClick: () => vo
       type="button"
       aria-pressed={on}
       onClick={onClick}
-      className={`rounded-full border px-3 py-1 text-[14px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2 hover:border-ai"}`}
+      className={`rounded-full border px-3 py-1 text-[14px] ${on ? "border-ai bg-ai text-on-fill" : "border-line bg-card text-ink-2 hover:border-ai"}`}
     >
       {on ? "✓ " : ""}
       {children}

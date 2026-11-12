@@ -23,7 +23,7 @@ export function SeriesFilter({ series, value }: { series: SeriesOpt[]; value: st
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-[13px] text-mute">常用</span>
           {pinned.map((s) => (
-            <button key={s.id} type="button" aria-pressed={value === s.id} onClick={() => go(value === s.id ? "" : s.id)} className={`rounded-full border px-3 py-1 text-[14px] ${value === s.id ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`}>
+            <button key={s.id} type="button" aria-pressed={value === s.id} onClick={() => go(value === s.id ? "" : s.id)} className={`rounded-full border px-3 py-1 text-[14px] ${value === s.id ? "border-ai bg-ai text-on-fill" : "border-line bg-card text-ink-2"}`}>
               {s.name}
             </button>
           ))}
@@ -31,7 +31,7 @@ export function SeriesFilter({ series, value }: { series: SeriesOpt[]; value: st
       )}
       <label className="block text-[13px] font-medium text-ink-2">
         看哪個系列
-        <select aria-label="看哪個系列" className="mt-1 min-h-11 w-full rounded-lg border border-line bg-white px-2.5 text-[15px]" value={value} onChange={(e) => go(e.target.value)}>
+        <select aria-label="看哪個系列" className="mt-1 min-h-11 w-full rounded-lg border border-field bg-card px-2.5 text-[15px]" value={value} onChange={(e) => go(e.target.value)}>
           <option value="">全部系列</option>
           {current && !current.active && <option value={current.id}>{current.name}（已過期）</option>}
           {kinds.map(([k, l]) => (

@@ -63,7 +63,7 @@ export function NewBatchForm({
     >
       <TextField label="採購團名稱（必填）" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="例：聖誕 A 團（代購小美）" />
       {newCategory === null ? (
-        <SeriesPicker series={cats} value={f.categoryId} onChange={(id) => setF({ ...f, categoryId: id })} noneLabel="不指定" extra={<button type="button" className="min-h-10 rounded-lg border border-line bg-white px-3 text-[14px] text-ai" onClick={() => setNewCategory("")}>＋ 新系列</button>} />
+        <SeriesPicker series={cats} value={f.categoryId} onChange={(id) => setF({ ...f, categoryId: id })} noneLabel="不指定" extra={<button type="button" className="min-h-10 rounded-lg border border-line bg-card px-3 text-[14px] text-ai" onClick={() => setNewCategory("")}>＋ 新系列</button>} />
       ) : (
         <div className="flex items-end gap-2">
           <label className="flex-1 text-[13px] font-medium text-ink-2">

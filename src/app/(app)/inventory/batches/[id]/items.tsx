@@ -168,7 +168,7 @@ export function ReceiveAllButton({ batchId, outstanding, operators, defaultRecei
   };
   const payModal = (
     <Modal open={got !== null} onClose={later} title={`已收貨 ${got ?? 0} 件，進庫存了`} footer={<><Button onClick={later}>先不用</Button><Button variant="primary" loading={pending} onClick={() => run(() => payRemainingAction(batchId, payer ?? who, payIdem.key), { success: "已記成付清", onOk: () => { payIdem.renew(); setGot(null); } })}>付清 {formatTwd(due)}</Button></>}>
-      <p className="text-[14px]" data-testid="pay-after-receive">這團還要付 <b className="num text-bad">{formatTwd(due)}</b>，要順便記成付清嗎？</p>
+      <p className="text-[14px]" data-testid="pay-after-receive">這團還要付 <b className="num text-warn">{formatTwd(due)}</b>，要順便記成付清嗎？</p>
     </Modal>
   );
   if (outstanding <= 0) return <>{payModal}<span className="flex items-center justify-center rounded-lg bg-good-soft px-3 py-2 text-[14px] text-good">{doneLabel}</span></>;

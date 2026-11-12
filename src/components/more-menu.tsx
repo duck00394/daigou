@@ -15,11 +15,11 @@ export function MoreMenu({ children, label = "⋯ 更多" }: { children: React.R
   }, [open]);
   return (
     <div ref={ref} className="relative">
-      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-3 text-[14px]">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="inline-flex min-h-10 items-center rounded-lg border border-line bg-card px-3 text-[14px]">
         {label}
       </button>
       {open && (
-        <div className="absolute right-0 z-30 mt-1 flex min-w-44 flex-col gap-1.5 rounded-xl border border-line bg-white p-2 shadow-lg [&>*]:w-full [&_a]:justify-start [&_button]:w-full [&_button]:justify-start" data-testid="more-menu">
+        <div className="absolute right-0 z-30 mt-1 flex min-w-44 flex-col gap-1.5 rounded-xl border border-line bg-card p-2 shadow-lg [&>*]:w-full [&_a]:justify-start [&_button]:w-full [&_button]:justify-start" data-testid="more-menu">
           {children}
         </div>
       )}

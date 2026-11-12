@@ -75,7 +75,7 @@ export function AddCost({ batchId, items, operators, owner, presets = [] }: { ba
               <div className="mb-1 text-[13px] text-ink-2">常用運費（點一下帶入）</div>
               <div className="flex flex-wrap gap-1.5">
                 {presets.map((p) => (
-                  <button key={p.id} type="button" className={`rounded-full border px-3 py-1.5 text-[14px] ${f.note === p.name ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`} onClick={() => { setF({ ...f, kind: p.kind, currency: p.currency, amount: String(p.amount), note: p.name }); if (joint) setSplit(half(p.amount)); }}>
+                  <button key={p.id} type="button" className={`rounded-full border px-3 py-1.5 text-[14px] ${f.note === p.name ? "border-ai bg-ai text-on-fill" : "border-line bg-card text-ink-2"}`} onClick={() => { setF({ ...f, kind: p.kind, currency: p.currency, amount: String(p.amount), note: p.name }); if (joint) setSplit(half(p.amount)); }}>
                     {p.name} {p.currency === "JPY" ? "¥" : "$"}{p.amount.toLocaleString()}
                   </button>
                 ))}
@@ -90,7 +90,7 @@ export function AddCost({ batchId, items, operators, owner, presets = [] }: { ba
           <Chips label="誰付的" value={f.payer} options={payerOpts} onChange={(payer) => { setF({ ...f, payer, method: "NONE" }); if (payer === "joint") setSplit(half(Number(f.amount) || 0)); }} />
           {!joint && <p className="text-[13px] text-mute">不攤進商品成本，單獨記一筆（算在這團的總額裡）。</p>}
           {joint && (
-            <div className="space-y-3 rounded-xl border border-line-2 bg-tone-gray-50-4 p-3">
+            <div className="space-y-3 rounded-xl border border-line-2 bg-paper p-3">
               {f.currency === "JPY" && <p className="text-[13px] text-mute">日幣會用這團的匯率換成台幣，下面請填台幣。</p>}
               <div>
                 <div className="mb-1 flex items-center justify-between text-[13px] text-ink-2">兩人怎麼分<button type="button" className="text-ai" onClick={() => setSplit(half(Number(f.amount) || 0))}>各一半</button></div>

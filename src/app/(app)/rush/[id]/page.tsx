@@ -21,14 +21,14 @@ export default async function RushDetail({ params }: { params: Promise<{ id: str
   return (
     <div className="space-y-3">
       <PageHeader title={ev.supplierName} back={{ href: "/rush", label: "搶購提醒" }} sub={ev.seriesName} />
-      <section className="space-y-2 rounded-xl border border-line bg-white p-4">
+      <section className="space-y-2 rounded-xl border border-line bg-card p-4">
         <div className="text-[16px]" data-testid="rush-when">{relativeDay(ev.startAt)} {taipeiParts(ev.startAt).time} 開始</div>
         {ev.status === "UPCOMING" ? <Countdown at={ev.startAt.toISOString()} /> : <div className="text-[18px] font-bold">{rushStatus[ev.status]}</div>}
         <span className={`inline-block rounded-full px-2.5 py-1 text-[13px] ${toneCls[b.tone]}`} data-testid="rush-schedule">{b.text}</span>
         {clash.length > 0 && <p className="text-[13px] text-warn"><Icon name="warn" /> 時間衝突：{clash.map((c) => `${taipeiParts(c.startAt).time} ${c.supplierName}，${c.seriesName}`).join("、")}</p>}
         {ev.notes && <p className="text-[14px] whitespace-pre-wrap">備註：{ev.notes}</p>}
         {ev.url && (
-          <a href={ev.url} target="_blank" rel="noopener noreferrer" className="block rounded-xl bg-ai py-3 text-center text-[16px] font-semibold text-white">
+          <a href={ev.url} target="_blank" rel="noopener noreferrer" className="block rounded-xl bg-ai py-3 text-center text-[16px] font-semibold text-on-fill">
             開啟搶購網址 ↗
           </a>
         )}

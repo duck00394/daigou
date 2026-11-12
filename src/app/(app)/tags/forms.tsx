@@ -30,7 +30,7 @@ export function TagEditButton({ tag }: { tag?: T }) {
           <SelectField label="標籤類型" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })} options={Object.entries(tagKind)} />
           <label className="text-[13px] font-medium text-ink-2">
             顏色
-            <input type="color" value={f.color} onChange={(e) => setF({ ...f, color: e.target.value })} className="mt-1 block h-10 w-20 rounded-lg border border-line" />
+            <input type="color" value={f.color} onChange={(e) => setF({ ...f, color: e.target.value })} className="mt-1 block h-10 w-20 rounded-lg border border-field" />
           </label>
           <div className="space-y-2 pt-5 text-sm">
             <label className="flex items-center gap-2">

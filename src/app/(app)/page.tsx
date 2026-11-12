@@ -1,5 +1,6 @@
 // 首頁：只放「今天要做的事」——兩顆大按鈕、三個數字、一張待辦清單（按了直接到篩好的地方）、下一場搶購
 import Link from "next/link";
+import { Icon } from "@/components/icons";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { getView, inView, viewBatchWhere } from "@/server/view";
@@ -73,51 +74,59 @@ export default async function Home() {
       : []),
   ].filter((x) => x.n > 0);
 
-  const stat = (label: string, value: number, href: string, tone: "bad" | "good" | "plain", testid: string) => (
-    <Link href={href} className="block rounded-xl border border-line bg-card px-2.5 py-2 hover:border-ai">
-      <div className="text-[12px] text-mute">{label}</div>
-      <div className={`num text-[18px] font-semibold ${tone === "bad" && value ? "text-bad" : tone === "good" ? (value < 0 ? "text-bad" : "text-good") : ""}`} data-testid={testid}>{formatTwd(value)}</div>
+  // 金額：一排共用一個外框（細線分格）；還欠的用杏色，賺的用綠色，紅色只留給賠錢
+  const stat = (label: string, value: number, href: string, tone: "owe" | "good", testid: string) => (
+    <Link href={href} className="block bg-card px-3.5 py-3 transition-colors duration-150 hover:bg-line-2">
+      <div className="text-[13px] text-mute">{label}</div>
+      <div className={`num mt-0.5 text-[19px] leading-7 font-semibold ${tone === "owe" ? (value ? "text-warn" : "text-ink") : value < 0 ? "text-bad" : value > 0 ? "text-good" : "text-ink"}`} data-testid={testid}>{formatTwd(value)}</div>
     </Link>
   );
 
   return (
     <div className="space-y-4">
       <h1 className="sr-only">首頁</h1>
-      <div className="grid grid-cols-2 gap-2" data-tour="home-actions">
-        <Link href="/purchase" className="rounded-xl bg-ai px-3 py-3.5 text-center text-[17px] font-semibold text-white hover:bg-ai-2">＋ 新增採購</Link>
-        <Link href="/sell" className="rounded-xl border border-line bg-white px-3 py-3.5 text-center text-[17px] font-semibold hover:border-ai">賣給客人</Link>
+      <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap" data-tour="home-actions">
+        <Link href="/purchase" className="inline-flex min-h-12 items-center justify-center rounded-xl bg-ai px-5 text-[16px] font-semibold text-on-fill transition-colors duration-150 hover:bg-ai-2 md:min-h-11">＋ 新增採購</Link>
+        <Link href="/sell" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-line bg-card px-5 text-[16px] font-semibold transition-colors duration-150 hover:bg-line-2 md:min-h-11">賣給客人</Link>
       </div>
-      <div className="grid grid-cols-2 gap-2" data-tour="home-stats">
-        {stat("還要付代購", dueTotal, "/inventory?tab=batches&open=0&pay=due", "bad", "home-due")}
-        {stat("代購要退", refundTotal, "/reconcile?open=refund", "bad", "home-refund")}
-        {stat("本月賺", m.profit, "/sales", "good", "home-profit")}
-        {stat("預訂預估可賺", pre.profit, "/sales#preorder", "good", "home-preorder")}
+      {/* 手機：金額 → 要處理的事 → 搶購；電腦：左邊要處理的事，右邊金額與搶購 */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-[auto_1fr] lg:items-start">
+        <div className="stat-grid grid grid-cols-2 lg:col-start-2 lg:row-start-1" data-tour="home-stats">
+          {stat("還要付代購", dueTotal, "/inventory?tab=batches&open=0&pay=due", "owe", "home-due")}
+          {stat("代購要退", refundTotal, "/reconcile?open=refund", "owe", "home-refund")}
+          {stat("本月賺", m.profit, "/sales", "good", "home-profit")}
+          {stat("預訂預估可賺", pre.profit, "/sales#preorder", "good", "home-preorder")}
+        </div>
+
+        <section aria-label="要處理的事" className="lg:col-start-1 lg:row-span-2 lg:row-start-1">
+          <h2 className="mb-2 flex items-baseline gap-2 text-[15px] font-semibold">
+            要處理的事
+            {todo.length > 0 && <span className="num text-[13px] font-normal text-mute">{todo.length} 項</span>}
+          </h2>
+          {todo.length === 0 ? (
+            <p className="rounded-xl border border-line bg-card px-4 py-4 text-center text-[14px] text-good" data-testid="home-todo-empty">都處理好了</p>
+          ) : (
+            <ul className="divide-y divide-line-2 overflow-hidden rounded-xl border border-line bg-card" data-testid="home-todo" data-tour="home-todo">
+              {todo.map((t) => (
+                <li key={t.href + t.text}>
+                  <Link href={t.href} className="flex min-h-12 items-center gap-3 px-3.5 py-2.5 transition-colors duration-150 hover:bg-line-2">
+                    <span className="num w-8 shrink-0 text-right text-[17px] font-semibold text-ink">{t.n}</span>
+                    <span className="flex-1 text-[15px] text-ink-2">{t.text}</span>
+                    <span aria-hidden className="text-mute"><Icon name="chevronRight" /></span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="flex items-center justify-between gap-2 rounded-xl border border-line bg-card px-3.5 py-2.5 lg:col-start-2 lg:row-start-2" aria-label="搶購提醒" data-testid="home-rush">
+          <Link href={rush ? `/rush/${rush.id}` : "/rush"} className="min-w-0 flex-1 truncate text-[14px]">
+            {rush ? <>下一場搶購　{relativeDay(rush.startAt).split(" ")[0]} {taipeiParts(rush.startAt).time}　{rush.supplierName}</> : <span className="text-mute">接下來沒有搶購，按這裡新增</span>}
+          </Link>
+          <PushStatusChip vapidKey={vapidPublicKey()} />
+        </section>
       </div>
-
-      <section aria-label="要處理的事">
-        <h2 className="mb-1.5 text-[14px] font-semibold text-ink-2">要處理的事</h2>
-        {todo.length === 0 ? (
-          <p className="rounded-xl border border-line bg-card px-4 py-4 text-center text-[14px] text-good" data-testid="home-todo-empty">都處理好了</p>
-        ) : (
-          <ul className="divide-y divide-line-2 overflow-hidden rounded-xl border border-line bg-card" data-testid="home-todo" data-tour="home-todo">
-            {todo.map((t) => (
-              <li key={t.href + t.text}>
-                <Link href={t.href} className="flex items-center gap-3 px-3 py-3 hover:bg-tone-gray-50-5">
-                  <span className="num min-w-8 rounded-md bg-peach px-1.5 text-center font-semibold text-peach-ink">{t.n}</span>
-                  <span className="flex-1 text-[15px]">{t.text}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="flex items-center justify-between gap-2 rounded-xl border border-line bg-card px-3 py-2.5" aria-label="搶購提醒" data-testid="home-rush">
-        <Link href={rush ? `/rush/${rush.id}` : "/rush"} className="min-w-0 flex-1 truncate text-[14px]">
-          {rush ? <>下一場搶購　{relativeDay(rush.startAt).split(" ")[0]} {taipeiParts(rush.startAt).time}　{rush.supplierName}</> : <span className="text-mute">接下來沒有搶購，按這裡新增</span>}
-        </Link>
-        <PushStatusChip vapidKey={vapidPublicKey()} />
-      </section>
     </div>
   );
 }

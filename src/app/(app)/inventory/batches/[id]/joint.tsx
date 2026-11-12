@@ -69,10 +69,10 @@ export function JointPanel({ batchId, s, editable }: { batchId: string; s: Joint
 
       <div className="mt-3 space-y-2" data-testid="joint-debts">
         {s.debts.length === 0 ? (
-          <p className="rounded-lg bg-white px-3 py-2 text-[14px] text-good">{s.paidTotal > 0 ? "兩人之間不用互相給錢" : "還沒有人付錢給代購"}</p>
+          <p className="rounded-lg bg-card px-3 py-2 text-[14px] text-good">{s.paidTotal > 0 ? "兩人之間不用互相給錢" : "還沒有人付錢給代購"}</p>
         ) : (
           s.debts.map((d) => (
-            <div key={`${d.from}-${d.to}`} className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2">
+            <div key={`${d.from}-${d.to}`} className="flex items-center justify-between gap-2 rounded-lg bg-card px-3 py-2">
               <span className="text-[14px] font-semibold text-bad">{name(d.from)}要給{name(d.to)} <span className="num">{formatTwd(d.amount)}</span></span>
               {editable && <Button small disabled={pending} onClick={() => run(() => recordJointTransferAction(batchId, d), { success: "已記下，結清了" })}>已給了（結清）</Button>}
             </div>
@@ -84,7 +84,7 @@ export function JointPanel({ batchId, s, editable }: { batchId: string; s: Joint
       </div>
 
       {editing && (
-        <div className="mt-3 space-y-3 rounded-lg bg-white p-3" data-testid="joint-edit">
+        <div className="mt-3 space-y-3 rounded-lg bg-card p-3" data-testid="joint-edit">
           <div>
             <div className="mb-1 text-[13px] font-medium text-ink-2">「一起的」商品比例（%）</div>
             <div className="grid grid-cols-2 gap-2">

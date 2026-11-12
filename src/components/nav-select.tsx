@@ -16,7 +16,7 @@ export function NavSelect({ label, options, current, className = "", hideLabel =
         value={current}
         disabled={pending}
         onChange={(e) => start(() => router.push(e.target.value))}
-        className="min-h-11 w-full rounded-lg border border-line bg-white px-2.5 text-[15px] font-normal text-ink disabled:opacity-60"
+        className="min-h-11 w-full rounded-lg border border-line bg-card px-2.5 text-[15px] font-normal text-ink disabled:opacity-60"
       >
         {options.map((o) => <option key={o.href} value={o.href}>{o.label}</option>)}
       </select>

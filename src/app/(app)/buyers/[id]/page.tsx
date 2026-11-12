@@ -73,7 +73,7 @@ export default async function BuyerPage({ params, searchParams }: { params: Prom
             {b.salesChannel && <span className="rounded-full bg-info-soft px-2 py-0.5 text-[12px] text-info" data-testid="buyer-channel">{b.salesChannel}</span>}
             {b.lineName && <span>｜LINE：{b.lineName}</span>}
             {b.tags.filter((t) => !t.removedAt).map((t) => (
-              <span key={t.id} className="inline-flex items-center gap-1 rounded-full border border-line bg-white px-2 py-0.5 text-[12px] text-ink">
+              <span key={t.id} className="inline-flex items-center gap-1 rounded-full border border-line bg-card px-2 py-0.5 text-[12px] text-ink">
                 <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: t.tag.color }} />
                 {t.tag.name}
               </span>
@@ -95,7 +95,7 @@ export default async function BuyerPage({ params, searchParams }: { params: Prom
           這位買家已合併，請到 <Link href={`/buyers/${b.mergedInto.id}`} className="text-ai underline">{b.mergedInto.name}</Link> 查看完整紀錄。
         </p>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="stat-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="有效訂單" value={confirmed.filter((o) => o.statusCache !== "CANCELLED").length} />
         <Stat label="已取消訂單" value={cancelledOrders.length} />
         <Stat label="累計應收" value={<Twd v={receivable} />} />
@@ -103,11 +103,11 @@ export default async function BuyerPage({ params, searchParams }: { params: Prom
         <Stat label="待出貨件數" value={pendingShip} />
         <Stat label="已出貨件數" value={shipped} />
       </div>
-      {refundDue > 0 && <p className="rounded-lg bg-bad-soft px-4 py-2 text-sm text-bad">需退還這位買家 NT${refundDue.toLocaleString()}。</p>}
+      {refundDue > 0 && <p className="rounded-lg bg-warn-soft px-4 py-2 text-sm text-warn">需退還這位買家 NT${refundDue.toLocaleString()}。</p>}
 
       <nav aria-label="買家資料分頁" className="no-print -mx-3 flex gap-1 overflow-x-auto px-3 sm:mx-0 sm:px-0">
         {TABS.map(([k, l]) => (
-          <Link key={k} href={`/buyers/${id}?tab=${k}`} aria-current={tab === k ? "page" : undefined} className={`shrink-0 rounded-lg px-3 py-1.5 text-sm ${tab === k ? "bg-ink text-white" : "bg-white text-ink-2 hover:bg-line-2"}`}>
+          <Link key={k} href={`/buyers/${id}?tab=${k}`} aria-current={tab === k ? "page" : undefined} className={`shrink-0 rounded-lg px-3 py-1.5 text-sm ${tab === k ? "bg-ink text-on-fill" : "bg-card text-ink-2 hover:bg-line-2"}`}>
             {l}
           </Link>
         ))}
@@ -271,7 +271,7 @@ export default async function BuyerPage({ params, searchParams }: { params: Prom
                 {confirmed.filter((o) => o.balanceCache > 0).map((o) => (
                   <li key={o.id} className="flex justify-between px-4 py-2">
                     <Link href={`/orders/${o.id}`} className="num text-ai hover:underline">{o.orderNo}</Link>
-                    <span>待收 <Twd v={o.balanceCache} className="font-medium text-bad" /></span>
+                    <span>待收 <Twd v={o.balanceCache} className="font-medium text-warn" /></span>
                   </li>
                 ))}
               </ul>

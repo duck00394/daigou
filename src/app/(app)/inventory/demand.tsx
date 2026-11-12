@@ -79,7 +79,7 @@ export function DemandButton({ name, shown, cls, rows, operators, viewer = "" }:
             <p>{edit.row.buyer} 的{name} × {edit.row.qty}</p>
             <label className="flex items-center gap-2">
               <span className="shrink-0">從 {label(edit.row.ownerKey)} 改成</span>
-              <select aria-label="改成跟誰訂的" className="min-h-10 flex-1 rounded-lg border border-line bg-white px-2" value={edit.to} onChange={(e) => setEdit({ ...edit, to: e.target.value })}>
+              <select aria-label="改成跟誰訂的" className="min-h-10 flex-1 rounded-lg border border-field bg-card px-2" value={edit.to} onChange={(e) => setEdit({ ...edit, to: e.target.value })}>
                 {choices.filter((c) => c.value !== edit.row.ownerKey).map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </label>

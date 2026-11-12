@@ -44,7 +44,7 @@ export function PickBox({ id, name }: { id: string; name: string }) {
   return (
     <span className="flex w-11 shrink-0 flex-col items-center gap-1 py-2.5 pl-2">
       <input type="checkbox" className="h-5 w-5 accent-ai" aria-label={`選 ${name}`} checked={q > 0} onChange={(e) => c.set(id, e.target.checked ? 1 : 0)} />
-      {q > 0 && <input aria-label={`${name} 件數`} inputMode="numeric" className="num h-7 w-9 rounded-md border border-line text-center text-[13px]" onFocus={(e) => e.target.select()} value={q} onChange={(e) => c.set(id, Math.max(1, Math.min(999, Number(e.target.value.replace(/\D/g, "")) || 1)))} />}
+      {q > 0 && <input aria-label={`${name} 件數`} inputMode="numeric" className="num h-7 w-9 rounded-md border border-field text-center text-[13px]" onFocus={(e) => e.target.select()} value={q} onChange={(e) => c.set(id, Math.max(1, Math.min(999, Number(e.target.value.replace(/\D/g, "")) || 1)))} />}
     </span>
   );
 }
@@ -56,7 +56,7 @@ export function SetButton({ ids, label }: { ids: string[]; label: string }) {
   const cost = ids.reduce((a, id) => a + (c.info[id]?.cost ?? 0), 0);
   if (!c.on) return null;
   return (
-    <button type="button" className={`rounded-lg border px-2 py-1 text-[12.5px] font-normal ${all ? "border-ai bg-ai text-white" : "border-line bg-white text-ink"}`} onClick={() => (all ? ids.forEach((id) => c.set(id, 0)) : c.setMany(ids, 1))} title={`整套成本約 ${formatTwd(cost)}`}>
+    <button type="button" className={`rounded-lg border px-2 py-1 text-[12.5px] font-normal ${all ? "border-ai bg-ai text-on-fill" : "border-line bg-card text-ink"}`} onClick={() => (all ? ids.forEach((id) => c.set(id, 0)) : c.setMany(ids, 1))} title={`整套成本約 ${formatTwd(cost)}`}>
       {all ? "取消整套" : label}
     </button>
   );
@@ -71,7 +71,7 @@ export function PickSpacer() {
 export function PickToggle() {
   const c = useContext(PickCtx)!;
   return (
-    <button type="button" className={`rounded-lg border px-3 py-1.5 text-[13.5px] ${c.on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink"}`} onClick={() => c.setOn(!c.on)} aria-pressed={c.on}>
+    <button type="button" className={`rounded-lg border px-3 py-1.5 text-[13.5px] ${c.on ? "border-ai bg-ai text-on-fill" : "border-line bg-card text-ink"}`} onClick={() => c.setOn(!c.on)} aria-pressed={c.on}>
       {c.on ? "不勾了" : "勾選算成本"}
     </button>
   );
@@ -97,12 +97,12 @@ function PickBar({ categoryId }: { categoryId?: string }) {
     }
   }
   return (
-    <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-20 mx-2 mb-2 rounded-2xl bg-ai px-4 py-2.5 text-white shadow-lg md:bottom-3" data-testid="pick-bar" role="status">
+    <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-20 mx-2 mb-2 rounded-2xl bg-ai px-4 py-2.5 text-on-fill shadow-lg md:bottom-3" data-testid="pick-bar" role="status">
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-[13px]">已選 {qty} 隻　成本合計 <b className="num text-[18px]" data-testid="pick-cost">{formatTwd(cost)}</b>{tentative ? "（有預估價）" : ""}</span>
         <span className="flex shrink-0 items-center gap-3">
           <button type="button" className="text-[13px] underline" onClick={c.clear}>清除</button>
-          {categoryId && <Link href={`/sell?cat=${categoryId}&pick=${ids.map((id) => `${id}:${c.sel[id]}`).join(",")}`} className="rounded-lg bg-white px-2.5 py-1 text-[13px] font-semibold text-ai" data-testid="pick-sell">賣給客人</Link>}
+          {categoryId && <Link href={`/sell?cat=${categoryId}&pick=${ids.map((id) => `${id}:${c.sel[id]}`).join(",")}`} className="rounded-lg bg-card px-2.5 py-1 text-[13px] font-semibold text-ai" data-testid="pick-sell">賣給客人</Link>}
         </span>
       </div>
       <div className="text-[12.5px] opacity-85">

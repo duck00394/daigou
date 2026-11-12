@@ -11,7 +11,7 @@ export function ResetButton({ ids, label, names }: { ids: string[]; label: strin
   if (!ids.length) return null;
   return (
     <>
-      <button type="button" className="min-h-10 rounded-lg border border-line bg-white px-3 text-[14px] text-warn" onClick={() => setOpen(true)}>{label}</button>
+      <button type="button" className="min-h-10 rounded-lg border border-line bg-card px-3 text-[14px] text-warn" onClick={() => setOpen(true)}>{label}</button>
       <Modal
         open={open}
         onClose={() => setOpen(false)}
@@ -33,7 +33,7 @@ export function RefundButton({ batchId, name, owed }: { batchId: string; name: s
   const n = Number(amt.replace(/[^\d]/g, "") || 0);
   return (
     <>
-      <button type="button" className="mt-1 min-h-9 rounded-lg border border-line bg-white px-3 text-[13px]" onClick={() => setOpen(true)}>記退款</button>
+      <button type="button" className="mt-1 min-h-9 rounded-lg border border-line bg-card px-3 text-[13px]" onClick={() => setOpen(true)}>記退款</button>
       <Modal
         open={open}
         onClose={() => setOpen(false)}
@@ -42,7 +42,7 @@ export function RefundButton({ batchId, name, owed }: { batchId: string; name: s
       >
         <label className="block text-[14px] font-medium text-ink-2">
           退了多少（台幣）
-          <input aria-label="退了多少" inputMode="numeric" className="mt-1 min-h-11 w-full rounded-lg border border-line px-2.5 text-[16px]" value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d]/g, ""))} />
+          <input aria-label="退了多少" inputMode="numeric" className="mt-1 min-h-11 w-full rounded-lg border border-field px-2.5 text-[16px]" value={amt} onChange={(e) => setAmt(e.target.value.replace(/[^\d]/g, ""))} />
         </label>
         <p className="mt-1 text-[12px] text-mute">應該退 {formatTwd(owed)}。只退一部分就填實際退的，剩下的會繼續列著。</p>
       </Modal>

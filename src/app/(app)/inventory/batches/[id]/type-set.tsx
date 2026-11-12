@@ -42,7 +42,7 @@ export function TypeSetLine({ categoryId, typeId, typeName, catName, roster, sel
           {opts.map((c) => {
             const on = edit.includes(c.id);
             return (
-              <button key={c.id} type="button" aria-pressed={on} onClick={() => setEdit(on ? edit.filter((x) => x !== c.id) : [...edit, c.id])} className={`rounded-full border px-3 py-1 text-[14px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`}>
+              <button key={c.id} type="button" aria-pressed={on} onClick={() => setEdit(on ? edit.filter((x) => x !== c.id) : [...edit, c.id])} className={`rounded-full border px-3 py-1 text-[14px] ${on ? "border-ai bg-ai text-on-fill" : "border-line bg-card text-ink-2"}`}>
                 {on ? "✓ " : "＋ "}
                 {c.name}
               </button>

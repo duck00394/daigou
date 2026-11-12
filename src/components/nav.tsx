@@ -1,5 +1,5 @@
 "use client";
-import { Icon } from "@/components/icons";
+import { Icon, type IconName } from "@/components/icons";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -37,12 +37,12 @@ export const NAV: { href: string; label: string; group: string; hint?: string; o
   { href: "/help", label: "名詞說明", group: "幫助", hint: "有幾隻、每隻成本、對單是什麼" },
 ];
 
-const BOTTOM = [
-  { href: "/", label: "首頁" },
-  { href: "/categories", label: "系列" },
-  { href: "/purchase", label: "＋ 採購", main: true },
-  { href: "/inventory?tab=stock", label: "庫存" },
-  { href: "/sales", label: "賺多少" },
+const BOTTOM: { href: string; label: string; icon: IconName; main?: true }[] = [
+  { href: "/", label: "首頁", icon: "home" },
+  { href: "/categories", label: "系列", icon: "layers" },
+  { href: "/purchase", label: "採購", icon: "plus", main: true },
+  { href: "/inventory?tab=stock", label: "庫存", icon: "box" },
+  { href: "/sales", label: "賺多少", icon: "chart" },
 ];
 
 function active(path: string, href: string, tab?: string | null) {
@@ -70,13 +70,13 @@ export function Sidebar({ ordersOn = true, view }: { ordersOn?: boolean; view?: 
   const nav = visible(ordersOn);
   const groups = [...new Set(nav.map((n) => n.group))];
   return (
-    <nav aria-label="主要功能" className="no-print sticky top-0 hidden h-dvh w-52 shrink-0 flex-col overflow-y-auto border-r border-line bg-white px-3 py-4 md:flex">
-      <Link href="/" className="round mb-5 flex items-center gap-2 px-2 text-[17px] font-semibold">
-        <span aria-hidden className="inline-block h-6 w-6 rounded-md bg-ai" />
+    <nav aria-label="主要功能" className="no-print sticky top-0 hidden h-dvh w-52 shrink-0 flex-col overflow-y-auto border-r border-line bg-paper px-3 py-4 md:flex">
+      <Link href="/" className="mb-5 flex items-center gap-2 px-2 text-[16px] font-semibold">
+        <span aria-hidden className="inline-block h-5 w-5 rounded-[5px] bg-ai" />
         代購帳房
       </Link>
       <form action="/search" method="get" role="search" className="mb-4 px-1">
-        <input type="search" name="q" placeholder="搜尋角色、商品" aria-label="搜尋" className="w-full rounded-lg border border-line px-2.5 py-1.5 text-[14px]" />
+        <input type="search" name="q" placeholder="搜尋角色、商品" aria-label="搜尋" className="w-full rounded-lg border border-field bg-card px-2.5 py-1.5 text-[14px] text-ink placeholder:text-mute" />
       </form>
       {view && <div className="px-1"><ViewSwitch v={view} /></div>}
       {groups.map((g) => (
@@ -87,7 +87,7 @@ export function Sidebar({ ordersOn = true, view }: { ordersOn?: boolean; view?: 
               key={n.href}
               href={n.href}
               aria-current={active(path, n.href, tab) ? "page" : undefined}
-              className={`block rounded-lg px-2.5 py-1.5 text-[14px] ${active(path, n.href, tab) ? "bg-peach font-semibold text-peach-ink" : "text-ink-2 hover:bg-line-2"}`}
+              className={`block rounded-lg px-2.5 py-1.5 text-[14px] transition-colors duration-150 ${active(path, n.href, tab) ? "bg-ai-soft font-medium text-ink" : "text-ink-2 hover:bg-line-2 hover:text-ink"}`}
             >
               {n.label}
             </Link>
@@ -110,23 +110,23 @@ export function MobileBar({ ordersOn = true, view }: { ordersOn?: boolean; view?
   const current = NAV.find((n) => active(path, n.href, tab) && n.href !== "/") ?? NAV[0];
   return (
     <>
-      <header className="no-print sticky top-0 z-40 flex items-center justify-between border-b border-line bg-white/95 px-4 py-2.5 backdrop-blur md:hidden">
+      <header className="no-print sticky top-0 z-40 flex items-center justify-between border-b border-line bg-paper/95 px-4 py-2.5 backdrop-blur md:hidden">
         <span className="flex min-w-0 items-center gap-2">
-          <Link href="/" className="round text-[16px] font-semibold whitespace-nowrap">
+          <Link href="/" className="text-[16px] font-semibold whitespace-nowrap">
             代購帳房
           </Link>
           {view && view.me && <button type="button" onClick={() => setOpen(true)} aria-label={`現在看：${view.name}，按這裡切換`}><ViewChip v={view} /></button>}
         </span>
         <span className="flex items-center gap-2">
-          <Link href="/search" aria-label="搜尋" className="rounded-lg border border-line px-2.5 py-1 text-[14px]"><Icon name="search" /> 搜尋</Link>
-          <button type="button" onClick={() => setOpen(true)} className="rounded-lg border border-line px-3 py-1 text-[14px]" aria-expanded={open}>
+          <Link href="/search" aria-label="搜尋" className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-line bg-card px-2.5 text-[14px]"><Icon name="search" /> 搜尋</Link>
+          <button type="button" onClick={() => setOpen(true)} className="min-h-9 rounded-lg border border-line bg-card px-3 text-[14px]" aria-expanded={open}>
             全部功能
           </button>
         </span>
       </header>
       {open && (
-        <div className="fixed inset-0 z-50 bg-black/30 md:hidden" onClick={() => setOpen(false)}>
-          <div className="absolute inset-x-0 top-0 max-h-dvh overflow-y-auto rounded-b-2xl bg-white px-4 pt-3 pb-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 bg-scrim md:hidden" onClick={() => setOpen(false)}>
+          <div className="absolute inset-x-0 top-0 max-h-dvh overflow-y-auto rounded-b-2xl bg-card px-4 pt-3 pb-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm text-mute">目前：{current.label}</span>
               <button type="button" onClick={() => setOpen(false)} className="px-2 py-1 text-mute" aria-label="關閉">
@@ -142,7 +142,7 @@ export function MobileBar({ ordersOn = true, view }: { ordersOn?: boolean; view?
                     <Link
                       key={n.href}
                       href={n.href}
-                      className={`rounded-lg border px-3 ${n.hint ? "py-2" : "py-2"} text-[15px] ${active(path, n.href, tab) ? "border-peach bg-peach text-peach-ink" : "border-line"} ${g === "常用" ? "font-medium" : "text-ink-2"}`}
+                      className={`rounded-lg border px-3 py-2 text-[15px] ${active(path, n.href, tab) ? "border-ai-soft bg-ai-soft text-ink" : "border-line"} ${g === "常用" ? "font-medium" : "text-ink-2"}`}
                     >
                       {n.label}
                       {n.hint && <span className="block text-[11.5px] font-normal text-mute">{n.hint}</span>}
@@ -157,15 +157,20 @@ export function MobileBar({ ordersOn = true, view }: { ordersOn?: boolean; view?
           </div>
         </div>
       )}
-      <nav aria-label="常用功能" className="no-print safe-bottom fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-white md:hidden">
+      <nav aria-label="常用功能" className="no-print safe-bottom fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-paper/95 backdrop-blur md:hidden">
         {BOTTOM.map((b) => (
           <Link
             key={b.href}
             href={b.href}
             aria-current={active(path, b.href, tab) ? "page" : undefined}
-            className={`flex flex-col items-center justify-center py-2.5 text-[12.5px] ${b.main ? "font-semibold" : ""} ${active(path, b.href, tab) ? "text-ai" : "text-ink-2"}`}
+            className={`flex min-h-14 flex-col items-center justify-center gap-0.5 text-[12px] ${active(path, b.href, tab) ? "font-medium text-ai" : "text-mute"}`}
           >
-            {b.main ? <span className={`rounded-full px-3 py-1 ${active(path, b.href, tab) ? "bg-ai text-white" : "bg-peach text-peach-ink"}`}>{b.label}</span> : b.label}
+            {b.main ? (
+              <span className="flex h-7 w-11 items-center justify-center rounded-full bg-ai text-[17px] text-on-fill"><Icon name={b.icon} /></span>
+            ) : (
+              <span className="text-[20px] leading-none"><Icon name={b.icon} /></span>
+            )}
+            <span className={b.main ? "font-medium text-ink" : ""}>{b.main ? `＋ ${b.label}` : b.label}</span>
           </Link>
         ))}
       </nav>

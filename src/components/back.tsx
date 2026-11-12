@@ -57,7 +57,7 @@ export function BackLink({ fallback }: { fallback?: { href: string; label: strin
     while (i >= 0 && /\/(new|edit)(\?|$)/.test(s[i])) i--;
     setSteps(i >= 0 ? s.length - 1 - i : 0);
   }, [url]);
-  const cls = "mb-1 inline-flex min-h-8 items-center text-sm text-ai hover:underline";
+  const cls = "mb-1 inline-flex min-h-8 items-center text-[13px] text-mute transition-colors duration-150 hover:text-ink";
   if (steps > 0)
     return (
       <button type="button" className={cls} onClick={() => (steps === 1 ? router.back() : window.history.go(-steps))} data-testid="back">

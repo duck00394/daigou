@@ -126,7 +126,7 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-line-2" aria-hidden><div className="h-full rounded-full bg-good" style={{ width: `${T.totalTwd > 0 ? Math.min(100, Math.round((T.paidTwd / T.totalTwd) * 100)) : 0}%` }} /></div>
           <div className="mt-1.5 flex flex-wrap justify-between gap-x-3 text-[14px]">
             <span>已付 <b className="num text-good" data-testid="cat-paid">{formatTwd(T.paidTwd)}</b></span>
-            <span>還沒付 <b className={`num ${T.dueTwd ? "text-bad" : ""}`} data-testid="cat-due">{formatTwd(T.dueTwd)}</b></span>
+            <span>還沒付 <b className={`num ${T.dueTwd ? "text-warn" : ""}`} data-testid="cat-due">{formatTwd(T.dueTwd)}</b></span>
           </div>
           <div className="mt-0.5 flex flex-wrap justify-between gap-x-3 text-[13px] text-mute">
             <span>{T.batches} 團，{T.qty} 隻{T.estimated ? "，有價格還沒確定" : ""}</span>
@@ -137,14 +137,14 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
         {showBatches && <>
         <div className="mt-3 space-y-3">
           {groups.filter((g) => mineKey(g.key)).map((g) => (
-            <div key={g.key} className={`rounded-xl border border-line-2 bg-tone-gray-50-4 p-3 ${ownerTone(g.key, ids).stripe}`} data-testid={`owner-${g.key}`}>
+            <div key={g.key} className={`rounded-xl border border-line-2 bg-paper p-3 ${ownerTone(g.key, ids).stripe}`} data-testid={`owner-${g.key}`}>
               <div className="flex items-baseline justify-between gap-2">
                 <h3 className="text-[16px] font-semibold"><OwnerBadge k={g.key} name={g.label} ids={ids} /></h3>
                 <span className="text-[13px] text-mute">總額 <span className="num font-medium text-ink">{formatTwd(g.total)}</span></span>
               </div>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                <div className="rounded-lg bg-white p-2.5">
-                  <div className="flex items-baseline justify-between"><span className="text-[13px] font-medium text-bad">待付款</span><span className="num font-semibold" data-testid={`due-${g.key}`}>{formatTwd(g.due)}</span></div>
+                <div className="rounded-lg bg-card p-2.5">
+                  <div className="flex items-baseline justify-between"><span className="text-[13px] font-medium text-warn">待付款</span><span className="num font-semibold" data-testid={`due-${g.key}`}>{formatTwd(g.due)}</span></div>
                   {g.dueList.length === 0 ? <p className="text-[12px] text-mute">都付清了</p> : (
                     <ul className="mt-1 space-y-0.5 text-[14px]">
                       {g.dueList.map((b) => (
@@ -153,7 +153,7 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
                     </ul>
                   )}
                 </div>
-                <div className="rounded-lg bg-white p-2.5">
+                <div className="rounded-lg bg-card p-2.5">
                   <div className="flex items-baseline justify-between"><span className="text-[13px] font-medium text-good">已付款</span><span className="num font-semibold" data-testid={`paid-${g.key}`}>{formatTwd(g.paid)}</span></div>
                   {g.paidList.length === 0 ? <p className="text-[12px] text-mute">還沒有付款</p> : (
                     <ul className="mt-1 space-y-0.5 text-[14px]">
@@ -197,9 +197,9 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
                   <span className="font-medium text-ink-2">{b.ownership === "JOINT" ? `合資${o.jointShares[b.id]?.length ? `（${o.jointShares[b.id].map((x) => `${who(x.key)} ${x.percent}%`).join("、")}）` : ""}` : `${b.orderedBy ?? "未指定"}的`}</span>｜{b.supplier ?? "未指定代購"}
                 </div>
                 <div className="mt-1.5 grid grid-cols-3 gap-1 text-center text-[13px]">
-                  <div className="rounded-lg bg-tone-gray-50-4 py-1"><div className="text-[11px] text-mute">到貨</div><span className="num">{b.received}／{b.qty}</span></div>
-                  <div className="rounded-lg bg-tone-gray-50-4 py-1"><div className="text-[11px] text-mute">{b.partial ? "這個系列" : "這團總額"}{b.estimated || !b.feesRecorded ? "（價格還沒確定）" : ""}</div><span className="num">{formatTwd(b.totalTwd)}</span></div>
-                  <div className="rounded-lg bg-tone-gray-50-4 py-1"><div className="text-[11px] text-mute">已付</div><span className="num">{b.partial ? (b.paidTwd ? formatTwd(b.paidTwd) : "無") : sums(b.paid) || "無"}</span></div>
+                  <div className="rounded-lg bg-paper py-1"><div className="text-[11px] text-mute">到貨</div><span className="num">{b.received}／{b.qty}</span></div>
+                  <div className="rounded-lg bg-paper py-1"><div className="text-[11px] text-mute">{b.partial ? "這個系列" : "這團總額"}{b.estimated || !b.feesRecorded ? "（價格還沒確定）" : ""}</div><span className="num">{formatTwd(b.totalTwd)}</span></div>
+                  <div className="rounded-lg bg-paper py-1"><div className="text-[11px] text-mute">已付</div><span className="num">{b.partial ? (b.paidTwd ? formatTwd(b.paidTwd) : "無") : sums(b.paid) || "無"}</span></div>
                 </div>
                 {b.partial && <div className="mt-1 text-[12px] text-info" data-testid="partial-note">這團也有別的系列，這裡只算這個系列的部分（運費照金額比例分）</div>}
                 {Object.keys(b.pending).length > 0 && <div className="mt-1 text-[12px] text-warn">待付款 {sums(b.pending)}</div>}
@@ -244,13 +244,13 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
                       <div key={r.product.id} className="flex items-start border-b border-line-2">
                         <PickBox id={r.product.id} name={r.product.name} />
                         <details className="group min-w-0 flex-1" data-testid="product-summary">
-                          <summary role="row" className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_3.25rem_4.25rem_4.5rem] items-baseline gap-2 px-4 py-2.5 hover:bg-tone-gray-50-5 [&::-webkit-details-marker]:hidden">
+                          <summary role="row" className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_3.25rem_4.25rem_4.5rem] items-baseline gap-2 px-4 py-2.5 hover:bg-line-2 [&::-webkit-details-marker]:hidden">
                             <span role="cell" className="min-w-0 truncate"><span title={r.product.name}>{name}</span></span>
                             <span role="cell" className={`num text-right ${leftOf(x) < 0 ? "font-semibold text-bad" : ""}`} data-k="left">{leftOf(x)}</span>
                             <span role="cell" className="num text-right" data-k="avg">{(est ? r.estAvg : r.avg) == null ? <span className="text-mute">無</span> : (est ? r.estAvg : r.avg)!.toLocaleString()}</span>
                             <span role="cell" className={`num text-right ${canProfit ? (profitOf(x) < 0 ? "text-bad" : "text-good") : "text-[13px] text-mute"}`} data-k="profit">{canProfit ? profitOf(x).toLocaleString() : x?.price == null ? "沒售價" : "無"}</span>
                           </summary>
-                          <div className="space-y-1 border-t border-line-2 bg-tone-gray-50-3 px-4 py-2.5 text-[13.5px]" data-testid="product-numbers">
+                          <div className="space-y-1 border-t border-line-2 bg-paper px-4 py-2.5 text-[13.5px]" data-testid="product-numbers">
                             {x && <div>手上 {x.onHand}，確定買到還沒到 {x.sure}{x.est.unsure ? `，還在等確認 ${x.est.unsure}` : ""}，客人訂 {x.ordered}，已賣 {x.sold.qty}{x.sold.qty ? `（實際已賺 ${formatTwd(x.sold.revenue - x.sold.cost)}）` : ""}</div>}
                             <div className="text-ink-2">售價 {x?.price != null ? formatTwd(x.price) : "還沒填"}，各團{fullView ? "成本" : "買價"} {r.min === r.max ? formatTwd(r.min) : `${r.min.toLocaleString()}～${r.max.toLocaleString()}`}</div>
                             <ul className="space-y-0.5 pt-1">

@@ -40,7 +40,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
   const [tree, types] = tab === "catalog" ? await Promise.all([catalogTree(prisma), typeOptions(prisma)]) : [[], []];
   const treeSeries = tree.flatMap((k) => k.series).find((x) => x.id === c.id);
   const usesOrders = await getOrdersEnabled(prisma);
-  const tabCls = (on: boolean) => `flex-1 rounded-lg py-2 text-center text-[14px] ${on ? "bg-white font-semibold shadow-sm" : "text-ink-2"}`;
+  const tabCls = (on: boolean) => `flex-1 rounded-lg py-2 text-center text-[14px] ${on ? "bg-card font-semibold shadow-sm" : "text-ink-2"}`;
   return (
     <div className="space-y-4">
       <PageHeader
@@ -85,7 +85,7 @@ export default async function CategoryPage({ params, searchParams }: { params: P
       {tab === "items" && usesOrders && (d.total.activeQty > 0 || d.total.cancelledQty > 0) && (
         <div>
           <h2 className="mb-2 text-[15px] font-semibold">買家預購統計</h2>
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-7">
+      <div className="stat-grid grid grid-cols-3 sm:grid-cols-7">
           <Stat label="商品款數" value={d.products.length} />
           <Stat label="有效購買人數" value={d.total.buyers.size} />
           <Stat label="有效訂購件數" value={d.total.activeQty} />
@@ -99,13 +99,13 @@ export default async function CategoryPage({ params, searchParams }: { params: P
       {tab === "items" && usesOrders && (
       <Section title="分類內商品" pad={false}>
         <form className="flex flex-wrap gap-2 border-b border-line-2 px-4 py-3" method="get">
-          <input type="search" name="q" defaultValue={sp.q} placeholder="搜尋商品" className="min-w-[12rem] flex-1 rounded-lg border border-line px-3 py-2" />
-          <select name="sort" defaultValue={sp.sort ?? ""} className="rounded-lg border border-line px-2 py-2">
+          <input type="search" name="q" defaultValue={sp.q} placeholder="搜尋商品" className="min-w-[12rem] flex-1 rounded-lg border border-field px-3 py-2" />
+          <select name="sort" defaultValue={sp.sort ?? ""} className="rounded-lg border border-field px-2 py-2">
             <option value="">依名稱</option>
             <option value="qty">訂購件數多→少</option>
             <option value="buyers">購買人數多→少</option>
           </select>
-          <button className="rounded-lg border border-ai bg-ai px-3 py-2 text-sm text-white">套用</button>
+          <button className="rounded-lg border border-ai bg-ai px-3 py-2 text-sm text-on-fill">套用</button>
         </form>
         {products.length === 0 ? (
           <Empty>這個分類還沒有商品。</Empty>

@@ -73,7 +73,7 @@ export function RushFormView({ id, initial, suppliers, series }: { id: string | 
         <span className={lab}>備註（選填）</span>
         <textarea rows={2} className={inputCls} aria-label="備註" value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} placeholder="例：優先搶烏薩奇與吉伊，限購 2" />
       </label>
-      <label className="flex items-center justify-between rounded-xl border border-line bg-white px-3 py-2.5 text-[15px]">
+      <label className="flex items-center justify-between rounded-xl border border-line bg-card px-3 py-2.5 text-[15px]">
         開始前通知我
         <input type="checkbox" role="switch" aria-label="開始前通知我" className="h-6 w-6" checked={f.notify} onChange={(e) => setF({ ...f, notify: e.target.checked })} />
       </label>

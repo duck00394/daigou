@@ -5,7 +5,7 @@ import { byText } from "@/lib/sort";
 
 export type SeriesOpt = { id: string; name: string; kindKey: string; kindLabel: string; active: boolean; kindSort?: number; pin?: number | null };
 
-const selCls = "min-h-11 w-full rounded-lg border border-line bg-white px-2.5 text-[15px]";
+const selCls = "min-h-11 w-full rounded-lg border border-field bg-card px-2.5 text-[15px]";
 
 export function kindsOf(series: SeriesOpt[]) {
   // 照「系列目錄 › 調整順序」排的順序
@@ -63,15 +63,15 @@ export function SeriesPicker({
           type="search"
           aria-label={`${prefix}找系列`}
           placeholder="找系列：打關鍵字，例如 聖誕"
-          className="min-h-11 w-full rounded-lg border border-line bg-white px-2.5 text-[15px]"
+          className="min-h-11 w-full rounded-lg border border-field bg-card px-2.5 text-[15px]"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
         {words.length > 0 && (
-          <ul className="absolute inset-x-0 top-full z-30 mt-1 max-h-72 divide-y divide-line-2 overflow-y-auto rounded-lg border border-line bg-white shadow-lg" data-testid="series-hits">
+          <ul className="absolute inset-x-0 top-full z-30 mt-1 max-h-72 divide-y divide-line-2 overflow-y-auto rounded-lg border border-line bg-card shadow-lg" data-testid="series-hits">
             {hits.map((s) => (
               <li key={s.id}>
-                <button type="button" className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-[15px] hover:bg-tone-gray-50-4" onClick={() => { setKind(s.kindKey); onChange(s.id); setQ(""); }}>
+                <button type="button" className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-[15px] hover:bg-line-2" onClick={() => { setKind(s.kindKey); onChange(s.id); setQ(""); }}>
                   <span>{s.name}</span>
                   <span className="shrink-0 text-[12px] text-mute">{s.kindLabel}{s.active ? "" : "，已過期"}</span>
                 </button>
@@ -85,7 +85,7 @@ export function SeriesPicker({
         <div className="flex flex-wrap items-center gap-1.5" data-testid="pinned-series">
           <span className="text-[13px] text-mute">常用</span>
           {pinned.map((s) => (
-            <button key={s.id} type="button" aria-pressed={value === s.id} onClick={() => pick(s)} className={`rounded-full border px-3 py-1 text-[14px] ${value === s.id ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`}>
+            <button key={s.id} type="button" aria-pressed={value === s.id} onClick={() => pick(s)} className={`rounded-full border px-3 py-1 text-[14px] ${value === s.id ? "border-ai bg-ai text-on-fill" : "border-line bg-card text-ink-2"}`}>
               {s.name}
             </button>
           ))}

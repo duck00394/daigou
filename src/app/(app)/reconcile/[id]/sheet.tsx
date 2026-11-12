@@ -84,13 +84,13 @@ export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchH
   return (
     <div className="space-y-3 pb-4">
       <div className="grid grid-cols-2 gap-2">
-        <button type="button" className={`${btn} border-good bg-good font-semibold text-white`} onClick={() => setD(Object.fromEntries(items.map((i) => [i.id, { bought: i.active, cut: false }])))}>這團全部買到</button>
-        <button type="button" className={`${btn} border-tone-red-300-2 bg-white font-semibold text-bad`} onClick={() => setD((x) => Object.fromEntries(items.map((i) => [i.id, x[i.id].bought < i.active ? { ...x[i.id], cut: true } : x[i.id]])))}>沒回的全部砍</button>
+        <button type="button" className={`${btn} border-good bg-good font-semibold text-on-fill`} onClick={() => setD(Object.fromEntries(items.map((i) => [i.id, { bought: i.active, cut: false }])))}>這團全部買到</button>
+        <button type="button" className={`${btn} border-tone-red-300-2 bg-card font-semibold text-bad`} onClick={() => setD((x) => Object.fromEntries(items.map((i) => [i.id, x[i.id].bought < i.active ? { ...x[i.id], cut: true } : x[i.id]])))}>沒回的全部砍</button>
       </div>
       <div className="overflow-hidden rounded-xl border border-line bg-card">
         {groups.map((g) => (
           <div key={g}>
-            <div className="bg-tone-gray-50-2 px-3 py-1.5 text-[13px] font-semibold text-ink-2">{g}</div>
+            <div className="bg-paper px-3 py-1.5 text-[13px] font-semibold text-ink-2">{g}</div>
             {items.filter((i) => i.group === g).map((i) => {
               const x = d[i.id];
               if (i.active === 0) {
@@ -111,7 +111,7 @@ export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchH
                     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[12px] ${st.c}`} data-testid="reconcile-status">{st.t}</span>
                   </div>
                   <div className="mt-2 flex items-center gap-2">
-                    <button type="button" aria-label={`${i.name} 全買到`} className={`${btn} ${x.bought === i.active && !x.cut ? "border-good bg-good text-white" : "border-line bg-white"}`} onClick={() => set(i.id, { bought: i.active, cut: false })}>全買到</button>
+                    <button type="button" aria-label={`${i.name} 全買到`} className={`${btn} ${x.bought === i.active && !x.cut ? "border-good bg-good text-on-fill" : "border-line bg-card"}`} onClick={() => set(i.id, { bought: i.active, cut: false })}>全買到</button>
                     <div className="flex items-center overflow-hidden rounded-lg border border-line">
                       <button type="button" aria-label={`${i.name} 少一件`} className="min-h-10 w-10 text-[18px] disabled:text-line" disabled={x.bought <= i.received} onClick={() => set(i.id, { bought: x.bought - 1 })}>−</button>
                       <input
@@ -130,7 +130,7 @@ export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchH
                       type="button"
                       aria-label={`${i.name} 砍`}
                       aria-pressed={x.cut}
-                      className={`${btn} ${x.cut ? "border-bad bg-bad-soft text-bad" : "border-tone-red-300-2 bg-white text-bad"}`}
+                      className={`${btn} ${x.cut ? "border-bad bg-bad-soft text-bad" : "border-tone-red-300-2 bg-card text-bad"}`}
                       onClick={() => set(i.id, x.cut ? { cut: false } : { cut: true, bought: x.bought >= i.active ? i.received : x.bought })}
                     >
                       {x.cut ? "已選砍" : "砍"}
@@ -145,7 +145,7 @@ export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchH
       {anyCut && (
         <label className="block text-[13px] font-medium text-ink-2">
           砍單原因（有砍的一起套用）
-          <select aria-label="砍單原因" className="mt-1 min-h-11 w-full rounded-lg border border-line bg-white px-2.5 text-[15px]" value={reason} onChange={(e) => setReason(e.target.value)}>
+          <select aria-label="砍單原因" className="mt-1 min-h-11 w-full rounded-lg border border-field bg-card px-2.5 text-[15px]" value={reason} onChange={(e) => setReason(e.target.value)}>
             {REASONS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </label>
@@ -158,8 +158,8 @@ export function ReconcileSheet({ batchId, items, pay, nextHref, listHref, batchH
         <label className="mt-2 block text-[13px] font-medium text-ink-2">
           總共付了多少（台幣）
           <div className="mt-1 flex gap-2">
-            <input aria-label="總共付了多少" inputMode="numeric" className="min-h-11 w-full rounded-lg border border-line bg-white px-2.5 text-[16px]" value={paid} onChange={(e) => setPaid(e.target.value.replace(/[^\d]/g, ""))} />
-            <button type="button" className="min-h-11 shrink-0 rounded-lg border border-line bg-white px-3 text-[14px]" onClick={() => setPaid(String(newTotal))}>付清</button>
+            <input aria-label="總共付了多少" inputMode="numeric" className="min-h-11 w-full rounded-lg border border-field bg-card px-2.5 text-[16px]" value={paid} onChange={(e) => setPaid(e.target.value.replace(/[^\d]/g, ""))} />
+            <button type="button" className="min-h-11 shrink-0 rounded-lg border border-line bg-card px-3 text-[14px]" onClick={() => setPaid(String(newTotal))}>付清</button>
           </div>
         </label>
         <p className="mt-1 text-[12px] text-mute" data-testid="reconcile-pay-note">

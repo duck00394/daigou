@@ -13,7 +13,7 @@ export const productStatus: Record<string, [string, Tone]> = {
 
 export const orderStatus: Record<string, [string, Tone]> = {
   PENDING_CONFIRM: ["待確認", "warn"],
-  AWAITING_PAYMENT: ["待付款", "warn"],
+  AWAITING_PAYMENT: ["待付款", "neutral"], // 付款欄已經標了未付款，這裡不再重複上色
   CONFIRMED: ["已確認", "info"],
   ORDERED: ["已下單", "info"],
   PROCESSING: ["處理中", "info"],
@@ -23,7 +23,7 @@ export const orderStatus: Record<string, [string, Tone]> = {
 };
 
 export const paymentStatus: Record<string, [string, Tone]> = {
-  UNPAID: ["未付款", "bad"],
+  UNPAID: ["未付款", "warn"], // 還欠的用杏色；紅色只留給錯誤
   PARTIAL: ["部分付款", "warn"],
   PAID: ["已付款", "good"],
   REFUND_PENDING: ["退款處理中", "warn"],

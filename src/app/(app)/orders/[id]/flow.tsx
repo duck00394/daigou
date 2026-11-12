@@ -31,7 +31,7 @@ export function OrderFlow({ orderId, lines, open, delivered, balance, methods }:
   if (step === 3 && !delivered) return null; // 沒有要出、也沒出過（例如整單取消）
 
   const pill = (i: number, text: string) => (
-    <div key={i} className={`flex-1 rounded-lg py-1.5 text-center text-[13px] ${step === i ? "bg-ai text-white" : step > i ? "bg-good-soft text-good" : "bg-line-2 text-mute"}`}>{text}</div>
+    <div key={i} className={`flex-1 rounded-lg py-1.5 text-center text-[13px] ${step === i ? "bg-ai text-on-fill" : step > i ? "bg-good-soft text-good" : "bg-line-2 text-mute"}`}>{text}</div>
   );
   const toggle = (l: FlowLine) => run(() => setPackedAction(orderId, [l.id], !l.packed));
   const canAll = lines.filter((l) => !l.packed && l.canPack);
@@ -63,7 +63,7 @@ export function OrderFlow({ orderId, lines, open, delivered, balance, methods }:
                     aria-label={`${l.name} 備齊`}
                     disabled={dis}
                     onClick={() => toggle(l)}
-                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border-[1.5px] text-white ${l.packed ? "border-ai bg-ai" : "border-tone-gray-300 bg-white"} ${dis && !l.packed ? "opacity-40" : ""}`}
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border-[1.5px] text-on-fill ${l.packed ? "border-ai bg-ai" : "border-tone-gray-300 bg-card"} ${dis && !l.packed ? "opacity-40" : ""}`}
                   >
                     {l.packed ? "✓" : ""}
                   </button>

@@ -18,7 +18,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&display=swap" />
       <CartProvider>
-        <div className="min-h-dvh bg-shop-bg text-shop-ink">
+        <div className="light-page min-h-dvh bg-shop-bg text-shop-ink">
           <div className="mx-auto min-h-dvh max-w-md bg-shop-bg pb-28 sm:shadow-lift-4">{children}</div>
         </div>
       </CartProvider>

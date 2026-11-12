@@ -33,7 +33,7 @@ export default async function ImportPage({ searchParams }: { searchParams: Promi
             <ul className="divide-y divide-line-2 text-sm">
               {recent.map((b) => (
                 <li key={b.id}>
-                  <Link href={`/import?batch=${b.id}`} className="flex items-center justify-between gap-2 px-4 py-2 hover:bg-tone-gray-50-5">
+                  <Link href={`/import?batch=${b.id}`} className="flex items-center justify-between gap-2 px-4 py-2 hover:bg-line-2">
                     <span className="min-w-0 truncate">
                       {b.fileName}｜{b.sheetName}｜{b._count.rows} 列
                     </span>

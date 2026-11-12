@@ -13,7 +13,7 @@ export function ActingChoice({ label, value, options, onChange, defaultValue, no
           這是 <b data-testid={`${testid}-name`}>{name(value)}</b> 的{noun}
           <span className="ml-1 text-[12px] text-mute">（跟著「現在看誰的」）</span>
         </span>
-        <button type="button" className="shrink-0 rounded-lg border border-line bg-white px-2.5 py-1 text-[13px] text-ai" onClick={() => setOpen(true)}>換人</button>
+        <button type="button" className="shrink-0 rounded-lg border border-line bg-card px-2.5 py-1 text-[13px] text-ai" onClick={() => setOpen(true)}>換人</button>
       </div>
     );
   }

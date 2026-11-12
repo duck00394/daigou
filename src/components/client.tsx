@@ -2,6 +2,7 @@
 // 前端互動元件：提示訊息、操作執行、確認對話框、表單欄位
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { btnCls } from "@/lib/btn";
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string; auth?: boolean };
 
@@ -32,7 +33,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           <div
             key={t.id}
             role={t.kind === "error" ? "alert" : "status"}
-            className={`pointer-events-auto max-w-md rounded-lg px-4 py-2.5 text-sm shadow-lg ${t.kind === "error" ? "bg-bad text-white" : t.kind === "info" ? "bg-ink text-white" : "bg-good text-white"}`}
+            className={`pointer-events-auto max-w-md rounded-lg px-4 py-2.5 text-sm font-medium shadow-lg ${t.kind === "error" ? "bg-bad text-on-fill" : t.kind === "info" ? "bg-ink text-paper" : "bg-ink text-paper"}`}
           >
             {t.kind === "error" ? "未完成：" : t.kind === "ok" ? "完成：" : ""}
             {t.text}
@@ -89,21 +90,13 @@ export function useRun() {
 // ── 按鈕 ──
 type BtnProps = React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "default" | "danger" | "ghost"; small?: boolean; loading?: boolean };
 export function Button({ variant = "default", small, loading, children, className = "", disabled, ...rest }: BtnProps) {
-  const v =
-    variant === "primary"
-      ? "border-ai bg-ai text-white hover:bg-ai-2"
-      : variant === "danger"
-        ? "border-tone-red-300 bg-white text-bad hover:bg-bad-soft"
-        : variant === "ghost"
-          ? "border-transparent bg-transparent text-ai hover:bg-ai-soft"
-          : "border-line bg-white text-ink hover:border-ai";
   return (
     <button
       type="button"
       {...rest}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-lg border font-medium whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 ${small ? "px-2.5 py-1 text-[13px]" : "px-3.5 py-2 text-sm"} ${v} ${className}`}
+      className={`${btnCls(variant, small)} ${className}`}
     >
       {loading && <span aria-hidden className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />}
       {children}
@@ -128,13 +121,13 @@ export function Modal({ open, onClose, title, children, footer, wide }: { open: 
         e.preventDefault();
         onClose();
       }}
-      className={`m-auto w-[calc(100%-24px)] ${wide ? "max-w-3xl" : "max-w-lg"} rounded-2xl border border-line bg-white p-0 text-ink shadow-xl backdrop:bg-black/30`}
+      className={`m-auto w-[calc(100%-24px)] ${wide ? "max-w-3xl" : "max-w-lg"} rounded-2xl border border-line bg-card p-0 text-ink backdrop:bg-scrim`}
     >
       {open && (
         <div className="flex max-h-[85vh] flex-col">
           <div className="flex items-center justify-between border-b border-line-2 px-4 py-3">
             <h2 className="text-base font-semibold">{title}</h2>
-            <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-mute hover:bg-line-2" aria-label="關閉">
+            <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-mute transition-colors duration-150 hover:bg-line-2 hover:text-ink" aria-label="關閉">
               ✕
             </button>
           </div>
@@ -219,7 +212,7 @@ export function ConfirmButton({
 
 // ── 欄位 ──
 export const inputCls =
-  "w-full rounded-lg border border-line bg-white px-3 py-2 text-[15px] text-ink placeholder:text-tone-gray-400 focus:border-ai focus:outline-none disabled:bg-line-2";
+  "w-full rounded-lg border border-field bg-card px-3 py-2 text-[15px] text-ink placeholder:text-mute focus:border-ai focus:outline-none disabled:bg-line-2 disabled:text-mute";
 
 export function Field({ label, hint, error, children, className = "" }: { label: string; hint?: React.ReactNode; error?: string | null; children: (id: string) => React.ReactNode; className?: string }) {
   const id = useId();
@@ -247,7 +240,7 @@ const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"))
 export function TimeInput24({ value, onChange, label, required = true }: { value: string; onChange: (v: string) => void; label: string; required?: boolean }) {
   const [h, m] = /^\d{2}:\d{2}$/.test(value) ? value.split(":") : ["", ""];
   const set = (nh: string, nm: string) => onChange(nh === "" && nm === "" ? "" : `${nh || "00"}:${nm || "00"}`);
-  const sel = "h-11 w-full min-w-0 rounded-lg border border-line bg-white px-2 text-[15px] text-ink num";
+  const sel = "h-11 w-full min-w-0 rounded-lg border border-field bg-card px-2 text-[15px] text-ink num";
   return (
     <span className="flex min-w-0 items-center gap-1" data-testid="time24">
       <select aria-label={`${label} 時`} className={sel} value={h} onChange={(e) => set(e.target.value, m)}>
@@ -380,5 +373,5 @@ export function ProductImage({ src, alt, size = 40 }: { src: string | null; alt:
     );
   }
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt={alt} width={size} height={size} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} className="shrink-0 rounded-md border border-line bg-white object-cover" style={{ width: size, height: size }} />;
+  return <img src={src} alt={alt} width={size} height={size} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} className="shrink-0 rounded-md border border-line bg-card object-cover" style={{ width: size, height: size }} />;
 }

@@ -76,7 +76,7 @@ export function ExcelPreview({ batchId, rows, lookup, locked }: { batchId: strin
               取消排除
             </Button>
             <select
-              className="rounded-lg border border-line px-2 py-1 text-[13px]"
+              className="rounded-lg border border-field bg-card px-2 py-1 text-[13px]"
               disabled={!sel.size}
               value=""
               aria-label="批次指定代購團"
@@ -95,7 +95,7 @@ export function ExcelPreview({ batchId, rows, lookup, locked }: { batchId: strin
       </div>
       <div ref={parent} className="relative h-[65vh] overflow-auto" role="table" aria-rowcount={view.length}>
         <div style={{ width, minWidth: "100%" }}>
-          <div role="row" className="sticky top-0 z-10 flex border-b border-line bg-tone-gray-50-4 text-[13px] font-medium text-ink-2">
+          <div role="row" className="sticky top-0 z-10 flex border-b border-line bg-paper text-[13px] font-medium text-ink-2">
             <div className="flex w-10 shrink-0 items-center justify-center">
               {!locked && (
                 <input

@@ -37,7 +37,7 @@ export function OwnerDue({ due, operators, hrefFor, title = "每個人還要付"
           const v = due.get(k);
           const t = ownerTone(k, ids);
           const body = (
-            <div className={`h-full rounded-lg border border-line-2 bg-tone-gray-50-4 px-3 py-2 ${t.stripe}`} data-testid={`due-owner-${k}`}>
+            <div className={`h-full rounded-lg border border-line-2 bg-paper px-3 py-2 ${t.stripe}`} data-testid={`due-owner-${k}`}>
               <div className="flex items-center gap-1.5 text-[13px] font-semibold"><span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: t.dot }} />{name(k)}</div>
               <div className={`num text-[19px] font-semibold ${v?.due ? "text-bad" : "text-good"}`}>{formatTwd(v?.due ?? 0)}</div>
               <div className="text-[12px] text-mute">{v ? `${v.batches} 團還沒付清` : "都付清了"}</div>

@@ -43,14 +43,14 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
         actions={
           <form method="get" className="flex items-center gap-2">
             <Link href="/operators" className="text-sm text-ai">經營者對帳</Link>
-            <select name="ym" defaultValue={ym} className="rounded-lg border border-line bg-white px-2 py-2" aria-label="月份">
+            <select name="ym" defaultValue={ym} className="rounded-lg border border-field bg-card px-2 py-2" aria-label="月份">
               {months().map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
-            <button className="rounded-lg border border-ai bg-ai px-3 py-2 text-sm text-white">查看</button>
+            <button className="rounded-lg border border-ai bg-ai px-3 py-2 text-sm text-on-fill">查看</button>
           </form>
         }
       />
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+      <div className="stat-grid grid grid-cols-2 lg:grid-cols-4">
         <Stat label="收入（已賣出）" value={<Twd v={r.revenue} />} note={`其中運費收入 ${r.shippingIncome.toLocaleString()} 元`} />
         <Stat label="賣掉的東西成本" value={<Twd v={r.cogs} />} note={r.estimatedCostUnits > 0 ? `${r.estimatedCostUnits} 件以預估成本計` : "依採購團實際成本"} tone={r.estimatedCostUnits > 0 ? "warn" : undefined} />
         <Stat label="其他費用" value={<Twd v={r.expenses} />} note={r.expensesUnassigned ? `另有以前記的 NT$${r.expensesUnassigned.toLocaleString()} 還沒分是誰的，沒算進去（切到「全部」看）` : "含採購團裡沒攤進商品的運費等"} />

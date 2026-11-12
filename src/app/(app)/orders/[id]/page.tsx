@@ -207,7 +207,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             {r.refundPending > 0 && <div className="flex justify-between"><dt className="text-mute">退款處理中</dt><dd><Twd v={r.refundPending} /></dd></div>}
             <div className="flex justify-between border-t border-line-2 pt-1.5 font-semibold">
               <dt>待收</dt>
-              <dd><Twd v={r.balance} className={r.balance > 0 ? "text-bad" : ""} /></dd>
+              <dd><Twd v={r.balance} className={r.balance > 0 ? "text-warn" : ""} /></dd>
             </div>
             {r.refundDue > 0 && (
               <div className="flex justify-between font-semibold text-bad">
@@ -216,7 +216,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
               </div>
             )}
           </dl>
-          {r.refundUnscheduled > 0 && <p className="mt-2 rounded-lg bg-bad-soft px-3 py-2 text-[13px] text-bad">已收超過應收 {r.refundUnscheduled.toLocaleString()} 元，尚未建立退款紀錄。</p>}
+          {r.refundUnscheduled > 0 && <p className="mt-2 rounded-lg bg-warn-soft px-3 py-2 text-[13px] text-warn">已收超過應收 {r.refundUnscheduled.toLocaleString()} 元，尚未建立退款紀錄。</p>}
         </Section>
       </div>
 
@@ -260,7 +260,8 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                       </div>
                     )}
                   </td>
-                  <td className="num text-right">{it.qty}</td>
+                  {/* 手機一項一張小卡：沒取消就只顯示「有效」、是 0 的數量不顯示，一件商品不用捲一整個畫面 */}
+                  <td className="num text-right" data-m-hide={it.cancelledQtyCache ? undefined : ""}>{it.qty}</td>
                   <td className="num text-right">{it.cancelledQtyCache || ""}</td>
                   <td className="num text-right font-medium">{ri.activeQty}</td>
                   <td className="text-right"><Twd v={it.unitPrice} /></td>
@@ -275,9 +276,9 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                       <StatusBadge map={shipStatus} value={ri.shipStatus} />
                     </div>
                   </td>
-                  <td className="num text-right">{reserved}</td>
-                  <td className="num text-right">{shipped}</td>
-                  <td className="num text-right font-medium">{ri.pendingShipQty}</td>
+                  <td className="num text-right" data-m-hide={reserved ? undefined : ""}>{reserved}</td>
+                  <td className="num text-right" data-m-hide={shipped ? undefined : ""}>{shipped}</td>
+                  <td className="num text-right font-medium" data-m-hide={ri.pendingShipQty ? undefined : ""}>{ri.pendingShipQty}</td>
                   <td>
                     {!cancelled && (
                       <div className="flex flex-col gap-1">

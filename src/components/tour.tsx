@@ -115,7 +115,7 @@ export function Tour() {
       ) : (
         <div className="fixed inset-0 bg-scrim" />
       )}
-      <div className="fixed inset-x-3 mx-auto max-w-md rounded-2xl bg-white p-4 shadow-2xl" style={tipStyle}>
+      <div className="fixed inset-x-3 mx-auto max-w-md rounded-2xl bg-card p-4 shadow-2xl" style={tipStyle}>
         <div className="text-[12px] text-mute">第 {step! + 1} 步／共 {TOUR.length} 步</div>
         <div className="mt-0.5 text-[17px] font-semibold" data-testid="tour-title">{s.title}</div>
         <p className="mt-1 text-[14.5px] leading-relaxed text-ink-2">{s.text}</p>
@@ -123,7 +123,7 @@ export function Tour() {
           <button type="button" className="text-[14px] text-mute underline" onClick={() => go(null)}>結束教學</button>
           <span className="flex gap-2">
             {step! > 0 && <button type="button" className="rounded-lg border border-line px-3 py-2 text-[14px]" onClick={() => go(step! - 1)}>上一步</button>}
-            <button type="button" className="rounded-lg bg-ai px-4 py-2 text-[14px] font-semibold text-white" onClick={() => go(step! + 1 < TOUR.length ? step! + 1 : null)}>{step! + 1 < TOUR.length ? "下一步" : "完成"}</button>
+            <button type="button" className="rounded-lg bg-ai px-4 py-2 text-[14px] font-semibold text-on-fill" onClick={() => go(step! + 1 < TOUR.length ? step! + 1 : null)}>{step! + 1 < TOUR.length ? "下一步" : "完成"}</button>
           </span>
         </div>
       </div>

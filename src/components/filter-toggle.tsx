@@ -1,5 +1,6 @@
 "use client";
 import { Children, isValidElement, useState } from "react";
+import { btnCls } from "@/lib/btn";
 
 /** 手機版只顯示搜尋框，其餘篩選收在「篩選條件」裡；桌面版全部展開 */
 export function FilterToggle({ children, clearHref }: { children: React.ReactNode; clearHref: string }) {
@@ -13,14 +14,14 @@ export function FilterToggle({ children, clearHref }: { children: React.ReactNod
     return p.type !== "hidden" && (!!p.value || !!p.checked);
   }).length;
   return (
-    <div className="flex flex-wrap items-end gap-2">
+    <div className="flex flex-wrap items-end gap-2 md:items-center md:gap-x-3">
       {search}
-      <button type="button" aria-expanded={open} onClick={() => setOpen((x) => !x)} className="rounded-lg border border-line bg-white px-3 py-2 text-sm md:hidden">
+      <button type="button" aria-expanded={open} onClick={() => setOpen((x) => !x)} className={`${btnCls("default")} min-h-11 md:hidden`}>
         篩選條件{active ? `（${active}）` : ""}
       </button>
-      <div className={`${open ? "grid" : "hidden"} w-full grid-cols-2 items-end gap-2 md:flex md:w-auto md:flex-wrap [&_input]:max-md:w-full [&_select]:max-md:w-full`}>{rest}</div>
-      <button className="rounded-lg border border-ai bg-ai px-3.5 py-2 text-sm font-medium text-white hover:bg-ai-2">套用</button>
-      <a href={clearHref} className="rounded-lg px-2 py-2 text-sm text-ai hover:underline">清除</a>
+      <div className={`${open ? "grid" : "hidden"} w-full grid-cols-2 items-end gap-2 md:contents [&_input]:max-md:w-full [&_select]:max-md:w-full`}>{rest}</div>
+      <button className={`${btnCls("primary")} min-h-11 md:min-h-9`}>套用</button>
+      <a href={clearHref} className={`${btnCls("ghost")} min-h-11 md:min-h-9`}>清除</a>
     </div>
   );
 }

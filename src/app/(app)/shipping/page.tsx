@@ -33,7 +33,7 @@ export default async function Shipping({ searchParams }: { searchParams: Promise
       />
       <nav className="flex flex-wrap gap-1" aria-label="分頁">
         {[["todo", "待出貨（依買家）"], ["order", "待出貨（依訂單）"], ["done", "出貨紀錄"]].map(([k, l]) => (
-          <Link key={k} href={`/shipping?tab=${k}`} aria-current={tab === k ? "page" : undefined} className={`rounded-lg px-3 py-1.5 text-sm ${tab === k ? "bg-ink text-white" : "bg-white text-ink-2 hover:bg-line-2"}`}>{l}</Link>
+          <Link key={k} href={`/shipping?tab=${k}`} aria-current={tab === k ? "page" : undefined} className={`rounded-lg px-3 py-1.5 text-sm ${tab === k ? "bg-ink text-on-fill" : "bg-card text-ink-2 hover:bg-line-2"}`}>{l}</Link>
         ))}
       </nav>
       {tab === "done" ? <DoneTab vk={vk} /> : <TodoTab byOrder={tab === "order"} sp={sp} vk={vk} />}
@@ -89,13 +89,13 @@ async function TodoTab({ byOrder, sp, vk }: { byOrder: boolean; sp: Record<strin
       <form method="get" className="flex flex-wrap items-end gap-2">
         <input type="hidden" name="tab" value={byOrder ? "order" : "todo"} />
         <label className="text-[12px] text-mute">代購團
-          <select name="groupBuyId" defaultValue={sp.groupBuyId ?? ""} className="mt-0.5 block rounded-lg border border-line bg-white px-2 py-2 text-[15px]">
+          <select name="groupBuyId" defaultValue={sp.groupBuyId ?? ""} className="mt-0.5 block rounded-lg border border-field bg-card px-2 py-2 text-[15px]">
             <option value="">全部</option>
             {gbs.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
         </label>
         <label className="flex items-center gap-1.5 py-2 text-sm"><input type="checkbox" name="ready" value="1" defaultChecked={!!sp.ready} className="h-4 w-4" />只看已有到貨可出的</label>
-        <button className="rounded-lg border border-ai bg-ai px-3 py-2 text-sm text-white">套用</button>
+        <button className="rounded-lg border border-ai bg-ai px-3 py-2 text-sm text-on-fill">套用</button>
       </form>
       {list.length === 0 ? (
         <Section><Empty action={<LinkButton href="/sell">賣給客人</LinkButton>}>沒有要給客人的東西。客人預訂的商品到貨後，會出現在這裡。</Empty></Section>

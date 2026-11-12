@@ -106,8 +106,8 @@ export function PushSetup({ vapidKey }: { vapidKey: string }) {
     await check();
   };
   const step = (n: number | string, done: boolean, title: string, body: React.ReactNode) => (
-    <div className="flex gap-3 rounded-xl border border-line bg-white p-3">
-      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[14px] font-bold text-white ${done ? "bg-good" : "bg-ai"}`}>{done ? "✓" : n}</span>
+    <div className="flex gap-3 rounded-xl border border-line bg-card p-3">
+      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[14px] font-bold text-on-fill ${done ? "bg-good" : "bg-ai"}`}>{done ? "✓" : n}</span>
       <div className="text-[14px]">
         <b>{title}</b>
         <div className="text-mute">{body}</div>

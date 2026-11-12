@@ -40,7 +40,7 @@ export default async function Categories() {
         actions={
           <>
             <CategoryEditButton label="＋ 新系列" customTypes={customTypes} />
-            <Link href="/catalog?order=1" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-white px-3 text-[14px] text-ai">調整順序</Link>
+            <Link href="/catalog?order=1" className="inline-flex min-h-10 items-center rounded-lg border border-line bg-card px-3 text-[14px] text-ai">調整順序</Link>
           </>
         }
       />

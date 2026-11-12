@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { PageHeader, Section, TableWrap, StatusBadge, Twd, Empty, LinkButton, Pager, TagChip, Badge } from "@/components/ui";
-import { FilterBar, FSearch, FSelect, qs } from "@/components/filters";
+import { FilterBar, FSearch, FSelect, fDateCls, qs } from "@/components/filters";
 import { BulkBar, RowCheck, Selection } from "./bulk";
 import { fmtDate, orderStatus, paymentStatus, shipStatus, orderSource } from "@/lib/labels";
 import type { Prisma } from "@prisma/client";
@@ -116,20 +116,20 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
           <FSelect name="groupBuyId" label="代購團" value={sp.groupBuyId} options={gbs.map((g) => [g.id, g.name])} />
           <FSelect name="categoryId" label="分類" value={sp.categoryId} options={cats.map((c) => [c.id, c.name])} />
           <FSelect name="source" label="來源" value={sp.source} options={Object.entries(orderSource)} />
-          <label className="text-[12px] text-mute">
-            <span className="mb-0.5 block">起日</span>
-            <input type="date" name="from" defaultValue={sp.from} className="rounded-lg border border-line px-2 py-2" />
+          <label className="text-[12px] text-mute md:flex md:items-center md:gap-1.5 md:text-[13px]">
+            <span className="mb-0.5 block md:mb-0">起日</span>
+            <input type="date" name="from" defaultValue={sp.from} className={fDateCls} />
           </label>
-          <label className="text-[12px] text-mute">
-            <span className="mb-0.5 block">迄日</span>
-            <input type="date" name="to" defaultValue={sp.to} className="rounded-lg border border-line px-2 py-2" />
+          <label className="text-[12px] text-mute md:flex md:items-center md:gap-1.5 md:text-[13px]">
+            <span className="mb-0.5 block md:mb-0">迄日</span>
+            <input type="date" name="to" defaultValue={sp.to} className={fDateCls} />
           </label>
           <FSelect name="sort" label="排序" value={sp.sort} allLabel="訂購時間：新到舊" options={[["old", "訂購時間：舊到新"], ["amount", "金額：高到低"], ["amountAsc", "金額：低到高"], ["balance", "待收：多到少"]]} />
           {sp.buyerId && <input type="hidden" name="buyerId" value={sp.buyerId} />}
         </FilterBar>
         <div className="flex gap-1.5 overflow-x-auto px-4 pt-2 md:hidden" data-testid="orders-quick">
           {quick.map(([l, h, on]) => (
-            <Link key={h} href={h} className={`shrink-0 rounded-full border px-3 py-1 text-[13px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`}>{l}</Link>
+            <Link key={h} href={h} className={`shrink-0 rounded-full border px-3 py-1 text-[13px] ${on ? "border-ai bg-ai text-on-fill" : "border-line bg-card text-ink-2"}`}>{l}</Link>
           ))}
         </div>
         <Selection ids={orders.map((o) => o.id)}>
@@ -143,13 +143,13 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
             {orders.map((o) => {
               const active = o.items.reduce((s, i) => s + i.qty - i.cancelledQtyCache, 0);
               return (
-                <li key={o.id} className="flex gap-2.5 rounded-xl border border-line bg-white p-3" data-testid="order-card">
+                <li key={o.id} className="flex gap-2.5 rounded-xl border border-line bg-card p-3" data-testid="order-card">
                   <span className="pt-0.5"><RowCheck id={o.id} label={`選取訂單 ${o.orderNo}`} /></span>
                   <Link href={`/orders/${o.id}`} className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="truncate text-[15.5px] font-semibold">{o.buyer.name}</span>
                       <span className="shrink-0 text-[15px] font-semibold">
-                        {o.balanceCache > 0 ? <Twd v={o.balanceCache} className="text-bad" /> : o.refundDueCache > 0 ? <span className="text-bad">應退 {o.refundDueCache.toLocaleString()}</span> : o.confirmation === "CANCELLED" ? <span className="text-mute">無</span> : <span className="text-[13px] text-good">已收齊</span>}
+                        {o.balanceCache > 0 ? <Twd v={o.balanceCache} className="text-warn" /> : o.refundDueCache > 0 ? <span className="text-warn">應退 {o.refundDueCache.toLocaleString()}</span> : o.confirmation === "CANCELLED" ? <span className="text-mute">無</span> : <span className="text-[13px] text-good">已收齊</span>}
                       </span>
                     </div>
                     <div className="text-[12.5px] text-mute">
@@ -211,7 +211,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
                     <td><StatusBadge map={paymentStatus} value={o.paymentStatusCache} /></td>
                     <td><StatusBadge map={shipStatus} value={o.shipStatusCache} /></td>
                     <td className="text-right"><Twd v={o.receivableCache} /></td>
-                    <td className="text-right">{o.balanceCache > 0 ? <Twd v={o.balanceCache} className="font-medium text-bad" /> : o.refundDueCache > 0 ? <Badge tone="bad">應退 {o.refundDueCache}</Badge> : <span className="text-mute">0</span>}</td>
+                    <td className="text-right">{o.balanceCache > 0 ? <Twd v={o.balanceCache} className="font-medium text-warn" /> : o.refundDueCache > 0 ? <Badge tone="warn">應退 {o.refundDueCache}</Badge> : <span className="text-mute">0</span>}</td>
                   </tr>
                 );
               })}

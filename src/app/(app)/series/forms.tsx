@@ -51,7 +51,7 @@ export function RosterEditor({ seriesId, roster, allCharacters, otherSeries }: {
       <ol className="flex flex-wrap gap-1.5">
         {roster.length === 0 && <li className="text-sm text-mute">這個系列還沒有角色。</li>}
         {roster.map((c, i) => (
-          <li key={c.id} className="inline-flex items-center gap-0.5 rounded-full border border-line bg-white py-0.5 pr-1 pl-2.5 text-[14px]">
+          <li key={c.id} className="inline-flex items-center gap-0.5 rounded-full border border-line bg-card py-0.5 pr-1 pl-2.5 text-[14px]">
             <span className="num mr-1 text-[12px] text-mute">{i + 1}</span>
             {c.name}
             <button type="button" aria-label={`把 ${c.name} 往前移`} disabled={i === 0} className="rounded px-1 text-mute hover:bg-line-2 disabled:opacity-30" onClick={() => run(() => moveSeriesCharacterAction(seriesId, c.id, -1), {})}>

@@ -36,8 +36,8 @@ export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, availa
           <tr className="text-left text-[12px] text-mute">
             <th className="py-1 font-normal">商品</th>
             <th className="font-normal">訂單</th>
-            <th className="px-1 text-right font-normal">未出</th>
-            <th className="px-1 text-right font-normal" title="已到貨、排給這一項可以出的數量（先下單的先分）">可出</th>
+            <th className="px-1 text-right font-normal whitespace-nowrap">未出</th>
+            <th className="px-1 text-right font-normal whitespace-nowrap" title="已到貨、排給這一項可以出的數量（先下單的先分）">可出</th>
             <th className="w-16 text-right font-normal">本次</th>
           </tr>
         </thead>
@@ -50,7 +50,7 @@ export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, availa
                 {i.packFlag !== "NONE" && <span className="ml-1 text-[12px] text-info">（{i.packFlag === "READY" ? "已備妥" : "備貨中"}）</span>}
                 {i.reservedBy && <div className="text-[12px] text-mute" data-testid="reserved-by">保留的是：{i.reservedBy}</div>}
               </td>
-              <td className="num text-[13px]"><a href={`/orders/${i.orderId}`} className="text-ai hover:underline">{i.orderNo}</a>{i.wholeOrder && <span className="ml-1 rounded-full bg-good-soft px-1.5 text-[11px] text-good" data-testid="whole-order">整張可出</span>}</td>
+              <td className="num text-[13px]"><a href={`/orders/${i.orderId}`} className="whitespace-nowrap text-ai hover:underline">{i.orderNo}</a>{i.wholeOrder && <span className="ml-1 inline-block rounded-full bg-good-soft px-1.5 text-[11px] whitespace-nowrap text-good" data-testid="whole-order">整張可出</span>}</td>
               <td className="num text-right">{i.pending}</td>
               <td className={`num text-right ${canOf(i) === 0 ? "text-mute" : "font-medium"}`} data-k="can">{canOf(i)}</td>
               <td className="text-right">

@@ -196,7 +196,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
         {groupBuys.length > 0 && (
           <Choice label="代購團（選填）" value={groupBuy} onChange={setGroupBuy} placeholder="不指定" options={groupBuys.map((g) => ({ value: g.id, label: g.name }))} hint="選了系列，那個系列只有一個代購團時會自動帶。" />
         )}
-        <label className="flex items-center gap-2 rounded-lg border border-line-2 bg-tone-gray-50-4 px-3 py-2 text-[14px]" data-testid="ship-fee">
+        <label className="flex items-center gap-2 rounded-lg border border-line-2 bg-paper px-3 py-2 text-[14px]" data-testid="ship-fee">
           <span className="shrink-0 font-medium text-ink-2">運費</span>
           <span className="text-mute">NT$</span>
           <input aria-label="運費" data-keep inputMode="numeric" className={`${inputCls} num min-h-10 w-24 text-right`} value={shipFee} onChange={(e) => setShipFee(e.target.value.replace(/\D/g, ""))} />
@@ -230,7 +230,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
         </div>
       )}
 
-      {sheets.length === 0 && !loading && !loadError && <p className="rounded-xl border border-dashed border-line bg-white p-6 text-center text-[14px] text-mute">先選種類和系列，下面就會帶出這個系列有賣的東西。</p>}
+      {sheets.length === 0 && !loading && !loadError && <p className="rounded-xl border border-dashed border-line bg-card p-6 text-center text-[14px] text-mute">先選種類和系列，下面就會帶出這個系列有賣的東西。</p>}
 
       {sheets.map((sheet) => (
         <div key={sheet.id} className="overflow-hidden rounded-xl border border-line bg-card" data-testid="sell-sheet" data-name={sheet.name}>
@@ -245,7 +245,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
           ) : (
             sheet.items.map((it) => (
               <div key={it.typeId || "none"}>
-                <div className="flex items-baseline justify-between bg-tone-gray-50-2 px-3 py-2">
+                <div className="flex items-baseline justify-between bg-paper px-3 py-2">
                   <span className="font-semibold">{it.typeName}</span>
                   <span className="text-[12px] text-mute">{it.price != null ? `預設 ${formatTwd(it.price)}` : "還沒設預設售價"}</span>
                 </div>
@@ -309,7 +309,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
             </label>
           )}
           {showFee && lines.length > 0 && (
-            <div className="rounded-lg bg-tone-gray-50-4 px-3 py-2.5 text-[14px]" data-testid="sell-platform-fee">
+            <div className="rounded-lg bg-paper px-3 py-2.5 text-[14px]" data-testid="sell-platform-fee">
               <div className="flex justify-between py-0.5"><span>客人付</span><span className="num">{formatTwd(total + fee)}</span></div>
               {fee > 0 && <div className="flex justify-between py-0.5"><span>運費</span><span className="num text-bad">−{formatTwd(fee)}</span></div>}
               <div className="flex items-center justify-between gap-2 py-0.5">
@@ -317,7 +317,7 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
                 {feeEdit === null ? (
                   <span><span className="num text-bad">−{formatTwd(pFee)}</span> <button type="button" className="ml-1 text-ai underline" onClick={() => setFeeEdit(String(autoFee))}>改</button></span>
                 ) : (
-                  <span className="flex items-center gap-1">−<input aria-label="平台實際扣多少" inputMode="numeric" className="num h-9 w-20 rounded-lg border border-line bg-white px-2 text-right" value={feeEdit} onChange={(e) => setFeeEdit(e.target.value)} /></span>
+                  <span className="flex items-center gap-1">−<input aria-label="平台實際扣多少" inputMode="numeric" className="num h-9 w-20 rounded-lg border border-field bg-card px-2 text-right" value={feeEdit} onChange={(e) => setFeeEdit(e.target.value)} /></span>
                 )}
               </div>
               <div className="mt-1 flex justify-between border-t border-line pt-1.5 font-semibold"><span>實拿</span><span className="num" data-testid="sell-net">{formatTwd(total - pFee)}</span></div>

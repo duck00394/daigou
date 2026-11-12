@@ -13,6 +13,7 @@ import { RateForm, NameList, TypeList, OperatorList, HealthCheck, MeSelect, Expe
 import { costKind, fmtDate } from "@/lib/labels";
 import { formatRate } from "@/lib/money";
 import { ShippingMethods } from "./shipping";
+import { ModePicker } from "@/components/mode";
 import { listShippingMethods } from "@/server/services/shipping-methods";
 
 export const metadata = { title: "匯出、備份與設定" };
@@ -53,6 +54,9 @@ export default async function Settings() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Section title="功能">
           <OrdersToggle on={ordersOn} />
+        </Section>
+        <Section title="外觀">
+          <ModePicker />
         </Section>
         <Section title="常用運費方式">
           <ShippingMethods rows={shipping.map((x) => ({ id: x.id, name: x.name, kind: x.kind, currency: x.currency, amount: x.amount, active: x.active }))} />

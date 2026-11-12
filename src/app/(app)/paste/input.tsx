@@ -39,7 +39,7 @@ export function PasteInput({ groupBuys, initialText = "", replaceBatchId = null 
       </label>
       <textarea
         id="line-text"
-        className={`${inputCls} round min-h-[14rem] leading-7`}
+        className={`${inputCls} min-h-[14rem] leading-7`}
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder={EXAMPLE}

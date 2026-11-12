@@ -96,7 +96,7 @@ export function RowEditor({ batchId, row, lookup, locked }: { batchId: string; r
             <b>{buyer.name}</b>
             <span className="text-[12px] text-mute">{buyer.code}</span>
             {buyer.tags.map((t) => (
-              <span key={t.name} className="inline-flex items-center gap-1 rounded-full bg-white px-2 text-[12px]">
+              <span key={t.name} className="inline-flex items-center gap-1 rounded-full bg-card px-2 text-[12px]">
                 <span className="h-2 w-2 rounded-full" style={{ background: t.color }} aria-hidden />
                 {t.name}
               </span>
@@ -121,7 +121,7 @@ export function RowEditor({ batchId, row, lookup, locked }: { batchId: string; r
             {cands.buyers.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {cands.buyers.map((c) => (
-                  <button key={c.id} type="button" disabled={disabled} onClick={() => save({ buyerId: c.id })} className="rounded-lg border border-line bg-white px-2.5 py-1 text-[13px] hover:border-ai disabled:opacity-50">
+                  <button key={c.id} type="button" disabled={disabled} onClick={() => save({ buyerId: c.id })} className="rounded-lg border border-line bg-card px-2.5 py-1 text-[13px] hover:border-ai disabled:opacity-50">
                     {c.name} <span className="text-mute">{c.code}，{c.via}</span>
                   </button>
                 ))}
@@ -165,7 +165,7 @@ export function RowEditor({ batchId, row, lookup, locked }: { batchId: string; r
             {cands.products.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {cands.products.map((c) => (
-                  <button key={c.id} type="button" disabled={disabled} onClick={() => save({ productId: c.id })} className="rounded-lg border border-line bg-white px-2.5 py-1 text-[13px] hover:border-ai disabled:opacity-50">
+                  <button key={c.id} type="button" disabled={disabled} onClick={() => save({ productId: c.id })} className="rounded-lg border border-line bg-card px-2.5 py-1 text-[13px] hover:border-ai disabled:opacity-50">
                     {c.name} <span className="text-mute">{c.salePriceTwd != null ? `NT$${c.salePriceTwd}` : ""}</span>
                   </button>
                 ))}

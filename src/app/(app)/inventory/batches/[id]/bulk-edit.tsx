@@ -107,7 +107,7 @@ export function BulkEditTable({ batchId, items, editable, jointOps, batchDutyPct
   return (
     <div>
       <div role="table" aria-label="採購品項" className="space-y-2 p-3 md:space-y-0 md:p-0">
-        <div role="row" className="hidden border-b border-line bg-tone-gray-50-4 px-4 py-2 text-[13px] font-medium text-ink-2 md:grid md:grid-cols-[minmax(10rem,1.6fr)_4.5rem_5.5rem_6.5rem_6.5rem_5rem_6.5rem_7rem_7.5rem] md:gap-2">
+        <div role="row" className="hidden border-b border-line bg-paper px-4 py-2 text-[13px] font-medium text-ink-2 md:grid md:grid-cols-[minmax(10rem,1.6fr)_4.5rem_5.5rem_6.5rem_6.5rem_5rem_6.5rem_7rem_7.5rem] md:gap-2">
           <span role="columnheader">商品</span>
           <span role="columnheader" className="text-right">已到貨</span>
           <span role="columnheader" className="text-right">數量</span>

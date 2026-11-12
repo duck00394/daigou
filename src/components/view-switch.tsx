@@ -24,7 +24,7 @@ export function ViewSwitch({ v, onDone }: { v: ViewInfo; onDone?: () => void }) 
   const { go, pending } = useSwitch();
   if (!v.me) {
     return (
-      <div className="mb-3 rounded-xl border border-tone-orange-300-6 bg-tone-amber-100-2 p-3" data-testid="view-switch">
+      <div className="mb-3 rounded-xl border border-line bg-card p-3" data-testid="view-switch">
         <Choice
           label="這台裝置是誰在用？選了之後每頁預設只看他的"
           value=""
@@ -49,7 +49,7 @@ export function ViewChip({ v }: { v: ViewInfo }) {
   const ids = v.ops.map((o) => o.id);
   const t = v.key === "all" ? null : ownerTone(v.key, ids);
   return (
-    <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[13px] font-semibold ${t ? t.chip : "bg-tone-purple-100-2 text-tone-purple-500"}`} data-testid="view-chip">
+    <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[13px] font-semibold ${t ? t.chip : "bg-ai-soft text-ai"}`} data-testid="view-chip">
       {v.key === "all" ? "全部" : `${v.name} 的`}
     </span>
   );
@@ -60,9 +60,9 @@ export function ViewBanner({ v }: { v: ViewInfo }) {
   const { go, pending } = useSwitch();
   if (!v.me || v.isMe) return null;
   return (
-    <div className="mb-3 flex items-center justify-between gap-2 rounded-xl bg-tone-pink-100-2 px-3 py-2 text-[14px] text-tone-pink-700" data-testid="view-banner">
+    <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-line bg-ai-soft px-3 py-2 text-[14px] text-ink" data-testid="view-banner">
       <span>正在看「{v.name}」的資料</span>
-      <button type="button" disabled={pending} className="font-semibold" onClick={() => go(() => setViewAction("me"))}>回到我的</button>
+      <button type="button" disabled={pending} className="font-semibold text-ai" onClick={() => go(() => setViewAction("me"))}>回到我的</button>
     </div>
   );
 }

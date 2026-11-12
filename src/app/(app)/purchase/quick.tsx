@@ -24,7 +24,7 @@ type Ship = { id: string; name: string; kind: string; currency: "TWD" | "JPY"; a
 const NEW = "__new__";
 const JOINT = "JOINT";
 
-const pill = (on: boolean) => `min-h-10 rounded-full border px-3.5 text-[15px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
+const pill = (on: boolean) => `min-h-10 rounded-full border px-3.5 text-[15px] ${on ? "border-ai bg-ai text-on-fill" : "border-line bg-card text-ink-2"}`;
 
 export function QuickPurchase(props: {
   me: string | null;
@@ -216,7 +216,7 @@ export function QuickPurchase(props: {
         </div>
         <p className="mt-1 text-[12px] text-mute">還沒付可以先空著，之後在這裡或團頁面再填。每件是誰的在下面「買了什麼」選。</p>
       </div>
-      {settle && <p className="rounded-lg bg-white px-3 py-2 text-[14px] font-semibold text-bad" data-testid="joint-settle">{settle}</p>}
+      {settle && <p className="rounded-lg bg-card px-3 py-2 text-[14px] font-semibold text-bad" data-testid="joint-settle">{settle}</p>}
     </div>
   );
 
@@ -264,8 +264,8 @@ export function QuickPurchase(props: {
               noneLabel="不指定"
               extra={
                 <>
-                  <button type="button" className="min-h-10 rounded-lg border border-line bg-white px-3 text-[14px] text-ai" onClick={() => setNewCat("")}>＋ 新系列</button>
-                  {categoryId && renaming === null && <button type="button" className="min-h-10 rounded-lg border border-line bg-white px-3 text-[14px] text-ai" onClick={() => setRenaming(catName ?? "")}><Icon name="pencil" /> 改名</button>}
+                  <button type="button" className="min-h-10 rounded-lg border border-line bg-card px-3 text-[14px] text-ai" onClick={() => setNewCat("")}>＋ 新系列</button>
+                  {categoryId && renaming === null && <button type="button" className="min-h-10 rounded-lg border border-line bg-card px-3 text-[14px] text-ai" onClick={() => setRenaming(catName ?? "")}><Icon name="pencil" /> 改名</button>}
                 </>
               }
             />
@@ -348,7 +348,7 @@ export function QuickPurchase(props: {
                   </button>
                   {supErr && !f.supplierId && <p role="alert" className="mt-1 text-[13px] text-bad" data-testid="supplier-error">{store ? "請選是哪家店" : "請選跟哪個代購買的"}</p>}
                   {supOpen && (
-                    <div className="mt-1 overflow-hidden rounded-xl border border-ai bg-white shadow-lg" data-testid="supplier-panel">
+                    <div className="mt-1 overflow-hidden rounded-xl border border-ai bg-card shadow-lg" data-testid="supplier-panel">
                       <div className="border-b border-line-2 p-2">
                         <input
                           autoFocus
@@ -364,11 +364,11 @@ export function QuickPurchase(props: {
                         {(supQ.trim() ? [["搜尋結果", supHits] as const] : ([["常用", favs], ["其他", shown.filter((x) => !favs.includes(x))]] as const)).map(([title, list]) =>
                           list.length ? (
                             <li key={title}>
-                              <div className="bg-tone-gray-50-2 px-3 py-1 text-[12px] text-mute">{title}</div>
+                              <div className="bg-paper px-3 py-1 text-[12px] text-mute">{title}</div>
                               <ul>
                                 {list.map((x) => (
                                   <li key={x.id}>
-                                    <button type="button" role="option" aria-selected={f.supplierId === x.id} className={`flex w-full items-center justify-between px-3 py-2.5 text-left text-[15px] ${f.supplierId === x.id ? "bg-ai-soft font-semibold text-ai" : "hover:bg-tone-gray-50-4"}`} onClick={() => { setF({ ...f, supplierId: x.id }); setSupOpen(false); setSupQ(""); }}>
+                                    <button type="button" role="option" aria-selected={f.supplierId === x.id} className={`flex w-full items-center justify-between px-3 py-2.5 text-left text-[15px] ${f.supplierId === x.id ? "bg-ai-soft font-semibold text-ai" : "hover:bg-line-2"}`} onClick={() => { setF({ ...f, supplierId: x.id }); setSupOpen(false); setSupQ(""); }}>
                                       {x.name}{f.supplierId === x.id && <span className="text-[12px]">已選</span>}
                                     </button>
                                   </li>
@@ -441,7 +441,7 @@ export function QuickPurchase(props: {
             </div>
             {f.owner === JOINT && jointBox()}
             {!store && (
-              <label className="flex items-center gap-2 rounded-xl border border-line-2 bg-tone-gray-50-4 px-3 py-2 text-[14px]" data-testid="buy-ship-fee">
+              <label className="flex items-center gap-2 rounded-xl border border-line-2 bg-paper px-3 py-2 text-[14px]" data-testid="buy-ship-fee">
                 <span className="shrink-0 font-medium text-ink-2">運費（賣貨便）</span>
                 <span className="text-mute">NT$</span>
                 <input aria-label="賣貨便運費" data-keep inputMode="numeric" className={`${inputCls} num min-h-10 w-24 text-right`} value={mainFee} onChange={(e) => setMainFee(e.target.value.replace(/\D/g, ""))} />
@@ -450,13 +450,13 @@ export function QuickPurchase(props: {
               </label>
             )}
             {store && (
-              <label className="flex items-center gap-2 rounded-xl border border-line-2 bg-tone-gray-50-4 p-3 text-[15px]">
+              <label className="flex items-center gap-2 rounded-xl border border-line-2 bg-paper p-3 text-[15px]">
                 <input type="checkbox" className="h-5 w-5" checked={paidAtStore} onChange={(e) => setPaidAtStore(e.target.checked)} />
                 在店裡已經付清了
                 <span className="text-[12px] text-mute">（存好就進庫存{paidAtStore ? "、記成已付款" : ""}）</span>
               </label>
             )}
-            <details className="rounded-xl border border-line-2 bg-tone-gray-50-4 px-3 py-2 text-[14px]" open={store || undefined}>
+            <details className="rounded-xl border border-line-2 bg-paper px-3 py-2 text-[14px]" open={store || undefined}>
               <summary className="cursor-pointer select-none py-1 text-ai">更多：實體店買的、到哪了、運費、訂金、團名、預計到貨</summary>
               <div className="mt-2 space-y-3">
                 <Choice

@@ -24,7 +24,7 @@ export default async function Payments({ searchParams }: { searchParams: Promise
   return (
     <div className="space-y-4">
       <PageHeader title="收款與退款" sub="已收、已退款、待收、待退款分開計算；待退款在實際退出前不算已退款。" actions={<LinkButton href="/api/export/payments">匯出收退款紀錄</LinkButton>} />
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+      <div className="stat-grid grid grid-cols-2 lg:grid-cols-5">
         <Stat label="應收合計" value={<Twd v={snap.receivable} />} note="已確認訂單" />
         <Stat label="淨收款（已收 − 已退）" value={<Twd v={snap.netReceived} />} />
         <Stat label="待收款" value={<Twd v={snap.balance} />} tone={snap.balance > 0 ? "warn" : undefined} />
@@ -33,7 +33,7 @@ export default async function Payments({ searchParams }: { searchParams: Promise
       </div>
       <nav className="flex gap-1" aria-label="分頁">
         {[["due", "待收款"], ["refunds", "退款"], ["records", "收款紀錄"]].map(([k, l]) => (
-          <Link key={k} href={`/payments?tab=${k}`} aria-current={tab === k ? "page" : undefined} className={`rounded-lg px-3 py-1.5 text-sm ${tab === k ? "bg-ink text-white" : "bg-white text-ink-2 hover:bg-line-2"}`}>{l}</Link>
+          <Link key={k} href={`/payments?tab=${k}`} aria-current={tab === k ? "page" : undefined} className={`rounded-lg px-3 py-1.5 text-sm ${tab === k ? "bg-ink text-on-fill" : "bg-card text-ink-2 hover:bg-line-2"}`}>{l}</Link>
         ))}
       </nav>
       {tab === "due" && <DueTab sp={sp} gbs={gbs} mine={mine} />}
@@ -77,7 +77,7 @@ async function DueTab({ sp, gbs, mine }: { sp: Record<string, string | undefined
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Link href={`/buyers/${g.buyer.id}?tab=money`} className="font-medium text-ai hover:underline">{g.buyer.name}</Link>
                 <span className="flex items-center gap-3">
-                  <span className="text-sm">待收 <Twd v={g.due} className="font-semibold text-bad" /></span>
+                  <span className="text-sm">待收 <Twd v={g.due} className="font-semibold text-warn" /></span>
                   <CollectForBuyer buyerId={g.buyer.id} buyerName={g.buyer.name} due={g.due} />
                 </span>
               </div>
@@ -132,7 +132,7 @@ async function RefundTab({ mine }: { mine: Prisma.OrderWhereInput }) {
             {needRecord.map((o) => (
               <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
                 <span><Link href={`/orders/${o.id}`} className="num text-ai hover:underline">{o.orderNo}</Link>｜{o.buyer.name}</span>
-                <span>需退 <Twd v={o.refundDueCache - o.refundPendingCache} className="font-medium text-bad" />（到訂單頁建立退款）</span>
+                <span>需退 <Twd v={o.refundDueCache - o.refundPendingCache} className="font-medium text-warn" />（到訂單頁建立退款）</span>
               </li>
             ))}
           </ul>
@@ -159,9 +159,9 @@ async function RecordsTab({ sp, mine }: { sp: Record<string, string | undefined>
     <Section pad={false} title={`期間淨收款：NT$${net.toLocaleString()}`}>
       <form method="get" className="flex flex-wrap items-end gap-2 border-b border-line-2 px-4 py-3">
         <input type="hidden" name="tab" value="records" />
-        <label className="text-[12px] text-mute">起日<input type="date" name="from" defaultValue={sp.from} className="mt-0.5 block rounded-lg border border-line px-2 py-2" /></label>
-        <label className="text-[12px] text-mute">迄日<input type="date" name="to" defaultValue={sp.to} className="mt-0.5 block rounded-lg border border-line px-2 py-2" /></label>
-        <button className="rounded-lg border border-ai bg-ai px-3 py-2 text-sm text-white">套用</button>
+        <label className="text-[12px] text-mute">起日<input type="date" name="from" defaultValue={sp.from} className="mt-0.5 block rounded-lg border border-field px-2 py-2" /></label>
+        <label className="text-[12px] text-mute">迄日<input type="date" name="to" defaultValue={sp.to} className="mt-0.5 block rounded-lg border border-field px-2 py-2" /></label>
+        <button className="rounded-lg border border-ai bg-ai px-3 py-2 text-sm text-on-fill">套用</button>
         <span className="text-[12px] text-mute">預設顯示最近 30 天</span>
       </form>
       {rows.length === 0 ? <Empty>期間內沒有紀錄。</Empty> : (

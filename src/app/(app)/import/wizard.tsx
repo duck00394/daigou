@@ -81,7 +81,7 @@ export function ImportWizard({ groupBuys }: { groupBuys: { id: string; name: str
             ref={inputRef}
             type="file"
             accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
-            className="block max-w-full text-sm file:mr-3 file:rounded-lg file:border file:border-line file:bg-white file:px-3 file:py-2"
+            className="block max-w-full text-sm file:mr-3 file:rounded-lg file:border file:border-line file:bg-card file:px-3 file:py-2"
             onChange={(e) => {
               const f = e.target.files?.[0] ?? null;
               setFile(f);
@@ -98,7 +98,7 @@ export function ImportWizard({ groupBuys }: { groupBuys: { id: string; name: str
           <h2 className="mb-2 text-[15px] font-semibold">2. 選擇工作表</h2>
           <div className="flex flex-wrap gap-2">
             {sheets.map((s) => (
-              <label key={s.name} className={`rounded-lg border px-3 py-2 text-sm ${sheet === s.name ? "border-ai bg-ai-soft" : "border-line bg-white"}`}>
+              <label key={s.name} className={`rounded-lg border px-3 py-2 text-sm ${sheet === s.name ? "border-ai bg-ai-soft" : "border-line bg-card"}`}>
                 <input
                   type="radio"
                   name="sheet"

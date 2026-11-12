@@ -23,9 +23,9 @@ export default async function PackList({ searchParams }: { searchParams: Promise
   const plan = await tx((t) => shipPlan(t));
   const canShip = new Map(plan.items.map((x) => [x.id, x.shippable]));
   return (
-    <div className="mx-auto max-w-2xl bg-white p-6 text-ink">
+    <div className="light-page mx-auto max-w-2xl bg-card p-6 text-ink">
       <div className="no-print mb-4 flex justify-end"><PrintButton /></div>
-      <h1 className="round text-xl font-semibold">包貨核對清單｜{buyer.name}</h1>
+      <h1 className="text-xl font-semibold">包貨核對清單｜{buyer.name}</h1>
       <p className="text-sm text-mute">{buyer.code}｜列印時間 {fmtDate(new Date(), true)}</p>
       {(buyer.recipientName || buyer.address) && (
         <p className="mt-2 text-sm">收件：{[buyer.recipientName, buyer.recipientPhone, buyer.shippingMethod, buyer.address].filter(Boolean).join("｜")}</p>

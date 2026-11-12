@@ -19,7 +19,7 @@ export function ProfitBoard({ p, series, cat, show, href }: { p: P; series: Seri
   const uncosted = p.total.open.uncosted;
   const tentative = p.total.shipped.tentative || p.total.open.tentative;
   const list = p.orders.filter((o) => (show === "shipped" ? o.shipped.qty > 0 : show === "open" ? o.open.qty + o.open.uncosted > 0 : true));
-  const chip = (on: boolean) => `shrink-0 rounded-full border px-3 py-1 text-[13px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
+  const chip = (on: boolean) => `shrink-0 rounded-full border px-3 py-1 text-[13px] ${on ? "border-ai bg-ai text-on-fill" : "border-line bg-card text-ink-2"}`;
   return (
     <section className="rounded-xl border border-line bg-card" data-testid="profit-board">
       <div className="border-b border-line-2 p-4">
@@ -55,7 +55,7 @@ export function ProfitBoard({ p, series, cat, show, href }: { p: P; series: Seri
             <tbody className="divide-y divide-line-2 border-t border-line-2">
               {p.series.map((s) => (
                 <tr key={s.id ?? "-"} data-name={s.name}>
-                  <td className="px-4 py-2">{s.id ? <Link href={href({ cat: s.id })} className="text-ai hover:underline">{s.name}</Link> : s.name}</td>
+                  <td className="px-4 py-2">{s.id ? <Link href={href({ cat: s.id })} className="whitespace-nowrap text-ai hover:underline">{s.name}</Link> : s.name}</td>
                   <td className="px-2 py-2 text-right">{s.shipped.qty ? money(profitOf(s.shipped), true) : <span className="text-mute">0</span>}</td>
                   <td className="px-2 py-2 text-right">{s.open.qty ? money(profitOf(s.open), true) : <span className="text-mute">0</span>}</td>
                   <td className="px-4 py-2 text-right font-semibold" data-k="sum">{money(profitOf(s.shipped) + profitOf(s.open), true)}</td>
@@ -87,7 +87,7 @@ export function ProfitBoard({ p, series, cat, show, href }: { p: P; series: Seri
                 <div className="min-w-0">
                   <Link href={`/orders/${o.id}`} className="font-medium text-ai hover:underline">{o.orderNo}</Link> {o.buyer}
                   {o.open.qty + o.open.uncosted > 0 ? <span className="ml-1 rounded-full bg-warn-soft px-2 py-0.5 text-[11.5px] text-warn">{o.shipped.qty ? "部分預訂" : "預訂"}</span> : <span className="ml-1 rounded-full bg-good-soft px-2 py-0.5 text-[11.5px] text-good">已出貨</span>}
-                  {o.balance > 0 && <span className="ml-1 rounded-full bg-bad-soft px-2 py-0.5 text-[11.5px] text-bad">還沒收</span>}
+                  {o.balance > 0 && <span className="ml-1 rounded-full bg-warn-soft px-2 py-0.5 text-[11.5px] text-warn">還沒收</span>}
                   <div className="text-[12.5px] text-mute">
                     {fmtDate(o.orderedAt).slice(0, 10)}，{o.channel ?? orderSource[o.source] ?? o.source}，{sum.qty} 件，{formatTwd(sum.revenue)}
                     {o.open.qty ? "（含預估）" : ""}

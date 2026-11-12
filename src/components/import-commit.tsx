@@ -15,7 +15,7 @@ export function CountChips({ counts, total }: { counts: Record<string, number>; 
       <span className="rounded-md bg-line-2 px-2 py-0.5">共 {total} 列</span>
       {Object.entries(importRowStatus).map(([k, [label]]) =>
         counts[k] ? (
-          <span key={k} className={`rounded-md px-2 py-0.5 ${k === "READY" || k === "COMMITTED" ? "bg-good-soft text-good" : k === "ERROR" || k === "FAILED" ? "bg-bad-soft text-bad" : k === "EXCLUDED" ? "bg-white text-mute" : "bg-warn-soft text-warn"}`}>
+          <span key={k} className={`rounded-md px-2 py-0.5 ${k === "READY" || k === "COMMITTED" ? "bg-good-soft text-good" : k === "ERROR" || k === "FAILED" ? "bg-bad-soft text-bad" : k === "EXCLUDED" ? "bg-card text-mute" : "bg-warn-soft text-warn"}`}>
             {label} {counts[k]}
           </span>
         ) : null,
@@ -31,7 +31,7 @@ export function CommitBar({ batchId, ready, groups, locked, kind, exportBase }: 
   const router = useRouter();
   return (
     <>
-      <div className="no-print sticky bottom-16 z-20 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-white px-4 py-3 shadow-sm md:bottom-4">
+      <div className="no-print sticky bottom-16 z-20 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-card px-4 py-3 shadow-sm md:bottom-4">
         <div className="text-sm">
           {locked ? (
             "這個批次已結束。"

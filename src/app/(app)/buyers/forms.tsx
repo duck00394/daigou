@@ -59,7 +59,7 @@ export function BuyerAliases({ buyerId, aliases }: { buyerId: string; aliases: {
       <div className="mb-2 flex flex-wrap gap-1.5">
         {aliases.length === 0 && <span className="text-sm text-mute">沒有別名。</span>}
         {aliases.map((a) => (
-          <span key={a.id} className="inline-flex items-center gap-1 rounded-full border border-line bg-white py-0.5 pr-1 pl-2.5 text-[14px]">
+          <span key={a.id} className="inline-flex items-center gap-1 rounded-full border border-line bg-card py-0.5 pr-1 pl-2.5 text-[14px]">
             {a.alias}
             <button type="button" aria-label={`移除別名 ${a.alias}`} className="rounded-full px-1.5 text-mute hover:bg-bad-soft hover:text-bad" onClick={() => run(() => removeBuyerAliasAction(a.id), { success: "已移除別名" })}>
               ✕

@@ -15,7 +15,7 @@ export function AssignAll({ n, operators, acting, counted, unit = "件以前記�
         還有 <b>{n}</b> {unit}還沒分是跟誰訂的，{counted ? "上面有算進去" : "這裡先不列"}。現貨賣掉的會照扣到誰的貨自動分，其他的分給下面選的人。
       </p>
       <div className="mt-1.5 flex flex-wrap items-center gap-2">
-        <select aria-label="全部分給誰" className="min-h-10 rounded-lg border border-line bg-white px-2 text-[14px] text-ink" value={who} onChange={(e) => setWho(e.target.value)}>
+        <select aria-label="全部分給誰" className="min-h-10 rounded-lg border border-field bg-card px-2 text-[14px] text-ink" value={who} onChange={(e) => setWho(e.target.value)}>
           {operators.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           <option value="joint">合資的</option>
         </select>

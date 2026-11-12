@@ -12,7 +12,7 @@ import type { TreeKind, TreeSeries, TreeItem } from "@/server/services/catalog-t
 
 type Opt = { id: string; name: string; only?: string[] | null };
 const NEW_KIND = "__new__";
-const selCls = "min-h-11 w-full rounded-lg border border-line bg-white px-2.5 text-[15px]";
+const selCls = "min-h-11 w-full rounded-lg border border-field bg-card px-2.5 text-[15px]";
 
 function kindToType(key: string, custom: string) {
   if (key === NEW_KIND) return { type: "CUSTOM" as const, customType: custom.trim() };
@@ -52,7 +52,7 @@ export function CatalogView({ tree, types, initialKind, initialOpen, initialOrde
   return (
     <div className="space-y-3">
       <div className="flex justify-end">
-        <button type="button" className="min-h-10 rounded-lg border border-ai bg-white px-3 text-[14px] font-semibold text-ai" onClick={() => setOrdering(true)}>調整順序</button>
+        <button type="button" className="min-h-10 rounded-lg border border-ai bg-card px-3 text-[14px] font-semibold text-ai" onClick={() => setOrdering(true)}>調整順序</button>
       </div>
       <div>
         <label className="block text-[13px] font-medium text-ink-2" htmlFor="catalog-kind">種類</label>
@@ -62,7 +62,7 @@ export function CatalogView({ tree, types, initialKind, initialOpen, initialOrde
               {[...kindOpts.entries()].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               <option value={NEW_KIND}>＋ 新種類…</option>
             </select>
-            {current && <button type="button" className="min-h-11 shrink-0 rounded-lg border border-line bg-white px-3 text-[14px] text-ai" onClick={() => setRenamingKind(current.label)}><Icon name="pencil" /> 改名</button>}
+            {current && <button type="button" className="min-h-11 shrink-0 rounded-lg border border-line bg-card px-3 text-[14px] text-ai" onClick={() => setRenamingKind(current.label)}><Icon name="pencil" /> 改名</button>}
           </div>
         ) : (
           <div className="mt-1 flex gap-2">
@@ -85,10 +85,10 @@ export function CatalogView({ tree, types, initialKind, initialOpen, initialOrde
       </div>
 
       {current?.series.map((s) => <SeriesCard key={s.id} s={s} types={types} kinds={[...kindOpts.entries()]} open={open.has(s.id)} onToggle={() => toggle(s.id)} />)}
-      {!current && kind !== NEW_KIND && <p className="rounded-xl border border-dashed border-line bg-white p-4 text-center text-[14px] text-mute">這個種類還沒有系列。</p>}
+      {!current && kind !== NEW_KIND && <p className="rounded-xl border border-dashed border-line bg-card p-4 text-center text-[14px] text-mute">這個種類還沒有系列。</p>}
 
       {adding ? (
-        <div className="space-y-2 rounded-xl border border-ai bg-white p-3">
+        <div className="space-y-2 rounded-xl border border-ai bg-card p-3">
           <div className="text-[14px] font-semibold">新系列</div>
           {kind === NEW_KIND && (
             <label className="block text-[13px] font-medium text-ink-2">
@@ -123,14 +123,14 @@ function SeriesCard({ s, types, kinds, open, onToggle }: { s: TreeSeries; types:
   // 可以加的品項：共用的（吊娃、徽章…）＋本來就屬於這個系列的；別的系列專屬的（例：別的一番賞的 A賞）不列
   const unused = types.filter((t) => !s.items.some((i) => i.typeId === t.id) && (!t.only || t.only.includes(s.id)));
   return (
-    <section className={`overflow-hidden rounded-xl border border-line bg-white ${s.active ? "" : "opacity-60"}`} data-testid="catalog-series" data-name={s.name}>
+    <section className={`overflow-hidden rounded-xl border border-line bg-card ${s.active ? "" : "opacity-60"}`} data-testid="catalog-series" data-name={s.name}>
       {renaming === null ? (
         <div className="flex items-stretch bg-ai-soft">
           <button type="button" className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2.5 text-left" aria-expanded={open} onClick={onToggle}>
             <span className="truncate font-semibold text-ai">{s.name}{!s.active && <span className="ml-1 text-[12px] font-normal text-mute">已過期</span>}</span>
             <span className="shrink-0 text-[12px] text-ai">{s.items.length} 品項，{chars} 角色 {open ? "▾" : "▸"}</span>
           </button>
-          <button type="button" aria-label={`改「${s.name}」名稱`} className="shrink-0 border-l border-white px-3 text-[14px] text-ai" onClick={() => setRenaming(s.name)}><Icon name="pencil" /></button>
+          <button type="button" aria-label={`改「${s.name}」名稱`} className="shrink-0 border-l border-card px-3 text-[14px] text-ai" onClick={() => setRenaming(s.name)}><Icon name="pencil" /></button>
         </div>
       ) : (
         <div className="flex gap-2 bg-ai-soft p-2">
@@ -310,7 +310,7 @@ function ItemRow({ categoryId, item }: { categoryId: string; item: TreeItem }) {
         {item.typeId && adding === null && <button type="button" className="rounded-full border border-dashed border-line px-3 py-1 text-[14px] text-mute" onClick={openAdd}>＋ 角色</button>}
       </div>
       {adding !== null && (
-        <div className="mt-2 rounded-lg border border-line bg-tone-gray-50 p-2.5" data-testid="add-chars">
+        <div className="mt-2 rounded-lg border border-line bg-paper p-2.5" data-testid="add-chars">
           {roster === null ? (
             <p className="text-[13px] text-mute">讀取角色中…</p>
           ) : (
@@ -324,7 +324,7 @@ function ItemRow({ categoryId, item }: { categoryId: string; item: TreeItem }) {
                   {left.map((c) => {
                     const on = picked.includes(c.id);
                     return (
-                      <button key={c.id} type="button" aria-pressed={on} onClick={() => setPicked(on ? picked.filter((x) => x !== c.id) : [...picked, c.id])} className={`rounded-full border px-3 py-1 text-[14px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`}>
+                      <button key={c.id} type="button" aria-pressed={on} onClick={() => setPicked(on ? picked.filter((x) => x !== c.id) : [...picked, c.id])} className={`rounded-full border px-3 py-1 text-[14px] ${on ? "border-ai bg-ai text-on-fill" : "border-line bg-card text-ink-2"}`}>
                         {on ? "✓ " : "＋ "}
                         {c.name}
                       </button>
@@ -388,7 +388,7 @@ function ReorderList({ tree, pins, me, operators, onDone }: { tree: TreeKind[]; 
       disabled={!me}
       defaultValue={rankOf.get(s.id) ?? ""}
       placeholder=""
-      className={`num h-9 w-12 shrink-0 rounded-lg border text-center text-[15px] ${rankOf.has(s.id) ? "border-warn bg-warn-soft font-semibold" : "border-line bg-white"}`}
+      className={`num h-9 w-12 shrink-0 rounded-lg border text-center text-[15px] ${rankOf.has(s.id) ? "border-warn bg-warn-soft font-semibold" : "border-line bg-card"}`}
       onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
       onBlur={(e) => {
         const raw = e.currentTarget.value.trim();
@@ -405,9 +405,9 @@ function ReorderList({ tree, pins, me, operators, onDone }: { tree: TreeKind[]; 
   const b = "min-h-9 rounded-lg border px-2.5 text-[13px] disabled:opacity-40";
   const btns = (label: string, i: number, n: number, fn: (d: "up" | "down" | "top") => Promise<{ ok: true; data: null } | { ok: false; error: string }>, dark?: boolean) => (
     <span className="flex shrink-0 gap-1">
-      <button type="button" aria-label={`${label} 移到最上面`} disabled={pending || i === 0} className={`${b} ${dark ? "border-tone-blue-700 bg-tone-blue-800 text-white" : "border-line bg-white"}`} onClick={() => run(() => fn("top"))}>移到最上面</button>
-      <button type="button" aria-label={`${label} 上移`} disabled={pending || i === 0} className={`${b} ${dark ? "border-tone-blue-700 bg-tone-blue-800 text-white" : "border-line bg-white"}`} onClick={() => run(() => fn("up"))}>上</button>
-      <button type="button" aria-label={`${label} 下移`} disabled={pending || i === n - 1} className={`${b} ${dark ? "border-tone-blue-700 bg-tone-blue-800 text-white" : "border-line bg-white"}`} onClick={() => run(() => fn("down"))}>下</button>
+      <button type="button" aria-label={`${label} 移到最上面`} disabled={pending || i === 0} className={`${b} ${dark ? "border-tone-blue-700 bg-tone-blue-800 text-on-fill" : "border-line bg-card"}`} onClick={() => run(() => fn("top"))}>移到最上面</button>
+      <button type="button" aria-label={`${label} 上移`} disabled={pending || i === 0} className={`${b} ${dark ? "border-tone-blue-700 bg-tone-blue-800 text-on-fill" : "border-line bg-card"}`} onClick={() => run(() => fn("up"))}>上</button>
+      <button type="button" aria-label={`${label} 下移`} disabled={pending || i === n - 1} className={`${b} ${dark ? "border-tone-blue-700 bg-tone-blue-800 text-on-fill" : "border-line bg-card"}`} onClick={() => run(() => fn("down"))}>下</button>
     </span>
   );
   return (
@@ -416,7 +416,7 @@ function ReorderList({ tree, pins, me, operators, onDone }: { tree: TreeKind[]; 
         <p className="text-[13px] text-mute">排好之後，所有選系列的下拉選單都照這個順序。已過期的自動排在最後。</p>
         <Button variant="primary" onClick={onDone}>完成</Button>
       </div>
-      <div className="overflow-hidden rounded-xl border border-line bg-white" data-testid="pinned-box">
+      <div className="overflow-hidden rounded-xl border border-line bg-card" data-testid="pinned-box">
         <div className="flex items-center justify-between gap-2 bg-warn-soft px-3 py-2 font-semibold text-warn">
           <span>常用{me ? `（${operators.find((o) => o.id === me)?.name ?? ""}的）` : ""}</span>
           {pinned.length > 0 && (
@@ -437,12 +437,12 @@ function ReorderList({ tree, pins, me, operators, onDone }: { tree: TreeKind[]; 
         )}
         {me && !pinned.length && <p className="border-t border-line-2 px-3 py-2.5 text-[13px] text-mute">在下面系列後面的格子打 1、2、3，就會排到這裡，選系列的下拉也會列在最上面。</p>}
       </div>
-      <div className="overflow-hidden rounded-xl border border-line bg-white">
+      <div className="overflow-hidden rounded-xl border border-line bg-card">
         {tree.map((k, ki) => {
           const live = k.series.filter((s) => s.active && !rankOf.has(s.id));
           return (
             <div key={k.key}>
-              <div className="flex items-center justify-between gap-2 bg-ink px-3 py-2 font-semibold text-white" data-testid="reorder-kind">
+              <div className="flex items-center justify-between gap-2 bg-ink px-3 py-2 font-semibold text-on-fill" data-testid="reorder-kind">
                 <span className="min-w-0 truncate">{k.label}</span>
                 {btns(k.label, ki, tree.length, (d) => moveKindAction(k.key, d), true)}
               </div>

@@ -159,7 +159,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         </div>
       )}
       {refundOwed > 0 && (
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-tone-red-300-2 bg-bad-soft px-4 py-2.5 text-[14px] text-bad" data-testid="batch-refund-owed">
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-tone-amber-300-2 bg-warn-soft px-4 py-2.5 text-[14px] text-warn" data-testid="batch-refund-owed">
           <span>已砍單，未退款：代購要退 <b className="num">{formatTwd(refundOwed)}</b>{b.refundedTwd ? `（已退 ${formatTwd(b.refundedTwd)}）` : ""}</span>
           <RefundButton batchId={b.id} name={b.name} owed={refundOwed} />
         </div>
@@ -174,14 +174,14 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         <div className="grid grid-cols-3 gap-2">
           <div><div className="text-[12px] text-mute">總額{estimated ? "（含預估）" : ""}</div><div className="num text-[20px] font-semibold" data-testid="batch-total">{formatTwd(pay.totalTwd)}</div></div>
           <div><div className="text-[12px] text-mute">已付</div><div className="num text-[20px] font-semibold text-good">{formatTwd(pay.paidTwd)}</div></div>
-          <div><div className="text-[12px] text-mute">還要付</div><div className={`num text-[20px] font-semibold ${pay.dueTwd ? "text-bad" : ""}`} data-testid="batch-due">{formatTwd(pay.dueTwd)}</div></div>
+          <div><div className="text-[12px] text-mute">還要付</div><div className={`num text-[20px] font-semibold ${pay.dueTwd ? "text-warn" : ""}`} data-testid="batch-due">{formatTwd(pay.dueTwd)}</div></div>
         </div>
         <div className="mt-1 text-[13px] text-mute">{totalQty} 件，已到 {received}{feeTotal > 0 ? `，含運費等 ${formatTwd(feeTotal)}` : ""}</div>
         {open && (
           <div className="mt-3 grid grid-cols-3 gap-2" aria-label="常用動作">
             <ReceiveAllButton batchId={b.id} outstanding={Math.max(0, totalQty - received)} operators={ops.filter((o) => o.active)} defaultReceiver={b.receivingResponsibleById ?? b.orderedById ?? null} doneLabel={isStoreKind(b.supplierRef?.kind) ? "實體店買的" : "全部到手了"} due={pay.dueTwd} payer={b.ownership === "JOINT" ? me : (b.orderedById ?? me)} />
             {pay.dueTwd > 0 ? <PayOffButton big batchId={b.id} due={pay.dueTwd} operators={ops.filter((o) => o.active)} defaultPayer={b.ownership === "JOINT" ? me : (b.orderedById ?? me)} /> : <span className="flex items-center justify-center rounded-lg bg-good-soft px-3 py-2 text-[14px] text-good">已付清</span>}
-            <Link href={`/inventory/batches/${b.id}?bulk=1#items`} className="flex items-center justify-center rounded-lg border border-line bg-white px-3 py-2 text-[14px] hover:border-ai">＋ 加商品</Link>
+            <Link href={`/inventory/batches/${b.id}?bulk=1#items`} className="flex items-center justify-center rounded-lg border border-line bg-card px-3 py-2 text-[14px] hover:border-ai">＋ 加商品</Link>
           </div>
         )}
       </section>
@@ -282,11 +282,11 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
       </Section>
       <details className="group rounded-xl border border-line bg-card" id="more">
         <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-[15px] font-semibold [&::-webkit-details-marker]:hidden">
-          <span><span className="mr-1 inline-block text-mute transition-transform group-open:rotate-90">▸</span>負責人、基本資料</span>
+          <span><span className="mr-1 inline-block text-mute transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none">▸</span>負責人、基本資料</span>
           <span className="text-[13px] font-normal text-mute group-open:hidden">點開修改</span>
         </summary>
-        <div className="space-y-4 border-t border-line-2 p-3">
-      <Section title="負責人" id="people">
+        <div className="divide-y divide-line-2 border-t border-line-2">
+      <Section title="負責人" id="people" flat>
         <ResponsibilityCard
           batchId={b.id}
           operators={ops}
@@ -296,7 +296,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         />
       </Section>
 
-      <Section id="info" title="基本資料">
+      <Section id="info" title="基本資料" flat>
         <BatchInfoCard
           batchId={b.id}
           editable={b.status !== "CANCELLED"}

@@ -69,7 +69,7 @@ export function SellButton({ product, small, label = "出售", primary, autoOpen
         {done ? (
           <dl className="grid grid-cols-3 gap-2 text-center">
             {([["收入", done.revenue], ["商品成本", done.cost], ["毛利", done.profit]] as const).map(([k, v]) => (
-              <div key={k} className="rounded-lg bg-tone-gray-50-4 py-2">
+              <div key={k} className="rounded-lg bg-paper py-2">
                 <dt className="text-[12px] text-mute">{k}</dt>
                 <dd className={`num text-[18px] font-semibold ${k === "毛利" && v < 0 ? "text-bad" : ""}`}>{formatTwd(v)}</dd>
               </div>

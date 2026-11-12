@@ -46,7 +46,7 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
   const asked = data.todo.filter((r) => !!r.askedAt).sort((a, b) => a.askedAt!.getTime() - b.askedAt!.getTime());
   const row = (r: (typeof data.todo)[number], action: React.ReactNode, askedAt?: Date | null) => (
     <li key={r.id} className="flex items-center gap-2 pr-3" data-testid="reconcile-row" data-name={r.name}>
-      <Link href={`/reconcile/${r.id}${q}`} className="flex min-w-0 flex-1 items-center justify-between gap-3 py-3 pl-4 hover:bg-tone-gray-50-4">
+      <Link href={`/reconcile/${r.id}${q}`} className="flex min-w-0 flex-1 items-center justify-between gap-3 py-3 pl-4 hover:bg-line-2">
         <div className="min-w-0">
           <div className="truncate font-semibold">{r.name}</div>
           <div className="truncate text-[12px] text-mute">{[r.supplierName, r.seriesName, r.orderNo ? `訂單 ${r.orderNo}` : null, r.orderedAt ? `${day(r.orderedAt)} 下單` : null].filter(Boolean).join("｜")}</div>
@@ -76,7 +76,7 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
       </div>
       {refunds.length > 0 && (
         <details className="rounded-xl border border-tone-red-300-2 bg-card" data-testid="refund-section" open={sp.open === "refund" || undefined}>
-          <summary className="cursor-pointer px-4 py-3 text-[14px] font-semibold text-bad">已砍單，未退款（{refunds.length}）<span className="ml-1 font-normal">代購要退 {formatTwd(refunds.reduce((a, r) => a + r.owed, 0))}</span></summary>
+          <summary className="cursor-pointer px-4 py-3 text-[14px] font-semibold text-warn">已砍單，未退款（{refunds.length}）<span className="ml-1 font-normal">代購要退 {formatTwd(refunds.reduce((a, r) => a + r.owed, 0))}</span></summary>
           <ul className="divide-y divide-line-2 border-t border-line-2">
             {refunds.map((r) => (
               <li key={r.id} className="flex items-center justify-between gap-3 px-4 py-3" data-testid="refund-row">
@@ -85,7 +85,7 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
                   <div className="truncate text-[12px] text-mute">{[r.supplierName, r.orderNo ? `訂單 ${r.orderNo}` : null, r.cancelled ? "整團取消" : `砍 ${r.cut} 件`, `已付 ${formatTwd(r.paidTwd + r.refundedTwd)}`, r.refundedTwd ? `已退 ${formatTwd(r.refundedTwd)}` : null].filter(Boolean).join("｜")}</div>
                 </Link>
                 <div className="shrink-0 text-right">
-                  <div className="num text-[14px] font-semibold text-bad">要退 {formatTwd(r.owed)}</div>
+                  <div className="num text-[14px] font-semibold text-warn">要退 {formatTwd(r.owed)}</div>
                   <RefundButton batchId={r.id} name={r.name} owed={r.owed} />
                 </div>
               </li>
@@ -95,7 +95,7 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
       )}
       {data.todo.length === 0 ? (
         <div className="rounded-xl border border-line bg-card" data-testid="todo-section">
-          <Empty action={<Link href="/purchase" className="inline-flex min-h-10 items-center rounded-lg bg-ai px-4 text-[14px] text-white">＋ 新增採購</Link>}>全部對完了。新增採購後，這裡會列出要跟代購確認有沒有買到的團。</Empty>
+          <Empty action={<Link href="/purchase" className="inline-flex min-h-10 items-center rounded-lg bg-ai px-4 text-[14px] text-on-fill">＋ 新增採購</Link>}>全部對完了。新增採購後，這裡會列出要跟代購確認有沒有買到的團。</Empty>
         </div>
       ) : (
         <>
@@ -129,7 +129,7 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
           <ul className="divide-y divide-line-2 border-t border-line-2">
             {data.done.map((r) => (
               <li key={r.id}>
-                <Link href={`/reconcile/${r.id}${q}`} className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-tone-gray-50-4">
+                <Link href={`/reconcile/${r.id}${q}`} className="flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-line-2">
                   <div className="min-w-0">
                     <div className="truncate">{r.name}</div>
                     <div className="truncate text-[12px] text-mute">{r.supplierName}</div>

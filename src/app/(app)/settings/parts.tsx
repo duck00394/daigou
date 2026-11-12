@@ -29,7 +29,7 @@ export function NameList({ kind, items }: { kind: "character" | "type"; items: {
     <div>
       <ul className="mb-3 flex flex-wrap gap-1.5">
         {items.map((i) => (
-          <li key={i.id} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-sm ${i.active ? "border-line bg-white" : "border-line bg-line-2 text-mute"}`}>
+          <li key={i.id} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-sm ${i.active ? "border-line bg-card" : "border-line bg-line-2 text-mute"}`}>
             {i.name}
             <button type="button" className="text-[12px] text-ai" onClick={() => run(() => save({ id: i.id, name: i.name, active: !i.active }), { success: i.active ? "已停用" : "已啟用" })}>
               {i.active ? "停用" : "啟用"}
@@ -61,7 +61,7 @@ export function TypeList({ items }: { items: { id: string; name: string; active:
               <Button small onClick={() => setEdit(null)}>取消</Button>
             </li>
           ) : (
-            <li key={i.id} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-sm ${i.active ? "border-line bg-white" : "border-line bg-line-2 text-mute"}`}>
+            <li key={i.id} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-sm ${i.active ? "border-line bg-card" : "border-line bg-line-2 text-mute"}`}>
               <button type="button" aria-label={`改「${i.name}」名稱`} onClick={() => setEdit({ id: i.id, name: i.name })}>{i.name}</button>
               <button type="button" className="text-[12px] text-ai" onClick={() => run(() => saveProductTypeAction({ id: i.id, name: i.name, active: !i.active }), { success: i.active ? "已停用" : "已啟用" })}>
                 {i.active ? "停用" : "啟用"}
@@ -108,7 +108,7 @@ export function RestoreForm({ hasData }: { hasData: boolean }) {
   const total = info ? Object.values(info.counts).reduce((a, b) => a + b, 0) : 0;
   return (
     <div className="space-y-3">
-      <input type="file" accept=".json,application/json" className="block text-sm file:mr-3 file:rounded-lg file:border file:border-line file:bg-white file:px-3 file:py-2" onChange={async (e) => {
+      <input type="file" accept=".json,application/json" className="block text-sm file:mr-3 file:rounded-lg file:border file:border-field file:bg-card file:px-3 file:py-2" onChange={async (e) => {
         const f = e.target.files?.[0] ?? null;
         setFile(f);
         setInfo(null);

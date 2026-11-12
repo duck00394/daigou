@@ -29,7 +29,7 @@ export function MergeDuplicates({ groups }: { groups: G[] }) {
               <li key={g.key} className="rounded-xl border border-line p-3" data-testid="merge-group">
                 <div className="flex items-center justify-between gap-2">
                   <b>{g.name}</b>
-                  <button type="button" role="switch" aria-checked={!!on[g.key]} aria-label={`合併 ${g.name}`} onClick={() => setOn({ ...on, [g.key]: !on[g.key] })} className={`rounded-full border px-2.5 py-0.5 text-[12px] ${on[g.key] ? "border-ai bg-ai text-white" : "border-line text-mute"}`}>
+                  <button type="button" role="switch" aria-checked={!!on[g.key]} aria-label={`合併 ${g.name}`} onClick={() => setOn({ ...on, [g.key]: !on[g.key] })} className={`rounded-full border px-2.5 py-0.5 text-[12px] ${on[g.key] ? "border-ai bg-ai text-on-fill" : "border-line text-mute"}`}>
                     {on[g.key] ? "✓ 合併" : "不合併"}
                   </button>
                 </div>

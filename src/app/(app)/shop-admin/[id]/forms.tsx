@@ -123,14 +123,14 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
             <div className="flex flex-wrap items-center justify-between gap-2 bg-line-2 px-3 py-2">
               <span className="text-[15px] font-semibold">{t}</span>
               <span className="flex items-center gap-1.5">
-                <input aria-label={`${t} 售價全部填`} inputMode="numeric" placeholder="售價" className="h-9 w-[72px] rounded-md border border-line bg-white px-2 text-[15px]" value={f.p} onChange={(e) => setFill({ ...fill, [t]: { ...f, p: e.target.value.replace(/[^\d]/g, "") } })} />
-                <input aria-label={`${t} 訂金全部填`} inputMode="numeric" placeholder="訂金" className="h-9 w-16 rounded-md border border-line bg-white px-2 text-[15px]" value={f.d} onChange={(e) => setFill({ ...fill, [t]: { ...f, d: e.target.value.replace(/[^\d]/g, "") } })} />
-                <input aria-label={`${t} 數量全部填`} inputMode="numeric" placeholder="數量" className="h-9 w-14 rounded-md border border-line bg-white px-2 text-[15px]" value={f.q} onChange={(e) => setFill({ ...fill, [t]: { ...f, q: e.target.value.replace(/[^\d]/g, "") } })} />
+                <input aria-label={`${t} 售價全部填`} inputMode="numeric" placeholder="售價" className="h-9 w-[72px] rounded-md border border-field bg-card px-2 text-[15px]" value={f.p} onChange={(e) => setFill({ ...fill, [t]: { ...f, p: e.target.value.replace(/[^\d]/g, "") } })} />
+                <input aria-label={`${t} 訂金全部填`} inputMode="numeric" placeholder="訂金" className="h-9 w-16 rounded-md border border-field bg-card px-2 text-[15px]" value={f.d} onChange={(e) => setFill({ ...fill, [t]: { ...f, d: e.target.value.replace(/[^\d]/g, "") } })} />
+                <input aria-label={`${t} 數量全部填`} inputMode="numeric" placeholder="數量" className="h-9 w-14 rounded-md border border-field bg-card px-2 text-[15px]" value={f.q} onChange={(e) => setFill({ ...fill, [t]: { ...f, q: e.target.value.replace(/[^\d]/g, "") } })} />
                 <Button small disabled={!canFill} onClick={() => setV({ ...v, ...Object.fromEntries(list.map((r) => [r.productId, { ...v[r.productId], q: f.q !== "" ? f.q : v[r.productId].q, p: f.p !== "" ? f.p : v[r.productId].p, d: f.d !== "" ? f.d : v[r.productId].d }])) })}>全部填</Button>
               </span>
             </div>
             {list[0].typeId && (
-              <div className="border-b border-line-2 bg-white px-3 py-2">
+              <div className="border-b border-line-2 bg-card px-3 py-2">
                 <TypePhoto categoryId={categoryId} typeId={list[0].typeId} typeName={t} value={list[0].typeImage} />
               </div>
             )}
@@ -149,14 +149,14 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
                       {noPrice && <span className="block text-[12px] text-bad">沒有售價，客人不能訂</span>}
                     </span>
                   </span>
-                  <input aria-label={`${r.label} 售價`} inputMode="numeric" placeholder={r.defaultPrice === null ? "未設" : String(r.defaultPrice)} className={`h-10 w-full rounded-md border px-2 text-[15px] placeholder:text-mute ${dirty && c.p !== (saved[r.productId]?.p ?? "") ? "border-ai bg-ai-soft" : noPrice ? "border-bad" : "border-line bg-white"}`} value={c.p} onChange={(e) => set(r.productId, { p: e.target.value.replace(/[^\d]/g, "") })} />
-                  <input aria-label={`${r.label} 訂金`} inputMode="numeric" className={`h-10 w-full rounded-md border px-2 text-[15px] ${dirty && c.d !== (saved[r.productId]?.d ?? "") ? "border-ai bg-ai-soft" : "border-line bg-white"}`} value={c.d} onChange={(e) => set(r.productId, { d: e.target.value.replace(/[^\d]/g, "") })} />
-                  <input aria-label={`${r.label} 開放數量`} inputMode="numeric" className={`h-10 w-full rounded-md border px-2 text-[15px] ${dirty && c.q !== (saved[r.productId]?.q ?? "") ? "border-ai bg-ai-soft" : "border-line bg-white"}`} value={c.q} onChange={(e) => set(r.productId, { q: e.target.value.replace(/[^\d]/g, "") })} />
+                  <input aria-label={`${r.label} 售價`} inputMode="numeric" placeholder={r.defaultPrice === null ? "未設" : String(r.defaultPrice)} className={`h-10 w-full rounded-md border px-2 text-[15px] placeholder:text-mute ${dirty && c.p !== (saved[r.productId]?.p ?? "") ? "border-ai bg-ai-soft" : noPrice ? "border-bad" : "border-field bg-card"}`} value={c.p} onChange={(e) => set(r.productId, { p: e.target.value.replace(/[^\d]/g, "") })} />
+                  <input aria-label={`${r.label} 訂金`} inputMode="numeric" className={`h-10 w-full rounded-md border px-2 text-[15px] ${dirty && c.d !== (saved[r.productId]?.d ?? "") ? "border-ai bg-ai-soft" : "border-field bg-card"}`} value={c.d} onChange={(e) => set(r.productId, { d: e.target.value.replace(/[^\d]/g, "") })} />
+                  <input aria-label={`${r.label} 開放數量`} inputMode="numeric" className={`h-10 w-full rounded-md border px-2 text-[15px] ${dirty && c.q !== (saved[r.productId]?.q ?? "") ? "border-ai bg-ai-soft" : "border-field bg-card"}`} value={c.q} onChange={(e) => set(r.productId, { q: e.target.value.replace(/[^\d]/g, "") })} />
                   <span className={`num text-center text-[15px] ${r.quota !== null && r.sold >= r.quota ? "font-semibold text-bad" : ""}`}>{r.sold}</span>
                   <span className="num text-center text-[15px]">{r.waiting || 0}</span>
                   {c.q !== "" && list.length > 1 && (
                     <span className="col-span-full -mt-0.5 flex flex-wrap items-center gap-1 pb-0.5">
-                      <select aria-label={`${r.label} 能不能單買`} className={`h-7 rounded border px-1 text-[12px] ${c.m ? "border-tone-amber-300-2 bg-warn-soft text-warn" : "border-line bg-white text-ink-2"}`} value={c.m} onChange={(e) => set(r.productId, { m: e.target.value as Cell["m"], bv: e.target.value ? c.bv : "" })}>
+                      <select aria-label={`${r.label} 能不能單買`} className={`h-7 rounded border px-1 text-[12px] ${c.m ? "border-tone-amber-300-2 bg-warn-soft text-warn" : "border-field bg-card text-ink-2"}`} value={c.m} onChange={(e) => set(r.productId, { m: e.target.value as Cell["m"], bv: e.target.value ? c.bv : "" })}>
                         <option value="">可以單買</option>
                         <option value="n">要搭其他角色（個數）</option>
                         <option value="a">要搭其他角色（金額）</option>
@@ -164,7 +164,7 @@ export function QuotaForm({ categoryId, rows }: { categoryId: string; rows: Quot
                       {c.m && (
                         <span className="flex items-center gap-0.5 text-[12px] text-ink-2">
                           {c.m === "a" && "滿 NT$"}
-                          <input aria-label={c.m === "n" ? `${r.label} 要搭幾個` : `${r.label} 要搭到多少錢`} inputMode="numeric" className={`h-7 rounded border px-1 text-[13px] ${c.m === "n" ? "w-10" : "w-16"} ${/^[1-9]\d*$/.test(c.bv) ? "border-line" : "border-bad"}`} value={c.bv} onChange={(e) => set(r.productId, { bv: e.target.value.replace(/[^\d]/g, "") })} />
+                          <input aria-label={c.m === "n" ? `${r.label} 要搭幾個` : `${r.label} 要搭到多少錢`} inputMode="numeric" className={`h-7 rounded border px-1 text-[13px] ${c.m === "n" ? "w-10" : "w-16"} ${/^[1-9]\d*$/.test(c.bv) ? "border-field" : "border-bad"}`} value={c.bv} onChange={(e) => set(r.productId, { bv: e.target.value.replace(/[^\d]/g, "") })} />
                           {c.m === "n" && "個"}
                         </span>
                       )}
@@ -213,8 +213,8 @@ function TypePhoto({ categoryId, typeId, typeName, value }: { categoryId: string
   const bad = url.trim() !== "" && !/^https:\/\/\S+$/.test(url.trim()) && url.trim() !== value;
   return (
     <span className="flex w-full items-center gap-1.5">
-      {url.trim() ? <Preview key={url.trim()} url={url.trim()} className="h-10 w-10 shrink-0 rounded-md border border-line" /> : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border-[1.5px] border-dashed border-tone-blue-300 bg-white text-[10px] text-mute">全體照</span>}
-      <input type="url" aria-label={`${typeName}全體照網址`} placeholder="全體照網址 https://…" className={`h-9 min-w-0 flex-1 rounded-md border bg-white px-2 text-[14px] ${bad ? "border-bad" : "border-line"}`} value={url} onChange={(e) => setUrl(e.target.value)} />
+      {url.trim() ? <Preview key={url.trim()} url={url.trim()} className="h-10 w-10 shrink-0 rounded-md border border-line" /> : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border-[1.5px] border-dashed border-tone-blue-300 bg-card text-[10px] text-mute">全體照</span>}
+      <input type="url" aria-label={`${typeName}全體照網址`} placeholder="全體照網址 https://…" className={`h-9 min-w-0 flex-1 rounded-md border bg-card px-2 text-[14px] ${bad ? "border-bad" : "border-field"}`} value={url} onChange={(e) => setUrl(e.target.value)} />
       <Button small loading={pending} disabled={!dirty || bad} onClick={() => run(() => setTypeImageAction(categoryId, typeId, url.trim() || null), { success: url.trim() ? `${typeName}的全體照已更新` : `已拿掉${typeName}的全體照` })}>存</Button>
     </span>
   );

@@ -57,10 +57,10 @@ export default async function HelpPage() {
   return (
     <div className="space-y-4">
       <PageHeader title="名詞說明" sub="看不懂的字來這裡查" />
-      <Link href="/?tour=1" className="flex items-center justify-between rounded-xl bg-ai px-4 py-3.5 text-white" data-testid="start-tour">
+      <Link href="/?tour=1" className="flex items-center justify-between rounded-xl border border-line bg-ai-soft px-4 py-3.5 text-ink transition-colors duration-150 hover:border-ai" data-testid="start-tour">
         <span>
           <span className="block text-[16px] font-semibold">新手教學</span>
-          <span className="block text-[13px] opacity-85">一步一步帶你走一次，大約一分鐘</span>
+          <span className="block text-[13px] text-ink-2">一步一步帶你走一次，大約一分鐘</span>
         </span>
       </Link>
       {SECTIONS.map((sec) => (

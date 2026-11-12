@@ -9,7 +9,7 @@ export function Choice({ label, value, options, onChange, hint, placeholder, cla
       <select
         aria-label={label}
         disabled={disabled}
-        className={`min-h-11 w-full rounded-lg border bg-white px-2.5 text-[15px] font-normal text-ink disabled:opacity-60 ${highlight ? "border-tone-amber-300-2 bg-warn-soft" : "border-line"}`}
+        className={`min-h-11 w-full rounded-lg border bg-card px-2.5 text-[15px] font-normal text-ink disabled:opacity-60 ${highlight ? "border-tone-amber-300-2 bg-warn-soft" : "border-field"}`}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >

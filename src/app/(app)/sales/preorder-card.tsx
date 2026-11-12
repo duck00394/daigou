@@ -32,7 +32,7 @@ export function PreorderCard({ p, who = null, operators = [], acting = "" }: { p
         {p.uncosted > 0 && <p className="text-[12px] text-warn" data-testid="pre-uncosted">{p.uncosted} 件還沒有成本（還沒買或不一定到），先不算</p>}
       </div>
       <details className="group border-t border-line-2">
-        <summary className="cursor-pointer list-none px-4 py-2.5 text-[14px] text-ai [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition-transform group-open:rotate-90">▸</span>看每位客人</summary>
+        <summary className="cursor-pointer list-none px-4 py-2.5 text-[14px] text-ai [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition-transform motion-reduce:transition-none group-open:rotate-90">▸</span>看每位客人</summary>
         <ul className="divide-y divide-line-2 border-t border-line-2" data-testid="pre-buyers">
           {p.buyers.map((b) => (
             <li key={b.id} className="flex items-baseline justify-between gap-2 px-4 py-2 text-[14px]" data-name={b.name}>
@@ -43,7 +43,7 @@ export function PreorderCard({ p, who = null, operators = [], acting = "" }: { p
         </ul>
       </details>
       <details className="group border-t border-line-2">
-        <summary className="cursor-pointer list-none px-4 py-2.5 text-[14px] text-ai [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition-transform group-open:rotate-90">▸</span>依商品看</summary>
+        <summary className="cursor-pointer list-none px-4 py-2.5 text-[14px] text-ai [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition-transform motion-reduce:transition-none group-open:rotate-90">▸</span>依商品看</summary>
         <ul className="divide-y divide-line-2 border-t border-line-2" data-testid="pre-products">
           {p.products.map((x) => (
             <li key={x.productId} className="flex items-baseline justify-between gap-2 px-4 py-2 text-[14px]">
@@ -54,7 +54,7 @@ export function PreorderCard({ p, who = null, operators = [], acting = "" }: { p
         </ul>
       </details>
       <details className="group border-t border-line-2" data-testid="pre-series-box">
-        <summary className="cursor-pointer list-none px-4 py-2.5 text-[14px] text-ai [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition-transform group-open:rotate-90">▸</span>依系列看</summary>
+        <summary className="cursor-pointer list-none px-4 py-2.5 text-[14px] text-ai [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition-transform motion-reduce:transition-none group-open:rotate-90">▸</span>依系列看</summary>
         <div className="border-t border-line-2 overflow-x-auto">
           <table className="w-full text-[14px]" data-testid="pre-series">
             <thead>
@@ -76,7 +76,7 @@ export function PreorderCard({ p, who = null, operators = [], acting = "" }: { p
                   <td className="px-4 py-2 text-right" data-k="profit">{money(x.profit, true)}</td>
                 </tr>
               ))}
-              <tr className="bg-tone-gray-50-4 font-semibold">
+              <tr className="bg-paper font-semibold">
                 <td className="px-4 py-2">合計</td>
                 <td className="num hidden px-2 py-2 text-right md:table-cell">{p.qty}</td>
                 <td className="num px-2 py-2 text-right">{formatTwd(p.revenue)}</td>

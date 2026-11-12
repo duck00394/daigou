@@ -56,7 +56,7 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
     const name = (k: string) => (k === JOINT ? "合資" : k === NONE ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
     return { owner: list[0]?.key ?? null, ownerNow: list.map((x) => `${name(x.key)} ${x.qty} 件`).join("、") };
   };
-  const chip = (on: boolean) => `shrink-0 rounded-full border px-3 py-1.5 text-sm ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`;
+  const chip = (on: boolean) => `shrink-0 rounded-full border px-3 py-1.5 text-sm ${on ? "border-ai bg-ai text-on-fill" : "border-line bg-card text-ink-2"}`;
   const href = (o: Record<string, string | undefined>) => {
     const u = new URLSearchParams();
     const v = { q: sp.q, ym: sp.ym, voided: sp.voided, cat: sp.cat, show: sp.show, ...o };
@@ -70,7 +70,7 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
       <ProfitBoard p={prof} series={seriesOpts} cat={sp.cat ?? ""} show={sp.show ?? ""} href={href} />
       <PreorderCard p={pre} who={view.key === "all" ? null : view.name} operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} acting={view.key === "all" ? (view.me ?? "") : view.key} />
       <h2 className="pt-2 text-[16px] font-semibold">現貨出售紀錄</h2>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" data-tour="sales-top">
+      <div className="stat-grid grid grid-cols-2 sm:grid-cols-4" data-tour="sales-top">
         <Stat label="賣了幾筆／幾件" value={`${total.count} / ${total.qty}`} />
         <Stat label="收入" value={<Twd v={total.revenue} />} />
         <Stat label="賣掉的東西成本" value={<Twd v={total.cost} />} note={total.tentative ? "有價格還沒確定" : undefined} />
@@ -80,7 +80,7 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
         <Section title="誰賺多少">
           <ul className="grid gap-2 sm:grid-cols-3">
             {ownerEntries.map(([k, v]) => (
-              <li key={k} className={`rounded-xl border border-line-2 bg-tone-gray-50-4 p-3 text-sm ${ownerTone(k, ids).stripe}`} data-testid={`sale-owner-${k}`}>
+              <li key={k} className={`rounded-xl border border-line-2 bg-paper p-3 text-sm ${ownerTone(k, ids).stripe}`} data-testid={`sale-owner-${k}`}>
                 <div className="font-semibold"><OwnerBadge k={k} name={who(k)} ids={ids} /></div>
                 <div>收入 <span className="num font-medium">{formatTwd(v.revenue)}</span>，成本 <span className="num">{formatTwd(v.cost)}</span></div>
                 <div className={v.revenue - v.cost < 0 ? "text-bad" : "text-good"}>毛利 <span className="num font-semibold">{formatTwd(v.revenue - v.cost)}</span></div>
@@ -92,10 +92,10 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
       )}
       <Section pad={false}>
         <form method="get" className="flex flex-wrap gap-2 border-b border-line-2 px-4 py-3">
-          <input type="search" name="q" defaultValue={sp.q} placeholder="搜尋商品、買家、備註" className="min-w-[12rem] flex-1 rounded-lg border border-line px-3 py-2" />
+          <input type="search" name="q" defaultValue={sp.q} placeholder="搜尋商品、買家、備註" className="min-w-[12rem] flex-1 rounded-lg border border-field px-3 py-2" />
           {sp.ym && <input type="hidden" name="ym" value={sp.ym} />}
           {sp.voided && <input type="hidden" name="voided" value={sp.voided} />}
-          <button className="rounded-lg border border-ai bg-ai px-3 py-2 text-sm text-white">搜尋</button>
+          <button className="rounded-lg border border-ai bg-ai px-3 py-2 text-sm text-on-fill">搜尋</button>
         </form>
         <div className="flex gap-1.5 overflow-x-auto border-b border-line-2 px-4 py-2.5">
           <Link href={href({ ym: undefined })} className={chip(ym === thisMonth)}>本月</Link>

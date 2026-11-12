@@ -39,7 +39,7 @@ export default async function OperatorsPage({ searchParams }: { searchParams: Pr
     tx((t) => operatorReport(t, f)),
   ]);
   const opName = (id: string | null) => (id ? (operators.find((o) => o.id === id)?.name ?? "（已移除）") : "未指定");
-  const sel = "w-full rounded-lg border border-line bg-white px-2.5 py-2 text-[15px]";
+  const sel = "w-full rounded-lg border border-field bg-card px-2.5 py-2 text-[15px]";
   const currencies = Object.keys(report.totals).sort();
 
   return (
@@ -76,8 +76,8 @@ export default async function OperatorsPage({ searchParams }: { searchParams: Pr
         </label>
         {sp.view && <input type="hidden" name="view" value={sp.view} />}
         <div className="col-span-2 flex gap-2 sm:col-span-3 lg:col-span-1">
-          <button type="submit" className="flex-1 rounded-lg border border-ai bg-ai px-3 py-2 text-sm font-medium text-white">套用</button>
-          <Link href="/operators" className="rounded-lg border border-line bg-white px-3 py-2 text-sm">清除</Link>
+          <button type="submit" className="flex-1 rounded-lg border border-ai bg-ai px-3 py-2 text-sm font-medium text-on-fill">套用</button>
+          <Link href="/operators" className="rounded-lg border border-line bg-card px-3 py-2 text-sm">清除</Link>
         </div>
       </form>
       <p className="-mt-2 text-[12px] text-mute">日期篩選：採購團依下單日、付款依付款日、收貨依收貨日。採購團數量不含已取消的團。</p>

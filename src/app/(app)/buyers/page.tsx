@@ -78,7 +78,7 @@ export default async function Buyers({ searchParams }: { searchParams: Promise<R
                     <td><div className="flex max-w-xs flex-wrap gap-1">{b.tags.map((t) => <TagChip key={t.id} name={t.tag.name} color={t.tag.color} />)}</div></td>
                     <td className="num text-right">{a?._count ?? 0}</td>
                     <td className="text-right"><Twd v={a?._sum.receivableCache ?? 0} /></td>
-                    <td className="text-right">{(a?._sum.balanceCache ?? 0) > 0 ? <Twd v={a?._sum.balanceCache} className="text-bad" /> : <span className="text-mute">0</span>}</td>
+                    <td className="text-right">{(a?._sum.balanceCache ?? 0) > 0 ? <Twd v={a?._sum.balanceCache} className="text-warn" /> : <span className="text-mute">0</span>}</td>
                     <td className="num text-mute">{fmtDate(lm.get(b.id))}</td>
                   </tr>
                 );

@@ -16,7 +16,7 @@ function Line({ href, testid, children, profit }: { href: string; testid: string
 
 function Tile({ label, children, testid }: { label: string; children: React.ReactNode; testid?: string }) {
   return (
-    <div className="rounded-xl border border-line bg-white px-3 py-2.5">
+    <div className="rounded-xl border border-line bg-card px-3 py-2.5">
       <div className="text-[12.5px] text-mute">{label}</div>
       <div className="num mt-0.5 text-[19px] font-bold leading-tight" data-testid={testid}>{children}</div>
     </div>
@@ -29,7 +29,7 @@ export function ProfitCard({ p, categoryId, est = false, sureHref, estHref, name
   const profit = est ? p.est.profit : p.profit;
   const free = est ? p.est.free : p.free.qty;
   const short = (est ? p.estShort : p.short).map((x) => ({ name: names[x.id] ?? "", n: x.n })).filter((x) => x.name);
-  const seg = (on: boolean) => `flex-1 rounded-lg py-2 text-center text-[14.5px] ${on ? "bg-white font-semibold text-ink shadow-sm" : "text-ink-2"}`;
+  const seg = (on: boolean) => `flex-1 rounded-lg py-2 text-center text-[14.5px] ${on ? "bg-card font-semibold text-ink shadow-sm" : "text-ink-2"}`;
   return (
     <section className="space-y-2.5" aria-label="這個系列算起來" data-testid="series-profit" data-tour="series-profit">
       {sureHref && estHref && (
