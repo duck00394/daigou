@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button, Modal, inputCls, notify, useRun } from "@/components/client";
-import { addCatalogCharacterAction, addCatalogItemAction, deleteCatalogCharacterAction, deleteCatalogItemAction, deleteSeriesAction, moveKindAction, moveSeriesKindAction, moveSeriesOrderAction, renameKindAction, setCatalogPriceAction, setHideSharedAction } from "@/actions/catalog-tree";
+import { addCatalogCharacterAction, addCatalogCharactersAction, catalogRosterAction, addCatalogItemAction, deleteCatalogCharacterAction, deleteCatalogItemAction, deleteSeriesAction, moveKindAction, moveSeriesKindAction, moveSeriesOrderAction, renameKindAction, setCatalogPriceAction, setHideSharedAction } from "@/actions/catalog-tree";
 import { renameCategoryAction, saveCategoryAction, setCategoryActiveAction } from "@/actions/catalog";
 import { keepInSeriesAction, seriesLeaksAction } from "@/actions/series";
 import type { TreeKind, TreeSeries, TreeItem } from "@/server/services/catalog-tree";
@@ -238,6 +238,24 @@ function ItemRow({ categoryId, item }: { categoryId: string; item: TreeItem }) {
   const { run, pending } = useRun();
   const [price, setPrice] = useState(item.price != null ? String(item.price) : "");
   const [adding, setAdding] = useState<string | null>(null);
+  // 「＋ 角色」：先列 IP 的角色點選，沒有的才打字
+  const [roster, setRoster] = useState<{ ipName: string; chars: { id: string; name: string }[] } | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  const openAdd = async () => {
+    setAdding("");
+    setPicked([]);
+    const r = await catalogRosterAction(categoryId);
+    setRoster(r.ok ? r.data : { ipName: "", chars: [] });
+  };
+  const closeAdd = () => {
+    setAdding(null);
+    setRoster(null);
+    setPicked([]);
+  };
+  const have = new Set(item.chars.map((c) => c.characterId));
+  const left = (roster?.chars ?? []).filter((c) => !have.has(c.id));
+  const addPicked = (ids: string[]) =>
+    run(() => addCatalogCharactersAction({ categoryId, typeId: item.typeId, characterIds: ids }), { success: `已加 ${ids.length} 隻`, onOk: closeAdd });
   const savePrice = (e: React.FocusEvent<HTMLInputElement>) => {
     const raw = e.currentTarget.value;
     const v = raw.trim() ? Number(raw) : null;
@@ -287,13 +305,42 @@ function ItemRow({ categoryId, item }: { categoryId: string; item: TreeItem }) {
             />
           </span>
         ))}
-        {item.typeId && adding === null && <button type="button" className="rounded-full border border-dashed border-line px-3 py-1 text-[14px] text-mute" onClick={() => setAdding("")}>＋ 角色</button>}
+        {item.typeId && adding === null && <button type="button" className="rounded-full border border-dashed border-line px-3 py-1 text-[14px] text-mute" onClick={openAdd}>＋ 角色</button>}
       </div>
       {adding !== null && (
-        <div className="mt-2 flex gap-2">
-          <input autoFocus aria-label="角色名字" className={`${inputCls} flex-1`} placeholder="例：吉伊（一次加一個）" value={adding} onChange={(e) => setAdding(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addChar()} />
-          <Button small variant="primary" loading={pending} onClick={addChar}>加</Button>
-          <Button small onClick={() => setAdding(null)}>完成</Button>
+        <div className="mt-2 rounded-lg border border-line bg-[#f6f8fb] p-2.5" data-testid="add-chars">
+          {roster === null ? (
+            <p className="text-[13px] text-mute">讀取角色中…</p>
+          ) : (
+            left.length > 0 && (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[13px] text-mute">{roster.ipName}的角色：點一下選</span>
+                  <Button small loading={pending} onClick={() => addPicked(left.map((c) => c.id))}>全部加入（{left.length}）</Button>
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {left.map((c) => {
+                    const on = picked.includes(c.id);
+                    return (
+                      <button key={c.id} type="button" aria-pressed={on} onClick={() => setPicked(on ? picked.filter((x) => x !== c.id) : [...picked, c.id])} className={`rounded-full border px-3 py-1 text-[14px] ${on ? "border-ai bg-ai text-white" : "border-line bg-white text-ink-2"}`}>
+                        {on ? "✓ " : "＋ "}
+                        {c.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )
+          )}
+          <div className="mt-2 flex items-center gap-2">
+            <span className="shrink-0 text-[13px] text-mute">{left.length ? "沒有的：" : "角色名字："}</span>
+            <input aria-label="角色名字" className={`${inputCls} min-w-0 flex-1`} placeholder="新角色名字" value={adding} onChange={(e) => setAdding(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addChar()} />
+            <Button small loading={pending} onClick={addChar}>加</Button>
+          </div>
+          <div className="mt-2 flex justify-end gap-2">
+            <Button small onClick={closeAdd}>{picked.length ? "取消" : "完成"}</Button>
+            {picked.length > 0 && <Button small variant="primary" loading={pending} onClick={() => addPicked(left.filter((c) => picked.includes(c.id)).map((c) => c.id))}>加入 {picked.length} 隻</Button>}
+          </div>
         </div>
       )}
     </div>

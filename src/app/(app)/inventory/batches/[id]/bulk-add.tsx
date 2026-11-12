@@ -38,6 +38,7 @@ type RowState = {
   salePrice: string;
   hint: string; // 參考價來源
   serverError?: string;
+  curSet?: boolean; // 自己改過幣別：「都是 N 元」不改這列的幣別
   touched?: boolean; // 使用者已經點進價格欄位：背景帶入的參考價不再覆蓋或接在後面
   loading?: boolean; // 正在讀取參考價：價格欄暫停輸入，避免讀到的數字和正在打的字混在一起
   more?: boolean; // 手機：展開規格、幣別、想賣價
@@ -143,6 +144,7 @@ export function BulkAddGrid({
   const ownerOf = (r: RowState) => r.ownerId ?? ownerAll;
   const [templates, setTemplates] = useState<Template[]>([]);
   const [rows, setRows] = useState<RowState[]>([blankRow(supplierCurrency)]);
+  const [sameBy, setSameBy] = useState<Record<string, string>>({});
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<Result[] | null>(null);
@@ -189,7 +191,8 @@ export function BulkAddGrid({
   }, [draftKey]);
   useEffect(() => {
     if (draftReady.current !== draftKey || draft) return; // 還沒決定要不要帶回舊草稿前，不覆蓋它
-    const keep = rows.filter((r) => !isBlank(r)).map(({ key, characterId, newName, spec, unitCost, currency, qty, salePrice, ownerId, typeId: t }) => ({ key, characterId, newName, spec, unitCost, currency, qty, salePrice, ownerId, typeId: t ?? typeId, hint: "" }));
+    // 「都是 N 元」帶入的單價也存進草稿，帶回來時直接是那個價
+    const keep = rows.filter((r) => !isBlank(r)).map((r) => (sameOn(r) ? { ...r, unitCost: sameOf(r)!, currency: r.curSet ? r.currency : supplierCurrency } : r)).map(({ key, characterId, newName, spec, unitCost, currency, qty, salePrice, ownerId, typeId: t }) => ({ key, characterId, newName, spec, unitCost, currency, qty, salePrice, ownerId, typeId: t ?? typeId, hint: "" }));
     const typeName = types.find((x) => x.id === typeId)?.name ?? "";
     const t = setTimeout(() => {
       try {
@@ -198,7 +201,7 @@ export function BulkAddGrid({
       } catch {}
     }, 400);
     return () => clearTimeout(t);
-  }, [rows, draftKey, draft, cat, seriesId, typeId, types]);
+  }, [rows, draftKey, draft, cat, seriesId, typeId, types, sameBy]); // eslint-disable-line react-hooks/exhaustive-deps
   const restoreDraft = () => {
     if (!draft) return;
     setCat(draft.cat);
@@ -447,6 +450,12 @@ export function BulkAddGrid({
   }
 
   // ── 統計 ──
+  // 「吊娃都是 N 元」：每個品項各一個價；這個品項單價沒自己打的列都用它（含之後加的列、背景帶入的參考價）
+  const sameOf = (r: RowState) => {
+    const v = sameBy[r.typeId ?? typeId]?.trim() ?? "";
+    return v && Number.isInteger(toInt(v)) && toInt(v)! > 0 ? v : null;
+  };
+  const sameOn = (r: RowState) => !isBlank(r) && !(r.touched && r.unitCost.trim() !== "") && sameOf(r) !== null;
   // 不知道單價：填這批商品總共多少，空白單價的列平均分（之後知道實際單價再到「編輯」改）
   const [lump, setLump] = useState("");
   const fill = useMemo(() => {
@@ -455,15 +464,18 @@ export function BulkAddGrid({
     if (L === null || !Number.isInteger(L) || L < 0) return out;
     // 空白或自動帶入（沒自己改過）的單價都算「不知道」
     const unknown = (r: RowState) => toInt(r.unitCost) === null || !r.touched;
-    const blanks = rows.filter((r) => !isBlank(r) && unknown(r) && Number.isInteger(toInt(r.qty)) && (toInt(r.qty) ?? 0) > 0);
+    const blanks = rows.filter((r) => !isBlank(r) && !sameOn(r) && unknown(r) && Number.isInteger(toInt(r.qty)) && (toInt(r.qty) ?? 0) > 0);
     if (!blanks.length) return out;
-    const known = rows.filter((r) => !isBlank(r) && !unknown(r) && Number.isInteger(toInt(r.unitCost)) && Number.isInteger(toInt(r.qty))).reduce((sum, r) => sum + toInt(r.qty)! * toInt(r.unitCost)!, 0);
+    const known = rows.filter((r) => !isBlank(r) && (sameOn(r) || !unknown(r)) && Number.isInteger(toInt(sameOn(r) ? sameOf(r)! : r.unitCost)) && Number.isInteger(toInt(r.qty))).reduce((sum, r) => sum + toInt(r.qty)! * toInt(sameOn(r) ? sameOf(r)! : r.unitCost)!, 0);
     const pieces = blanks.reduce((sum, r) => sum + toInt(r.qty)!, 0);
     const per = Math.round(Math.max(0, L - known) / pieces);
     for (const r of blanks) out.set(r.key, String(per));
     return out;
-  }, [lump, rows]);
-  const eff = useMemo(() => rows.map((r) => (fill.has(r.key) ? { ...r, unitCost: fill.get(r.key)! } : r)), [rows, fill]);
+  }, [lump, rows, sameBy]); // eslint-disable-line react-hooks/exhaustive-deps
+  const eff = useMemo(
+    () => rows.map((r) => (sameOn(r) ? { ...r, unitCost: sameOf(r)!, currency: r.curSet ? r.currency : supplierCurrency } : fill.has(r.key) ? { ...r, unitCost: fill.get(r.key)! } : r)),
+    [rows, fill, sameBy, typeId, supplierCurrency], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   // 合資：這批各人小計（台幣，一起的照比例）
   const jointSum = useMemo(() => {
     if (!joint) return "";
@@ -819,6 +831,18 @@ export function BulkAddGrid({
       )}
 
       {/* 5：表格 */}
+      <label className="flex items-center gap-2 text-[14px]" data-testid="same-price">
+        <span className="shrink-0">{typeName || "這批"}都是</span>
+        <input
+          className={`${inputCls} num w-28 text-right`}
+          inputMode="numeric"
+          aria-label="同一個單價"
+          placeholder="單價"
+          value={sameBy[typeId] ?? ""}
+          onChange={(e) => setSameBy((m) => ({ ...m, [typeId]: e.target.value }))}
+        />
+        <span className="shrink-0 text-mute">{supplierCurrency === "JPY" ? "日幣" : "元"}</span>
+      </label>
       {joint && (
         <div className="rounded-xl border border-[#d9c8f2] bg-[#f7f2fd] p-3" data-testid="joint-owner-box">
           <label className="block text-[13px] font-medium text-ink-2">
@@ -850,7 +874,7 @@ export function BulkAddGrid({
         {rows.map((r, i) => {
           const err = (showErrors || !isBlank(r) ? rowError(eff[i]) : null) ?? (dupKeys.has(r.key) ? "與上面的列角色與規格重複" : null) ?? r.serverError ?? null;
           const q = toInt(r.qty);
-          const c = toInt(r.unitCost);
+          const c = toInt(eff[i].unitCost);
           const sub = q !== null && c !== null && Number.isInteger(q) && Number.isInteger(c) ? q * c : null;
           const cell = (col: number) => ({ "data-row": i, "data-col": col, onKeyDown: (e: React.KeyboardEvent) => onKeyDown(e, i, col), onPaste: (e: React.ClipboardEvent) => onPaste(e, i, col) });
           const lbl = "sr-only";
@@ -933,12 +957,12 @@ export function BulkAddGrid({
               </div>
               <div role="cell">
                 <label className={lbl} htmlFor={`u-${r.key}`}>單價</label>
-                <input id={`u-${r.key}`} {...cell(2)} className={`${inputCls} num text-right ${err?.includes("單價") && !isBlank(r) ? "border-bad ring-1 ring-bad" : ""}`} inputMode="numeric" disabled={r.loading} placeholder={r.loading ? "讀取中…" : fill.get(r.key) ? `≈${fill.get(r.key)}` : undefined} value={fill.has(r.key) && !r.touched ? "" : r.unitCost} onFocus={() => !r.touched && update(r.key, { touched: true })} onChange={(e) => update(r.key, { unitCost: e.target.value, hint: "", touched: true })} />
-                {r.hint && <span className="mt-0.5 hidden text-[11px] leading-tight text-mute md:block">{r.hint}</span>}
+                <input id={`u-${r.key}`} {...cell(2)} className={`${inputCls} num text-right ${sameOn(r) ? "bg-[#eef3fb] placeholder:text-ink" : ""} ${err?.includes("單價") && !isBlank(r) ? "border-bad ring-1 ring-bad" : ""}`} inputMode="numeric" disabled={r.loading} placeholder={r.loading ? "讀取中…" : sameOn(r) ? sameOf(r)! : fill.get(r.key) ? `≈${fill.get(r.key)}` : undefined} value={sameOn(r) ? "" : fill.has(r.key) && !r.touched ? "" : r.unitCost} onFocus={() => !r.touched && !sameOn(r) && update(r.key, { touched: true })} onChange={(e) => update(r.key, { unitCost: e.target.value, hint: "", touched: true })} />
+                {r.hint && !sameOn(r) && <span className="mt-0.5 hidden text-[11px] leading-tight text-mute md:block">{r.hint}</span>}
               </div>
               <div role="cell" className={`order-last col-span-2 md:order-none md:col-span-1 ${extra}`}>
                 <label className={lblX} htmlFor={`cur-${r.key}`}>幣別</label>
-                <select id={`cur-${r.key}`} {...cell(3)} className={inputCls} value={r.currency} onChange={(e) => update(r.key, { currency: e.target.value as Currency })}>
+                <select id={`cur-${r.key}`} {...cell(3)} className={inputCls} value={sameOn(r) && !r.curSet ? supplierCurrency : r.currency} onChange={(e) => update(r.key, { currency: e.target.value as Currency, curSet: true })}>
                   <option value="JPY">日幣</option>
                   <option value="TWD">台幣</option>
                 </select>
@@ -957,7 +981,7 @@ export function BulkAddGrid({
               </div>
               <div role="cell" className="hidden md:block md:pt-2.5 md:text-right">
                 <span className="sr-only">小計</span>
-                <span className="num font-medium">{sub === null ? "—" : r.currency === "JPY" ? formatJpy(sub) : formatTwd(sub)}</span>
+                <span className="num font-medium">{sub === null ? "—" : eff[i].currency === "JPY" ? formatJpy(sub) : formatTwd(sub)}</span>
               </div>
               <div role="cell" className="flex justify-end gap-1 pt-2 md:pt-1">
                 <button type="button" className="hidden rounded-md px-2 py-1 text-[13px] text-ai hover:bg-ai-soft md:inline" onClick={() => duplicateRow(r.key)} title="複製這一列的單價、幣別、數量到下一列（Ctrl+D）">複製</button>

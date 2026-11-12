@@ -16,6 +16,12 @@ export async function setCatalogPriceAction(input: { categoryId: string; typeId:
 export async function addCatalogCharacterAction(input: { categoryId: string; typeId: string; characterName: string }) {
   return run((a) => tx((t) => ct.addCatalogCharacter(t, a, z.object({ categoryId: z.string(), typeId: z.string(), characterName: z.string().max(50) }).parse(input))));
 }
+export async function catalogRosterAction(categoryId: string) {
+  return run(() => tx((t) => ct.catalogRoster(t, z.string().parse(categoryId))), "read");
+}
+export async function addCatalogCharactersAction(input: { categoryId: string; typeId: string; characterIds: string[] }) {
+  return run((a) => tx((t) => ct.addCatalogCharacters(t, a, z.object({ categoryId: z.string(), typeId: z.string(), characterIds: z.array(z.string()).max(100) }).parse(input)), { timeout: 120_000 }));
+}
 export async function sellSheetAction(categoryId: string) {
   return run(() => tx((t) => ct.sellSheet(t, z.string().parse(categoryId))));
 }

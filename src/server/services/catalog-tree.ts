@@ -503,3 +503,25 @@ export async function setHideShared(t: Tx, actor: Actor, categoryId: string, hid
 export async function hideSharedFor(db: Db, categoryId: string) {
   return (await db.category.findUnique({ where: { id: categoryId }, select: { hideSharedTypes: true } }))?.hideSharedTypes ?? false;
 }
+
+/** 系列目錄「＋ 角色」可以直接點的角色：IP 預設角色（系列與角色）＋這個系列另外加過的 */
+export async function catalogRoster(t: Tx, categoryId: string) {
+  const ip = await seriesIpFor(t, categoryId);
+  const [roster, extra] = await Promise.all([
+    t.seriesCharacter.findMany({ where: { seriesId: ip.id, character: { active: true } }, orderBy: [{ sortOrder: "asc" }], select: { character: { select: { id: true, name: true } } } }),
+    t.categoryCharacter.findMany({ where: { categoryId, character: { active: true } }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { character: { select: { id: true, name: true } } } }),
+  ]);
+  const seen = new Set<string>();
+  const chars = [...roster, ...extra].map((x) => x.character).filter((c) => !seen.has(c.id) && seen.add(c.id));
+  return { ipName: ip.name, chars };
+}
+
+/** 一次加好幾隻已有的角色到這個系列＋品項 */
+export async function addCatalogCharacters(t: Tx, actor: Actor, input: { categoryId: string; typeId: string; characterIds: string[] }) {
+  if (!input.characterIds.length) throw new BizError("請選角色");
+  const chars = await t.character.findMany({ where: { id: { in: input.characterIds } }, select: { id: true, name: true } });
+  if (chars.length !== new Set(input.characterIds).size) throw new BizError("有角色找不到，請重新整理");
+  const byId = new Map(chars.map((c) => [c.id, c.name]));
+  for (const id of input.characterIds) await addCatalogCharacter(t, actor, { categoryId: input.categoryId, typeId: input.typeId, characterName: byId.get(id)! });
+  return { count: input.characterIds.length };
+}
