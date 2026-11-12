@@ -195,7 +195,7 @@ export async function startArrivalPay(t: Tx, actor: Actor, orderIds: string[]) {
     const order = await t.order.findUnique({ where: { id }, include: { items: { select: { categoryId: true } } } });
     if (!order || order.source !== "WEB" || order.payDueAt || order.myshipAt || order.confirmation === "CANCELLED") continue;
     const s = await paySetting(t, order);
-    if (!s || s.payTiming !== "ARRIVAL" || s.depositPerItem) continue;
+    if (!s || s.payTiming !== "ARRIVAL" || order.depositAmount) continue;
     if (await startPay(t, id)) n++;
   }
   await audit(t, actor, "shop.arrivalPay", "Order", null, { orderIds, started: n });
@@ -204,14 +204,18 @@ export async function startArrivalPay(t: Tx, actor: Actor, orderIds: string[]) {
 
 /** 訂單成立時：成立就付的系列馬上開始；回傳 true＝已經合併發出通知 */
 export async function payOnPlaced(t: Tx, orderId: string, merged: { card: CardInput; code?: string }, opts: { strict?: boolean } = { strict: true }) {
-  const order = await t.order.findUnique({ where: { id: orderId }, include: { items: { select: { categoryId: true } } } });
+  const order = await t.order.findUnique({ where: { id: orderId }, include: { items: { select: { categoryId: true, productId: true, qty: true, cancelledQtyCache: true } } } });
   if (!order) return false;
   const s = await paySetting(t, order);
   if (!s) return false;
-  if (s.depositPerItem) {
+  // 訂金＝這張訂單裡要訂金的角色（開放數量頁設的每件訂金 × 件數）；有就整張走訂金流程
+  const quotas = await t.shopQuota.findMany({ where: { categoryId: s.categoryId, productId: { in: order.items.map((i) => i.productId) }, deposit: { gt: 0 } } });
+  const dep = new Map(quotas.map((q) => [q.productId, q.deposit ?? 0]));
+  const amount = order.items.reduce((a, i) => a + (dep.get(i.productId) ?? 0) * (i.qty - i.cancelledQtyCache), 0);
+  if (amount > 0) {
     // 候補遞補時（取消別人的訂單時觸發）不能因為匯款帳戶沒設定就讓取消失敗：先成立，留給後台處理
     if (!opts.strict && !(await getShopInfo(t)).bankInfo) return false;
-    return !!(await startDeposit(t, orderId, s.depositPerItem, merged));
+    return !!(await startDeposit(t, orderId, amount, merged));
   }
   if (s.payTiming !== "ORDER") return false;
   return !!(await startPay(t, orderId, { merged }));
@@ -222,11 +226,10 @@ export async function payOnPlaced(t: Tx, orderId: string, merged: { card: CardIn
 // → 經營者確認無誤 → 傳扣除訂金的賣貨便連結（幾小時內下單看系列設定；已付訂金的逾期不自動取消）→ 取貨付尾款
 
 /** 開始收訂金：記金額與期限，發「請匯訂金」通知（跟成立通知合成一則） */
-async function startDeposit(t: Tx, orderId: string, perItem: number, merged: { card: CardInput; code?: string }, now = new Date()) {
+async function startDeposit(t: Tx, orderId: string, total: number, merged: { card: CardInput; code?: string }, now = new Date()) {
   const order = await t.order.findUnique({ where: { id: orderId }, include: { items: true, buyer: { select: { lineUserId: true, email: true } } } });
   if (!order || order.depositAmount !== null || order.confirmation === "CANCELLED") return null;
-  const qty = order.items.reduce((a, i) => a + i.qty - i.cancelledQtyCache, 0);
-  const amount = Math.min(perItem * qty, order.receivableCache);
+  const amount = Math.min(total, order.receivableCache);
   if (amount <= 0) return null;
   const bank = (await getShopInfo(t)).bankInfo;
   if (!bank) throw new BizError("賣家還沒設定匯款資料，這個系列暫時不能下單，請聯絡客服");

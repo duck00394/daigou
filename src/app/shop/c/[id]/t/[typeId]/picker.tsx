@@ -6,7 +6,7 @@ import { useMemo, useState, useTransition } from "react";
 import { money, Stepper, useCart } from "../../../../cart";
 import { joinWaitAction } from "../../../../actions";
 
-type Row = { productId: string; name: string; label: string; image: string | null; price: number | null; left: number; waiting: number; mine: number; inWait: boolean; seed: number; bundle: number; bundleAmount: number };
+type Row = { productId: string; name: string; label: string; image: string | null; price: number | null; left: number; waiting: number; mine: number; inWait: boolean; seed: number; bundle: number; bundleAmount: number; deposit: number };
 
 export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, rows }: { categoryId: string; catName: string; open: boolean; loggedIn: boolean; loginHref: string; limit: number | null; rows: Row[] }) {
   const cart = useCart();
@@ -92,6 +92,7 @@ export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, 
                     {r.price !== null && <span className={`text-[14px] font-bold ${sold ? "text-shop-mute" : "text-shop-rose"}`}>{money(r.price)}</span>}
                   </div>
                   <div className={`text-[12px] ${sold ? "text-shop-rose-2" : "text-shop-mute"}`}>{note}</div>
+                  {r.deposit > 0 && <div className="mt-0.5 mr-1 inline-block rounded-md bg-shop-gold-soft px-1.5 py-0.5 text-[11px] font-bold text-shop-gold">要先付訂金 {money(r.deposit)}</div>}
                   {(r.bundle > 0 || r.bundleAmount > 0) && <div className="mt-0.5 inline-block rounded-md bg-shop-gold-soft px-1.5 py-0.5 text-[11px] font-bold text-shop-gold">不能單買・每 1 個要搭{r.bundle ? ` ${r.bundle} 個可以單買的角色` : `可以單買的角色滿 ${money(r.bundleAmount)}`}</div>}
                 </div>
                 {sold ? (
@@ -109,7 +110,7 @@ export function Picker({ categoryId, catName, open, loggedIn, loginHref, limit, 
             );
           })}
         </ul>
-        <p className="px-4 py-3 text-[12px] leading-relaxed text-shop-mute">可以按 ＋／－，也可以點數字直接輸入。{open ? "售完的可以排候補，有人取消會依序遞補並用 LINE 通知。" : "開賣後售完的可以排候補。"}</p>
+        <p className="px-4 py-3 text-[12px] leading-relaxed text-shop-mute">可以按 ＋／－，也可以點數字直接輸入。{rows.some((r) => r.deposit > 0) ? "標「訂金」的角色下單後要先匯訂金，尾款用賣貨便取貨付款。" : ""}{open ? "售完的可以排候補，有人取消會依序遞補並用 LINE 通知。" : "開賣後售完的可以排候補。"}</p>
       </div>
 
       {msg && (

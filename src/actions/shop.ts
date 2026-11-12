@@ -18,7 +18,6 @@ const catSchema = z.object({
   payUrl: z.string().max(1000).nullable(),
   payTiming: z.enum(["ORDER", "ARRIVAL"]),
   payHours: z.number().int(),
-  depositPerItem: z.number().int().nullable(),
 });
 
 export async function saveShopCategoryAction(categoryId: string, raw: z.infer<typeof catSchema>) {
@@ -29,14 +28,14 @@ export async function saveShopCategoryAction(categoryId: string, raw: z.infer<ty
       openAt = taipeiToUtc(v.openDate, v.openTime || "00:00");
       if (!openAt) throw new BizError("開賣時間格式不對");
     }
-    await tx((t) => shop.saveShopCategory(t, a, categoryId, { enabled: v.enabled, openAt, perPersonLimit: v.perPersonLimit, ownerId: v.ownerId, imageUrl: v.imageUrl, intro: v.intro, payUrl: v.payUrl, payTiming: v.payTiming, payHours: v.payHours, depositPerItem: v.depositPerItem }));
+    await tx((t) => shop.saveShopCategory(t, a, categoryId, { enabled: v.enabled, openAt, perPersonLimit: v.perPersonLimit, ownerId: v.ownerId, imageUrl: v.imageUrl, intro: v.intro, payUrl: v.payUrl, payTiming: v.payTiming, payHours: v.payHours }));
     revalidatePath(`/shop-admin/${categoryId}`);
     revalidatePath("/shop");
     return true;
   });
 }
 
-const quotaSchema = z.array(z.object({ productId: z.string().max(64), quota: z.number().int().nullable(), price: z.number().int().nullable().optional(), bundleNeed: z.number().int().nullable().optional(), bundleAmount: z.number().int().nullable().optional() })).max(500);
+const quotaSchema = z.array(z.object({ productId: z.string().max(64), quota: z.number().int().nullable(), price: z.number().int().nullable().optional(), bundleNeed: z.number().int().nullable().optional(), bundleAmount: z.number().int().nullable().optional(), deposit: z.number().int().nullable().optional() })).max(500);
 
 export async function saveQuotasAction(categoryId: string, raw: z.infer<typeof quotaSchema>) {
   return run(async (a) => {

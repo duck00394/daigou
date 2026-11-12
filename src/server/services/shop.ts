@@ -26,6 +26,7 @@ export type ShopProduct = {
   quota: number;
   bundleNeed: number; // 0＝不限；n＝每買 1 個要搭配 n 個同品項的其他角色
   bundleAmount: number; // 0＝不限；x＝每買 1 個，同品項其他角色要買滿 x 元
+  deposit: number; // 0＝不用訂金；x＝每件要先匯的訂金
   sold: number;
   left: number;
   waiting: number;
@@ -65,6 +66,7 @@ export async function shopProducts(db: Db, categoryId: string): Promise<ShopProd
         quota: q.quota,
         bundleNeed: q.bundleNeed ?? 0,
         bundleAmount: q.bundleAmount ?? 0,
+        deposit: q.deposit ?? 0,
         sold: s,
         left: Math.max(0, q.quota - s),
         waiting: waits.get(p.id) ?? 0,
@@ -175,12 +177,7 @@ export async function placeShopOrder(t: Tx, buyerId: string, input: { lines: Car
     if (!s || !s.enabled || !s.category.active) throw new BizError("有系列已經停止訂購，請重新整理購物車");
     if (!isOpen(s, now)) throw new BizError(`「${s.category.name}」還沒開賣`);
   }
-  // 要訂金的系列：一定要留 Threads 或 IG 帳號（有問題時聯絡得到人）
-  // 訪客下單、要付訂金的商品：一定要留 Threads 或 IG 帳號（有問題時聯絡得到人）
-  const needDeposit = settings.some((x) => x.depositPerItem && x.payUrl);
-  const needSocial = needDeposit || !buyer.lineUserId;
   const social = field.mode === "text" ? contact.phone : (input.contact.social ?? "").trim();
-  if (needSocial && !social) throw new BizError(needDeposit ? "要付訂金的商品，請填 Threads 或 IG 帳號" : "請填 Threads 或 IG 帳號");
   if (social.length > 60) throw new BizError("Threads 或 IG 帳號太長了");
 
   // 鎖住開放數量，再算剩下幾個（同時下單的人會排隊，名額照順序）
@@ -203,6 +200,10 @@ export async function placeShopOrder(t: Tx, buyerId: string, input: { lines: Car
     const had = mine.get(k) ?? 0;
     if (limit && had + l.qty > limit) throw new BizError(`「${p.name}」每人限購 ${limit} 個${had ? `（你已經訂了 ${had} 個）` : ""}`);
   }
+
+  // 訪客下單、要付訂金的商品：一定要留 Threads 或 IG 帳號（有問題時聯絡得到人）
+  const needDeposit = lines.some((l) => (info.get(`${l.categoryId}|${l.productId}`)?.deposit ?? 0) > 0 && byCat.get(l.categoryId)?.payUrl);
+  if ((needDeposit || !buyer.lineUserId) && !social) throw new BizError(needDeposit ? "要付訂金的商品，請填 Threads 或 IG 帳號" : "請填 Threads 或 IG 帳號");
 
   // 不能單買的角色：同一張訂單裡，同品項「可以單買」的角色要夠（不能單買的不能互搭；好幾個不能單買的要各自搭，加總計算）
   const groupsByType = new Map<string, CartLine[]>();
@@ -479,7 +480,7 @@ export async function customerWaits(db: Db, buyerId: string) {
 
 // ───────────── 後台設定 ─────────────
 
-export type ShopCategoryInput = { enabled: boolean; openAt: Date | null; perPersonLimit: number | null; ownerId: string | null; imageUrl: string | null; intro: string | null; payUrl?: string | null; payTiming?: "ORDER" | "ARRIVAL"; payHours?: number; depositPerItem?: number | null };
+export type ShopCategoryInput = { enabled: boolean; openAt: Date | null; perPersonLimit: number | null; ownerId: string | null; imageUrl: string | null; intro: string | null; payUrl?: string | null; payTiming?: "ORDER" | "ARRIVAL"; payHours?: number };
 
 export async function saveShopCategory(t: Tx, actor: Actor, categoryId: string, input: ShopCategoryInput) {
   const cat = await t.category.findUnique({ where: { id: categoryId } });
@@ -494,8 +495,6 @@ export async function saveShopCategory(t: Tx, actor: Actor, categoryId: string, 
   if (payUrl && (!/^https:\/\/\S+$/.test(payUrl) || payUrl.length > 1000)) throw new BizError("賣貨便連結要用 https:// 開頭");
   if (input.payHours !== undefined && (!Number.isInteger(input.payHours) || input.payHours < 1 || input.payHours > 168)) throw new BizError("下單期限要是 1～168 小時");
   if (input.payTiming !== undefined && !["ORDER", "ARRIVAL"].includes(input.payTiming)) throw new BizError("付款時機不對");
-  if (input.depositPerItem !== undefined && input.depositPerItem !== null && (!Number.isInteger(input.depositPerItem) || input.depositPerItem < 1 || input.depositPerItem > 99999)) throw new BizError("每件訂金要是 1～99999 的整數，或空白（不用訂金）");
-  if (input.depositPerItem && !(payUrl ?? (await t.shopCategory.findUnique({ where: { categoryId } }))?.payUrl)) throw new BizError("要收訂金的話，請先貼上尾款的賣貨便賣場連結");
   const data = {
     enabled: input.enabled,
     openAt: input.openAt,
@@ -506,7 +505,6 @@ export async function saveShopCategory(t: Tx, actor: Actor, categoryId: string, 
     ...(payUrl !== undefined ? { payUrl } : {}),
     ...(input.payTiming ? { payTiming: input.payTiming } : {}),
     ...(input.payHours !== undefined ? { payHours: input.payHours } : {}),
-    ...(input.depositPerItem !== undefined ? { depositPerItem: input.depositPerItem } : {}),
   };
   const before = await t.shopCategory.findUnique({ where: { categoryId } });
   // 換掉或拿掉自己上傳的舊圖：一起刪掉，不佔資料庫空間
@@ -516,7 +514,7 @@ export async function saveShopCategory(t: Tx, actor: Actor, categoryId: string, 
   await audit(t, actor, "shop.category", "Category", categoryId, { before, after: data });
 }
 
-export type QuotaInput = { productId: string; quota: number | null; price?: number | null; bundleNeed?: number | null; bundleAmount?: number | null };
+export type QuotaInput = { productId: string; quota: number | null; price?: number | null; bundleNeed?: number | null; bundleAmount?: number | null; deposit?: number | null };
 
 /** 存開放數量和售價（price 沒傳＝不改售價；null＝改回用品項售價） */
 export async function saveQuotas(t: Tx, actor: Actor, categoryId: string, rows: QuotaInput[]) {
@@ -542,9 +540,17 @@ export async function saveQuotas(t: Tx, actor: Actor, categoryId: string, rows: 
     if (r.bundleAmount !== undefined && r.bundleAmount !== null && (!Number.isInteger(r.bundleAmount) || r.bundleAmount < 0 || r.bundleAmount > 999999)) throw new BizError("搭配金額要是整數（台幣）");
     const bundleNeed = r.bundleNeed === undefined ? (cur?.bundleNeed ?? null) : r.bundleNeed || null;
     const bundleAmount = r.bundleAmount === undefined ? (cur?.bundleAmount ?? null) : r.bundleAmount || null;
-    if (!cur || cur.quota !== r.quota || cur.price !== price || cur.bundleNeed !== bundleNeed || cur.bundleAmount !== bundleAmount) {
-      await t.shopQuota.upsert({ where: key, update: { quota: r.quota, price, bundleNeed, bundleAmount }, create: { categoryId, productId: r.productId, quota: r.quota, price, bundleNeed, bundleAmount } });
-      changed.push({ ...r, price, bundleNeed, bundleAmount });
+    if (r.deposit !== undefined && r.deposit !== null && (!Number.isInteger(r.deposit) || r.deposit < 0 || r.deposit > 99999)) throw new BizError("訂金要是整數（台幣）");
+    const deposit = r.deposit === undefined ? (cur?.deposit ?? null) : r.deposit || null;
+    if (deposit) {
+      const sc = await t.shopCategory.findUnique({ where: { categoryId } });
+      if (!sc?.payUrl) throw new BizError("要收訂金的話，請先在上面的設定貼上賣貨便賣場連結");
+      const fallback = price ?? (await shopProducts(t, categoryId)).find((p) => p.productId === r.productId)?.price ?? null;
+      if (fallback !== null && deposit > fallback) throw new BizError("訂金不能比售價高");
+    }
+    if (!cur || cur.quota !== r.quota || cur.price !== price || cur.bundleNeed !== bundleNeed || cur.bundleAmount !== bundleAmount || cur.deposit !== deposit) {
+      await t.shopQuota.upsert({ where: key, update: { quota: r.quota, price, bundleNeed, bundleAmount, deposit }, create: { categoryId, productId: r.productId, quota: r.quota, price, bundleNeed, bundleAmount, deposit } });
+      changed.push({ ...r, price, bundleNeed, bundleAmount, deposit });
       if (bundleNeed || bundleAmount) await dropWaits(t, categoryId, r.productId);
     }
   }

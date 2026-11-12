@@ -1194,7 +1194,6 @@ model ShopCategory {
   payUrl         String? // 賣貨便賣場連結（這個系列共用一個通用賣場）
   payTiming      ShopPayTiming @default(ORDER) // 什麼時候要客人用賣貨便下單
   payHours       Int           @default(1) // 幾小時內要下單；逾期自動取消並遞補候補
-  depositPerItem Int? // 每件訂金（台幣）；空白＝不用訂金。有訂金時 payUrl 是「尾款賣場」（價格已扣訂金）
   sortOrder      Int       @default(0)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -1213,6 +1212,7 @@ model ShopQuota {
   bundleNeed   Int? // 不能單買：每買 1 個，同一張訂單要再買幾個同品項的其他角色；空白＝不限個數
   bundleAmount Int? // 不能單買：每買 1 個，同一張訂單同品項的其他角色要買滿多少錢（台幣）；空白＝不限金額
   price        Int? // 這個角色在訂購頁的售價；空白＝用品項售價（系列頁的品項售價），再沒有就用商品參考售價
+  deposit      Int? // 這個角色每件要先匯的訂金；空白＝不用訂金（賣貨便賣場上這個角色要標扣掉訂金後的價格）
   category     Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   createdAt    DateTime @default(now())

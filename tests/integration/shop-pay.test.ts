@@ -221,7 +221,8 @@ describe("賣貨便付款期限", () => {
 describe("訂金", () => {
   const setDeposit = async (perItem = 300, payHours = 24) => {
     await tx((t) => pay.setShopInfo(t, actor, { bankInfo: "中國信託（822）1234-5678-9012" }));
-    await tx((t) => shop.saveShopCategory(t, actor, s.halloween.id, { enabled: true, openAt: null, perPersonLimit: null, ownerId: "op_a", imageUrl: null, intro: null, payUrl: PAY, payTiming: "ORDER", payHours, depositPerItem: perItem }));
+    await tx((t) => shop.saveShopCategory(t, actor, s.halloween.id, { enabled: true, openAt: null, perPersonLimit: null, ownerId: "op_a", imageUrl: null, intro: null, payUrl: PAY, payTiming: "ORDER", payHours }));
+    await tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p1.id, quota: 3, deposit: perItem }, { productId: s.p2.id, quota: 1, deposit: perItem }]));
   };
   const depositGuest = (email: string, social: string | null = null, lines = [{ productId: s.p1.id, qty: 2 }]) =>
     tx(async (t) => shop.placeShopOrder(t, await pay.guestBuyer(t, email, "訂金客", () => nextCode(t, "buyer")), { lines: lines.map((l) => ({ categoryId: s.halloween.id, ...l })), contact: { ...contact, social }, key: key() }));
@@ -289,7 +290,8 @@ describe("訂金", () => {
   });
 
   it("要訂金的系列：沒設匯款帳戶不能下單；結帳欄位不是帳號時要另外填 Threads／IG；沒有尾款賣場不能設訂金", async () => {
-    await tx((t) => shop.saveShopCategory(t, actor, s.halloween.id, { enabled: true, openAt: null, perPersonLimit: null, ownerId: "op_a", imageUrl: null, intro: null, payUrl: PAY, payTiming: "ORDER", payHours: 24, depositPerItem: 300 }));
+    await tx((t) => shop.saveShopCategory(t, actor, s.halloween.id, { enabled: true, openAt: null, perPersonLimit: null, ownerId: "op_a", imageUrl: null, intro: null, payUrl: PAY, payTiming: "ORDER", payHours: 24 }));
+    await tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p1.id, quota: 3, deposit: 300 }]));
     await expect(depositGuest("nobank@example.com")).rejects.toThrow("還沒設定匯款資料");
     expect(await prisma.order.count()).toBe(0);
     await tx((t) => pay.setShopInfo(t, actor, { bankInfo: "郵局 700 0001234567" }));
@@ -299,7 +301,28 @@ describe("訂金", () => {
     await expect(place(null)).rejects.toThrow("Threads 或 IG");
     const r = await place("@ashou");
     expect((await prisma.order.findUniqueOrThrow({ where: { id: r.orderId } })).notes).toContain("Threads／IG：@ashou");
-    await expect(tx((t) => shop.saveShopCategory(t, actor, s.shanghai.id, { enabled: true, openAt: null, perPersonLimit: null, ownerId: "op_a", imageUrl: null, intro: null, payUrl: null, depositPerItem: 100 }))).rejects.toThrow("尾款");
+    await tx((t) => shop.saveShopCategory(t, actor, s.shanghai.id, { enabled: true, openAt: null, perPersonLimit: null, ownerId: "op_a", imageUrl: null, intro: null, payUrl: null }));
+    await expect(tx((t) => shop.saveQuotas(t, actor, s.shanghai.id, [{ productId: s.p3.id, quota: 5, deposit: 100 }]))).rejects.toThrow("賣貨便賣場連結");
+    // 訂金不能比售價高（p2 售價 300）
+    await expect(tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p2.id, quota: 1, deposit: 301 }]))).rejects.toThrow("訂金不能比售價高");
+  });
+
+  it("同一個系列只有部分角色要訂金：只算那些角色的訂金，整張走訂金流程；都不用訂金的照一般流程", async () => {
+    await tx((t) => pay.setShopInfo(t, actor, { bankInfo: "郵局 700 0001234567" }));
+    await tx((t) => shop.saveShopCategory(t, actor, s.halloween.id, { enabled: true, openAt: null, perPersonLimit: null, ownerId: "op_a", imageUrl: null, intro: null, payUrl: PAY, payTiming: "ORDER", payHours: 24 }));
+    await tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p1.id, quota: 3, deposit: 100 }, { productId: s.p2.id, quota: 1, deposit: null }]));
+    expect((await shop.shopProducts(prisma, s.halloween.id)).map((p) => [p.productId, p.deposit]).sort()).toEqual([[s.p1.id, 100], [s.p2.id, 0]].sort());
+    const mixed = await depositGuest("mix@example.com", null, [{ productId: s.p1.id, qty: 2 }, { productId: s.p2.id, qty: 1 }]);
+    const o = await prisma.order.findUniqueOrThrow({ where: { id: mixed.orderId } });
+    expect([o.depositAmount, o.receivableCache, o.payDueAt]).toEqual([200, 1300, null]);
+    await tx((t) => cancelOrder(t, actor, { orderId: mixed.orderId, reason: "測試" }));
+    const plain = await depositGuest("plain@example.com", null, [{ productId: s.p2.id, qty: 1 }]);
+    const p = await prisma.order.findUniqueOrThrow({ where: { id: plain.orderId } });
+    expect(p.depositAmount).toBeNull();
+    expect(p.payDueAt).not.toBeNull();
+    // 清掉訂金欄：之後的訂單就不用訂金
+    await tx((t) => shop.saveQuotas(t, actor, s.halloween.id, [{ productId: s.p1.id, quota: 3, deposit: null }]));
+    expect((await shop.shopProducts(prisma, s.halloween.id)).find((x) => x.productId === s.p1.id)!.deposit).toBe(0);
   });
 });
 

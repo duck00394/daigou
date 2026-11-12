@@ -51,6 +51,7 @@ export default async function ShopCategoryAdmin({ params }: { params: Promise<{ 
         price: q.get(p.id)?.price ?? null,
         bundleNeed: q.get(p.id)?.bundleNeed ?? 0,
         bundleAmount: q.get(p.id)?.bundleAmount ?? 0,
+        deposit: q.get(p.id)?.deposit ?? null,
         quota: q.get(p.id)?.quota ?? null,
         sold: sold.get(p.id) ?? 0,
         waiting: w.get(p.id) ?? 0,
@@ -87,7 +88,6 @@ export default async function ShopCategoryAdmin({ params }: { params: Promise<{ 
           payUrl: s?.payUrl ?? "",
           payTiming: s?.payTiming ?? "ORDER",
           payHours: s?.payHours ?? 1,
-          depositPerItem: s?.depositPerItem ?? null,
         }}
         isNew={!s}
       />

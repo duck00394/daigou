@@ -63,6 +63,7 @@ export default async function TypePage({ params }: { params: Promise<{ id: strin
             seed: i,
             bundle: p.bundleNeed,
             bundleAmount: p.bundleAmount,
+            deposit: s.payUrl ? p.deposit : 0,
           }))}
         />
         {s.intro && (

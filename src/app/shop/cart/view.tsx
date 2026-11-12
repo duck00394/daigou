@@ -6,7 +6,7 @@ import { money, Pic, Stepper, useCart, type CartItem } from "../cart";
 import { placeOrderAction } from "../actions";
 import type { ContactField } from "@/server/services/shop";
 
-type Status = Record<string, { open: boolean; openAt: string | null; name: string; pay: { timing: "ORDER" | "ARRIVAL"; hours: number; deposit: number } | null }>;
+type Status = Record<string, { open: boolean; openAt: string | null; name: string; pay: { timing: "ORDER" | "ARRIVAL"; hours: number } | null }>;
 export const DONE_KEY = "dg_done";
 const fieldCls = "h-[46px] w-full rounded-[14px] border border-[#e6dace] bg-[#fdfaf6] px-3.5 text-[16px] text-shop-ink";
 
@@ -14,7 +14,7 @@ function newKey() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-export function CartView({ loggedIn, lineName, defaults, returning, shippingOptions, status, field }: { field: ContactField; loggedIn: boolean; lineName: string | null; defaults: { name: string; phone: string; shipping: string }; returning: boolean; shippingOptions: string[]; status: Status }) {
+export function CartView({ loggedIn, lineName, deposits, defaults, returning, shippingOptions, status, field }: { field: ContactField; loggedIn: boolean; lineName: string | null; deposits: Record<string, number>; defaults: { name: string; phone: string; shipping: string }; returning: boolean; shippingOptions: string[]; status: Status }) {
   const cart = useCart();
   const router = useRouter();
   const [f, setF] = useState({ ...defaults, note: "", email: "", social: "" });
@@ -41,11 +41,13 @@ export function CartView({ loggedIn, lineName, defaults, returning, shippingOpti
   const guest = !loggedIn && mode === "guest";
   const canSubmit = loggedIn || guest;
   // 付款方式提醒：同樣設定的系列合在一起講
-  const payKey = (p: NonNullable<Status[string]["pay"]>) => (p.deposit ? "DEPOSIT|1" : `${p.timing}|${p.hours}`);
-  const payNotes = [...new Set([...groups.keys()].map((c) => status[c]?.pay).filter((p): p is NonNullable<typeof p> => !!p).map(payKey))].map((k) => {
+  // 系列裡有要訂金的角色在購物車：這個系列整張走訂金流程
+  const catDeposit = (c: string) => (groups.get(c) ?? []).reduce((x, it) => x + (deposits[`${c}|${it.productId}`] ?? 0) * it.qty, 0);
+  const payKey = (c: string) => (catDeposit(c) > 0 ? "DEPOSIT|1" : `${status[c].pay!.timing}|${status[c].pay!.hours}`);
+  const payNotes = [...new Set([...groups.keys()].filter((c) => status[c]?.pay).map(payKey))].map((k) => {
     const [timing, hours] = k.split("|");
-    const cats = [...groups.keys()].filter((c) => status[c]?.pay && payKey(status[c].pay!) === k);
-    const deposit = cats.reduce((a, c) => a + (status[c].pay!.deposit || 0) * (groups.get(c) ?? []).reduce((x, it) => x + it.qty, 0), 0);
+    const cats = [...groups.keys()].filter((c) => status[c]?.pay && payKey(c) === k);
+    const deposit = cats.reduce((a, c) => a + catDeposit(c), 0);
     return { timing, hours: Number(hours), names: cats.map((c) => status[c].name), deposit };
   });
   const hasDeposit = payNotes.some((p) => p.timing === "DEPOSIT");
@@ -98,7 +100,10 @@ export function CartView({ loggedIn, lineName, defaults, returning, shippingOpti
                   <div className="flex justify-between gap-2">
                     <div>
                       <div className="text-[15px] font-bold">{it.name}</div>
-                      <div className="text-[12px] text-shop-mute">{money(it.price)}</div>
+                      <div className="text-[12px] text-shop-mute">
+                        {money(it.price)}
+                        {deposits[`${it.categoryId}|${it.productId}`] ? <span className="ml-1.5 rounded-full bg-shop-gold-soft px-1.5 py-0.5 text-[11px] font-bold text-shop-gold">訂金 {deposits[`${it.categoryId}|${it.productId}`]}</span> : null}
+                      </div>
                     </div>
                     <button type="button" aria-label={`刪除${it.name}`} onClick={() => cart.remove(it.categoryId, it.productId)} className="h-8 w-8 text-[18px] text-shop-mute">×</button>
                   </div>
@@ -184,7 +189,7 @@ export function CartView({ loggedIn, lineName, defaults, returning, shippingOpti
             <p key={`${p.timing}${p.hours}`}>
               {payNotes.length > 1 && <b>{p.names.join("、")}：</b>}
               {p.timing === "DEPOSIT" ? (
-                <>需要訂金 <b>NT$ {p.deposit.toLocaleString("en-US")}</b>：成立後 <b className="text-[#c8102e]">1 小時</b>內匯款並回傳末五碼，逾時自動取消。尾款用賣貨便取貨付款，不用再匯款。</>
+                <>有要訂金的商品，訂金 <b>NT$ {p.deposit.toLocaleString("en-US")}</b>：成立後 <b className="text-[#c8102e]">1 小時</b>內匯款並回傳末五碼，逾時自動取消。確認後會傳賣貨便連結，整張訂單一起在賣貨便下單，尾款取貨時付。</>
               ) : p.timing === "ORDER" ? (
                 <>成立後 <b className="text-[#c8102e]">{p.hours} 小時</b>內，用賣貨便下單。逾期會取消並讓給候補的人。</>
               ) : (
