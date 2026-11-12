@@ -6,7 +6,7 @@ import { Choice } from "@/components/choice";
 import { bulkFlagsAction } from "@/actions/orders";
 import { toDateTimeInput } from "@/lib/labels";
 
-export type ShipItem = { id: string; orderNo: string; orderId: string; name: string; spec: string | null; pending: number; reserved: number; packFlag: string; reservedBy?: string; ownerKey?: string | null };
+export type ShipItem = { id: string; orderNo: string; orderId: string; name: string; spec: string | null; pending: number; reserved: number; packFlag: string; reservedBy?: string; ownerKey?: string | null; shippable?: number; wholeOrder?: boolean }; // shippable＝出貨排程算出來現在可以出幾件
 type Op = { id: string; name: string };
 const ownerOpts = (operators: Op[]) => [...operators.map((o) => ({ value: o.id, label: o.name })), { value: "joint", label: "合資的" }, { value: "none", label: "未指定的" }];
 
@@ -14,17 +14,20 @@ const ownerOpts = (operators: Op[]) => [...operators.map((o) => ({ value: o.id, 
 export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, available, operators = [] }: { buyerId: string; buyerName: string; defaultMethod: string | null; items: ShipItem[]; available: Record<string, number>; operators?: Op[] }) {
   // 誰出的貨（扣誰的庫存）：空白＝照已保留的，不夠的先扣先買進的
   // 預訂記了跟誰訂的（而且都一樣）就預設扣他的
-  const keys = [...new Set(items.map((i) => i.ownerKey ?? ""))];
-  const [owner, setOwner] = useState(keys.length === 1 && keys[0] && ownerOpts(operators).some((o) => o.value === keys[0]) ? keys[0] : "");
+  // 預設不指定：照已保留的、不夠的從共用庫存池依批次進貨先後（FIFO）保留；要指定扣誰的庫存再手動選
+  const [owner, setOwner] = useState("");
   const ownerLabel = ownerOpts(operators).find((o) => o.value === owner)?.label.replace(/的$/, "") ?? "";
-  const [qty, setQty] = useState<Record<string, string>>(() => Object.fromEntries(items.map((i) => [i.id, i.reserved > 0 ? String(Math.min(i.reserved, i.pending)) : ""])));
+  const canOf = (i: ShipItem) => i.shippable ?? i.reserved;
+  const [qty, setQty] = useState<Record<string, string>>(() => Object.fromEntries(items.map((i) => [i.id, canOf(i) > 0 ? String(Math.min(canOf(i), i.pending)) : ""])));
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ method: defaultMethod ?? "", tracking: "", shippedAt: toDateTimeInput(new Date()), note: "" });
   const [auto, setAuto] = useState(false);
   const { run, pending } = useRun();
   const idem = useIdemKey();
   const lines = useMemo(() => items.map((i) => ({ i, q: Number(qty[i.id] || 0) })).filter((x) => x.q > 0), [items, qty]);
-  const needsAuto = lines.some((x) => x.q > x.i.reserved);
+  // 排程算得出來的件數內：自動從可用庫存保留（FIFO），不用另外勾；超過的（會用到排在前面客人的貨）才要確認
+  const needsAuto = lines.some((x) => x.q > canOf(x.i));
+  const autoNeeded = lines.some((x) => x.q > x.i.reserved);
   const total = lines.reduce((s, x) => s + x.q, 0);
   return (
     <div>
@@ -34,7 +37,7 @@ export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, availa
             <th className="py-1 font-normal">商品</th>
             <th className="font-normal">訂單</th>
             <th className="px-1 text-right font-normal">未出</th>
-            <th className="px-1 text-right font-normal" title="已到貨保留、可以出貨的數量">可出</th>
+            <th className="px-1 text-right font-normal" title="已到貨、排給這一項可以出的數量（先下單的先分）">可出</th>
             <th className="w-16 text-right font-normal">本次</th>
           </tr>
         </thead>
@@ -47,9 +50,9 @@ export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, availa
                 {i.packFlag !== "NONE" && <span className="ml-1 text-[12px] text-info">（{i.packFlag === "READY" ? "已備妥" : "備貨中"}）</span>}
                 {i.reservedBy && <div className="text-[12px] text-mute" data-testid="reserved-by">保留的是：{i.reservedBy}</div>}
               </td>
-              <td className="num text-[13px]"><a href={`/orders/${i.orderId}`} className="text-ai hover:underline">{i.orderNo}</a></td>
+              <td className="num text-[13px]"><a href={`/orders/${i.orderId}`} className="text-ai hover:underline">{i.orderNo}</a>{i.wholeOrder && <span className="ml-1 rounded-full bg-good-soft px-1.5 text-[11px] text-good" data-testid="whole-order">整張可出</span>}</td>
               <td className="num text-right">{i.pending}</td>
-              <td className={`num text-right ${i.reserved === 0 ? "text-mute" : "font-medium"}`}>{i.reserved}</td>
+              <td className={`num text-right ${canOf(i) === 0 ? "text-mute" : "font-medium"}`} data-k="can">{canOf(i)}</td>
               <td className="text-right">
                 <input className={`${inputCls} w-16 py-1 text-right`} inputMode="numeric" value={qty[i.id] ?? ""} onChange={(e) => setQty({ ...qty, [i.id]: e.target.value })} aria-label={`${i.name} 本次出貨數量`} />
               </td>
@@ -60,7 +63,7 @@ export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, availa
       <div className="mt-2 flex flex-wrap gap-2">
         <Button small variant="primary" disabled={total === 0} onClick={() => setOpen(true)}>出貨 {total} 件</Button>
         <Button small loading={pending} onClick={() => run(() => bulkFlagsAction(items.map((i) => i.id), { packFlag: "PREPARING" }), { success: "已標記備貨中" })}>標記備貨中</Button>
-        <Button small loading={pending} onClick={() => run(() => bulkFlagsAction(items.filter((i) => i.reserved > 0).map((i) => i.id), { packFlag: "READY" }), { success: "已標記已備妥" })}>標記已備妥</Button>
+        <Button small loading={pending} onClick={() => run(() => bulkFlagsAction(items.filter((i) => canOf(i) > 0).map((i) => i.id), { packFlag: "READY" }), { success: "已標記已備妥" })}>標記已備妥</Button>
         <a href={`/shipping/pack?buyerId=${buyerId}`} target="_blank" rel="noopener" className="self-center text-[13px] text-ai hover:underline">包貨核對清單</a>
       </div>
       <Modal
@@ -77,8 +80,8 @@ export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, availa
                 if (!Number.isInteger(x.q) || x.q > x.i.pending) return notify(`「${x.i.name}」最多只能出貨 ${x.i.pending} 件`);
               }
               run(
-                () => createShipmentAction({ buyerId, method: f.method || null, trackingNo: f.tracking || null, shippedAt: f.shippedAt, note: f.note || null, items: lines.map((x) => ({ orderItemId: x.i.id, qty: x.q })), autoReserve: auto, dedupeKey: idem.key, owner: owner || null }),
-                { success: (d) => `已建立出貨單 ${d.shipmentNo}`, onOk: () => { idem.renew(); setOpen(false); } },
+                () => createShipmentAction({ buyerId, method: f.method || null, trackingNo: f.tracking || null, shippedAt: f.shippedAt, note: f.note || null, items: lines.map((x) => ({ orderItemId: x.i.id, qty: x.q })), autoReserve: autoNeeded && (!needsAuto || auto), dedupeKey: idem.key, owner: owner || null }),
+                { success: (d) => (d.duplicated ? `此筆出貨已完成（${d.shipmentNo}），沒有重複出貨` : `已建立出貨單 ${d.shipmentNo}`), onOk: () => { idem.renew(); setOpen(false); } },
               );
             }}
           >
@@ -101,10 +104,10 @@ export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, availa
         )}
         {needsAuto && (
           <div className="mb-3 rounded-lg bg-warn-soft px-3 py-2 text-sm">
-            <p>部分商品的出貨數量超過已到貨保留的數量。</p>
+            <p>有商品的出貨數量超過「可出」：多的會用到排在前面、比較早下單的客人的貨。</p>
             <label className="mt-1 flex items-center gap-2">
               <input type="checkbox" className="h-4 w-4" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
-              從{owner ? `${ownerLabel}的` : ""}可用庫存自動保留不足的數量（可用：{lines.filter((x) => x.q > x.i.reserved).map((x) => `${x.i.name} ${available[x.i.id] ?? 0} 件`).join("、")}）
+              確定先給這位客人（從{owner ? `${ownerLabel}的` : ""}可用庫存保留；可用：{lines.filter((x) => x.q > canOf(x.i)).map((x) => `${x.i.name} ${available[x.i.id] ?? 0} 件`).join("、")}）
             </label>
           </div>
         )}

@@ -219,9 +219,11 @@ export async function adjustStock(t: Tx, actor: Actor, input: { productId: strin
  */
 export async function reserveForItem(t: Tx, actor: Actor, input: { orderItemId: string; qty: number; batchItemId?: string | null; owner?: string | null }) {
   if (!Number.isInteger(input.qty) || input.qty <= 0) throw new BizError("保留數量必須是正整數");
-  const { item, need } = await itemNeed(t, input.orderItemId);
+  const { item } = await itemNeed(t, input.orderItemId);
   if (item.order.confirmation !== "CONFIRMED") throw new BizError(`訂單 ${item.order.orderNo} 不是已確認狀態，不能保留庫存`);
   await lockRows(t, "Product", [item.productId]);
+  // 鎖住後再讀一次還需要幾件（同時有出貨、保留時，用最新的數字，不會多保留）
+  const { need } = await itemNeed(t, input.orderItemId);
   if (input.qty > need) throw new BizError(`此明細只需要再保留 ${need} 件`);
   let lots = await productLots(t, item.productId);
   if (input.batchItemId !== undefined) lots = lots.filter((l) => l.batchItemId === (input.batchItemId ?? null));

@@ -34,8 +34,14 @@ export async function createShipment(t: Tx, actor: Actor, input: ShipInput) {
   });
   if (items.length !== lines.length) throw new BizError("找不到部分訂單明細");
   const orderIds = [...new Set(items.map((i) => i.orderId))];
+  // 鎖定順序一律：訂單（依 id）→ 商品（依 id），跟一次出貨、單張出貨、保留庫存一致，避免互相卡住
   await lockRows(t, "Order", orderIds);
   await lockRows(t, "Product", items.map((i) => i.productId));
+  // 鎖住後再查一次：同一個識別碼的請求剛剛已經完成，就直接回傳那一次的結果（不再保留、不再扣庫存）
+  if (input.dedupeKey) {
+    const dup = await t.shipment.findUnique({ where: { dedupeKey: input.dedupeKey }, include: { items: true } });
+    if (dup) return { shipment: dup, duplicated: true };
+  }
 
   for (const it of items) {
     if (it.order.buyerId !== input.buyerId) throw new BizError(`訂單 ${it.order.orderNo} 不屬於這位買家`);

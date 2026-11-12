@@ -7,6 +7,7 @@ import { BuyerShipCard, ShipOwnerButton, ShipmentEdit, type ShipItem } from "./p
 import { listOperators } from "@/server/services/operators";
 import { shipOwnerLabels } from "@/server/services/ship-owner";
 import { getView } from "@/server/view";
+import { shipPlan } from "@/server/services/order-flow";
 
 type Ops = { id: string; name: string }[];
 /** 「JING 1・合資 1」 */
@@ -47,11 +48,15 @@ async function TodoTab({ byOrder, sp, vk }: { byOrder: boolean; sp: Record<strin
       ...(vk ? { ownerKey: { in: [vk, "joint", "none"] } } : {}),
       order: { confirmation: "CONFIRMED", ...(sp.groupBuyId ? { groupBuyId: sp.groupBuyId } : {}) },
       shipStatusCache: { notIn: ["SHIPPED", "DELIVERED", "CANCELLED"] },
-      ...(sp.ready ? { reservedQtyCache: { gt: 0 } } : {}),
     },
     include: { order: { include: { buyer: { include: { tags: { where: { removedAt: null, tag: { active: true } }, include: { tag: true } } } }, groupBuy: { select: { name: true } } } } },
     orderBy: [{ order: { orderedAt: "asc" } }, { createdAt: "asc" }],
   });
+  // 可出幾件：跟首頁、訂單列表、採購團提醒同一套出貨排程（已保留＋共用庫存池，先下單的先分）
+  const plan = await tx((t) => shipPlan(t));
+  const canShip = new Map(plan.items.map((x) => [x.id, x.shippable]));
+  const readyOrders = new Set(plan.readyOrderIds);
+  if (sp.ready) items.splice(0, items.length, ...items.filter((i) => (canShip.get(i.id) ?? 0) > 0));
   const inv = await tx((t) => inventoryFor(t, [...new Set(items.map((i) => i.productId))], vk));
   const ops = await tx((t) => listOperators(t, { includeInactive: true }));
   const activeOps = ops.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }));
@@ -67,6 +72,8 @@ async function TodoTab({ byOrder, sp, vk }: { byOrder: boolean; sp: Record<strin
     packFlag: i.packFlag,
     reservedBy: ownersText(resBy.get(i.id), ops),
     ownerKey: i.ownerKey,
+    shippable: Math.min(canShip.get(i.id) ?? 0, i.qty - i.cancelledQtyCache - i.shippedQtyCache),
+    wholeOrder: readyOrders.has(i.orderId),
   });
   const groups = new Map<string, { key: string; title: string; sub: string; buyer: (typeof items)[number]["order"]["buyer"]; items: typeof items }>();
   for (const i of items) {
@@ -75,7 +82,8 @@ async function TodoTab({ byOrder, sp, vk }: { byOrder: boolean; sp: Record<strin
     g.items.push(i);
     groups.set(key, g);
   }
-  const list = [...groups.values()].sort((a, b) => b.items.reduce((s, i) => s + i.reservedQtyCache, 0) - a.items.reduce((s, i) => s + i.reservedQtyCache, 0));
+  const canOf = (g: { items: typeof items }) => g.items.reduce((s, i) => s + (canShip.get(i.id) ?? 0), 0);
+  const list = [...groups.values()].sort((a, b) => canOf(b) - canOf(a));
   return (
     <>
       <form method="get" className="flex flex-wrap items-end gap-2">
@@ -94,7 +102,7 @@ async function TodoTab({ byOrder, sp, vk }: { byOrder: boolean; sp: Record<strin
       ) : (
         <div className="space-y-3">
           {list.map((g) => {
-            const ready = g.items.reduce((s, i) => s + i.reservedQtyCache, 0);
+            const ready = canOf(g);
             return (
               <Section
                 key={g.key}

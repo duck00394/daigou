@@ -101,7 +101,7 @@ export function OrderFlow({ orderId, lines, open, delivered, balance, methods }:
             loading={pending}
             onClick={() =>
               run(() => shipOrderAction({ orderId, method: ship.method || null, trackingNo: ship.tracking.trim() || null, shippedAt: ship.at || null, dedupeKey: shipIdem.key }), {
-                success: "已出貨",
+                success: (d) => (d.duplicated ? `此筆出貨已完成（${d.shipmentNo}），沒有重複出貨` : "已出貨"),
                 onOk: () => {
                   setMode(null);
                   shipIdem.renew();

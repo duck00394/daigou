@@ -135,7 +135,7 @@ function BulkShip({ ids, methods, onDone }: { ids: string[]; methods: string[]; 
             loading={pending}
             onClick={() =>
               run(() => bulkShipAction({ orderIds: ids, method: f.method || null, shippedAt: f.at || null, dedupeKey: idem.key }), {
-                success: (d) => `已出貨 ${d.buyers} 位客人（${d.qty} 件）${d.skipped.length ? `，${d.skipped.length} 張先不出` : ""}`,
+                success: (d) => (d.duplicated ? `此筆出貨已完成（${d.buyers} 位客人、${d.qty} 件），沒有重複出貨` : `已出貨 ${d.buyers} 位客人（${d.qty} 件）${d.skipped.length ? `，${d.skipped.length} 張先不出` : ""}`),
                 onOk: () => {
                   setGroups(null);
                   idem.renew();

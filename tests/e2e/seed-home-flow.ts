@@ -27,7 +27,7 @@ async function main() {
   const b = await tx((t) => createBuyer(t, actor, { name: `首頁客B${tag}` }));
   const oa = await tx((t) => createOrder(t, actor, { buyerId: a.id, items: [{ productId: chii.id, qty: 1 }] }));
   const ob = await tx((t) => createOrder(t, actor, { buyerId: b.id, items: [{ productId: hachi.id, qty: 1 }] }));
-  process.stdout.write(JSON.stringify({ oa: oa.orderNo, ob: ob.orderNo, b2: b2.name, b2Id: b2.id }));
+  process.stdout.write(JSON.stringify({ oa: oa.orderNo, ob: ob.orderNo, b2: b2.name, b2Id: b2.id, aId: a.id, bId: b.id }));
   await prisma.$disconnect();
 }
 main().catch((e) => {

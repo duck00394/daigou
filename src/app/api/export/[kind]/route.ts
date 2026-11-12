@@ -141,12 +141,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
         include: { order: { include: { buyer: true } } },
         orderBy: [{ order: { buyer: { name: "asc" } } }, { order: { orderedAt: "asc" } }],
       });
+      // 可出貨＝出貨排程（跟出貨頁「可出」同一套）；已保留＝實際已經保留給這一項的件數
+      const { shipPlan } = await import("@/server/services/order-flow");
+      const plan = await tx((t) => shipPlan(t));
+      const canShip = new Map(plan.items.map((x) => [x.id, x.shippable]));
       return sheetResponse("待出貨清單", [
-        ["買家", "訂單編號", "商品", "規格", "有效數量", "已出貨", "已到貨可出貨", "尚未到貨", "常用配送", ...(priv ? ["收件人", "電話", "地址"] : [])],
+        ["買家", "訂單編號", "商品", "規格", "有效數量", "已出貨", "已保留", "可出貨", "還不能出", "常用配送", ...(priv ? ["收件人", "電話", "地址"] : [])],
         ...items.map((i) => {
           const active = i.qty - i.cancelledQtyCache;
           const left = active - i.shippedQtyCache;
-          return [i.order.buyer.name, i.order.orderNo, i.productNameSnapshot, i.specNote ?? "", active, i.shippedQtyCache, i.reservedQtyCache, left - i.reservedQtyCache, i.order.buyer.shippingMethod ?? "", ...(priv ? [i.order.buyer.recipientName ?? "", i.order.buyer.recipientPhone ?? "", i.order.buyer.address ?? ""] : [])];
+          return [i.order.buyer.name, i.order.orderNo, i.productNameSnapshot, i.specNote ?? "", active, i.shippedQtyCache, i.reservedQtyCache, Math.min(left, canShip.get(i.id) ?? 0), left - Math.min(left, canShip.get(i.id) ?? 0), i.order.buyer.shippingMethod ?? "", ...(priv ? [i.order.buyer.recipientName ?? "", i.order.buyer.recipientPhone ?? "", i.order.buyer.address ?? ""] : [])];
         }),
       ], format);
     }
