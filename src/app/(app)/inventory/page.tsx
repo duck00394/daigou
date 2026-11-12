@@ -18,6 +18,7 @@ import { PageHeader, Section, TableWrap, Empty, StatusBadge, LinkButton, Badge }
 import { ReceiveForm, AdjustForm, CreateBatchFromDemand, KeepButton } from "./parts";
 import { SellButton } from "@/components/quick-sale";
 import { getMe } from "@/server/me";
+import { readyToShip } from "@/server/services/order-flow";
 import { JOINT, NONE, stockByOwner } from "@/server/services/ownership";
 import { DemandButton } from "./demand";
 import type { OwnerStockOpt } from "@/components/owner-chips";
@@ -56,7 +57,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
       <NavSelect label="頁面" hideLabel options={TABS.map(([k, l]) => ({ label: l, href: `/inventory?tab=${k}` }))} current={`/inventory?tab=${tab}`} />
       {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} owner={owner} kind={sp.kind} v={sp.v} hideUnsure={sp.unsure === "0"} />}
       {tab === "demand" && <DemandTab owner={owner} />}
-      {tab === "batches" && <BatchesTab cat={sp.cat} open={sp.open} owner={owner} confirm={sp.confirm} view={sp.view} pay={sp.pay} late={sp.late} settle={sp.settle} />}
+      {tab === "batches" && <BatchesTab cat={sp.cat} open={sp.open} owner={owner} confirm={sp.confirm} view={sp.view} pay={sp.pay} late={sp.late} settle={sp.settle} transit={sp.transit} />}
       {tab === "receive" && <ReceiveTab productId={sp.productId} />}
       {tab === "adjust" && (
         <Section title="盤點調整">
@@ -452,7 +453,7 @@ async function DemandTab({ owner = "" }: { owner?: string }) {
   );
 }
 
-async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, late: lateFilter, settle }: { cat?: string; open?: string; owner: string; confirm?: string; view?: string; pay?: string; late?: string; settle?: string }) {
+async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, late: lateFilter, settle, transit }: { cat?: string; open?: string; owner: string; confirm?: string; view?: string; pay?: string; late?: string; settle?: string; transit?: string }) {
   // 進行中（預設）／含已完成／已取消：已取消的只在「已取消」裡看，平常不出現
   const mode = open === "cancelled" ? "cancelled" : open === "0" ? "all" : "open";
   const operators = await tx((t) => listOperators(t));
@@ -487,7 +488,10 @@ async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, lat
     const ids = new Set((await tx((t) => unsettledJoint(t))).map((x) => x.id));
     batches = batches.filter((b) => ids.has(b.id));
   }
-  if (payFilter || lateFilter || settle) pay = await tx((t) => batchPaySummary(t, batches.map((b) => b.id)));
+  // 代購寄出了、還沒收齊（超過預計到貨日的在「超過預計到貨」那邊）
+  if (transit === "1") batches = batches.filter((b) => b.progress === "SHIPPED" && (b.status === "ORDERED" || b.status === "PARTIAL_RECEIVED") && !(b.expectedAt && b.expectedAt < today));
+  const readyN = await tx((t) => readyToShip(t, { owner: owner || null }));
+  if (payFilter || lateFilter || settle || transit) pay = await tx((t) => batchPaySummary(t, batches.map((b) => b.id)));
   return (
     <Section title="採購團" pad={false}>
       <div className="border-b border-line-2 px-4 py-2.5"><OwnerDue compact title="每個人還要付（現金流）" due={await tx((t) => dueByOwner(t, cat ? { categoryId: cat === "none" ? null : cat } : {}))} operators={operators.map((o) => ({ id: o.id, name: o.name }))} only={owner ? [owner, "joint", "none"] : undefined} /></div>
@@ -512,9 +516,15 @@ async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, lat
           { label: "總計買了什麼", href: href(cat, open, owner, { confirm, view: "items" }) },
         ]} />
       </div>
-      {(payFilter === "due" || lateFilter === "1" || settle === "1") && (
+      {readyN.orderIds.length > 0 && (
+        <Link href="/orders?ready=1" className="flex items-center justify-between gap-2 border-b border-line-2 bg-good-soft px-4 py-2.5 text-[14px] text-good" data-testid="batches-ready-ship">
+          <span>到貨了，有 <b>{readyN.orderIds.length}</b> 張客人訂單可以出貨（{readyN.qty} 件）</span>
+          <span className="shrink-0 font-semibold">去出貨</span>
+        </Link>
+      )}
+      {(payFilter === "due" || lateFilter === "1" || settle === "1" || transit === "1") && (
         <div className="flex items-center justify-between border-b border-line-2 bg-ai-soft px-4 py-2 text-[14px]" data-testid="batch-filter-chip">
-          <span>只看：{payFilter === "due" ? "還沒付清的團" : settle === "1" ? "合資還沒結清的團" : "超過預計到貨日的團"}（{batches.length}）</span>
+          <span>只看：{payFilter === "due" ? "還沒付清的團" : settle === "1" ? "合資還沒結清的團" : transit === "1" ? "代購寄出了、還沒登記收到的團" : "超過預計到貨日的團"}（{batches.length}）</span>
           <Link href={href(cat, open)} className="font-semibold text-ai">看全部</Link>
         </div>
       )}
@@ -541,7 +551,7 @@ async function BatchesTab({ cat, open, owner, confirm, view, pay: payFilter, lat
                 {b.status !== "CANCELLED" && (
                   <span className="absolute bottom-2 left-2 z-10 flex gap-1.5" data-testid="card-actions">
                     {(pay.get(b.id)?.dueTwd ?? 0) > 0 && <PayOffButton batchId={b.id} due={pay.get(b.id)!.dueTwd} operators={opOpts} defaultPayer={b.ownership === "JOINT" ? meId : (b.orderedById ?? meId)} />}
-                    {lateFilter === "1" && rec < ordered && <span className="w-24"><ReceiveAllButton batchId={b.id} outstanding={ordered - rec} operators={opOpts} defaultReceiver={b.orderedById ?? meId} /></span>}
+                    {(lateFilter === "1" || transit === "1") && rec < ordered && <span className="w-24"><ReceiveAllButton batchId={b.id} outstanding={ordered - rec} operators={opOpts} defaultReceiver={b.orderedById ?? meId} /></span>}
                   </span>
                 )}
                 <span className="absolute right-2 bottom-2 z-10"><DeleteBatchButton batchId={b.id} name={b.name} paid={pay.get(b.id)?.paidTwd ?? 0} received={rec} items={b.items.length} qty={b.items.reduce((x, i) => x + i.qty - i.cancelledQty, 0)} /></span>

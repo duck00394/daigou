@@ -6,34 +6,35 @@ import { useEffect, useState } from "react";
 import { ViewChip, ViewSwitch, type ViewInfo } from "./view-switch";
 
 // 常用：收藏轉售每天會用到的；其他：接單（LINE／訂單）與資料設定
-export const NAV: { href: string; label: string; group: string; hint?: string }[] = [
+export const NAV: { href: string; label: string; group: string; hint?: string; orders?: true }[] = [
+  // 依做事的順序分組：常用 → 採購與收貨 → 訂單與出貨 → 訂購頁 → 資料與設定（每個頁面都還在，只是換位置）
   { href: "/", label: "首頁", group: "常用", hint: "今天要做什麼、還要付多少" },
   { href: "/purchase", label: "＋ 新增採購", group: "常用", hint: "買了什麼、哪一團" },
   { href: "/sell", label: "賣給客人", group: "常用", hint: "選系列、填數量，沒貨記預訂" },
-  { href: "/rush", label: "搶購提醒", group: "常用", hint: "什麼時候開搶，開始前通知手機" },
-  { href: "/categories", label: "系列", group: "常用", hint: "每個系列買了什麼、花多少、品項售價" },
-  { href: "/inventory?tab=batches", label: "採購團、收貨", group: "常用", hint: "東西到了沒、登記收到" },
-  { href: "/reconcile", label: "對單", group: "常用", hint: "跟代購確認買到多少、砍了哪些" },
   { href: "/inventory?tab=stock", label: "庫存、賣出、自留", group: "常用", hint: "手上有什麼、成本多少" },
-  { href: "/sales", label: "賺多少", group: "常用", hint: "賣出的收入、成本、毛利" },
-  { href: "/orders", label: "訂單", group: "常用", hint: "客人的訂單、預訂，可以多選一次改代購團" },
-  { href: "/shipping", label: "出貨", group: "常用", hint: "預訂到貨了交給客人、改出貨人" },
-  { href: "/shop-admin", label: "訂購頁（客人下單）", group: "常用", hint: "開放系列給客人下單（訪客或 LINE）、限量、候補" },
-  { href: "/shop-pay", label: "訂購頁付款", group: "常用", hint: "客人用賣貨便下單了沒、逾期、補發通知" },
-  { href: "/?tour=1", label: "新手教學", group: "幫助", hint: "一步一步帶你走一次" },
-  { href: "/help", label: "名詞說明", group: "幫助", hint: "有幾隻、每隻成本、對單是什麼" },
-  { href: "/paste", label: "貼上加單", group: "接單" },
-  { href: "/payments", label: "收款與退款", group: "接單" },
-  { href: "/buyers", label: "買家", group: "接單" },
-  { href: "/groupbuys", label: "開團（接單用）", group: "接單" },
-  { href: "/import", label: "Excel 匯入", group: "接單" },
+  { href: "/sales", label: "賺多少", group: "常用", hint: "照系列看已出貨＋預訂賺多少" },
+  { href: "/inventory?tab=batches", label: "採購團、收貨", group: "採購與收貨", hint: "東西到了沒、登記收到" },
+  { href: "/reconcile", label: "對單", group: "採購與收貨", hint: "跟代購確認買到多少、砍了哪些" },
+  { href: "/categories", label: "系列", group: "採購與收貨", hint: "每個系列買了什麼、花多少、品項售價" },
+  { href: "/rush", label: "搶購提醒", group: "採購與收貨", hint: "什麼時候開搶，開始前通知手機" },
+  { href: "/suppliers", label: "供應商、代購", group: "採購與收貨" },
+  { href: "/orders", label: "訂單", group: "訂單與出貨", hint: "客人的訂單、預訂；可以多選一次出貨、收款" },
+  { href: "/shipping", label: "出貨", group: "訂單與出貨", hint: "預訂到貨了交給客人、改出貨人" },
+  { href: "/payments", label: "收款與退款", group: "訂單與出貨", orders: true },
+  { href: "/paste", label: "貼上加單", group: "訂單與出貨", orders: true },
+  { href: "/buyers", label: "買家", group: "訂單與出貨", orders: true },
+  { href: "/groupbuys", label: "開團（接單用）", group: "訂單與出貨", orders: true },
+  { href: "/import", label: "Excel 匯入", group: "訂單與出貨", orders: true },
+  { href: "/shop-admin", label: "訂購頁（客人下單）", group: "訂購頁", hint: "開放系列給客人下單（訪客或 LINE）、限量、候補" },
+  { href: "/shop-pay", label: "訂購頁付款", group: "訂購頁", hint: "客人用賣貨便下單了沒、逾期、補發通知" },
   { href: "/catalog", label: "種類與系列管理", group: "資料與設定" },
-  { href: "/products", label: "商品", group: "資料與設定" },
   { href: "/series", label: "系列與角色", group: "資料與設定" },
-  { href: "/suppliers", label: "供應商、代購", group: "資料與設定" },
+  { href: "/products", label: "商品", group: "資料與設定" },
   { href: "/reports", label: "完整報表", group: "資料與設定" },
   { href: "/tags", label: "標籤", group: "資料與設定" },
   { href: "/settings", label: "匯出、備份與設定", group: "資料與設定" },
+  { href: "/?tour=1", label: "新手教學", group: "幫助", hint: "一步一步帶你走一次" },
+  { href: "/help", label: "名詞說明", group: "幫助", hint: "有幾隻、每隻成本、對單是什麼" },
 ];
 
 const BOTTOM = [
@@ -61,7 +62,7 @@ function useTab() {
   return sp.get("tab");
 }
 
-const visible = (ordersOn: boolean) => NAV.filter((n) => ordersOn || n.group !== "接單");
+const visible = (ordersOn: boolean) => NAV.filter((n) => ordersOn || !n.orders);
 
 export function Sidebar({ ordersOn = true, view }: { ordersOn?: boolean; view?: ViewInfo }) {
   const path = usePathname();

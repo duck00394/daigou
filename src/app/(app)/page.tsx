@@ -10,6 +10,7 @@ import { unsettledJoint } from "@/server/services/joint";
 import { preorderProfit } from "@/server/services/preorder";
 import { reconcileList } from "@/server/services/reconcile";
 import { shortProducts } from "@/server/services/stock-left";
+import { readyToShip } from "@/server/services/order-flow";
 import { getOrdersEnabled } from "@/server/services/settings";
 import { formatTwd } from "@/lib/money";
 import { PushStatusChip } from "@/components/push-setup";
@@ -26,7 +27,7 @@ export default async function Home() {
     return new Date(Date.UTC(y, m - 1, 1, -8));
   })();
   const usesOrders = await getOrdersEnabled(prisma);
-  const [d, sales, unpaidSales, live, refunds, rec, overdue, rush] = await Promise.all([
+  const [d, sales, unpaidSales, live, refunds, rec, overdue, rush, transit, ready] = await Promise.all([
     dashboard(prisma, { owner: vk === "all" ? null : vk }),
     tx((t) => listQuickSales(t, { from: monthStart })),
     prisma.order.aggregate({ where: { source: "QUICK", confirmation: "CONFIRMED", balanceCache: { gt: 0 }, ...(vk === "all" ? {} : { items: { some: { ownerKey: { in: [vk, "joint", "none"] } } } }) }, _count: true }),
@@ -35,6 +36,9 @@ export default async function Home() {
     tx((t) => reconcileList(t, { view: vk })),
     prisma.purchaseBatch.count({ where: { status: { in: ["ORDERED", "PARTIAL_RECEIVED"] }, expectedAt: { lt: new Date() }, ...viewBatchWhere(vk) } }),
     prisma.rushEvent.findFirst({ where: { status: "UPCOMING", startAt: { gte: new Date(Date.now() - 30 * 60000) } }, orderBy: { startAt: "asc" } }),
+    // 代購寄出了、還沒登記收到（超過預計到貨日的另外算，不重複）
+    prisma.purchaseBatch.count({ where: { status: { in: ["ORDERED", "PARTIAL_RECEIVED"] }, progress: "SHIPPED", OR: [{ expectedAt: null }, { expectedAt: { gte: new Date() } }], ...viewBatchWhere(vk) } }),
+    tx((t) => readyToShip(t, { owner: vk === "all" ? null : vk })),
   ]);
   const pay = await tx((t) => batchPaySummary(t, live.map((b) => b.id)));
   const pre = await tx((t) => preorderProfit(t, { owner: vk === "all" ? null : vk }));
@@ -53,14 +57,16 @@ export default async function Home() {
     { n: dueBatches.length, text: "團還沒付清", href: "/inventory?tab=batches&open=0&pay=due" },
     { n: unsettled.length, text: "團合資還沒結清", href: unsettled.length === 1 ? `/inventory/batches/${unsettled[0].id}` : "/inventory?tab=batches&settle=1" },
     { n: overdue, text: "團超過預計到貨日", href: "/inventory?tab=batches&late=1" },
-    { n: d.toShipQty, text: "件客人預訂到貨了，還沒給", href: "/shipping" },
+    { n: transit, text: "團代購寄出了，到了記得登記收到", href: "/inventory?tab=batches&transit=1" },
+    { n: ready.orderIds.length, text: "張訂單到貨了，可以出貨", href: "/orders?ready=1" },
     { n: short.length, text: "項商品客人訂的比庫存多", href: "/inventory?tab=stock&v=1&only=short" },
     { n: pre.unassigned, text: "件客人預訂還沒分是跟誰訂的", href: "/inventory?tab=stock&v=1&only=unassigned" },
-    { n: unpaidSales._count, text: "筆賣出還沒收到錢", href: "/sales" },
+    // 有接單時「張訂單還沒收款」已經包含現貨出售的，不重複列
+    ...(usesOrders ? [] : [{ n: unpaidSales._count, text: "筆賣出還沒收到錢", href: "/orders?due=1&source=QUICK" }]),
     ...(usesOrders
       ? [
           { n: d.pendingConfirm, text: "張訂單待確認", href: "/orders?status=PENDING_CONFIRM" },
-          { n: d.unpaidOrders, text: "張訂單還沒收款", href: "/payments" },
+          { n: d.unpaidOrders, text: "張訂單還沒收款", href: "/orders?due=1" },
           { n: d.refundPending + d.refundUnscheduled, text: "筆退款要處理", href: "/payments?tab=refunds" },
           { n: d.needProducts, text: "項商品客人訂了還沒買", href: "/inventory?tab=demand" },
         ]

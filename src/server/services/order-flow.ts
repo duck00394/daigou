@@ -171,3 +171,51 @@ export async function bulkPay(t: Tx, actor: Actor, input: { orderIds: string[]; 
   if (!count) throw new BizError("勾的訂單都不用收款（已付清或已取消）");
   return { count, total };
 }
+
+/**
+ * 到貨了可以出貨的訂單：每一項還沒給的都有貨（已保留＋跟誰訂的那個人的可用庫存；先下單的先分）。
+ * 首頁待辦、訂單列表「到貨可出貨」、採購團收貨後的提醒都用這一套，跟一次出貨的判斷一致。
+ * owner：看某個人時只算跟他訂的（＋合資、未指定）；productIds：只看跟這些商品有關的訂單
+ */
+export async function readyToShip(t: Tx, opts: { owner?: string | null; productIds?: string[] } = {}) {
+  const items = await t.orderItem.findMany({
+    where: {
+      order: { confirmation: "CONFIRMED", statusCache: { notIn: ["COMPLETED", "CANCELLED"] } },
+      ...(opts.owner ? { ownerKey: { in: [opts.owner, "joint", "none"] } } : {}),
+    },
+    orderBy: [{ order: { orderedAt: "asc" } }, { createdAt: "asc" }],
+    select: { id: true, orderId: true, productId: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true, reservedQtyCache: true, ownerKey: true },
+  });
+  const open = items.map((i) => ({ ...i, pending: i.qty - i.cancelledQtyCache - i.shippedQtyCache })).filter((i) => i.pending > 0);
+  if (!open.length) return { orderIds: [] as string[], qty: 0 };
+  const byOrder = new Map<string, typeof open>();
+  for (const i of open) byOrder.set(i.orderId, [...(byOrder.get(i.orderId) ?? []), i]);
+  const stock = await stockByOwner(t, { productIds: [...new Set(open.map((i) => i.productId))] });
+  const used = new Map<string, number>();
+  const freeOf = (productId: string, owner: string | null) => {
+    const m = stock.get(productId);
+    if (!m) return 0;
+    return owner ? (m.get(owner)?.free ?? 0) : [...m.values()].reduce((a, x) => a + x.free, 0);
+  };
+  const want = opts.productIds ? new Set(opts.productIds) : null;
+  const orderIds: string[] = [];
+  let qty = 0;
+  for (const [orderId, lines] of byOrder) {
+    // 先看這張單全部都夠不夠；夠才算可以出貨、才佔用庫存（不夠的不佔，讓後面的單先出）
+    const need = new Map<string, number>();
+    for (const l of lines) {
+      const k = `${l.productId}|${l.ownerKey ?? ""}`;
+      need.set(k, (need.get(k) ?? 0) + Math.max(0, l.pending - l.reservedQtyCache));
+    }
+    const ok = [...need.entries()].every(([k, n]) => {
+      const [p, o] = k.split("|");
+      return n <= freeOf(p, o || null) - (used.get(k) ?? 0);
+    });
+    if (!ok) continue;
+    for (const [k, n] of need) used.set(k, (used.get(k) ?? 0) + n);
+    if (want && !lines.some((l) => want.has(l.productId))) continue;
+    orderIds.push(orderId);
+    qty += lines.reduce((a, l) => a + l.pending, 0);
+  }
+  return { orderIds, qty };
+}

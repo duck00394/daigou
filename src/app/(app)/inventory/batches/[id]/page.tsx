@@ -16,6 +16,7 @@ import { OwnerBadge } from "@/components/owner-badge";
 import { batchPaySummary } from "@/server/services/batch-ops";
 import { getMe } from "@/server/me";
 import { listShippingMethods } from "@/server/services/shipping-methods";
+import { readyToShip } from "@/server/services/order-flow";
 import { ProgressBar, ResponsibilityCard, SupplierPayments, Receiving, type PaymentRow } from "./operators";
 import { listOperators } from "@/server/services/operators";
 import { sharePercents } from "@/server/services/ownership";
@@ -134,6 +135,9 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
   const anyCut = b.items.some((i) => i.cancelledQty > 0);
   const joint = b.ownership === "JOINT" ? await tx((t) => jointSettlement(t, b.id)) : null;
   const refundOwed = !open ? pay.paidTwd : anyCut ? pay.paidTwd - pay.totalTwd : 0;
+  // 收貨後接著做：這團的東西到了，有哪些客人訂單可以出貨了（一次出貨在訂單列表）
+  const receivedSome = b.items.some((i) => i.movements.some((m) => m.kind === "RECEIVE"));
+  const readyHere = receivedSome ? await tx((t) => readyToShip(t, { productIds: [...new Set(b.items.map((i) => i.productId))] })) : null;
   return (
     <div className="space-y-4">
       <PageHeader
@@ -142,6 +146,12 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         sub={<span className="flex flex-wrap items-center gap-2"><OwnerBadge k={b.ownership === "JOINT" ? "joint" : b.orderedById} name={b.ownership === "JOINT" ? "合資" : opName(b.orderedById)} ids={ops.map((o) => o.id)} />{isStoreKind(b.supplierRef?.kind) ? <Badge tone="info">實體店購買</Badge> : <StatusBadge map={batchStageLabel} value={batchStage(b)} />}{batchSeries.map((x) => <a key={x.id} href={`/categories/${x.id}`} className="text-ai hover:underline">{x.name}</a>)}{supplierName && supplierName !== b.name && <span>{isStoreKind(b.supplierRef?.kind) ? "店家" : "代購"}：{supplierName}</span>}<span className="text-[12px] text-mute">{b.code}</span></span>}
         actions={<>{open && <LinkButton href={`/reconcile/${b.id}`}>對單</LinkButton>}<LinkButton href={`/purchase${b.categoryId ? `?categoryId=${b.categoryId}` : ""}`}>同活動再開一團</LinkButton><MoreMenu>{open && <CancelBatch id={b.id} />}<DeleteBatchButton label="刪除整團" batchId={b.id} name={b.name} paid={pay.paidTwd} received={received} items={b.items.length} qty={totalQty} payments={b.supplierPayments.filter((p) => p.status !== "VOIDED").length} fees={b.costs.length} goTo="/inventory?tab=batches" /></MoreMenu></>}
       />
+      {readyHere && readyHere.orderIds.length > 0 && (
+        <Link href="/orders?ready=1" className="flex items-center justify-between gap-2 rounded-xl border border-ai bg-ai-soft px-4 py-2.5 text-[14px]" data-testid="batch-ready-ship">
+          <span>這團到的貨，有 <b>{readyHere.orderIds.length}</b> 張客人訂單可以出貨了（{readyHere.qty} 件）</span>
+          <span className="shrink-0 font-semibold text-ai">去出貨</span>
+        </Link>
+      )}
       {(b.supplierOrderNo || b.notes) && (
         <div className="space-y-1 rounded-xl border border-line bg-card px-4 py-2.5 text-[14px]" data-testid="batch-where">
           {b.supplierOrderNo && <div className="flex items-center gap-2"><span className="text-mute">訂單編號</span><span className="num font-semibold break-all" data-testid="batch-order-no">{b.supplierOrderNo}</span><CopyButton text={b.supplierOrderNo} /></div>}

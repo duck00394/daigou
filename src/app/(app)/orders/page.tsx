@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { prisma } from "@/server/db";
+import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { PageHeader, Section, TableWrap, StatusBadge, Twd, Empty, LinkButton, Pager, TagChip, Badge } from "@/components/ui";
 import { FilterBar, FSearch, FSelect, qs } from "@/components/filters";
@@ -9,6 +9,7 @@ import type { Prisma } from "@prisma/client";
 import { getView } from "@/server/view";
 import { AssignAll } from "../sales/assign";
 import { listShippingMethods } from "@/server/services/shipping-methods";
+import { readyToShip } from "@/server/services/order-flow";
 
 export const metadata = { title: "訂單" };
 const SIZE = 50;
@@ -24,8 +25,10 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
   const unassignedWhere: Prisma.OrderWhereInput = { confirmation: { not: "CANCELLED" }, items: { some: {}, none: { ownerKey: { not: null } } } };
   const onlyUnassigned = sp.unassigned === "1";
   const mineWhere: Prisma.OrderWhereInput = onlyUnassigned ? unassignedWhere : vk ? { items: { some: { ownerKey: { in: [vk, "joint", "none"] } } } } : {};
+  // 首頁待辦直接帶過來的清單：到貨了可以出貨的、還沒收齊錢的（勾好可以一次出貨、一次收款）
+  const ready = sp.ready === "1" ? await tx((t) => readyToShip(t, { owner: vk })) : null;
   const where: Prisma.OrderWhereInput = {
-    AND: [mineWhere],
+    AND: [mineWhere, ...(ready ? [{ id: { in: ready.orderIds } }] : []), ...(sp.due === "1" ? [{ confirmation: "CONFIRMED" as const, balanceCache: { gt: 0 } }] : [])],
     ...(sp.q
       ? {
           OR: [
@@ -69,7 +72,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
   const unassignedN = vk || onlyUnassigned ? await prisma.order.count({ where: unassignedWhere }) : 0;
   // 手機：搜尋框下面的快捷篩選
   const quick: [string, string, boolean][] = [
-    ["全部", "/orders", !sp.payment && !sp.status],
+    ["全部", "/orders", !sp.payment && !sp.status && !sp.ready && !sp.due],
     [`未付款 ${unpaidN}`, "/orders?payment=UNPAID", sp.payment === "UNPAID" && !sp.status],
     [`待確認 ${pendingN}`, "/orders?status=PENDING_CONFIRM", sp.status === "PENDING_CONFIRM" && !sp.payment],
   ];
@@ -96,6 +99,14 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
           <AssignAll n={unassignedN} unit="張以前記的訂單" operators={view.ops} acting={vk ?? ""} counted={false} moreHref="/orders?unassigned=1" />
         </div>
       ) : null}
+      {(ready || sp.due === "1") && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ai-soft bg-ai-soft px-3 py-2.5 text-[14px]" data-testid="orders-focus">
+          <span>
+            {ready ? <>到貨了可以出貨的訂單 <b>{ready.orderIds.length}</b> 張（{ready.qty} 件）：勾「全選本頁」再按「出貨」，同一位客人會併成一包。</> : <>還沒收齊錢的訂單：勾「全選本頁」再按「收款」，每張的待收一次記好。</>}
+          </span>
+          <Link href="/orders" className="text-ai underline">看全部訂單</Link>
+        </div>
+      )}
       <Section pad={false}>
         <FilterBar action="/orders">
           <FSearch data-search value={sp.q} placeholder="訂單編號、買家、商品" />
@@ -133,7 +144,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
               const active = o.items.reduce((s, i) => s + i.qty - i.cancelledQtyCache, 0);
               return (
                 <li key={o.id} className="flex gap-2.5 rounded-xl border border-line bg-white p-3" data-testid="order-card">
-                  <span className="pt-0.5"><RowCheck id={o.id} /></span>
+                  <span className="pt-0.5"><RowCheck id={o.id} label={`選取訂單 ${o.orderNo}`} /></span>
                   <Link href={`/orders/${o.id}`} className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="truncate text-[15.5px] font-semibold">{o.buyer.name}</span>
@@ -175,7 +186,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
                 const active = o.items.reduce((s, i) => s + i.qty - i.cancelledQtyCache, 0);
                 return (
                   <tr key={o.id}>
-                    <td><RowCheck id={o.id} /></td>
+                    <td><RowCheck id={o.id} label={`選取訂單 ${o.orderNo}`} /></td>
                     <td className="whitespace-nowrap">
                       <Link href={`/orders/${o.id}`} className="num font-medium text-ai hover:underline">{o.orderNo}</Link>
                       <div className="text-[12px] text-mute">

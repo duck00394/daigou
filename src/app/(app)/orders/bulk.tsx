@@ -102,9 +102,9 @@ export function BulkBar({ groupBuys = [], owners, acting = "", pendingIds = [], 
   );
 }
 
-export function RowCheck({ id }: { id: string }) {
+export function RowCheck({ id, label = "選取訂單" }: { id: string; label?: string }) {
   const c = useContext(SelCtx)!;
-  return <input type="checkbox" aria-label="選取訂單" className="h-4 w-4" checked={c.sel.has(id)} onChange={(e) => c.toggle(id, e.target.checked)} />;
+  return <input type="checkbox" aria-label={label} className="h-4 w-4" checked={c.sel.has(id)} onChange={(e) => c.toggle(id, e.target.checked)} />;
 }
 
 type ShipGroup = { buyerId: string; buyer: string; ok: { id: string; orderNo: string; qty: number }[]; skip: { id: string; orderNo: string; reason: string }[] };

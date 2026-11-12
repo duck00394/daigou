@@ -8,7 +8,7 @@ import { addBatchItem, createBatch } from "@/server/services/purchase";
 import { createReceivingRecord } from "@/server/services/receiving";
 import { createOrder, cancelItemQty, updateItem } from "@/server/services/orders";
 import { addPayment } from "@/server/services/payments";
-import { packState, setPacked, shipOrder, pickedUp, bulkShip, bulkShipPreview, bulkPay, bulkPayPreview } from "@/server/services/order-flow";
+import { packState, setPacked, shipOrder, pickedUp, bulkShip, bulkShipPreview, bulkPay, bulkPayPreview, readyToShip } from "@/server/services/order-flow";
 
 const A = "op_a";
 const B = "op_b";
@@ -133,5 +133,33 @@ describe("訂單列表：一次出貨、一次收款", () => {
     expect(await prisma.payment.count()).toBe(4);
     const after = await prisma.order.findMany({ where: { id: { in: ids } }, select: { paymentStatusCache: true } });
     expect(after.every((o) => o.paymentStatusCache === "PAID")).toBe(true);
+  });
+});
+
+describe("到貨可以出貨的訂單", () => {
+  it("先下單的先分；不夠的那張不算、也不佔貨；看某個人只算跟他訂的；出完就不列", async () => {
+    await stock(A, s.p1.id, 1);
+    const o1 = await tx((t) => createOrder(t, actor, { buyerId: s.b1.id, items: [{ productId: s.p1.id, qty: 1 }] }));
+    const o2 = await tx((t) => createOrder(t, actor, { buyerId: s.b2.id, items: [{ productId: s.p1.id, qty: 1 }] })); // 吉伊只有 1 件 → 先下單的 o1 可以出
+    const o3 = await tx((t) => createOrder(t, actor, { buyerId: s.b3.id, items: [{ productId: s.p2.id, qty: 1 }] })); // 小八沒貨
+    let r = await tx((t) => readyToShip(t, {}));
+    expect(r.orderIds).toEqual([o1.id]);
+    expect(r.qty).toBe(1);
+    // 跟 B 訂的、只有 A 的貨 → 看 B 不算
+    await prisma.orderItem.updateMany({ where: { orderId: o1.id }, data: { ownerKey: B } });
+    r = await tx((t) => readyToShip(t, { owner: B }));
+    expect(r.orderIds).toEqual([]);
+    // o1 用不到 A 的貨（跟 B 訂的），輪到 o2
+    r = await tx((t) => readyToShip(t, {}));
+    expect(r.orderIds).toEqual([o2.id]);
+    await stock(B, s.p1.id, 1);
+    r = await tx((t) => readyToShip(t, { owner: B }));
+    expect(r.orderIds).toEqual([o1.id]);
+    // 只看跟小八有關的：沒有
+    expect((await tx((t) => readyToShip(t, { productIds: [s.p2.id] }))).orderIds).toEqual([]);
+    // 出完就不列
+    await tx((t) => bulkShip(t, actor, { orderIds: [o1.id, o2.id], dedupeKey: "ready-ship-0001" }));
+    expect((await tx((t) => readyToShip(t, {}))).orderIds).toEqual([]);
+    expect(o3).toBeTruthy();
   });
 });
