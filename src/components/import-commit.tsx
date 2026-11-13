@@ -31,7 +31,7 @@ export function CommitBar({ batchId, ready, groups, locked, kind, exportBase }: 
   const router = useRouter();
   return (
     <>
-      <div className="no-print sticky bottom-16 z-20 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-card px-4 py-3 shadow-sm md:bottom-4">
+      <div className="no-print sticky bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-20 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-card px-4 py-3 shadow-sm md:bottom-4">
         <div className="text-sm">
           {locked ? (
             "這個批次已結束。"

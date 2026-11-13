@@ -146,6 +146,7 @@ export function BulkAddGrid({
   const [templates, setTemplates] = useState<Template[]>([]);
   const [rows, setRows] = useState<RowState[]>([blankRow(supplierCurrency)]);
   const [sameBy, setSameBy] = useState<Record<string, string>>({});
+  const [sameQty, setSameQty] = useState("");
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<Result[] | null>(null);
@@ -292,7 +293,7 @@ export function BulkAddGrid({
     items.forEach((i) => (specs[i.characterId] = i.spec ?? null));
     // 選了角色，數量先帶 1（買多件再改）
     const tkey = tid ?? "";
-    const pending = items.map((i) => ({ ...blankRow(supplierCurrency), characterId: i.characterId, spec: i.spec ?? "", qty: "1", hint: "讀取參考價…", loading: true, typeId: tkey }));
+    const pending = items.map((i) => ({ ...blankRow(supplierCurrency), characterId: i.characterId, spec: i.spec ?? "", qty: Number(sameQty) > 0 ? sameQty : "1", hint: "讀取參考價…", loading: true, typeId: tkey }));
     const placed = new Map<string, string>(); // characterId|spec → row key
     setRows((rs) => {
       const kept = replace ? [] : rs.filter((r) => !isBlank(r));
@@ -367,7 +368,7 @@ export function BulkAddGrid({
       return;
     }
     if (!cat) {
-      setRows((rs) => [...rs.filter((r) => !isBlank(r)), { ...blankRow(supplierCurrency), characterId: "__new__", newName: name, qty: "1", typeId }]);
+      setRows((rs) => [...rs.filter((r) => !isBlank(r)), { ...blankRow(supplierCurrency), characterId: "__new__", newName: name, qty: Number(sameQty) > 0 ? sameQty : "1", typeId }]);
       setNewChip(null);
       return;
     }
@@ -844,6 +845,23 @@ export function BulkAddGrid({
         />
         <span className="shrink-0 text-mute">{supplierCurrency === "JPY" ? "日幣" : "元"}</span>
       </label>
+      {/* 每個角色買一樣多：一次把這個品項的每一列數量改掉（不用一列一列按＋） */}
+      <label className="flex items-center gap-2 text-[14px]" data-testid="same-qty">
+        <span className="shrink-0">每個買</span>
+        <input
+          className={`${inputCls} num w-20 text-right`}
+          inputMode="numeric"
+          aria-label="每個買幾個"
+          placeholder="1"
+          value={sameQty}
+          onChange={(e) => {
+            const v = e.target.value.replace(/\D/g, "").slice(0, 4);
+            setSameQty(v);
+            if (v && Number(v) > 0) setRows((rs) => rs.map((r) => (!isBlank(r) && (r.typeId ?? typeId) === typeId ? { ...r, qty: v } : r)));
+          }}
+        />
+        <span className="shrink-0 text-mute">個（下面每一列一起改，之後還可以單獨改）</span>
+      </label>
       {joint && (
         <div className="rounded-xl border border-tone-purple-200 bg-tone-purple-50 p-3" data-testid="joint-owner-box">
           <label className="block text-[13px] font-medium text-ink-2">
@@ -1016,7 +1034,7 @@ export function BulkAddGrid({
       </div>
 
       {/* 6：統計與送出 */}
-      <div className="no-print sticky bottom-16 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-card px-4 py-3 shadow-sm md:bottom-4">
+      <div className="no-print sticky bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-card px-4 py-3 shadow-sm md:bottom-4">
         <div className="text-sm">
           共 <b className="num">{stats.qty}</b> 件　
           {stats.jpy > 0 && <span className="num">{formatJpy(stats.jpy)} </span>}

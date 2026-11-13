@@ -1,3 +1,4 @@
+import { AreaTabs } from "@/components/area-tabs";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { PageHeader, Section } from "@/components/ui";
@@ -14,6 +15,7 @@ export default async function NewOrder({ searchParams }: { searchParams: Promise
   ]);
   return (
     <div>
+      <AreaTabs area="take" current="/orders/new" />
       <PageHeader title="新增訂單" back={{ href: "/orders", label: "訂單" }} sub="手動建單；大量訂單建議用「貼上加單」或「Excel 匯入」" />
       <Section>
         <NewOrderForm groupBuys={gbs.map((g) => ({ id: g.id, name: g.name }))} initialBuyer={buyer} />

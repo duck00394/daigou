@@ -1,3 +1,4 @@
+import { AreaTabs } from "@/components/area-tabs";
 import Link from "next/link";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
@@ -25,6 +26,7 @@ export default async function GroupBuys({ searchParams }: { searchParams: Promis
   const sm = new Map(stats.map((s) => [s.groupBuyId, s]));
   return (
     <div>
+      <AreaTabs area="take" current="/groupbuys" />
       <PageHeader title={sp.closing ? "7 天內截止的代購團" : "代購團"} sub="代購團記錄實際開團與收單；商品分類與採購團分開管理。" actions={<GroupBuyEditButton categories={cats} />} />
       <Section pad={false}>
         {gbs.length === 0 ? (

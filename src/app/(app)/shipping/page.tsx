@@ -2,7 +2,8 @@ import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { inventoryFor } from "@/server/services/mine";
-import { PageHeader, Section, TableWrap, Empty, LinkButton, TagChip } from "@/components/ui";
+import { PageHeader, Section, TableWrap, Empty, LinkButton, TagChip, Badge } from "@/components/ui";
+import { formatTwd } from "@/lib/money";
 import { BuyerShipCard, ShipOwnerButton, ShipmentEdit, type ShipItem } from "./parts";
 import { listOperators } from "@/server/services/operators";
 import { shipOwnerLabels } from "@/server/services/ship-owner";
@@ -32,7 +33,7 @@ export default async function Shipping({ searchParams }: { searchParams: Promise
       />
       <nav className="flex flex-wrap gap-1" aria-label="分頁">
         {[["todo", "待出貨（依買家）"], ["order", "待出貨（依訂單）"], ["done", "出貨紀錄"]].map(([k, l]) => (
-          <Link key={k} href={`/shipping?tab=${k}`} aria-current={tab === k ? "page" : undefined} className={`rounded-lg px-3 py-1.5 text-sm ${tab === k ? "bg-ink text-on-fill" : "bg-card text-ink-2 hover:bg-line-2"}`}>{l}</Link>
+          <Link key={k} href={`/shipping?tab=${k}`} aria-current={tab === k ? "page" : undefined} className={`flex min-h-9 items-center rounded-full border px-3.5 text-[13.5px] transition-colors duration-150 ${tab === k ? "border-ai bg-ai font-medium text-on-fill" : "border-line bg-card text-ink-2 hover:bg-line-2"}`}>{l}</Link>
         ))}
       </nav>
       {tab === "done" ? <DoneTab vk={vk} /> : <TodoTab byOrder={tab === "order"} sp={sp} vk={vk} />}
@@ -93,6 +94,13 @@ async function TodoTab({ byOrder, sp, vk }: { byOrder: boolean; sp: Record<strin
   const waitGroups = list.filter((g) => canOf(g) === 0);
   const readyQty = readyGroups.reduce((a, g) => a + canOf(g), 0);
   const wholeN = new Set(list.flatMap((g) => g.items.filter((i) => readyOrders.has(i.orderId)).map((i) => i.orderId))).size;
+  // 每位客人（或每張單）一眼看出：全部可出／部分可出／還沒到，和錢收齊了沒（出貨不會因為沒付錢擋住，只是提醒）
+  const stateOf = (g: (typeof list)[number]) => {
+    const pending = g.items.reduce((a, i) => a + i.qty - i.cancelledQtyCache - i.shippedQtyCache, 0);
+    const can = Math.min(canOf(g), pending);
+    const owe = [...new Map(g.items.map((i) => [i.orderId, i.order.balanceCache])).values()].reduce((a, b) => a + b, 0);
+    return { pending, can, owe };
+  };
   const card = (g: (typeof list)[number]) => (
     <Section
       key={g.key}
@@ -102,7 +110,16 @@ async function TodoTab({ byOrder, sp, vk }: { byOrder: boolean; sp: Record<strin
           {g.buyer.tags.map((t) => <TagChip key={t.id} name={t.tag.name} color={t.tag.color} />)}
         </span>
       }
-      actions={<span className="text-[13px] text-mute">{g.sub ? `${g.sub}｜` : ""}可出 {canOf(g)} 件</span>}
+      actions={(() => {
+        const st = stateOf(g);
+        return (
+          <span className="flex flex-wrap items-center justify-end gap-1.5 text-[13px] text-mute" data-testid="ship-state">
+            {g.sub && <span>{g.sub}</span>}
+            {st.can >= st.pending ? <Badge tone="good">全部可出 {st.can} 件</Badge> : st.can > 0 ? <Badge tone="info">部分可出 {st.can}／{st.pending} 件</Badge> : <Badge tone="muted">還沒到 {st.pending} 件</Badge>}
+            {st.owe > 0 && <Badge tone="warn">還沒付清 {formatTwd(st.owe)}</Badge>}
+          </span>
+        );
+      })()}
     >
       <BuyerShipCard
         buyerId={g.buyer.id}

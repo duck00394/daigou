@@ -212,7 +212,7 @@ export function NewOrderForm({ groupBuys, initialBuyer }: { groupBuys: { id: str
         </div>
       )}
       <TextArea label={mode === "APPEND" ? "追加備註" : "訂單備註"} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
-      <div className="sticky bottom-16 z-20 flex items-center justify-between gap-3 rounded-xl border border-line bg-card px-4 py-3 shadow-sm md:bottom-4">
+      <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-20 flex items-center justify-between gap-3 rounded-xl border border-line bg-card px-4 py-3 shadow-sm md:bottom-4">
         <span className="text-sm">
           {mode === "APPEND" ? "追加金額" : "應收"}：<b className="num text-[17px]">{formatTwd(total)}</b>
         </span>

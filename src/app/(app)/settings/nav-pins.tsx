@@ -1,10 +1,10 @@
 "use client";
 // 常用頁面（每個經營者各自一份）：勾的放在「每天用」與手機底部，數字是順序
-// 首頁固定第一個、＋新增採購固定在中間；沒勾的頁面一樣在「偶爾用」「設定與資料」裡
+// 首頁固定第一個、採購固定第二個；沒勾的頁面回到自己那一組（帳務管理、商品與客人、客人訂購、分析與系統）
 import { useState } from "react";
 import { Button, useRun } from "@/components/client";
 import { setNavPinsAction } from "@/actions/ops";
-import { BOTTOM_MAX, DEFAULT_PINS, PINNABLE, bottomTabs } from "@/lib/nav-items";
+import { BOTTOM_PINS, DEFAULT_PINS, PINNABLE, bottomTabs } from "@/lib/nav-items";
 
 export function NavPins({ pins, ordersOn, meName }: { pins: string[] | null; ordersOn: boolean; meName: string | null }) {
   const items = PINNABLE.filter((n) => ordersOn || !n.orders);
@@ -47,9 +47,9 @@ export function NavPins({ pins, ordersOn, meName }: { pins: string[] | null; ord
       </p>
       <div className="border-b border-line-2">
         {fixed("首頁", "固定第一個")}
+        {fixed("採購（新增採購）", "固定第二個")}
         {sel.map((h, i) => (
           <div key={h}>
-            {i === 2 && fixed("＋ 新增採購", "固定在中間")}
             <div className={row} data-testid="pin-row" data-href={h}>
               <label className="flex min-h-9 flex-1 cursor-pointer items-center gap-3">
                 <input type="checkbox" className="peer sr-only" checked onChange={() => toggle(h)} aria-label={label(h)} />
@@ -67,20 +67,19 @@ export function NavPins({ pins, ordersOn, meName }: { pins: string[] | null; ord
             </div>
           </div>
         ))}
-        {sel.length < 2 && fixed("＋ 新增採購", "固定在中間")}
         {unpicked.map((n) => (
           <label key={n.href} className={`${row} cursor-pointer text-ink-2`} data-testid="pin-row" data-href={n.href}>
             <input type="checkbox" className="peer sr-only" checked={false} onChange={() => toggle(n.href)} aria-label={n.label} />
             <span className={`${box(false)} peer-focus-visible:ring-2 peer-focus-visible:ring-ai`} aria-hidden />
             <span className="flex-1">{n.label}</span>
-            <span className="num w-14 text-center text-mute">–</span>
+            <span className="w-14 text-center text-[12.5px] text-mute">不放</span>
           </label>
         ))}
       </div>
       <p className="mt-2 text-[13px] text-ink-2" data-testid="pin-bottom">
-        手機底部：{bottom.map((b) => (b.main ? `＋${b.label}` : b.label)).join("、")}
+        手機底部：{[...bottom.map((b) => (b.main ? `＋${b.label}` : b.label)), "更多"].join("、")}
       </p>
-      {sel.length > BOTTOM_MAX - 2 && <p className="text-[12.5px] text-mute">第 {BOTTOM_MAX - 1} 個以後只放在電腦側邊欄的「每天用」，手機在「全部功能」裡。</p>}
+      {sel.length > BOTTOM_PINS && <p className="text-[12.5px] text-mute">第 {BOTTOM_PINS + 1} 個以後只放在電腦側邊欄的「每天用」，手機在「更多」裡。</p>}
       <div className="mt-3 flex items-center justify-between gap-2">
         <Button
           variant="ghost"

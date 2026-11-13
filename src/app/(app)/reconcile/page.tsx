@@ -1,4 +1,5 @@
 // 對單：一團一團跟代購確認買到多少、砍了哪些、哪些還沒回
+import { AreaTabs } from "@/components/area-tabs";
 import { getView, inView } from "@/server/view";
 import { refundsOwed } from "@/server/services/batch-ops";
 import { formatTwd } from "@/lib/money";
@@ -62,6 +63,7 @@ export default async function ReconcilePage({ searchParams }: { searchParams: Pr
   );
   return (
     <div className="space-y-3">
+      <AreaTabs area="money" current="/reconcile" />
       <PageHeader title="對單" sub="跟代購確認：買到幾件、砍了哪些、哪些還沒回"  />
       <div className="rounded-xl border border-line bg-card p-3">
         <div className="flex items-baseline justify-between text-[15px]">

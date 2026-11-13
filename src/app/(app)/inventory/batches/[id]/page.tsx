@@ -192,7 +192,13 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
           <div><div className="text-[12px] text-mute">已付</div><div className="num text-[20px] font-semibold text-good">{formatTwd(pay.paidTwd)}</div></div>
           <div><div className="text-[12px] text-mute">還要付</div><div className={`num text-[20px] font-semibold ${pay.dueTwd ? "text-warn" : ""}`} data-testid="batch-due">{formatTwd(pay.dueTwd)}</div></div>
         </div>
-        <div className="mt-1 text-[13px] text-mute">{totalQty} 件，已到 {received}{feeTotal > 0 ? `，含運費等 ${formatTwd(feeTotal)}` : ""}</div>
+        <div className="mt-1 text-[13px] text-mute">{totalQty} 件，已到 {received}{totalQty > received ? <span className="text-warn">，還差 {totalQty - received}</span> : ""}{feeTotal > 0 ? `，含運費等 ${formatTwd(feeTotal)}` : ""}</div>
+        {/* 收貨進度：訂的 vs 收到的 */}
+        {totalQty > 0 && (
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-line-2" role="progressbar" aria-label="收貨進度" aria-valuemin={0} aria-valuemax={totalQty} aria-valuenow={Math.min(received, totalQty)} data-testid="batch-recv-bar">
+            <div className={`h-full rounded-full ${received >= totalQty ? "bg-good" : "bg-ai"}`} style={{ width: `${Math.min(100, Math.round((received / totalQty) * 100))}%` }} />
+          </div>
+        )}
         {open && (
           <div className="mt-3 grid grid-cols-3 gap-2" aria-label="常用動作">
             <ReceiveAllButton batchId={b.id} outstanding={Math.max(0, totalQty - received)} operators={ops.filter((o) => o.active)} defaultReceiver={b.receivingResponsibleById ?? b.orderedById ?? null} doneLabel={isStoreKind(b.supplierRef?.kind) ? "實體店買的" : "全部到手了"} due={pay.dueTwd} payer={b.ownership === "JOINT" ? me : (b.orderedById ?? me)} />

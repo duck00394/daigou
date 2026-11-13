@@ -1,3 +1,4 @@
+import { AreaTabs } from "@/components/area-tabs";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/server/db";
@@ -20,6 +21,7 @@ export default async function PastePage({ searchParams }: { searchParams: Promis
     const recent = await prisma.importBatch.findMany({ where: { kind: "LINE" }, orderBy: { createdAt: "desc" }, take: 8, include: { _count: { select: { rows: true } } } });
     return (
       <div className="space-y-4">
+        <AreaTabs area="take" current="/paste" />
         <PageHeader title="貼上加單" sub="一次貼上多位買家的訊息；系統會辨識買家、商品與數量，確認後才建立訂單。" />
         <Section>
           <PasteInput groupBuys={groupBuys} />

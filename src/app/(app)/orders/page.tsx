@@ -1,3 +1,4 @@
+import { AreaTabs } from "@/components/area-tabs";
 import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
@@ -10,21 +11,13 @@ import { getView } from "@/server/view";
 import { AssignAll } from "../sales/assign";
 import { listShippingMethods } from "@/server/services/shipping-methods";
 import { readyToShip } from "@/server/services/order-flow";
+import { plainStatus } from "@/lib/order-plain";
+import { Icon } from "@/components/icons";
+import { btnCls } from "@/lib/btn";
+import { formatTwd } from "@/lib/money";
 
 export const metadata = { title: "訂單" };
 
-type Tone = "neutral" | "info" | "good" | "warn" | "bad" | "muted";
-/** 一張單只講一句話：取消／待確認／可以出貨／等貨中／已出貨／完成，再補一句錢還沒收齊（三個狀態欄的資料不變，只是合成一個白話說法） */
-function plainStatus(o: { confirmation: string; statusCache: string; shipStatusCache: string; balanceCache: number }, ready: boolean): [string, Tone] {
-  if (o.confirmation === "CANCELLED" || o.statusCache === "CANCELLED") return ["已取消", "muted"];
-  if (o.confirmation === "PENDING") return ["待確認", "warn"];
-  if (o.statusCache === "COMPLETED") return ["完成", "muted"];
-  const owe = o.balanceCache > 0 ? "・還沒付清" : "";
-  if (ready) return [`可以出貨${owe}`, "good"];
-  if (o.shipStatusCache === "SHIPPED" || o.shipStatusCache === "DELIVERED") return [`${o.shipStatusCache === "DELIVERED" ? "已取貨" : "已出貨"}${owe}`, "neutral"];
-  if (o.shipStatusCache === "PARTIAL") return [`出了一部分${owe}`, "neutral"];
-  return [`等貨中${owe}`, "neutral"];
-}
 const SIZE = 50;
 
 export default async function Orders({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
@@ -98,15 +91,23 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
   const base = `/orders${qs({ ...sp, page: undefined })}`;
   return (
     <div>
-      <PageHeader
-        title="訂單"
-        actions={
-          <>
-            <LinkButton href="/paste">貼上加單</LinkButton>
-            <LinkButton href="/orders/new" primary>新增訂單</LinkButton>
-          </>
-        }
-      />
+      <AreaTabs area="take" current="/orders" />
+      {/* 手機：標題和「新增訂單」一行，不再多一行返回、說明 */}
+      <div className="mb-3 flex items-center justify-between gap-2 md:hidden">
+        <h1 className="text-[20px] leading-tight font-semibold text-ink">訂單</h1>
+        <LinkButton href="/orders/new" primary>＋ 新增訂單</LinkButton>
+      </div>
+      <div className="max-md:hidden">
+        <PageHeader
+          title="訂單"
+          actions={
+            <>
+              {/* 貼上加單、賣給客人、開團在上面「接單」那一排 */}
+              <LinkButton href="/orders/new" primary>新增訂單</LinkButton>
+            </>
+          }
+        />
+      </div>
       {onlyUnassigned ? (
         <div className="mb-3 rounded-xl border border-tone-amber-300-2 bg-warn-soft px-3 py-2 text-[14px] text-warn" data-testid="orders-unassigned-list">
           只列還沒分是跟誰訂的 {unassignedN} 張（含待確認、已經給了的）。勾選後在下面選「分給誰」。已經給了的會照扣到誰的貨自動分。
@@ -160,30 +161,50 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
         ) : (
           <>
           {/* 手機：一筆一張卡片，不用往右拉 */}
-          <ul className="space-y-2 px-3 py-2 md:hidden" data-testid="order-cards">
+          {/* 手機：一張單一段（不再包一層卡片），段跟段之間一條線 */}
+          <ul className="divide-y divide-line md:hidden" data-testid="order-cards">
             {orders.map((o) => {
-              const active = o.items.reduce((s, i) => s + i.qty - i.cancelledQtyCache, 0);
+              const live = o.items.filter((i) => i.qty > i.cancelledQtyCache);
+              const active = live.reduce((s, i) => s + i.qty - i.cancelledQtyCache, 0);
+              const [st, tone] = plainStatus(o, readySet.has(o.id));
+              const net = o.paidCache - o.refundedCache;
+              const acts = o.confirmation === "PENDING" || readySet.has(o.id) || (o.confirmation === "CONFIRMED" && o.balanceCache > 0);
               return (
-                <li key={o.id} className="flex gap-2.5 rounded-xl border border-line bg-card p-3" data-testid="order-card">
-                  <span className="pt-0.5"><RowCheck id={o.id} label={`選取訂單 ${o.orderNo}`} /></span>
-                  <div className="min-w-0 flex-1">
-                  <Link href={`/orders/${o.id}`} className="block">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-[15.5px] font-semibold">{o.buyer.name}</span>
-                      <span className="shrink-0 text-[15px] font-semibold">
-                        {o.balanceCache > 0 ? <Twd v={o.balanceCache} className="text-warn" /> : o.refundDueCache > 0 ? <span className="text-warn">應退 {o.refundDueCache.toLocaleString()}</span> : o.confirmation === "CANCELLED" ? <span className="text-mute">無</span> : <span className="text-[13px] text-good">已收齊</span>}
+                <li key={o.id} className="py-1" data-testid="order-card">
+                  {/* 每張單同一個順序：買家、狀態 → 買了什麼 → 待收 → 訂單編號、日期 → 下一步按鈕（按鈕在連結外面，按了不會跳頁） */}
+                  <div className="flex gap-2.5 px-4 pt-3">
+                    <span className="pt-0.5"><RowCheck id={o.id} label={`選取訂單 ${o.orderNo}`} /></span>
+                    <Link href={`/orders/${o.id}`} className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="truncate text-[16px] font-semibold">{o.buyer.name}</span>
+                        <span className="flex shrink-0 items-center gap-1"><Badge tone={tone}>{st}</Badge><span aria-hidden className="text-mute"><Icon name="chevronRight" /></span></span>
                       </span>
-                    </div>
-                    <div className="text-[12.5px] text-mute">
-                      <span className="num">{o.orderNo}</span>，{fmtDate(o.orderedAt)}，{orderSource[o.source]}{o.groupBuy ? `，${o.groupBuy.name}` : ""}{o.parentOrderId ? "，追加單" : ""}
-                    </div>
-                    <div className="mt-1 line-clamp-2 text-[13.5px] text-ink-2">{o.items.map((i) => `${i.productNameSnapshot}×${i.qty - i.cancelledQtyCache}`).join("、")}（共 {active} 件）</div>
-                  </Link>
-                  {/* 一個白話狀態＋下一步按鈕（按鈕在連結外面，按了不會跳頁） */}
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    {(() => { const [t, tone] = plainStatus(o, readySet.has(o.id)); return <Badge tone={tone}>{t}</Badge>; })()}
-                    <RowActions id={o.id} pendingConfirm={o.confirmation === "PENDING"} ready={readySet.has(o.id)} due={o.confirmation === "CONFIRMED" && o.balanceCache > 0} methods={shipMethods} />
+                      <span className="mt-1 line-clamp-2 text-[14px] text-ink-2">{live.map((i) => `${i.productNameSnapshot}×${i.qty - i.cancelledQtyCache}`).join("、") || "無"}<span className="text-mute">（共 {active} 件）</span></span>
+                      <span className="mt-1.5 flex items-baseline justify-between gap-3" data-testid="order-money">
+                        {o.confirmation === "CANCELLED" ? (
+                          <span className="text-[14px] text-mute">已取消</span>
+                        ) : o.refundDueCache > 0 ? (
+                          <span className="num text-[16px] font-semibold text-warn">應退 {formatTwd(o.refundDueCache)}</span>
+                        ) : o.balanceCache > 0 ? (
+                          <span className="num text-[16px] font-semibold text-warn">待收 {formatTwd(o.balanceCache)}</span>
+                        ) : (
+                          <span className="text-[14px] text-good">已收齊</span>
+                        )}
+                        {o.confirmation !== "CANCELLED" && <span className="num shrink-0 text-[12.5px] text-mute">應收 {formatTwd(o.receivableCache)}，已收 {formatTwd(net)}</span>}
+                      </span>
+                      <span className="mt-1 flex flex-wrap gap-x-2 text-[12px] text-mute">
+                        <span className="num">{o.orderNo}</span>
+                        <span>{fmtDate(o.orderedAt)}</span>
+                        <span>{orderSource[o.source]}{o.groupBuy ? `，${o.groupBuy.name}` : ""}{o.parentOrderId ? "，追加單" : ""}</span>
+                      </span>
+                    </Link>
                   </div>
+                  <div className="px-4 pt-2.5 pb-3 pl-11">
+                    {acts ? (
+                      <RowActions wide id={o.id} pendingConfirm={o.confirmation === "PENDING"} ready={readySet.has(o.id)} due={o.confirmation === "CONFIRMED" && o.balanceCache > 0} methods={shipMethods} />
+                    ) : (
+                      <Link href={`/orders/${o.id}`} className={`${btnCls("default")} w-full`}>查看</Link>
+                    )}
                   </div>
                 </li>
               );
@@ -199,6 +220,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
                 <th>商品</th>
                 <th>狀態</th>
                 <th className="text-right">應收</th>
+                <th className="text-right">已收</th>
                 <th className="text-right">待收</th>
                 <th><span className="sr-only">下一步</span></th>
               </tr>
@@ -231,6 +253,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
                     </td>
                     <td className="whitespace-nowrap" title={`${orderStatus[o.statusCache]?.[0] ?? ""}・${paymentStatus[o.paymentStatusCache]?.[0] ?? ""}・${shipStatus[o.shipStatusCache]?.[0] ?? ""}`}>{(() => { const [t, tone] = plainStatus(o, readySet.has(o.id)); return <Badge tone={tone}>{t}</Badge>; })()}</td>
                     <td className="text-right"><Twd v={o.receivableCache} /></td>
+                    <td className="text-right">{o.paidCache - o.refundedCache > 0 ? <Twd v={o.paidCache - o.refundedCache} className="text-good" /> : <span className="text-mute">0</span>}</td>
                     <td className="text-right">{o.balanceCache > 0 ? <Twd v={o.balanceCache} className="font-medium text-warn" /> : o.refundDueCache > 0 ? <Badge tone="warn">應退 {o.refundDueCache}</Badge> : <span className="text-mute">0</span>}</td>
                     <td><RowActions id={o.id} pendingConfirm={o.confirmation === "PENDING"} ready={readySet.has(o.id)} due={o.confirmation === "CONFIRMED" && o.balanceCache > 0} methods={shipMethods} /></td>
                   </tr>

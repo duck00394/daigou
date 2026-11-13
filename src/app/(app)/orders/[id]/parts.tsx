@@ -42,10 +42,10 @@ export function CancelOrderButton({ orderId, orderNo }: { orderId: string; order
   );
 }
 
-export function ConfirmOrderButton({ orderId, small, label = "確認訂單" }: { orderId: string; small?: boolean; label?: string }) {
+export function ConfirmOrderButton({ orderId, small, wide, label = "確認訂單" }: { orderId: string; small?: boolean; wide?: boolean; label?: string }) {
   const { run, pending } = useRun();
   return (
-    <Button variant="primary" small={small} loading={pending} onClick={() => run(() => updateOrderMetaAction(orderId, { confirmation: "CONFIRMED" }), { success: "已確認訂單" })}>
+    <Button variant="primary" small={small} className={wide ? "w-full" : undefined} loading={pending} onClick={() => run(() => updateOrderMetaAction(orderId, { confirmation: "CONFIRMED" }), { success: "已確認訂單" })}>
       {label}
     </Button>
   );

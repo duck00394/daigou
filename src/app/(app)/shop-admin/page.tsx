@@ -1,3 +1,4 @@
+import { AreaTabs } from "@/components/area-tabs";
 import Link from "next/link";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
@@ -38,6 +39,7 @@ export default async function ShopAdmin() {
 
   return (
     <div className="space-y-4">
+      <AreaTabs area="take" current="/shop-admin" />
       <PageHeader title="訂購頁（客人下單）" sub="客人用訪客或 LINE 登入自己下單，訂單會直接進「訂單」，也會算進庫存的客人訂" actions={<Link href="/shop-pay" className="text-[14px] text-ai underline">訂購頁付款</Link>} />
 
       <Section title="訂購頁網址">

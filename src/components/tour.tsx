@@ -3,12 +3,15 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+/** 同一個框可能有手機版、電腦版兩份（另一份藏起來），找看得到的那一個 */
+const visibleEl = (sel: string) => [...document.querySelectorAll<HTMLElement>(sel)].find((e) => e.getClientRects().length > 0) ?? null;
+
 type Step = { path: string; target?: string; title: string; text: string };
 
 export const TOUR: Step[] = [
   { path: "/", title: "歡迎使用代購帳房", text: "這個教學會帶你走一次：買東西 → 跟代購對單 → 到貨 → 賣給客人 → 看賺多少。大約一分鐘，隨時可以按「結束教學」。" },
-  { path: "/", target: "[data-tour=home-actions]", title: "最常用的兩個按鈕", text: "跟代購買了東西，按「新增採購」記下來；有客人要買，按「賣給客人」。" },
-  { path: "/", target: "[data-tour=home-stats]", title: "錢一眼看", text: "還要付代購多少、代購要退你多少、這個月賺多少、客人預訂預估可賺多少。點數字可以看是哪幾筆。" },
+  { path: "/", target: "[data-tour=home-actions]", title: "快速操作", text: "跟代購買了東西，按「採購」記下來；有客人要買，按「賣給客人」或「接單」。其他地方在選單（手機在下面的「更多」）。" },
+  { path: "/", target: "[data-tour=home-stats]", title: "本月重點", text: "還要付代購多少、這個月賺多少、代購要退你多少、客人預訂預估可賺多少。點一列可以看是哪幾筆。" },
   { path: "/", target: "[data-tour=home-todo]", title: "待辦事項", text: "還沒對單、還沒付清、到貨了還沒給客人的，都會列在這裡。點一下直接去處理。" },
   { path: "/purchase", target: "[data-tour=buy-series]", title: "新增採購：先選系列", text: "系列就是一個活動或主題，例如 ANA、萬聖節。沒有的話按「＋ 新系列」。" },
   { path: "/purchase", target: "#pick-supplier", title: "選代購", text: "按這裡選跟哪個代購買的，可以打字找；沒有的話清單最下面可以新增。訂單編號、在哪訂的也可以順便填。" },
@@ -19,7 +22,7 @@ export const TOUR: Step[] = [
   { path: "/sell", title: "賣給客人", text: "選系列，在角色旁邊填數量。手上有貨的直接賣掉；沒貨的會記成客人預訂，到貨後在「出貨」交給客人。" },
   { path: "/sales", target: "[data-tour=sales-top]", title: "賺多少", text: "每個月賣了多少、成本多少、賺多少。上面還有客人預訂預估可賺。賣錯了可以「更正」或「作廢」，庫存會自動回來。" },
   { path: "/categories", target: "[data-tour=series-list]", title: "系列", text: "點一個系列，可以看這個系列總共要付代購多少、已付多少、全部賣掉預估可賺多少，還有每個角色有幾隻、每隻成本。" },
-  { path: "/", title: "教學結束", text: "看不懂的名詞，到「全部功能 › 名詞說明」查。想再看一次教學，在「全部功能 › 新手教學」。" },
+  { path: "/", title: "教學結束", text: "看不懂的名詞，到選單的「名詞說明」查（手機在下面的「更多」）。想再看一次教學，在「更多 › 新手教學」。" },
 ];
 
 const KEY = "dg-tour-step";
@@ -82,7 +85,7 @@ export function Tour() {
     let tries = 0;
     let timer: ReturnType<typeof setTimeout>;
     const find = () => {
-      const el = document.querySelector(s.target!);
+      const el = visibleEl(s.target!);
       if (el) {
         el.scrollIntoView({ block: "center" });
         setTimeout(() => setRect(el.getBoundingClientRect()), 250);
@@ -91,7 +94,7 @@ export function Tour() {
     };
     find();
     const update = () => {
-      const el = document.querySelector(s.target!);
+      const el = visibleEl(s.target!);
       if (el) setRect(el.getBoundingClientRect());
     };
     window.addEventListener("resize", update);

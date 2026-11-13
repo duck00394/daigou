@@ -5,6 +5,7 @@ import { tx } from "@/server/db";
 import { seriesCostCompare, type CostRow } from "@/server/services/series-cost";
 import { Empty } from "@/components/ui";
 import { formatTwd } from "@/lib/money";
+import { CostSelect } from "./cost-filters";
 
 type SP = { char?: string; type?: string; series?: string; calc?: string; scope?: string; sort?: string };
 
@@ -58,44 +59,42 @@ export async function CostCompare({ sp, owner }: { sp: SP; owner: string }) {
 
   return (
     <div className="space-y-3" data-testid="cost-compare">
-      {/* 角色：一次看一個角色在各系列的成本 */}
-      <nav aria-label="角色" className="flex gap-1.5 overflow-x-auto pb-1" data-testid="cost-chars">
-        {chars.map((c) => (
-          <Link key={c.name} href={link({ char: c.name })} aria-current={char === c.name ? "page" : undefined} className={chip(char === c.name)}>
-            {c.name}<span className="ml-1 text-[12px] opacity-75">{c.series.size}</span>
-          </Link>
-        ))}
-        <Link href={link({ char: "all" })} aria-current={!char ? "page" : undefined} className={chip(!char)}>全部角色</Link>
-      </nav>
+      {/* 角色：一次看一個角色在各系列的成本。手機往下看結果時這一排黏在上面，換角色不用捲回去 */}
+      <div className="sticky top-(--mobile-header-h) z-20 -mx-3 bg-paper/95 px-3 py-1.5 sm:-mx-5 sm:px-5 backdrop-blur md:static md:mx-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none">
+        <nav aria-label="角色" className="flex gap-1.5 overflow-x-auto pb-1" data-testid="cost-chars">
+          {chars.map((c) => (
+            <Link key={c.name} href={link({ char: c.name })} scroll={false} aria-current={char === c.name ? "page" : undefined} className={chip(char === c.name)}>
+              {c.name}<span className="ml-1 text-[12px] opacity-75">{c.series.size}</span>
+            </Link>
+          ))}
+          <Link href={link({ char: "all" })} scroll={false} aria-current={!char ? "page" : undefined} className={chip(!char)}>全部角色</Link>
+        </nav>
+      </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex overflow-hidden rounded-lg border border-line" role="group" aria-label="成本算法">
-          <Link href={link({ calc: undefined })} className={seg(full)}>含運費、關稅</Link>
-          <Link href={link({ calc: "unit" })} className={seg(!full)}>只看買價</Link>
-        </span>
-        <span className="inline-flex overflow-hidden rounded-lg border border-line" role="group" aria-label="資料範圍">
-          <Link href={link({ scope: undefined })} className={seg(!est)}>確定的</Link>
-          <Link href={link({ scope: "est" })} className={seg(est)}>含還沒確認的</Link>
-        </span>
-        <form action="/categories" method="get" className="flex flex-wrap items-center gap-2">
-          <input type="hidden" name="view" value="cost" />
-          {sp.char && <input type="hidden" name="char" value={sp.char} />}
-          {sp.calc && <input type="hidden" name="calc" value={sp.calc} />}
-          {sp.scope && <input type="hidden" name="scope" value={sp.scope} />}
-          <select name="type" defaultValue={sp.type ?? ""} aria-label="品項" className="min-h-9 rounded-lg border border-field bg-card px-2 text-[14px] text-ink">
-            <option value="">全部品項</option>
-            {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
-          <select name="series" defaultValue={sp.series ?? ""} aria-label="系列" className="min-h-9 max-w-[12rem] rounded-lg border border-field bg-card px-2 text-[14px] text-ink">
-            <option value="">全部系列</option>
-            {seriesList.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-          </select>
-          <select name="sort" defaultValue={sp.sort ?? ""} aria-label="排序" className="min-h-9 rounded-lg border border-field bg-card px-2 text-[14px] text-ink">
-            <option value="">每隻成本：高到低</option>
-            <option value="asc">每隻成本：低到高</option>
-          </select>
-          <button className="min-h-9 rounded-lg bg-ai px-3 text-[14px] font-medium text-on-fill">套用</button>
-        </form>
+      {/* 常用條件：品項、排序（選了就套用），兩個切換；不常用的「哪個系列」收在更多條件 */}
+      <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:items-center">
+          <CostSelect name="type" label="品項" value={sp.type ?? ""} allLabel="全部品項" options={types.map((t) => [t.id, t.name])} className="md:w-auto" />
+          <CostSelect name="sort" label="排序" value={sp.sort ?? ""} allLabel="成本高到低" options={[["asc", "成本低到高"]]} className="md:w-auto" />
+          <span className="col-span-2 flex flex-wrap gap-2">
+            <span className="inline-flex overflow-hidden rounded-lg border border-line" role="group" aria-label="成本算法">
+              <Link href={link({ calc: undefined })} scroll={false} className={`${seg(full)} whitespace-nowrap`}>含運費、關稅</Link>
+              <Link href={link({ calc: "unit" })} scroll={false} className={`${seg(!full)} whitespace-nowrap`}>只看買價</Link>
+            </span>
+            <span className="inline-flex overflow-hidden rounded-lg border border-line" role="group" aria-label="資料範圍">
+              <Link href={link({ scope: undefined })} scroll={false} className={`${seg(!est)} whitespace-nowrap`}>確定的</Link>
+              <Link href={link({ scope: "est" })} scroll={false} className={`${seg(est)} whitespace-nowrap`}>含還沒確認的</Link>
+            </span>
+          </span>
+        </div>
+        <details className="group" open={!!sp.series || undefined}>
+          <summary className="inline-flex min-h-9 cursor-pointer list-none items-center text-[13.5px] text-ai [&::-webkit-details-marker]:hidden">
+            更多條件{sp.series ? "（已選系列）" : ""}
+          </summary>
+          <div className="mt-1.5 max-w-sm">
+            <CostSelect name="series" label="系列" value={sp.series ?? ""} allLabel="全部系列" options={seriesList.map(([id, name]) => [id, name])} className="w-full" />
+          </div>
+        </details>
       </div>
 
       {groups.length === 0 ? (

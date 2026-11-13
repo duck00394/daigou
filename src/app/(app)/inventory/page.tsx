@@ -34,6 +34,7 @@ import { batchReconcile } from "@/server/services/reconcile";
 import { OwnerDue } from "@/components/owner-due";
 import { countSets } from "@/lib/sets";
 import { stockLeft } from "@/server/services/stock-left";
+import { AreaTabs } from "@/components/area-tabs";
 
 export const metadata = { title: "庫存與採購" };
 
@@ -53,6 +54,8 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
   const owner = view.key === "all" ? "" : view.key; // 現在看誰的（全部功能裡切換）
   return (
     <div className="space-y-4">
+      {/* 從「帳務 › 付代購」進來的：上面一排帳務分頁，切回收款、對單不用回選單 */}
+      {tab === "batches" && sp.pay === "due" && <div className="-mb-4"><AreaTabs area="money" current="/inventory?tab=batches&open=0&pay=due" /></div>}
       <PageHeader title={tab === "batches" ? "採購團、收貨" : "庫存"} sub={tab === "batches" ? "每一次跟代購下單、付款、到貨" : tab === "stock" ? "手上有多少、還會到多少、客人訂了多少" : undefined} actions={<><LinkButton href="/purchase" primary small>＋ 新增採購</LinkButton><LinkButton href="/api/export/inventory" small>匯出</LinkButton></>} />
       <NavSelect label="頁面" hideLabel options={TABS.map(([k, l]) => ({ label: l, href: `/inventory?tab=${k}` }))} current={`/inventory?tab=${tab}`} />
       {tab === "stock" && <StockTab q={sp.q} only={sp.only} cat={sp.cat} type={sp.type} owner={owner} kind={sp.kind} v={sp.v} hideUnsure={sp.only === "unsure" ? sp.unsure === "0" : sp.unsure !== "1"} />}
@@ -271,7 +274,15 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
       {only === "short" && <p className="rounded-xl border border-tone-red-200-3 bg-bad-soft px-3 py-2 text-[14px] text-bad" data-testid="stock-short-note">只列客人訂的比庫存多的（庫存是負的）：要再買，或跟客人說少了。補貨或取消預訂後就會自動消失。</p>}
       {only === "unassigned" && <p className="rounded-xl border border-line bg-card px-3 py-2 text-[14px] text-ink-2">只列還有預訂沒分是跟誰訂的角色。點「客人訂」的數字，每一筆選跟誰訂的。</p>}
       {rows.length > 0 && (
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* 每一欄是什麼：可以賣的就是「庫存」那一欄 */}
+          <p className="flex min-w-0 flex-wrap gap-x-3 gap-y-0.5 text-[12.5px] text-mute" data-testid="stock-legend">
+            <span><b className="font-medium text-ink">庫存</b>＝還能賣的（現有＋一定到－客人訂）</span>
+            <span><span className="text-info">客人訂</span>＝已留給客人</span>
+            <span><span className="text-good">一定到</span>＝買到還沒到</span>
+            {!hideUnsure && <span><span className="text-warn">不一定</span>＝等代購確認</span>}
+            <span>自留＝留給自己不賣</span>
+          </p>
           <Link href={unsureHref} scroll={false} className="rounded-lg border border-line bg-card px-3 py-1.5 text-[13px] text-ai" data-testid="unsure-toggle">{hideUnsure ? "顯示「不一定」" : "隱藏「不一定」"}</Link>
         </div>
       )}

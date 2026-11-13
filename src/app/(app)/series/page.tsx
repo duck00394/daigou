@@ -1,3 +1,4 @@
+import { AreaTabs } from "@/components/area-tabs";
 import Link from "next/link";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
@@ -14,6 +15,7 @@ export default async function SeriesList() {
   });
   return (
     <div>
+      <AreaTabs area="catalog" current="/series" />
       <PageHeader title="系列與角色" sub="IP／系列下的角色名單會用在採購團的「批次新增系列商品」。系列、角色、商品類型、分類、供應商、採購團各自獨立管理。" actions={<SeriesEditButton />} />
       <Section pad={false}>
         {list.length === 0 ? (

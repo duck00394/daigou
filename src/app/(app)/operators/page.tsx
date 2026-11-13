@@ -1,3 +1,4 @@
+import { AreaTabs } from "@/components/area-tabs";
 import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
@@ -44,6 +45,7 @@ export default async function OperatorsPage({ searchParams }: { searchParams: Pr
 
   return (
     <div className="space-y-4">
+      <AreaTabs area="money" current="/operators" />
       <PageHeader title="經營者對帳" sub="誰負責下單、誰實際付了供應商多少、誰收貨清點。" actions={<LinkButton href="/settings">經營者名稱</LinkButton>} />
       <p className="rounded-xl border border-tone-amber-300-2 bg-warn-soft px-4 py-2.5 text-[13px] leading-6 text-warn">
         這裡只呈現實際發生的紀錄，<strong>不是</strong>合夥人之間的成本分攤或還款結算：誰付給供應商的錢，不代表誰應該負擔這筆成本，也不代表誰欠誰。不同幣別分開統計，不直接相加。

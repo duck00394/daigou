@@ -662,6 +662,10 @@ textarea {
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom);
 }
+/* 手機頂部列的高度：頂部列本身和要黏在它下面的東西（例：系列成本比較的角色列）共用這一個值 */
+:root {
+  --mobile-header-h: 57px;
+}
 
 /* 手機：TableWrap 的表格一列變一張小卡片，兩欄排（欄位名稱由 stack-table.tsx 從表頭抄到 data-label） */
 @media (max-width: 767.98px) {

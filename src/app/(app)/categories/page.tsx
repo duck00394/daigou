@@ -1,4 +1,5 @@
 // 系列：每個系列花了多少、還要付、到了幾件（原本的活動總表＋系列目錄合在一起；點進去看買了什麼、採購團、品項售價）
+import { AreaTabs } from "@/components/area-tabs";
 import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
@@ -22,6 +23,7 @@ export default async function Categories({ searchParams }: { searchParams: Promi
   if (sp.view === "cost")
     return (
       <div className="space-y-3">
+        <AreaTabs area="catalog" current="/categories?view=cost" />
         <PageHeader title="系列成本比較" sub="同一個角色、同一個品項，在各系列每隻成本差多少。" back={{ href: "/categories", label: "系列" }} />
         <CostCompare sp={sp} owner={vk === "all" ? "" : vk} />
       </div>
@@ -44,6 +46,7 @@ export default async function Categories({ searchParams }: { searchParams: Promi
   if (expired.rows.length) groups.push(expired);
   return (
     <div className="space-y-3">
+      <AreaTabs area="catalog" current="/categories" />
       <PageHeader
         title="系列"
         sub="點種類展開；點系列看買了什麼、採購團、品項售價。"
@@ -54,14 +57,6 @@ export default async function Categories({ searchParams }: { searchParams: Promi
           </>
         }
       />
-      {/* 跨系列比成本的入口：原本的系列列表不變 */}
-      <Link href="/categories?view=cost" className="flex items-center justify-between gap-3 rounded-xl border border-line bg-card px-4 py-3 transition-colors duration-150 hover:bg-line-2" data-testid="cost-compare-link">
-        <span>
-          <span className="block text-[15px] font-semibold">系列成本比較</span>
-          <span className="block text-[13px] text-mute">同一個角色在各系列每隻成本、各團價格、每隻可賺</span>
-        </span>
-        <span aria-hidden className="text-mute">›</span>
-      </Link>
       <div data-tour="series-list"><SeriesList groups={groups} /></div>
     </div>
   );

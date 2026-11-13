@@ -95,7 +95,8 @@ export function ItemsPanel(props: {
                     {i.actualUnitCost == null && <span className="ml-1 text-[11px] text-mute">（預估）</span>}
                   </div>
                   <div className="text-[12px] text-mute">
-                    {i.received > 0 ? `已到 ${i.received}` : "還沒到"}
+                    {/* 訂的 vs 收到的：一眼看出還差幾個 */}
+                    {i.qty > 0 && (i.received >= i.qty ? <span className="text-good" data-testid="item-recv">全部到了 {i.received}／{i.qty}</span> : i.received > 0 ? <span data-testid="item-recv">已到 {i.received}／{i.qty}，<span className="text-warn">還差 {i.qty - i.received}</span></span> : <span data-testid="item-recv">還沒到（訂 {i.qty}）</span>)}
                     {props.jointOps && <span data-testid="item-owner">，{props.jointOps.find((o) => o.id === i.ownerId)?.name ? `${props.jointOps.find((o) => o.id === i.ownerId)!.name}的` : "大家一起"}</span>}
                     {i.cancelledQty > 0 && <span className="text-bad">，已砍 {i.cancelledQty}{i.cancelReason ? `（${i.cancelReason}）` : ""}</span>}
                   </div>

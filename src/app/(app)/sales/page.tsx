@@ -1,3 +1,4 @@
+import { AreaTabs } from "@/components/area-tabs";
 import Link from "next/link";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
@@ -66,6 +67,7 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
   return (
     <div className="space-y-4">
       <datalist id="buyer-names">{buyers.map((b) => <option key={b.name} value={b.name} />)}</datalist>
+      <AreaTabs area="money" current="/sales" />
       <PageHeader title="賺多少" sub="賣掉的收入、成本、賺多少；客人預訂預估可賺"  actions={<><LinkButton href="/api/export/sales">匯出</LinkButton><SellButton label="＋ 出售現貨" primary autoOpen={sp.new === "1"} /></>} />
       <ProfitBoard p={prof} series={seriesOpts} cat={sp.cat ?? ""} show={sp.show ?? ""} href={href} />
       <PreorderCard p={pre} who={view.key === "all" ? null : view.name} operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} acting={view.key === "all" ? (view.me ?? "") : view.key} />

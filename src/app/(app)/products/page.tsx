@@ -1,3 +1,4 @@
+import { AreaTabs } from "@/components/area-tabs";
 import Link from "next/link";
 import { productSearchWhere } from "@/server/services/catalog";
 import { prisma, tx } from "@/server/db";
@@ -51,6 +52,7 @@ export default async function Products({ searchParams }: { searchParams: Promise
 
   return (
     <div>
+      <AreaTabs area="catalog" current="/products" />
       <PageHeader
         title="商品"
         sub="每個商品現在可賣幾件、還沒到幾件"

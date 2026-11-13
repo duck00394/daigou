@@ -22,7 +22,7 @@ test("手機：整單取消（已收款要退）、盤點調整", async ({ page 
 
   // 第一張整單取消：已收的錢要退
   await page.goto(`/orders?q=${encodeURIComponent(buyer)}`);
-  await page.getByTestId("order-card").first().getByRole("link").click();
+  await page.getByTestId("order-card").first().getByRole("link").first().click();
   await page.getByRole("button", { name: "取消整張訂單" }).click();
   const dlg = page.getByRole("dialog");
   await dlg.getByLabel("取消原因").fill("客人不要了");

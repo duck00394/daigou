@@ -41,8 +41,9 @@ test("手機版主要頁面沒有整頁橫向捲動，底部導覽可用", async
   await bar.getByRole("link", { name: "庫存" }).click();
   await expect(page).toHaveURL(/tab=stock/);
   await expect(bar.getByRole("link", { name: "庫存" })).toHaveAttribute("aria-current", "page");
-  await bar.getByRole("link", { name: "系列" }).click();
-  await expect(page).toHaveURL(/\/categories$/);
+  // 第三格：有接單時是「接單」，沒開接單時是「系列」
+  await bar.getByRole("link", { name: /^(接單|系列)$/ }).click();
+  await expect(page).toHaveURL(/\/(orders|categories)$/);
   // 全站搜尋
   await page.getByRole("link", { name: "搜尋" }).first().click();
   await page.getByLabel("搜尋商品").fill("吉伊");
@@ -58,7 +59,7 @@ test("手機版主要頁面沒有整頁橫向捲動，底部導覽可用", async
   await page.getByRole("button", { name: "全部功能" }).click();
   await expect(page.getByRole("link", { name: "貼上加單" })).toHaveCount(0);
   // 訂單、出貨不管有沒有開接單都在（賣給客人的預訂要在這裡給客人）
-  await expect(page.getByRole("link", { name: /^訂單\s*客人/ }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: /^接單\s*客人/ }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: /^出貨\s*預訂/ }).first()).toBeVisible();
   await page.keyboard.press("Escape");
   await page.goto("/settings");

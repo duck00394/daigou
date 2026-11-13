@@ -1,3 +1,4 @@
+import { AreaTabs } from "@/components/area-tabs";
 import Link from "next/link";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
@@ -23,6 +24,7 @@ export default async function Payments({ searchParams }: { searchParams: Promise
   const gbs = await prisma.groupBuy.findMany({ orderBy: { createdAt: "desc" } });
   return (
     <div className="space-y-4">
+      <AreaTabs area="money" current="/payments" />
       <PageHeader title="收款與退款" sub="已收、已退款、待收、待退款分開計算；待退款在實際退出前不算已退款。" actions={<LinkButton href="/api/export/payments">匯出收退款紀錄</LinkButton>} />
       <div className="stat-grid grid grid-cols-2 lg:grid-cols-5">
         <Stat label="應收合計" value={<Twd v={snap.receivable} />} note="已確認訂單" />
