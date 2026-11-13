@@ -55,21 +55,40 @@ export async function resolveBuyer(t: Tx, actor: Actor, name: string | null | un
 }
 
 export async function quickSale(t: Tx, actor: Actor, input: QuickSaleInput) {
+  const { productId, qty, unitPrice, ...rest } = input;
+  return quickSaleMany(t, actor, { ...rest, lines: [{ productId, qty, unitPrice }] });
+}
+
+export type QuickSaleLine = { productId: string; qty: number; unitPrice: number };
+
+/** 一位客人一次買好幾樣現貨：同一張單（不拆成一樣一張），一次出貨、一次收款 */
+export async function quickSaleMany(t: Tx, actor: Actor, input: Omit<QuickSaleInput, "productId" | "qty" | "unitPrice"> & { lines: QuickSaleLine[] }) {
   if (!input.idemKey || input.idemKey.length < 8) throw new BizError("缺少送出識別碼");
   const key = `quick:${input.idemKey}`;
   const existing = await t.order.findUnique({ where: { idempotencyKey: key } });
   if (existing) return { orderId: existing.id, duplicated: true, ...(await saleSummary(t, existing.id)) };
-  if (!Number.isInteger(input.qty) || input.qty <= 0) throw new BizError("出售數量必須是正整數");
-  if (!Number.isInteger(input.unitPrice) || input.unitPrice < 0) throw new BizError("售價必須是不小於 0 的整數");
-  const product = await t.product.findUnique({ where: { id: input.productId } });
-  if (!product) throw new BizError("找不到商品");
-  await lockRows(t, "Product", [product.id]);
+  if (!input.lines.length) throw new BizError("至少要賣一樣");
+  const seen = new Set<string>();
+  for (const l of input.lines) {
+    if (!Number.isInteger(l.qty) || l.qty <= 0) throw new BizError("出售數量必須是正整數");
+    if (!Number.isInteger(l.unitPrice) || l.unitPrice < 0) throw new BizError("售價必須是不小於 0 的整數");
+    if (seen.has(l.productId)) throw new BizError("同一個商品出現兩次");
+    seen.add(l.productId);
+  }
+  const products = await t.product.findMany({ where: { id: { in: [...seen] } } });
+  if (products.length !== seen.size) throw new BizError("找不到商品");
+  await lockRows(t, "Product", [...seen]);
   // 鎖定後再確認一次：同一請求同時送出兩次時，第二個會等第一個完成後在這裡判定為重複
   const again = await t.order.findUnique({ where: { idempotencyKey: key } });
   if (again) return { orderId: again.id, duplicated: true, ...(await saleSummary(t, again.id)) };
-  const lots = await filterLotsByOwner(t, await productLots(t, product.id), input.owner);
-  const free = lots.reduce((s, l) => s + Math.max(0, l.free), 0);
-  if (free < input.qty) throw new BizError(`「${product.name}」${input.owner ? "這個人的" : ""}可售庫存只有 ${free} 件（已保留給買家與自留的不能出售）`);
+  const lotsOf = new Map<string, Awaited<ReturnType<typeof productLots>>>();
+  for (const l of input.lines) {
+    const p = products.find((x) => x.id === l.productId)!;
+    const lots = await filterLotsByOwner(t, await productLots(t, p.id), input.owner);
+    const free = lots.reduce((s, x) => s + Math.max(0, x.free), 0);
+    if (free < l.qty) throw new BizError(`「${p.name}」${input.owner ? "這個人的" : ""}可售庫存只有 ${free} 件（已保留給買家與自留的不能出售）`);
+    lotsOf.set(p.id, lots);
+  }
   const buyer = await resolveBuyer(t, actor, input.buyerName);
   const soldAt = input.soldAt ?? new Date();
   const order = await createOrder(t, actor, {
@@ -78,24 +97,28 @@ export async function quickSale(t: Tx, actor: Actor, input: QuickSaleInput) {
     orderedAt: soldAt,
     notes: input.note ?? null,
     idempotencyKey: key,
-    items: [{ productId: product.id, qty: input.qty, unitPrice: input.unitPrice }],
+    items: input.lines.map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: l.unitPrice })),
   });
+  const itemOf = (pid: string) => order.items.find((i) => i.productId === pid)!;
   // 指定賣誰的：只從那個人的成本批次依先進先出保留；不指定則由出貨自動保留
   if (input.owner) {
     await t.orderItem.updateMany({ where: { orderId: order.id }, data: { ownerKey: input.owner } });
-    let left = input.qty;
-    for (const lot of lots) {
-      if (left <= 0) break;
-      const take = Math.min(left, Math.max(0, lot.free));
-      if (take <= 0) continue;
-      await reserveForItem(t, actor, { orderItemId: order.items[0].id, qty: take, batchItemId: lot.batchItemId });
-      left -= take;
+    for (const l of input.lines) {
+      let left = l.qty;
+      for (const lot of lotsOf.get(l.productId)!) {
+        if (left <= 0) break;
+        const take = Math.min(left, Math.max(0, lot.free));
+        if (take <= 0) continue;
+        await reserveForItem(t, actor, { orderItemId: itemOf(l.productId).id, qty: take, batchItemId: lot.batchItemId });
+        left -= take;
+      }
     }
   }
-  await createShipment(t, actor, { buyerId: buyer.id, items: [{ orderItemId: order.items[0].id, qty: input.qty }], autoReserve: !input.owner, shippedAt: soldAt, method: "現貨出售", dedupeKey: key });
-  const amount = input.qty * input.unitPrice;
+  await createShipment(t, actor, { buyerId: buyer.id, items: input.lines.map((l) => ({ orderItemId: itemOf(l.productId).id, qty: l.qty })), autoReserve: !input.owner, shippedAt: soldAt, method: "現貨出售", dedupeKey: key });
+  const amount = input.lines.reduce((a, l) => a + l.qty * l.unitPrice, 0);
   if (input.paid !== false && amount > 0) await addPayment(t, actor, { orderId: order.id, amount, paidAt: soldAt, method: input.method ?? null, note: "現貨出售", dedupeKey: key });
-  await audit(t, actor, "quickSale.create", "Order", order.id, { productId: product.id, qty: input.qty, unitPrice: input.unitPrice, buyerId: buyer.id, paid: input.paid !== false });
+  const one = input.lines.length === 1 ? input.lines[0] : null;
+  await audit(t, actor, "quickSale.create", "Order", order.id, { ...(one ? { productId: one.productId, qty: one.qty, unitPrice: one.unitPrice } : { lines: input.lines }), buyerId: buyer.id, paid: input.paid !== false });
   return { orderId: order.id, duplicated: false, ...(await saleSummary(t, order.id)) };
 }
 
@@ -247,7 +270,8 @@ export async function listQuickSales(t: Tx, opts: { q?: string | null; from?: Da
       buyer: o.buyer,
       channel: o.salesChannel ?? o.buyer.salesChannel ?? null,
       productId: o.items[0]?.productId ?? null,
-      productName: o.items.map((i) => i.productNameSnapshot).join("、"),
+      productName: o.items.map((i) => (o.items.length > 1 ? `${i.productNameSnapshot}×${i.qty}` : i.productNameSnapshot)).join("、"),
+      itemCount: o.items.length,
       originalQty: o.items.reduce((a, i) => a + i.qty, 0),
       unitPrice: o.items[0]?.unitPrice ?? 0,
       note: o.notes,

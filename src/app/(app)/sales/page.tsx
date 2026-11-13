@@ -113,7 +113,7 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="font-medium">
-                      {r.productId ? <Link href={`/products/${r.productId}`} className="hover:underline">{r.productName}</Link> : r.productName}
+                      {r.productId && r.itemCount === 1 ? <Link href={`/products/${r.productId}`} className="hover:underline">{r.productName}</Link> : r.productName}
                       <span className="ml-1 text-ink-2">× {r.voided ? r.originalQty : r.qty}</span>
                       {r.voided && <span className="ml-2 rounded bg-line-2 px-1.5 text-[12px] text-mute">已作廢</span>}
                     </div>
@@ -135,8 +135,9 @@ export default async function Sales({ searchParams }: { searchParams: Promise<{ 
                 </div>
                 {!r.voided && r.productId && (
                   <div className="mt-2 flex gap-2">
-                    <SellButton small label="更正" correct={{ orderId: r.id, productId: r.productId, productName: r.productName, qty: r.qty, unitPrice: r.unitPrice, buyerName: r.buyer.name === "散客" ? null : r.buyer.name, soldAt: toDateInput(r.soldAt), note: r.note, ...ownerOfSale(r.owners) }} operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} />
-                    <VoidSaleButton orderId={r.id} label={`${r.productName} × ${r.qty}`} />
+                    {/* 一張單好幾樣：更正只能改一樣，所以不給更正；要改就作廢後重新登記 */}
+                    {r.itemCount === 1 && <SellButton small label="更正" correct={{ orderId: r.id, productId: r.productId, productName: r.productName, qty: r.qty, unitPrice: r.unitPrice, buyerName: r.buyer.name === "散客" ? null : r.buyer.name, soldAt: toDateInput(r.soldAt), note: r.note, ...ownerOfSale(r.owners) }} operators={operators.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} />}
+                    <VoidSaleButton orderId={r.id} label={r.itemCount > 1 ? `${r.productName}（共 ${r.qty} 件）` : `${r.productName} × ${r.qty}`} />
                   </div>
                 )}
               </li>

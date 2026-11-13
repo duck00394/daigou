@@ -1,11 +1,11 @@
 // 賣給客人（一次登記一位客人買的好幾樣）：
-// - 有現貨的部分：直接出售（沿用現貨出售：建單、出貨、收款一次完成）
+// - 有現貨的部分：直接出售（沿用現貨出售：建單、出貨、收款一次完成），好幾樣放同一張單
 // - 超過現貨的部分：記成「預訂」（一般訂單），到貨後在「出貨」交給客人
 import { getPlatformFees, platformFeeOf } from "./settings";
 import { BizError, lockRows, type Tx } from "@/server/db";
 import { filterLotsByOwner } from "./ownership";
 import { audit, type Actor } from "./common";
-import { quickSale, resolveBuyer } from "./quick-sale";
+import { quickSaleMany, resolveBuyer } from "./quick-sale";
 import { createOrder, updateOrderMeta } from "./orders";
 import { addPayment } from "./payments";
 import { productLots } from "./inventory";
@@ -62,14 +62,16 @@ export async function sellToCustomer(t: Tx, actor: Actor, input: { buyerName?: s
   const buyer = await resolveBuyer(t, actor, input.buyerName);
   // 記住這位客人的平台（還沒記過、或這次換了）
   if (channel && input.buyerName?.trim() && buyer.salesChannel !== channel) await t.buyer.update({ where: { id: buyer.id }, data: { salesChannel: channel } });
+  // 有現貨的全部放同一張單（一位客人買了什麼一眼看得到），不再一樣一張
+  const nowLines = plan.filter((x) => x.now > 0).map(({ l, now }) => ({ productId: l.productId, qty: now, unitPrice: l.unitPrice }));
+  if (nowLines.length) {
+    const q = await quickSaleMany(t, actor, { lines: nowLines, buyerName: input.buyerName ?? null, paid: input.paid !== false, idemKey: `${input.idemKey}:now`, owner: input.owner || null });
+    if (channel || groupBuyId) await t.order.update({ where: { id: q.orderId }, data: { ...(channel ? { salesChannel: channel } : {}), ...(groupBuyId ? { groupBuyId } : {}) } });
+    sold = nowLines.reduce((a, l) => a + l.qty, 0);
+    quickOrders.push(q.orderId);
+    goodsOf.set(q.orderId, nowLines.reduce((a, l) => a + l.qty * l.unitPrice, 0));
+  }
   for (const { l, now } of plan) {
-    if (now > 0) {
-      const q = await quickSale(t, actor, { productId: l.productId, qty: now, unitPrice: l.unitPrice, buyerName: input.buyerName ?? null, paid: input.paid !== false, idemKey: `${input.idemKey}:${l.productId}`, owner: input.owner || null });
-      if (channel || groupBuyId) await t.order.update({ where: { id: q.orderId }, data: { ...(channel ? { salesChannel: channel } : {}), ...(groupBuyId ? { groupBuyId } : {}) } });
-      sold += now;
-      quickOrders.push(q.orderId);
-      goodsOf.set(q.orderId, (goodsOf.get(q.orderId) ?? 0) + now * l.unitPrice);
-    }
     if (l.qty > now) preLines.push({ ...l, qty: l.qty - now });
     total += l.qty * l.unitPrice;
   }

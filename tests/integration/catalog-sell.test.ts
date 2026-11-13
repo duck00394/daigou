@@ -59,6 +59,21 @@ describe("系列目錄、賣給客人", () => {
     expect(pre.items.map((i) => [i.productId === s.chii.productId ? "吉伊" : "小八", i.qty, i.unitPrice]).sort()).toEqual([["吉伊", 1, 650], ["小八", 1, 600]].sort());
     expect(await checkIntegrity(prisma)).toEqual([]);
   });
+
+  it("一位客人一次買好幾樣現貨：同一張單（不拆開），一次收款", async () => {
+    const s = await setup();
+    await tx((t) => receiveStock(t, actor, { productId: s.chii.productId, qty: 2, unitCostTwd: 400 }));
+    await tx((t) => receiveStock(t, actor, { productId: s.hachi.productId, qty: 1, unitCostTwd: 400 }));
+    const lines = [{ productId: s.chii.productId, qty: 2, unitPrice: 680 }, { productId: s.hachi.productId, qty: 1, unitPrice: 680 }];
+    const r = await tx((t) => sellToCustomer(t, actor, { buyerName: "pinn", lines, idemKey: "sell-one-0001" }));
+    expect(r).toMatchObject({ sold: 3, preordered: 0, total: 2040 });
+    const quick = await prisma.order.findMany({ where: { source: "QUICK" }, include: { items: true, payments: true } });
+    expect(quick).toHaveLength(1);
+    expect(quick[0].items.map((i) => i.qty).sort()).toEqual([1, 2]);
+    expect(quick[0].payments.map((p) => p.amount)).toEqual([2040]);
+    expect(quick[0].paymentStatusCache).toBe("PAID");
+    expect(await checkIntegrity(prisma)).toEqual([]);
+  });
 });
 
 describe("種類改名、系列換種類", () => {
