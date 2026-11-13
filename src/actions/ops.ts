@@ -284,3 +284,14 @@ export async function setPlatformFeeAction(channel: string, pct: number | null) 
   const { setPlatformFee } = await import("@/server/services/settings");
   return run((a) => tx((t) => setPlatformFee(t, a, z.string().max(40).parse(channel), z.number().nullable().parse(pct))));
 }
+
+/** 常用頁面：存到「這台裝置是誰在用」那個人的設定；null＝恢復預設 */
+export async function setNavPinsAction(pins: string[] | null) {
+  const { setNavPins } = await import("@/server/services/settings");
+  const { getMe } = await import("@/server/me");
+  return run(async (a) => {
+    const me = await getMe();
+    if (!me) throw new BizError("先在「經營者管理」選這台裝置是誰在用");
+    return tx((t) => setNavPins(t, a, me, pins === null ? null : z.array(z.string().max(80)).max(60).parse(pins)));
+  });
+}

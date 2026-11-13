@@ -1,7 +1,8 @@
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { viewOwner } from "@/server/view";
-import { getDefaultRateMicro, getOrdersEnabled, getPlatformFees } from "@/server/services/settings";
+import { getDefaultRateMicro, getNavPins, getOrdersEnabled, getPlatformFees } from "@/server/services/settings";
+import { NavPins } from "./nav-pins";
 import { PlatformFees } from "./platform-fees";
 import { DEFAULT_CHANNELS } from "@/lib/channels";
 import { OrdersToggle } from "./orders-toggle";
@@ -48,6 +49,8 @@ export default async function Settings() {
   const ordersOn = await getOrdersEnabled(prisma);
   const [fees, used] = await Promise.all([getPlatformFees(prisma), prisma.order.groupBy({ by: ["salesChannel"], where: { salesChannel: { not: null } }, _count: true, orderBy: { _count: { salesChannel: "desc" } }, take: 20 })]);
   const me = await getMe();
+  const pins = await getNavPins(prisma, me);
+  const meName = me ? (operators.find((o) => o.id === me)?.name ?? null) : null;
   return (
     <div className="space-y-4">
       <PageHeader title="匯出、備份與設定" />
@@ -57,6 +60,9 @@ export default async function Settings() {
         </Section>
         <Section title="外觀">
           <ModePicker />
+        </Section>
+        <Section title="常用頁面">
+          <NavPins pins={pins} ordersOn={ordersOn} meName={meName} />
         </Section>
         <Section title="常用運費方式">
           <ShippingMethods rows={shipping.map((x) => ({ id: x.id, name: x.name, kind: x.kind, currency: x.currency, amount: x.amount, active: x.active }))} />

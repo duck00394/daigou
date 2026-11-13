@@ -1,43 +1,14 @@
 "use client";
-import { Icon, type IconName } from "@/components/icons";
+import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ViewChip, ViewSwitch, type ViewInfo } from "./view-switch";
+import { NAV, arrangeNav, bottomTabs, type BottomTab } from "@/lib/nav-items";
 
-// 選單分三組：每天用、偶爾用、設定與資料
-export const NAV: { href: string; label: string; group: string; hint?: string; orders?: true }[] = [
-  // 三組：每天用（直接看得到）→ 偶爾用 → 設定與資料（電腦版收起來，點開才看；每個頁面都還在）
-  { href: "/", label: "首頁", group: "每天用", hint: "今天要做什麼、還要付多少" },
-  { href: "/orders", label: "訂單", group: "每天用", hint: "客人的訂單、預訂；可以多選一次出貨、收款" },
-  { href: "/shipping", label: "出貨", group: "每天用", hint: "預訂到貨了交給客人、改出貨人" },
-  { href: "/purchase", label: "＋ 新增採購", group: "每天用", hint: "買了什麼、哪一團" },
-  { href: "/inventory?tab=batches", label: "採購團、收貨", group: "每天用", hint: "東西到了沒、登記收到" },
-  { href: "/inventory?tab=stock", label: "庫存、賣出、自留", group: "每天用", hint: "手上有什麼、成本多少" },
-  { href: "/sell", label: "賣給客人", group: "每天用", hint: "選系列、填數量，沒貨記預訂" },
-  { href: "/sales", label: "賺多少", group: "每天用", hint: "照系列看已出貨＋預訂賺多少" },
-  { href: "/buyers", label: "買家", group: "偶爾用", orders: true },
-  { href: "/categories", label: "系列", group: "偶爾用", hint: "每個系列買了什麼、花多少、品項售價" },
-  { href: "/reconcile", label: "對單", group: "偶爾用", hint: "跟代購確認買到多少、砍了哪些" },
-  { href: "/payments", label: "收款與退款", group: "偶爾用", orders: true },
-  { href: "/paste", label: "貼上加單", group: "偶爾用", orders: true },
-  { href: "/rush", label: "搶購提醒", group: "偶爾用", hint: "什麼時候開搶，開始前通知手機" },
-  { href: "/groupbuys", label: "開團（接單用）", group: "偶爾用", orders: true },
-  { href: "/shop-admin", label: "訂購頁（客人下單）", group: "偶爾用", hint: "開放系列給客人下單（訪客或 LINE）、限量、候補" },
-  { href: "/shop-pay", label: "訂購頁付款", group: "偶爾用", hint: "客人用賣貨便下單了沒、逾期、補發通知" },
-  { href: "/products", label: "商品", group: "設定與資料" },
-  { href: "/suppliers", label: "供應商、代購", group: "設定與資料" },
-  { href: "/import", label: "Excel 匯入", group: "設定與資料", orders: true },
-  { href: "/catalog", label: "種類與系列管理", group: "設定與資料" },
-  { href: "/series", label: "系列與角色", group: "設定與資料" },
-  { href: "/reports", label: "完整報表", group: "設定與資料" },
-  { href: "/tags", label: "標籤", group: "設定與資料" },
-  { href: "/settings", label: "匯出、備份與設定", group: "設定與資料" },
-  { href: "/?tour=1", label: "新手教學", group: "設定與資料", hint: "一步一步帶你走一次" },
-  { href: "/help", label: "名詞說明", group: "設定與資料", hint: "有幾隻、每隻成本、對單是什麼" },
-];
+export { NAV };
 
-type Tab = { href: string; label: string; icon: IconName; main?: true };
+type Tab = BottomTab;
 // 手機底部：每天最常用的直接一下到。有接單時多放「訂單」「出貨」（賺多少在首頁的數字點進去、或「全部功能」）
 const BOTTOM_ORDERS: Tab[] = [
   { href: "/", label: "首頁", icon: "home" },
@@ -73,11 +44,13 @@ function useTab() {
 }
 
 const visible = (ordersOn: boolean) => NAV.filter((n) => ordersOn || !n.orders);
+// 自己設過常用頁面就照他的排；沒設過跟原本一樣
+const arranged = (ordersOn: boolean, pins?: string[] | null) => (pins ? arrangeNav(visible(ordersOn), pins) : visible(ordersOn));
 
-export function Sidebar({ ordersOn = true, view }: { ordersOn?: boolean; view?: ViewInfo }) {
+export function Sidebar({ ordersOn = true, view, pins }: { ordersOn?: boolean; view?: ViewInfo; pins?: string[] | null }) {
   const path = usePathname();
   const tab = useTab();
-  const nav = visible(ordersOn);
+  const nav = arranged(ordersOn, pins);
   const groups = [...new Set(nav.map((n) => n.group))];
   return (
     <nav aria-label="主要功能" className="no-print sticky top-0 hidden h-dvh w-52 shrink-0 flex-col overflow-y-auto border-r border-line bg-paper px-3 py-4 md:flex">
@@ -120,10 +93,12 @@ export function Sidebar({ ordersOn = true, view }: { ordersOn?: boolean; view?: 
   );
 }
 
-export function MobileBar({ ordersOn = true, view }: { ordersOn?: boolean; view?: ViewInfo }) {
+export function MobileBar({ ordersOn = true, view, pins }: { ordersOn?: boolean; view?: ViewInfo; pins?: string[] | null }) {
   const path = usePathname();
   const tab = useTab();
-  const nav = visible(ordersOn);
+  const nav = arranged(ordersOn, pins);
+  const visibleSet = new Set(nav.map((n) => n.href));
+  const bottom = pins ? bottomTabs(pins.filter((h) => visibleSet.has(h))) : ordersOn ? BOTTOM_ORDERS : BOTTOM_PLAIN;
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [path]);
   const current = NAV.find((n) => active(path, n.href, tab) && n.href !== "/") ?? NAV[0];
@@ -176,8 +151,8 @@ export function MobileBar({ ordersOn = true, view }: { ordersOn?: boolean; view?
           </div>
         </div>
       )}
-      <nav aria-label="常用功能" className={`no-print safe-bottom fixed inset-x-0 bottom-0 z-40 grid ${ordersOn ? "grid-cols-6" : "grid-cols-5"} border-t border-line bg-paper/95 backdrop-blur md:hidden`}>
-        {(ordersOn ? BOTTOM_ORDERS : BOTTOM_PLAIN).map((b) => (
+      <nav aria-label="常用功能" className="no-print safe-bottom fixed inset-x-0 bottom-0 z-40 grid border-t border-line bg-paper/95 backdrop-blur md:hidden" style={{ gridTemplateColumns: `repeat(${bottom.length}, minmax(0, 1fr))` }}>
+        {bottom.map((b) => (
           <Link
             key={b.href}
             href={b.href}

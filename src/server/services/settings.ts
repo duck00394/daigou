@@ -2,6 +2,7 @@ import type { Db, Tx } from "@/server/db";
 import { BizError } from "@/server/db";
 import { formatRate, parseRate } from "@/lib/money";
 import { audit, type Actor } from "./common";
+import { cleanPins, pinsKey } from "@/lib/nav-items";
 
 export const DEFAULT_RATE_MICRO = 210000; // 0.21，僅在尚未設定時使用
 
@@ -87,4 +88,32 @@ export async function setSecondShipFee(t: Tx, actor: Actor, typeId: string, fee:
   await t.appSetting.upsert({ where: { key: "secondShipFees" }, update: { value: JSON.stringify(all) }, create: { key: "secondShipFees", value: JSON.stringify(all) } });
   await audit(t, actor, "settings.secondShipFee", "AppSetting", "secondShipFees", { typeId, from: before, to: fee });
   return all;
+}
+
+/** 常用頁面（每個經營者各自一份）：勾的頁面順序；沒設過是 null（照預設） */
+export async function getNavPins(db: Db, operatorId: string | null): Promise<string[] | null> {
+  if (!operatorId) return null;
+  const s = await db.appSetting.findUnique({ where: { key: pinsKey(operatorId) } });
+  if (!s) return null;
+  try {
+    return cleanPins(JSON.parse(s.value));
+  } catch {
+    return null;
+  }
+}
+
+/** pins＝null：恢復預設（刪掉這個人的設定） */
+export async function setNavPins(t: Tx, actor: Actor, operatorId: string, pins: string[] | null) {
+  const op = await t.operator.findUnique({ where: { id: operatorId }, select: { active: true } });
+  if (!op?.active) throw new BizError("先在「經營者管理」選這台裝置是誰在用");
+  const key = pinsKey(operatorId);
+  if (pins === null) {
+    await t.appSetting.deleteMany({ where: { key } });
+    await audit(t, actor, "settings.navPins", "AppSetting", key, { reset: true });
+    return null;
+  }
+  const clean = cleanPins(pins) ?? [];
+  await t.appSetting.upsert({ where: { key }, update: { value: JSON.stringify(clean) }, create: { key, value: JSON.stringify(clean) } });
+  await audit(t, actor, "settings.navPins", "AppSetting", key, { pins: clean });
+  return clean;
 }
