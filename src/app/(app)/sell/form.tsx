@@ -23,7 +23,8 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
   // 代購團（選填）：加了系列、那個系列剛好只有一個代購團時自動帶
   const [groupBuy, setGroupBuy] = useState("");
   // 填了代購團：預設加賣貨便運費 38，要改再打開
-  const [shipFee, setShipFee] = useState(String(DEFAULT_SHIP));
+  // 賣給客人不收運費（拿掉運費欄；要收運費到訂單頁「修改」填）
+  const [shipFee] = useState(String(DEFAULT_SHIP));
   // 運費：預設 0（不加），要收再填
   const fee = Math.max(0, Number(shipFee) || 0);
   // 送出前的確認表
@@ -167,7 +168,6 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
         setFeeEdit(null);
         setPrice({});
         setBuyer("");
-        setShipFee(String(DEFAULT_SHIP));
         // 重新整理現貨數字（系列保留，方便記下一位）
         try {
           const fresh = await Promise.all(sheets.map((s) => fetchSheet(s.id)));
@@ -196,12 +196,6 @@ export function SellForm({ series, buyers, initialCategory, waiting, channels = 
         {groupBuys.length > 0 && (
           <Choice label="代購團（選填）" value={groupBuy} onChange={setGroupBuy} placeholder="不指定" options={groupBuys.map((g) => ({ value: g.id, label: g.name }))} hint="選了系列，那個系列只有一個代購團時會自動帶。" />
         )}
-        <label className="flex items-center gap-2 rounded-lg border border-line-2 bg-paper px-3 py-2 text-[14px]" data-testid="ship-fee">
-          <span className="shrink-0 font-medium text-ink-2">運費</span>
-          <span className="text-mute">NT$</span>
-          <input aria-label="運費" data-keep inputMode="numeric" className={`${inputCls} num min-h-10 w-24 text-right`} value={shipFee} onChange={(e) => setShipFee(e.target.value.replace(/\D/g, ""))} />
-          <span className="ml-auto text-[12px] text-mute">要收運費再填</span>
-        </label>
         <div className="grid grid-cols-2 gap-2">
           <ChannelPicker value={channel} onChange={setChannel} extra={channels} />
           <label className="block text-[13px] font-medium text-ink-2">

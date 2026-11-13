@@ -231,18 +231,17 @@ test("手機：系列目錄、賣給客人、庫存階層", async ({ page }) => 
   await toast(page, new RegExp(`張訂單改成「${gbName}」`));
   await expect(page.locator("tbody")).toContainText(gbName);
 
-  // 賣給客人：運費預設 0，要收再填；確認表的合計含運費
+  // 賣給客人：沒有運費欄（不收運費）；確認表的合計＝商品金額
   await page.goto("/sell");
   await page.getByLabel("種類", { exact: true }).selectOption({ label: kind });
   await page.getByLabel("系列", { exact: true }).selectOption({ label: series });
   await page.locator(`[data-testid="sell-row"][data-name="${series}:吊娃:小八"]`).getByLabel("小八 數量").fill("1");
   await page.getByLabel("客人", { exact: true }).fill(`小美${tag}`);
   await choose(page, "代購團（選填）", gbName);
-  await expect(page.getByLabel("運費", { exact: true })).toHaveValue("0"); // 賣東西不預設運費
-  await page.getByLabel("運費", { exact: true }).fill("50");
+  await expect(page.getByLabel("運費", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: /^登記：/ }).click();
-  await expect(page.getByTestId("sell-confirm")).toContainText("運費");
-  await expect(page.getByTestId("sell-confirm-total")).toHaveText("NT$700");
+  await expect(page.getByTestId("sell-confirm")).not.toContainText("運費");
+  await expect(page.getByTestId("sell-confirm-total")).toHaveText("NT$650");
   await page.getByRole("button", { name: "返回修改" }).click();
   await expect(page.getByTestId("sell-confirm")).toHaveCount(0);
 
