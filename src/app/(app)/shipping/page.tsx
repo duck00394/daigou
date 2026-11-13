@@ -57,7 +57,7 @@ async function TodoTab({ byOrder, sp, vk }: { byOrder: boolean; sp: Record<strin
     include: { order: { include: { buyer: { include: { tags: { where: { removedAt: null, tag: { active: true } }, include: { tag: true } } } }, groupBuy: { select: { name: true } } } } },
     orderBy: [{ order: { orderedAt: "asc" } }, { createdAt: "asc" }],
   });
-  // 可出幾件：跟首頁、訂單列表、採購團提醒同一套出貨排程（已保留＋共用庫存池，先下單的先分）
+  // 可出幾件：跟首頁、訂單列表、採購團提醒同一套出貨排程（已保留＋跟誰訂的那個人的可用庫存，先下單的先分）
   const plan = await tx((t) => shipPlan(t));
   const canShip = new Map(plan.items.map((x) => [x.id, x.shippable]));
   const readyOrders = new Set(plan.readyOrderIds);

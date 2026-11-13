@@ -1,4 +1,4 @@
-// 「現在看誰的」：只算這個人的（＋合資、未指定的）。別人的團、貨、預訂都不算。
+// 「現在看誰的」：團、訂單算這個人的（＋合資、未指定的）；庫存只算他自己的（stockKeys）。別人的團、貨、預訂都不算。
 // owner 空白＝全部（兩個人加起來）。
 import type { Prisma } from "@prisma/client";
 import type { Tx } from "@/server/db";
@@ -12,6 +12,15 @@ export function mineBatchWhere(owner: string | null | undefined): Prisma.Purchas
   return owner ? { OR: [{ ownership: "JOINT" }, { orderedById: null }, { ownership: "PERSONAL", orderedById: owner }] } : {};
 }
 
+/**
+ * 庫存「看某個人」：只算他自己的貨（他的個人團＋合資團裡指定給他的那幾列），也只扣跟他訂的預訂。
+ * 合資團沒指定是誰的、手動入庫沒有主人的，只在「全部」看得到。各賣各的，出貨也只扣自己的（見 shipPlan）
+ */
+export const stockKeys = (owner: string | null | undefined) => (owner ? [owner] : null);
+export function mineStockItemWhere(owner: string | null | undefined): Prisma.PurchaseBatchItemWhereInput {
+  return owner ? { OR: [{ batch: { ownership: "PERSONAL", orderedById: owner } }, { ownerId: owner, batch: { ownership: "JOINT" } }] } : {};
+}
+
 /** 跟這個人訂的訂單明細 */
 export function mineItemWhere(owner: string | null | undefined): Prisma.OrderItemWhereInput {
   const k = mineKeys(owner);
@@ -21,15 +30,15 @@ export function mineItemWhere(owner: string | null | undefined): Prisma.OrderIte
 /** 跟 inventorySummary 一樣的數字，但只算這個人的 */
 export async function inventoryFor(t: Tx, productIds: string[], owner: string | null | undefined) {
   const inv = await inventorySummary(t, productIds);
-  const keys = mineKeys(owner);
+  const keys = stockKeys(owner);
   if (!keys || !productIds.length) return inv;
   const [by, batchItems, demand] = await Promise.all([
     stockByOwner(t, { productIds }),
     t.purchaseBatchItem.findMany({
-      where: { productId: { in: productIds }, batch: { status: { notIn: ["CANCELLED", "DRAFT"] }, ...mineBatchWhere(owner) } },
+      where: { productId: { in: productIds }, batch: { status: { notIn: ["CANCELLED", "DRAFT"] } }, ...mineStockItemWhere(owner) },
       select: { productId: true, qty: true, cancelledQty: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
     }),
-    t.orderItem.findMany({ where: { productId: { in: productIds }, order: { confirmation: "CONFIRMED" }, ...mineItemWhere(owner) }, select: { productId: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true, reservedQtyCache: true } }),
+    t.orderItem.findMany({ where: { productId: { in: productIds }, order: { confirmation: "CONFIRMED" }, ...(owner ? { ownerKey: owner } : {}) }, select: { productId: true, qty: true, cancelledQtyCache: true, shippedQtyCache: true, reservedQtyCache: true } }),
   ]);
   const out = new Map<string, ReturnType<typeof inv.get> & object>();
   for (const id of productIds) {

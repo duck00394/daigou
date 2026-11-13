@@ -1,10 +1,10 @@
 // 庫存頁「庫存」欄的算法（庫存頁和首頁待辦共用同一套，不另外算）：
 // 庫存＝現有（不含自留）＋一定到（對單買到、還沒到）－客人預訂還沒給；不一定到的（還在等代購確認）不算
-// 看某個人：只算他的團＋合資、未指定的團，客人訂只算跟他訂的（＋合資、未指定）
+// 看某個人：只算他自己的貨（個人團＋合資團裡指定給他的列），客人訂只算跟他訂的；合資沒指定、未指定的只在「全部」
 import type { Tx } from "@/server/db";
-import { mineBatchWhere } from "./mine";
+import { mineStockItemWhere, stockKeys } from "./mine";
 import { inventorySummary } from "./inventory";
-import { JOINT, NONE, stockByOwner } from "./ownership";
+import { stockByOwner } from "./ownership";
 import { openDemandRows } from "./demand-owner";
 import { pendingQty } from "./batch-ops";
 
@@ -13,11 +13,11 @@ const ZERO: StockS = { onHand: 0, reserved: 0, available: 0, incoming: 0, shippe
 
 export async function stockLeft(t: Tx, ids: string[], owner: string | null) {
   const [inv, byOwner, demandAll] = await Promise.all([inventorySummary(t, ids), stockByOwner(t, { productIds: ids }), openDemandRows(t, ids)]);
-  const ownerKeys = owner ? [owner, JOINT, NONE] : [];
+  const ownerKeys = stockKeys(owner) ?? [];
   const ownerIncoming = new Map<string, number>();
   if (owner) {
     const items = await t.purchaseBatchItem.findMany({
-      where: { productId: { in: ids }, batch: { status: { not: "CANCELLED" }, ...mineBatchWhere(owner) } },
+      where: { productId: { in: ids }, batch: { status: { not: "CANCELLED" } }, ...mineStockItemWhere(owner) },
       select: { productId: true, qty: true, cancelledQty: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
     });
     for (const i of items) ownerIncoming.set(i.productId, (ownerIncoming.get(i.productId) ?? 0) + Math.max(0, i.qty - i.cancelledQty - i.movements.reduce((a, m) => a + m.onHandDelta, 0)));
@@ -26,7 +26,7 @@ export async function stockLeft(t: Tx, ids: string[], owner: string | null) {
   const unsureMap = new Map<string, number>();
   {
     const items = await t.purchaseBatchItem.findMany({
-      where: { productId: { in: ids }, batch: { status: { not: "CANCELLED" }, ...mineBatchWhere(owner) } },
+      where: { productId: { in: ids }, batch: { status: { not: "CANCELLED" } }, ...mineStockItemWhere(owner) },
       select: { qty: true, cancelledQty: true, confirmedQty: true, productId: true, batch: { select: { status: true, supplierRef: { select: { kind: true } } } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
     });
     for (const i of items) unsureMap.set(i.productId, (unsureMap.get(i.productId) ?? 0) + pendingQty(i, i.movements.reduce((a, m) => a + m.onHandDelta, 0)));

@@ -1,6 +1,6 @@
 // 出貨排程：首頁待辦、訂單列表、出貨頁、採購團收貨提醒、一次出貨都用同一套（shipPlan）
-// 同一商品的可賣庫存是一個共用池（不分哪一團、誰的貨）；自留不算；已保留的不重複分；先下單的先分；實際扣庫存照批次進貨先後（FIFO）
-// 驗：跨團共用、有無「跟誰訂的」混在一起、預覽＝實際保留、FIFO 成本、自留、先下單優先、部分到貨、整張可出、一次出貨、重複送出、同時送出、失敗整筆退回
+// 各賣各的：記了跟誰訂的就只能用那個人的貨，沒記的誰的貨都可以；自留不算；已保留的不重複分；先下單的先分；實際扣庫存照批次進貨先後（FIFO）
+// 驗：只扣自己的貨、有無「跟誰訂的」混在一起、預覽＝實際保留、FIFO 成本、自留、先下單優先、部分到貨、整張可出、一次出貨、重複送出、同時送出、失敗整筆退回
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { prisma, tx } from "@/server/db";
 import { checkIntegrity } from "@/server/services/integrity";
@@ -125,24 +125,30 @@ describe("出貨排程（各頁一致）", () => {
   });
 });
 
-describe("共用庫存池（不分哪一團、誰的貨）", () => {
-  it("A 團有貨、B 團沒貨：跟 B 訂的客人照樣用 A 的貨出（首頁、出貨頁、單張出貨）", async () => {
+describe("各賣各的（記了跟誰訂的就只扣那個人的貨）", () => {
+  it("A 團有貨、B 團沒貨：跟 B 訂的單不能用 A 的貨（各頁都不列、出貨擋下來）；沒記跟誰訂的就可以用", async () => {
     await stock(A, s.p1.id, 1, 300);
     const o = await order(s.b1.id, [{ productId: s.p1.id, qty: 1 }]);
     await setOwner(o.id, B);
-    const v = await views([s.p1.id]);
-    expect([v.home, v.shippingPage, v.batch]).toEqual([[o.id], [o.id], [o.id]]);
-    // 看 B 的待辦也列（跟 B 訂的單），即使貨在 A 團
-    expect((await tx((t) => readyToShip(t, { owner: B }))).orderIds).toEqual([o.id]);
+    let v = await views([s.p1.id]);
+    expect([v.home, v.shippingPage, v.batch]).toEqual([[], [], []]);
+    expect(v.plan.items[0].shippable).toBe(0);
+    expect((await tx((t) => readyToShip(t, { owner: B }))).orderIds).toEqual([]);
     const [it] = await itemsOf(o.id);
+    await expect(tx((t) => setPacked(t, actor, o.id, [it.id], true))).rejects.toThrow("還差 1 件");
+    await expect(tx((t) => bulkShip(t, actor, { orderIds: [o.id], dedupeKey: "own-ship-0000" }))).rejects.toThrow("沒辦法出貨");
+    await expect(tx((t) => createShipment(t, actor, { buyerId: s.b1.id, items: [{ orderItemId: it.id, qty: 1 }], autoReserve: true, dedupeKey: "own-ship-page" }))).rejects.toThrow("可用庫存只有 0 件");
+    expect(await prisma.inventoryMovement.count({ where: { kind: { in: ["RESERVE", "SHIP"] } } })).toBe(0);
+    // 改成沒記跟誰訂的：誰的貨都可以，照到貨先後扣
+    await setOwner(o.id, null);
+    v = await views([s.p1.id]);
+    expect([v.home, v.shippingPage, v.batch]).toEqual([[o.id], [o.id], [o.id]]);
     await tx((t) => setPacked(t, actor, o.id, [it.id], true));
-    await tx((t) => shipOrder(t, actor, { orderId: o.id, dedupeKey: "pool-ship-0001" }));
+    await tx((t) => shipOrder(t, actor, { orderId: o.id, dedupeKey: "own-ship-0001" }));
     expect(await shipCosts()).toEqual([`${A}:300`]);
-    // 原本「跟誰訂的」紀錄不變（採購追蹤、對帳用）
-    expect((await itemsOf(o.id))[0].ownerKey).toBe(B);
   });
 
-  it("A、B 團都有貨：不同客人共用；先下單的先分（不看跟誰訂的）；預覽＝實際；FIFO 跨團扣", async () => {
+  it("A、B 團都有貨：跟誰訂的就扣誰的（不會搶對方的）；沒記的照到貨先後；預覽＝實際", async () => {
     await stock(A, s.p1.id, 1, 300); // 最早到貨
     await stock(B, s.p1.id, 1, 500);
     const o1 = await order(s.b1.id, [{ productId: s.p1.id, qty: 1 }]); // 跟 B 訂
@@ -151,21 +157,19 @@ describe("共用庫存池（不分哪一團、誰的貨）", () => {
     await setOwner(o1.id, B);
     await setOwner(o2.id, A);
     const v = await views([s.p1.id]);
-    // 只有 2 件：照下單先後給 o1、o2，不會因為跟誰訂的不同而跳過
     expect(v.home).toEqual([o1.id, o2.id]);
     expect(v.shippingPage).toEqual(v.home);
     expect(v.plan.items.find((i) => i.orderId === o3.id)!.shippable).toBe(0);
-    // 一次出貨的預覽＝各頁的排程
+    // 看 A：只列跟 A 訂的
+    expect((await tx((t) => readyToShip(t, { owner: A }))).orderIds).toEqual([o2.id]);
     const pv = await tx((t) => bulkShipPreview(t, [o1.id, o2.id, o3.id]));
     expect(pv.flatMap((g) => g.ok.map((x) => x.id)).sort()).toEqual([o1.id, o2.id].sort());
     expect(pv.flatMap((g) => g.skip.map((x) => x.id))).toEqual([o3.id]);
-    const r = await tx((t) => bulkShip(t, actor, { orderIds: [o3.id, o2.id, o1.id], dedupeKey: "pool-ship-0002" }));
+    const r = await tx((t) => bulkShip(t, actor, { orderIds: [o3.id, o2.id, o1.id], dedupeKey: "own-ship-0002" }));
     expect([r.buyers, r.qty, r.skipped.map((x) => x.id)]).toEqual([2, 2, [o3.id]]);
-    // 實際出貨＝預覽
-    for (const o of [o1, o2]) for (const it of await itemsOf(o.id)) expect((await shippedBy(o.id)).get(it.id)).toBe(it.qty);
-    expect((await shippedBy(o3.id)).size).toBe(0);
-    // FIFO 跨團：先到的 A 300 先扣、再扣 B 500；成本照實際批次
-    expect(await shipCosts()).toEqual([`${A}:300`, `${B}:500`]);
+    // 實際扣的：o1 扣 B 的 500、o2 扣 A 的 300
+    expect(await shipCosts({ orderItem: { orderId: o1.id } })).toEqual([`${B}:500`]);
+    expect(await shipCosts({ orderItem: { orderId: o2.id } })).toEqual([`${A}:300`]);
     expect((await onHand(s.p1.id)).onHand).toBe(0);
     expect(await reservedTotals(s.p1.id)).toEqual({ movements: 0, items: 0 });
   });
@@ -175,44 +179,40 @@ describe("共用庫存池（不分哪一團、誰的貨）", () => {
     await stock(B, s.p1.id, 1, 500);
     await stock(A, s.p1.id, 1, 400);
     await stock(B, s.p2.id, 1, 200);
-    const o1 = await order(s.b1.id, [{ productId: s.p1.id, qty: 2 }, { productId: s.p2.id, qty: 1 }]); // 跟 B 訂
-    const o2 = await order(s.b2.id, [{ productId: s.p1.id, qty: 1 }]); // 沒記
-    const o3 = await order(s.b3.id, [{ productId: s.p1.id, qty: 2 }, { productId: s.p2.id, qty: 1 }]); // 跟 A 訂：吉伊只剩 1、小八沒了
+    const o1 = await order(s.b1.id, [{ productId: s.p1.id, qty: 2 }, { productId: s.p2.id, qty: 1 }]); // 跟 B 訂：B 的吉伊只有 1
+    const o2 = await order(s.b2.id, [{ productId: s.p1.id, qty: 1 }]); // 沒記：照到貨先後（A 300）
+    const o3 = await order(s.b3.id, [{ productId: s.p1.id, qty: 2 }, { productId: s.p2.id, qty: 1 }]); // 跟 A 訂：A 沒有小八
     const o4 = await order(s.b1.id, [{ productId: s.p1.id, qty: 1 }]); // 跟 A 訂
     await setOwner(o1.id, B);
     await setOwner(o3.id, A);
     await setOwner(o4.id, A);
     const plan = await tx((t) => shipPlan(t));
-    // 4 件吉伊：o1 2、o2 1 → 剩 1；o3 要 2 不夠（不佔），o4 要 1 → 整張可出
-    expect(plan.readyOrderIds).toEqual([o1.id, o2.id, o4.id]);
+    expect(plan.readyOrderIds).toEqual([o2.id, o4.id]);
+    const of = (id: string) => plan.items.find((i) => i.id === id)!;
+    const o1p1 = await itemOf(o1.id, s.p1.id);
+    const o1p2 = await itemOf(o1.id, s.p2.id);
     const o3p1 = await itemOf(o3.id, s.p1.id);
     const o3p2 = await itemOf(o3.id, s.p2.id);
-    const of = (id: string) => plan.items.find((i) => i.id === id)!;
-    expect([of(o3p1.id).shippable, of(o3p2.id).shippable]).toEqual([0, 0]); // 剩下的貨全排給整張可出的 o4
+    // 剩下：B 的吉伊 1、小八 1 給 o1；A 的吉伊剩 1（400）給 o3
+    expect([of(o1p1.id).shippable, of(o1p2.id).shippable, of(o3p1.id).shippable, of(o3p2.id).shippable]).toEqual([1, 1, 1, 0]);
 
-    // 一次出貨（照客人併包）：出的件數＝預覽的整張可出
-    const r = await tx((t) => bulkShip(t, actor, { orderIds: [o1.id, o2.id, o3.id, o4.id], dedupeKey: "pool-ship-0003" }));
-    expect([r.buyers, r.qty, r.skipped.map((x) => x.id)]).toEqual([2, 5, [o3.id]]);
+    const r = await tx((t) => bulkShip(t, actor, { orderIds: [o1.id, o2.id, o3.id, o4.id], dedupeKey: "own-ship-0003" }));
+    expect([r.buyers, r.qty, r.skipped.map((x) => x.id).sort()]).toEqual([2, 2, [o1.id, o3.id].sort()]);
     for (const id of plan.readyOrderIds) for (const it of await itemsOf(id)) expect((await shippedBy(id)).get(it.id)).toBe(it.qty);
-    // FIFO：A300×2、B500、A400 依到貨先後全部扣完；小八只有 B200
-    expect(await shipCosts({ productId: s.p1.id })).toEqual([`${A}:300`, `${A}:300`, `${A}:400`, `${B}:500`]);
-    expect(await shipCosts({ productId: s.p2.id })).toEqual([`${B}:200`]);
-    // 出完：o3 還是不能出，各頁一致
-    const after = await views([s.p1.id, s.p2.id]);
-    expect([after.home, after.shippingPage, after.batch]).toEqual([[], [], []]);
-    expect(after.plan.items.map((i) => i.shippable)).toEqual([0, 0]);
+    // o2（沒記）、o4（A）都扣 A 最早的 300
+    expect(await shipCosts({ productId: s.p1.id })).toEqual([`${A}:300`, `${A}:300`]);
 
-    // 再到 1 件吉伊：出貨頁顯示 o3 吉伊可先出 1 件；照這個數量出貨會成功，多 1 件就擋下來
-    await stock(B, s.p1.id, 1, 450);
-    const p2 = await tx((t) => shipPlan(t));
-    expect(p2.items.find((i) => i.id === o3p1.id)!.shippable).toBe(1);
-    await expect(tx((t) => createShipment(t, actor, { buyerId: s.b3.id, items: [{ orderItemId: o3p1.id, qty: 2 }], autoReserve: true, dedupeKey: "pool-ship-over" }))).rejects.toThrow();
-    await tx((t) => createShipment(t, actor, { buyerId: s.b3.id, items: [{ orderItemId: o3p1.id, qty: 1 }], autoReserve: true, dedupeKey: "pool-ship-part" }));
-    expect(await shipCosts({ orderItemId: o3p1.id })).toEqual([`${B}:450`]);
+    // 出貨頁照預覽的可出件數出：o3 吉伊 1 件扣 A 的 400；多 1 件就擋下來
+    await expect(tx((t) => createShipment(t, actor, { buyerId: s.b3.id, items: [{ orderItemId: o3p1.id, qty: 2 }], autoReserve: true, dedupeKey: "own-ship-over" }))).rejects.toThrow();
+    await tx((t) => createShipment(t, actor, { buyerId: s.b3.id, items: [{ orderItemId: o3p1.id, qty: 1 }], autoReserve: true, dedupeKey: "own-ship-part" }));
+    expect(await shipCosts({ orderItemId: o3p1.id })).toEqual([`${A}:400`]);
+    // o1：B 的吉伊 1、小八 1 照樣可以出
+    await tx((t) => createShipment(t, actor, { buyerId: s.b1.id, items: [{ orderItemId: o1p1.id, qty: 1 }, { orderItemId: o1p2.id, qty: 1 }], autoReserve: true, dedupeKey: "own-ship-o1" }));
+    expect(await shipCosts({ orderItem: { orderId: o1.id } })).toEqual([`${B}:200`, `${B}:500`]);
     expect(await reservedTotals(s.p1.id)).toEqual({ movements: 0, items: 0 });
   });
 
-  it("自留不算可出；保留給別人的不重複分；跟誰訂的不限制", async () => {
+  it("自留不算可出；保留給別人的不重複分；跟 B 訂的不能用 A 的貨", async () => {
     await stock(A, s.p1.id, 3);
     await tx((t) => keepStock(t, actor, { productId: s.p1.id, delta: 1, owner: A, dedupeKey: "keep-plan-1" })); // A 自留 1
     const o0 = await order(s.b3.id, [{ productId: s.p1.id, qty: 1 }]);
@@ -220,21 +220,19 @@ describe("共用庫存池（不分哪一團、誰的貨）", () => {
     await tx((t) => reserveForItem(t, actor, { orderItemId: it0.id, qty: 1, owner: null })); // o0 已保留 1 件（還沒出）
     const o1 = await order(s.b1.id, [{ productId: s.p1.id, qty: 1 }]);
     const o2 = await order(s.b2.id, [{ productId: s.p1.id, qty: 1 }]);
-    await setOwner(o1.id, B); // 跟 B 訂、B 沒貨也一樣排
+    await setOwner(o1.id, B); // 跟 B 訂、B 沒貨 → 不能出
     const v = await views([s.p1.id]);
-    // 3 件：自留 1、保留給 o0 1 → 只剩 1 件可賣，給先下單的 o1；o2 沒有
-    expect(v.home).toEqual([o0.id, o1.id]);
-    expect(v.plan.items.find((i) => i.orderId === o2.id)!.shippable).toBe(0);
+    // 3 件：自留 1、保留給 o0 1 → 只剩 1 件可賣；o1 跟 B 訂用不到，給 o2
+    expect(v.home).toEqual([o0.id, o2.id]);
+    expect(v.plan.items.find((i) => i.orderId === o1.id)!.shippable).toBe(0);
     const it1 = await itemOf(o1.id, s.p1.id);
-    await tx((t) => createShipment(t, actor, { buyerId: s.b1.id, items: [{ orderItemId: it1.id, qty: 1 }], autoReserve: true, dedupeKey: "keep-plan-ship1" }));
-    // o2：沒有可賣的了（自留的、保留給 o0 的都不能動）
+    await expect(tx((t) => createShipment(t, actor, { buyerId: s.b1.id, items: [{ orderItemId: it1.id, qty: 1 }], autoReserve: true, dedupeKey: "keep-plan-ship1" }))).rejects.toThrow();
     const it2 = await itemOf(o2.id, s.p1.id);
-    await expect(tx((t) => createShipment(t, actor, { buyerId: s.b2.id, items: [{ orderItemId: it2.id, qty: 1 }], autoReserve: true, dedupeKey: "keep-plan-ship2" }))).rejects.toThrow();
-    await expect(tx((t) => bulkShip(t, actor, { orderIds: [o2.id], dedupeKey: "keep-plan-bulk" }))).rejects.toThrow("沒辦法出貨");
+    await tx((t) => createShipment(t, actor, { buyerId: s.b2.id, items: [{ orderItemId: it2.id, qty: 1 }], autoReserve: true, dedupeKey: "keep-plan-ship2" }));
     expect((await itemOf(o0.id, s.p1.id)).reservedQtyCache).toBe(1);
-    // o0 出貨：用它自己保留的那件
-    const r = await tx((t) => bulkShip(t, actor, { orderIds: [o0.id, o2.id], dedupeKey: "keep-plan-bulk0" }));
-    expect([r.buyers, r.qty, r.skipped.map((x) => x.id)]).toEqual([1, 1, [o2.id]]);
+    // o0 出貨：用它自己保留的那件；o1 還是不能出
+    const r = await tx((t) => bulkShip(t, actor, { orderIds: [o0.id, o1.id], dedupeKey: "keep-plan-bulk0" }));
+    expect([r.buyers, r.qty, r.skipped.map((x) => x.id)]).toEqual([1, 1, [o1.id]]);
     const inv = await onHand(s.p1.id);
     expect([inv.onHand, inv.kept]).toEqual([0, 1]);
     expect(await reservedTotals(s.p1.id)).toEqual({ movements: 0, items: 0 });

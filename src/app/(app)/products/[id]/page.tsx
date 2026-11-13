@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
-import { inventoryFor, mineBatchWhere, mineItemWhere, mineKeys } from "@/server/services/mine";
+import { inventoryFor, mineBatchWhere, mineItemWhere, stockKeys } from "@/server/services/mine";
 import { lotOwners, ownerOfLot } from "@/server/services/ownership";
 import { viewOwner } from "@/server/view";
 import { productLots } from "@/server/services/inventory";
@@ -37,7 +37,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
       const all = await productLots(t, id);
       if (!owner) return all;
       const os = await lotOwners(t, all.map((l) => l.batchItemId));
-      return all.filter((l) => mineKeys(owner)!.includes(ownerOfLot(os, l.batchItemId)));
+      return all.filter((l) => stockKeys(owner)!.includes(ownerOfLot(os, l.batchItemId)));
     }),
     prisma.inventoryMovement.findMany({ where: { productId: id, ...(owner ? { OR: [{ purchaseBatchItem: { batch: mineBatchWhere(owner) } }, { purchaseBatchItemId: null, orderItem: mineItemWhere(owner) }] } : {}) }, orderBy: { createdAt: "desc" }, take: 30, include: { orderItem: { select: { order: { select: { id: true, orderNo: true } } } } } }),
     productBuyers(prisma, id, sp.categoryId, owner),

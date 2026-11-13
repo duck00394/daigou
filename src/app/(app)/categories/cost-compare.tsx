@@ -6,6 +6,7 @@ import { seriesCostCompare, type CostRow } from "@/server/services/series-cost";
 import { Empty } from "@/components/ui";
 import { formatTwd } from "@/lib/money";
 import { CostSelect } from "./cost-filters";
+import { SumCheck, SumGroup, SumProvider } from "@/components/quick-sum";
 
 type SP = { char?: string; type?: string; series?: string; calc?: string; scope?: string; sort?: string };
 
@@ -100,10 +101,11 @@ export async function CostCompare({ sp, owner }: { sp: SP; owner: string }) {
       {groups.length === 0 ? (
         <Empty>這個條件沒有可以比的成本。換一個角色或「全部品項」看看。</Empty>
       ) : (
-        groups.map((g) => (
+        <SumProvider itemWord="列" qtyWord="隻" avgLabel="平均每隻">
+        {groups.map((g) => (
           <section key={g.id} className="overflow-hidden rounded-xl border border-line bg-card" data-testid="cost-group" data-name={g.name}>
             <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-line px-4 py-2.5">
-              <h2 className="text-[15px] font-semibold">{char ? `${char}・` : ""}{g.name}</h2>
+              <h2 className="text-[15px] font-semibold">{char ? `${char}・` : ""}{g.name}<SumGroup label={g.name} items={g.rows.map((r) => ({ id: r.productId + r.categoryId, qty: qtyOf(r), cost: costOf(r) }))} /></h2>
               {g.lo && g.hi && g.lo !== g.hi && (
                 <span className="flex flex-wrap gap-x-3 text-[13px] text-ink-2" data-testid="cost-range">
                   <span>最低 <b className="num text-good">{formatTwd(costOf(g.lo)!)}</b><span className="text-mute">（{g.lo.categoryName}）</span></span>
@@ -126,10 +128,14 @@ export async function CostCompare({ sp, owner }: { sp: SP; owner: string }) {
                 return (
                   <details key={r.productId + r.categoryId} className="group border-b border-line-2 last:border-b-0" data-testid="cost-row">
                     <summary role="row" className={`${cols} cursor-pointer list-none px-4 py-2.5 text-[15px] hover:bg-line-2 [&::-webkit-details-marker]:hidden`}>
-                      <span role="cell" className="min-w-0">
+                      <span role="cell" className="flex min-w-0 gap-2">
+                        {/* 快速加總：勾幾個系列，下面算成本合計、平均每隻（跟著含運費／只看買價切換） */}
+                        <span className="pt-0.5"><SumCheck id={r.productId + r.categoryId} qty={qtyOf(r)} cost={costOf(r)} label={`${r.categoryName}${char ? "" : ` ${r.character}`}`} /></span>
+                        <span className="min-w-0">
                         <span className="block truncate">{r.categoryName}{char ? "" : `・${r.character}`}</span>
                         <span className="block text-[12px] text-mute md:hidden">{qtyOf(r)} 隻・買價 {buyOf(r) != null ? formatTwd(buyOf(r)!) : "無"}</span>
                         {(r.tentative || (!est && r.unsure > 0)) && <span className="block text-[12px] text-mute">{r.tentative ? "成本還是預估的" : ""}{r.tentative && !est && r.unsure ? "，" : ""}{!est && r.unsure ? `還有 ${r.unsure} 隻沒確認、沒算` : ""}</span>}
+                        </span>
                       </span>
                       <span role="cell" className="num hidden text-right md:block">{qtyOf(r)}</span>
                       <span role="cell" className="num text-right font-semibold" data-k="cost">{c != null ? formatTwd(c) : <span className="font-normal text-mute">無</span>}</span>
@@ -153,7 +159,8 @@ export async function CostCompare({ sp, owner }: { sp: SP; owner: string }) {
               })}
             </div>
           </section>
-        ))
+        ))}
+        </SumProvider>
       )}
       <p className="text-[12.5px] text-mute">每隻成本＝{full ? "買價＋運費、關稅平均分到每隻" : "只看買價（不含運費、關稅）"}；{est ? "還在等代購確認的也算進去" : "只算到貨和代購確認一定有的"}。每隻可賺＝售價−每隻成本。點一列看各團價格。</p>
     </div>

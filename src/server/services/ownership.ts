@@ -10,6 +10,9 @@ export const JOINT = "joint";
 export const NONE = "none";
 export type OwnerKey = string; // 經營者 id、JOINT 或 NONE
 
+/** 出貨扣誰的貨：訂單明細記了跟誰訂的（經營者或合資）就只扣那個人的；沒記（或未指定）＝誰的都可以（照到貨先後） */
+export const shipOwnerOf = (k: string | null | undefined): OwnerKey | null => (!k || k === NONE ? null : k);
+
 export function batchOwnerKey(b: { ownership: string; orderedById: string | null }): OwnerKey {
   return b.ownership === "JOINT" ? JOINT : (b.orderedById ?? NONE);
 }

@@ -3,7 +3,7 @@ import { BizError, lockRows, type Tx } from "@/server/db";
 import type { Actor } from "./common";
 import { updateItem } from "./orders";
 import { reserveForItem } from "./inventory";
-import { stockByOwner } from "./ownership";
+import { lotOwners, ownerOfLot, shipOwnerOf, stockByOwner } from "./ownership";
 import { createShipment } from "./shipping";
 import { addPayment } from "./payments";
 import { recomputeOrder } from "./recompute";
@@ -21,7 +21,7 @@ async function lockForShip(t: Tx, orderIds: string[]) {
 
 type Line = { id: string; productId: string; name: string; pending: number; reserved: number; ownerKey: string | null; packed: boolean };
 
-/** 這張單還沒出貨的明細，以及每一項現在能不能備齊（保留＋可用庫存夠不夠；共用庫存池） */
+/** 這張單還沒出貨的明細，以及每一項現在能不能備齊（保留＋跟誰訂的那個人的可用庫存夠不夠；沒記跟誰訂的＝誰的都可以） */
 export async function packState(t: Tx, orderId: string) {
   const items = await t.orderItem.findMany({
     where: { orderId },
@@ -32,12 +32,13 @@ export async function packState(t: Tx, orderId: string) {
     .map((i) => ({ id: i.id, productId: i.productId, name: i.productNameSnapshot, pending: i.qty - i.cancelledQtyCache - i.shippedQtyCache, reserved: i.reservedQtyCache, ownerKey: i.ownerKey, packed: i.packFlag === "READY" }))
     .filter((l) => l.pending > 0);
   const byOwner = await stockByOwner(t, { productIds: [...new Set(lines.map((l) => l.productId))] });
-  // 同一商品出現在好幾列：可用庫存依序分，不重複算；不分是誰的貨（共用庫存池）
+  // 同一商品出現在好幾列：可用庫存依序分，不重複算；各賣各的，只算跟誰訂的那個人的貨
   const used = new Map<string, number>();
   return lines.map((l) => {
     const m = byOwner.get(l.productId);
-    const key = l.productId;
-    const free = [...(m?.values() ?? [])].reduce((a, x) => a + Math.max(0, x.free), 0);
+    const own = shipOwnerOf(l.ownerKey);
+    const key = `${l.productId}|${own ?? ""}`;
+    const free = own ? Math.max(0, m?.get(own)?.free ?? 0) : [...(m?.values() ?? [])].reduce((a, x) => a + Math.max(0, x.free), 0);
     const left = Math.max(0, free - (used.get(key) ?? 0));
     const need = Math.max(0, l.pending - l.reserved);
     const ok = need <= left;
@@ -59,7 +60,7 @@ export async function setPacked(t: Tx, actor: Actor, orderId: string, itemIds: s
   return rows.length;
 }
 
-/** 整張單還沒出的一次出貨：不夠的先從共用庫存池保留（FIFO），再建出貨 */
+/** 整張單還沒出的一次出貨：不夠的先從跟誰訂的那個人的貨保留（照到貨先後），再建出貨 */
 export async function shipOrder(t: Tx, actor: Actor, input: { orderId: string; method?: string | null; trackingNo?: string | null; shippedAt?: Date; dedupeKey: string }) {
   const done = async () => {
     const dup = await t.shipment.findUnique({ where: { dedupeKey: input.dedupeKey }, include: { items: true } });
@@ -79,7 +80,7 @@ export async function shipOrder(t: Tx, actor: Actor, input: { orderId: string; m
   if (notPacked.length) throw new BizError(`還有 ${notPacked.length} 項沒勾備齊：${notPacked.map((l) => l.name).join("、")}`);
   for (const l of st) {
     const need = l.pending - l.reserved;
-    if (need > 0) await reserveForItem(t, actor, { orderItemId: l.id, qty: need, owner: null }); // 共用庫存池，照批次進貨先後（FIFO）
+    if (need > 0) await reserveForItem(t, actor, { orderItemId: l.id, qty: need }); // 扣跟誰訂的那個人的貨，照批次進貨先後（FIFO）
   }
   const r = await createShipment(t, actor, { buyerId: order.buyerId, method: input.method, trackingNo: input.trackingNo, shippedAt: input.shippedAt, items: st.map((l) => ({ orderItemId: l.id, qty: l.pending })), autoReserve: false, dedupeKey: input.dedupeKey });
   return { shipmentNo: r.shipment.shipmentNo, duplicated: false, count: st.reduce((a, l) => a + l.pending, 0) };
@@ -162,7 +163,7 @@ export async function bulkShip(t: Tx, actor: Actor, input: { orderIds: string[];
       for (const l of st) {
         if (!l.packed) await updateItem(t, actor, l.id, { packFlag: "READY" });
         const need = l.pending - l.reserved;
-        if (need > 0) await reserveForItem(t, actor, { orderItemId: l.id, qty: need, owner: null }); // 共用庫存池，照批次進貨先後（FIFO）
+        if (need > 0) await reserveForItem(t, actor, { orderItemId: l.id, qty: need }); // 扣跟誰訂的那個人的貨，照批次進貨先後（FIFO）
         lines.push({ orderItemId: l.id, qty: l.pending });
       }
     }
@@ -201,12 +202,11 @@ export async function bulkPay(t: Tx, actor: Actor, input: { orderIds: string[]; 
 
 /**
  * 出貨排程（首頁待辦、訂單列表、出貨頁、採購團收貨提醒、一次出貨共用同一套）：
- * - 同一個商品的可賣庫存是一個共用池：不管是哪一團、誰的貨，都可以分給任何客人的訂單
- *   （訂單記的「跟誰訂的」照舊保留，給採購追蹤、成本與賺多少用，只是不再限制出貨用哪裡的貨）
+ * - 各賣各的：訂單明細記了跟誰訂的（經營者或合資），就只能用那個人的貨；沒記的誰的貨都可以
  * - 可以用的貨＝已經保留給這一項的＋可用庫存（自留的不算、已經保留給別張單的不重複分）
  * - 先下單的先分：整張單都夠才算「整張可以出」，並先佔貨；不夠的單不佔，讓後面整張夠的先出
  * - 第二輪：剩下的貨再依下單順序分給不夠的單（出貨頁顯示實際可以先出幾件）
- * 實際出貨時保留照各批次進貨先後扣（FIFO），成本算法不變
+ * 每一批貨照到貨先後（FIFO）分，跟實際保留時扣的順序一樣；成本算法不變
  */
 // 永遠用全部的訂單一起排（看某個人時只是把結果篩給他看），各頁才會一致
 export async function shipPlan(t: Tx) {
@@ -218,23 +218,54 @@ export async function shipPlan(t: Tx) {
   const open = items.map((i) => ({ ...i, pending: i.qty - i.cancelledQtyCache - i.shippedQtyCache, reserved: Math.min(i.reservedQtyCache, i.qty - i.cancelledQtyCache - i.shippedQtyCache) })).filter((i) => i.pending > 0);
   const byOrder = new Map<string, typeof open>();
   for (const i of open) byOrder.set(i.orderId, [...(byOrder.get(i.orderId) ?? []), i]);
-  // 每個商品的可用庫存：各批次「現有（自留已扣掉）－已保留」加總，跟實際保留時算的一樣（每批次不小於 0）
-  const pool = new Map<string, number>();
+  // 每個商品的每一批貨：「現有（自留已扣掉）－已保留」、是誰的、什麼時候到的（跟實際保留時算的一樣，每批不小於 0）
+  type Lot = { owner: string; free: number; at: number };
+  const lotsOf = new Map<string, Lot[]>();
   if (open.length) {
-    const lots = await t.inventoryMovement.groupBy({ by: ["productId", "purchaseBatchItemId"], where: { productId: { in: [...new Set(open.map((i) => i.productId))] } }, _sum: { onHandDelta: true, reservedDelta: true } });
-    for (const l of lots) pool.set(l.productId, (pool.get(l.productId) ?? 0) + Math.max(0, (l._sum.onHandDelta ?? 0) - (l._sum.reservedDelta ?? 0)));
+    const lots = await t.inventoryMovement.groupBy({ by: ["productId", "purchaseBatchItemId"], where: { productId: { in: [...new Set(open.map((i) => i.productId))] } }, _sum: { onHandDelta: true, reservedDelta: true }, _min: { createdAt: true } });
+    const owners = await lotOwners(t, lots.map((l) => l.purchaseBatchItemId));
+    for (const l of lots) {
+      const lot = { owner: ownerOfLot(owners, l.purchaseBatchItemId), free: Math.max(0, (l._sum.onHandDelta ?? 0) - (l._sum.reservedDelta ?? 0)), at: l._min.createdAt?.getTime() ?? 0 };
+      lotsOf.set(l.productId, [...(lotsOf.get(l.productId) ?? []), lot]);
+    }
+    for (const ls of lotsOf.values()) ls.sort((a, b) => a.at - b.at);
   }
-  const avail = (pid: string) => pool.get(pid) ?? 0;
-  const take = (pid: string, n: number) => pool.set(pid, avail(pid) - n);
+  const usable = (pid: string, own: string | null) => (lotsOf.get(pid) ?? []).filter((l) => !own || l.owner === own);
+  const avail = (pid: string, own: string | null) => usable(pid, own).reduce((a, l) => a + l.free, 0);
+  // 照到貨先後扣；回傳怎麼還原（整張不夠時退回）
+  const take = (pid: string, own: string | null, n: number) => {
+    const undo: [Lot, number][] = [];
+    for (const l of usable(pid, own)) {
+      if (n <= 0) break;
+      const x = Math.min(n, l.free);
+      if (x <= 0) continue;
+      l.free -= x;
+      n -= x;
+      undo.push([l, x]);
+    }
+    return undo;
+  };
   const shippable = new Map<string, number>(); // 每一項現在可以出幾件
   for (const i of open) shippable.set(i.id, i.reserved);
   const ready: string[] = [];
-  // 第一輪：整張都夠的單（依下單順序）
+  // 第一輪：整張都夠的單（依下單順序）；一項不夠就整張退回、不佔貨
   for (const [orderId, lines] of byOrder) {
-    const need = new Map<string, number>();
-    for (const l of lines) need.set(l.productId, (need.get(l.productId) ?? 0) + l.pending - l.reserved);
-    if (![...need.entries()].every(([pid, n]) => n <= avail(pid))) continue;
-    for (const [pid, n] of need) take(pid, n);
+    const undo: [Lot, number][] = [];
+    let ok = true;
+    for (const l of lines) {
+      const need = l.pending - l.reserved;
+      if (need <= 0) continue;
+      const own = shipOwnerOf(l.ownerKey);
+      if (avail(l.productId, own) < need) {
+        ok = false;
+        break;
+      }
+      undo.push(...take(l.productId, own, need));
+    }
+    if (!ok) {
+      for (const [lot, x] of undo) lot.free += x;
+      continue;
+    }
     for (const l of lines) shippable.set(l.id, l.pending);
     ready.push(orderId);
   }
@@ -242,9 +273,10 @@ export async function shipPlan(t: Tx) {
   const readySet = new Set(ready);
   for (const i of open) {
     if (readySet.has(i.orderId)) continue;
-    const extra = Math.min(i.pending - i.reserved, avail(i.productId));
+    const own = shipOwnerOf(i.ownerKey);
+    const extra = Math.min(i.pending - i.reserved, avail(i.productId, own));
     if (extra > 0) {
-      take(i.productId, extra);
+      take(i.productId, own, extra);
       shippable.set(i.id, i.reserved + extra);
     }
   }

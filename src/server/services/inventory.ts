@@ -9,7 +9,7 @@ import { BizError, lockRows, type Tx } from "@/server/db";
 import { divRound } from "@/lib/money";
 import { audit, type Actor } from "./common";
 import { recomputeOrder } from "./recompute";
-import { filterLotsByOwner, lotOwners, ownerOfLot } from "./ownership";
+import { filterLotsByOwner, lotOwners, ownerOfLot, shipOwnerOf } from "./ownership";
 
 export interface Lot {
   batchItemId: string | null;
@@ -225,11 +225,13 @@ export async function reserveForItem(t: Tx, actor: Actor, input: { orderItemId: 
   // 鎖住後再讀一次還需要幾件（同時有出貨、保留時，用最新的數字，不會多保留）
   const { need } = await itemNeed(t, input.orderItemId);
   if (input.qty > need) throw new BizError(`此明細只需要再保留 ${need} 件`);
+  // 扣誰的貨：有指定就照指定；沒指定（也沒指定哪一批）就照這一項「跟誰訂的」，各賣各的，不扣別人的貨
+  const owner = input.owner !== undefined ? input.owner : input.batchItemId === undefined ? shipOwnerOf(item.ownerKey) : null;
   let lots = await productLots(t, item.productId);
   if (input.batchItemId !== undefined) lots = lots.filter((l) => l.batchItemId === (input.batchItemId ?? null));
-  if (input.owner) lots = await filterLotsByOwner(t, lots, input.owner);
+  if (owner) lots = await filterLotsByOwner(t, lots, owner);
   const free = lots.reduce((s, l) => s + Math.max(0, l.free), 0);
-  if (free < input.qty) throw new BizError(`「${item.productNameSnapshot}」${input.owner ? `${await ownerName(t, input.owner)}的` : ""}可用庫存只有 ${free} 件`);
+  if (free < input.qty) throw new BizError(`「${item.productNameSnapshot}」${owner ? `${await ownerName(t, owner)}的` : ""}可用庫存只有 ${free} 件`);
   let left = input.qty;
   for (const lot of lots) {
     if (left <= 0) break;

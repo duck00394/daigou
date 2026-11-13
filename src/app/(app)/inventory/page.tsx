@@ -20,6 +20,8 @@ import { SellButton } from "@/components/quick-sale";
 import { getMe } from "@/server/me";
 import { readyToShip } from "@/server/services/order-flow";
 import { JOINT, NONE, stockByOwner } from "@/server/services/ownership";
+import { mineStockItemWhere, stockKeys } from "@/server/services/mine";
+import { SumCheck, SumGroup, SumProvider } from "@/components/quick-sum";
 import { DemandButton } from "./demand";
 import type { OwnerStockOpt } from "@/components/owner-chips";
 import { stockValuation } from "@/server/services/reports";
@@ -120,9 +122,11 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
   const { byOwner, demandAll } = stock;
   const val = valAll.byProduct;
   const ownerName = (k: string) => (k === JOINT ? "合資" : k === NONE ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
+  // 看某個人的時候：只列他自己的庫存（跟上面數字同一個範圍），別人的、合資沒指定的不列，也不能從這裡賣／留；看「全部」才全部列
+  const ownerKeys = stockKeys(owner);
   const ownersOf = (pid: string): OwnerStockOpt[] =>
     [...(byOwner.get(pid)?.entries() ?? [])]
-      .filter(([, x]) => x.free > 0 || x.kept > 0)
+      .filter(([k, x]) => (x.free > 0 || x.kept > 0) && (!ownerKeys || ownerKeys.includes(k)))
       .map(([k, x]) => ({ key: k, label: k === me ? `${ownerName(k)}（我）` : ownerName(k), free: x.free, kept: x.kept }))
       .sort((a, b) => (a.key === me ? -1 : b.key === me ? 1 : 0));
   const seriesById = new Map(seriesOpts.map((s) => [s.id, s]));
@@ -289,6 +293,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
       {rows.length === 0 ? (
         <Section><Empty action={only === "all" ? undefined : <LinkButton href="/purchase" primary>＋ 新增採購</LinkButton>}>{only === "all" ? "沒有符合的商品。換個關鍵字或系列試試。" : "這裡目前沒有庫存，也沒有還沒到的貨。新增採購後，買的東西會出現在這裡。"}</Empty></Section>
       ) : (
+        <SumProvider qtyLabel="現有 " avgLabel="平均每支">
         <div className="overflow-hidden rounded-xl border border-line bg-card">
           <table className="w-full text-[15px]" aria-label="庫存表">
             <thead>
@@ -329,6 +334,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                             <tr className="border-t border-line-2 bg-paper">
                               <td colSpan={COLS} className="py-1 pr-3 pl-5 text-[13px] font-semibold text-ink-2" data-testid="stock-type">
                                 {tg.name}
+                                <SumGroup label={`${sg.name} ${tg.name}`} items={tg.rows.map((r) => ({ id: r.p.id, qty: Math.max(0, r.s.onHand), cost: avgOf(r)?.avg ?? null }))} />
                                 {(() => {
                                   const si = setInfo.get(`${sg.key}|${tg.key}`);
                                   if (!si) return null;
@@ -349,7 +355,9 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                               return (
                                 <Fragment key={r.p.id}>
                                 <tr className={meta ? "max-md:border-0 md:border-b md:border-line-2" : "border-b border-line-2"} data-testid="stock-row" data-name={r.p.name} data-incoming={r.s.incoming}>
-                                  <td className="py-2 pr-3 pl-7 align-top">
+                                  <td className="py-2 pr-3 pl-2 align-top">
+                                    {/* 快速加總：勾了下面直接算成本合計、平均每支（照現有件數） */}
+                                    <span className="mr-2 inline-flex align-[-0.2em]"><SumCheck id={r.p.id} qty={Math.max(0, r.s.onHand)} cost={avgOf(r)?.avg ?? null} label={label(r)} /></span>
                                     <Link href={`/products/${r.p.id}`} className="font-medium hover:underline" title={r.p.name}>{label(r)}</Link>
                                     {dup && sg.key !== "none" && <Link href={`/categories/${sg.key}#merge`} className="ml-1.5 rounded-full bg-warn-soft px-2 py-0.5 text-[11px] text-warn" data-testid="dup-badge"><Icon name="warn" /> 重複了，按這裡合併</Link>}
                                     {meta && <div className="hidden text-[11.5px] leading-snug text-mute md:block">{meta}</div>}
@@ -371,7 +379,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                                 {/* 手機：平均成本、自留等放在這一列下面，佔滿寬度，不會擠成好幾行 */}
                                 {meta && (
                                   <tr className="border-b border-line-2 md:hidden" data-testid="stock-meta" data-name={r.p.name}>
-                                    <td colSpan={COLS} className="pt-0 pr-3 pb-2 pl-7 text-[12px] leading-snug text-mute">{meta}</td>
+                                    <td colSpan={COLS} className="pt-0 pr-3 pb-2 pl-9 text-[12px] leading-snug text-mute">{meta}</td>
                                   </tr>
                                 )}
                                 </Fragment>
@@ -398,6 +406,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
             </tbody>
           </table>
         </div>
+        </SumProvider>
       )}
       <p className="text-[12px] text-mute">
         欄位看不懂？到「全部功能 › 名詞說明」。{" "}
@@ -411,12 +420,12 @@ async function DemandTab({ owner = "" }: { owner?: string }) {
   const [d, rate] = await Promise.all([tx((t) => purchaseDemand(t, { owner: owner || null })), getDefaultRateMicro(prisma)]);
   const products = await prisma.product.findMany({ where: { id: { in: [...d.keys()] } }, select: { id: true, name: true, code: true, officialPriceJpy: true } });
   const inv = await tx((t) => inventorySummary(t, [...d.keys()]));
-  // 看某個人：可用庫存、已在途只算他的（＋合資、未指定的）
-  const keys = owner ? [owner, JOINT, NONE] : [];
+  // 看某個人：可用庫存、已在途只算他自己的（個人團＋合資團指定給他的列）
+  const keys = stockKeys(owner) ?? [];
   const byOwner = owner ? await tx((t) => stockByOwner(t, { productIds: [...d.keys()] })) : null;
   const incomingMine = new Map<string, number>();
   if (owner) {
-    const items = await prisma.purchaseBatchItem.findMany({ where: { productId: { in: [...d.keys()] }, batch: { status: { not: "CANCELLED" }, ...viewBatchWhere(owner) } }, select: { productId: true, qty: true, cancelledQty: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } });
+    const items = await prisma.purchaseBatchItem.findMany({ where: { productId: { in: [...d.keys()] }, batch: { status: { not: "CANCELLED" } }, ...mineStockItemWhere(owner) }, select: { productId: true, qty: true, cancelledQty: true, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } } });
     for (const i of items) incomingMine.set(i.productId, (incomingMine.get(i.productId) ?? 0) + Math.max(0, i.qty - i.cancelledQty - i.movements.reduce((a, m) => a + m.onHandDelta, 0)));
   }
   const rows = products.map((p) => {

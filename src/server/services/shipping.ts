@@ -74,7 +74,7 @@ export async function createShipment(t: Tx, actor: Actor, input: ShipInput) {
     let reserved = groups.reduce((s, g) => s + g.qty, 0);
     if (reserved < line.qty) {
       if (!input.autoReserve) throw new BizError(`「${it.productNameSnapshot}」只保留了 ${reserved} 件，請先登記到貨或保留庫存`);
-      await reserveForItem(t, actor, { orderItemId: it.id, qty: line.qty - reserved, owner: input.owner || null });
+      await reserveForItem(t, actor, { orderItemId: it.id, qty: line.qty - reserved, owner: input.owner || undefined }); // 沒指定出貨人：扣這一項跟誰訂的那個人的貨
       groups = await itemReservations(t, it.id);
       reserved = groups.reduce((s, g) => s + g.qty, 0);
     }

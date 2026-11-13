@@ -14,7 +14,7 @@ const ownerOpts = (operators: Op[]) => [...operators.map((o) => ({ value: o.id, 
 export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, available, operators = [] }: { buyerId: string; buyerName: string; defaultMethod: string | null; items: ShipItem[]; available: Record<string, number>; operators?: Op[] }) {
   // 誰出的貨（扣誰的庫存）：空白＝照已保留的，不夠的先扣先買進的
   // 預訂記了跟誰訂的（而且都一樣）就預設扣他的
-  // 預設不指定：照已保留的、不夠的從共用庫存池依批次進貨先後（FIFO）保留；要指定扣誰的庫存再手動選
+  // 預設不指定：照已保留的、不夠的從「跟誰訂的」那個人的貨依批次進貨先後（FIFO）保留（沒記跟誰訂的才誰的都可以）；要改扣誰的庫存再手動選
   const [owner, setOwner] = useState("");
   const ownerLabel = ownerOpts(operators).find((o) => o.value === owner)?.label.replace(/的$/, "") ?? "";
   const canOf = (i: ShipItem) => i.shippable ?? i.reserved;
@@ -99,7 +99,7 @@ export function BuyerShipCard({ buyerId, buyerName, defaultMethod, items, availa
             value={owner}
             onChange={setOwner}
             options={[{ value: "", label: "照已保留的（不換）" }, ...ownerOpts(operators)]}
-            hint={owner ? `已保留的會換成${ownerLabel}的貨，${ownerLabel}的不夠會擋下來。` : "選了人，就只扣那個人的庫存，兩個人的庫存才對得上。"}
+            hint={owner ? `已保留的會換成${ownerLabel}的貨，${ownerLabel}的不夠會擋下來。` : "沒選：照已保留的，不夠的扣這張單「跟誰訂的」那個人的貨（各賣各的）。選了人，就改扣那個人的庫存。"}
           />
         )}
         {needsAuto && (
