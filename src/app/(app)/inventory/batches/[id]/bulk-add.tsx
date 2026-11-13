@@ -95,7 +95,7 @@ function rowError(r: RowState): string | null {
 export function BulkAddGrid({
   batchId,
   supplierId,
-  supplierCurrency,
+  supplierCurrency: supplierCurrencyProp,
   rateMicro,
   series: seriesInit,
   types: typesInit,
@@ -144,9 +144,13 @@ export function BulkAddGrid({
   const [ownerAll, setOwnerAll] = useState(""); // 合資：全部設成（"" ＝ 一起的）
   const ownerOf = (r: RowState) => r.ownerId ?? ownerAll;
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [rows, setRows] = useState<RowState[]>([blankRow(supplierCurrency)]);
+  // 這批商品的幣別：預設跟代購設定的一樣，可以在上面一次改整批（每一列細項還能單獨改）
+  const [supplierCurrency, setSupplierCurrency] = useState<Currency>(supplierCurrencyProp);
+  useEffect(() => setSupplierCurrency(supplierCurrencyProp), [supplierCurrencyProp]);
+  const [rows, setRows] = useState<RowState[]>([blankRow(supplierCurrencyProp)]);
   const [sameBy, setSameBy] = useState<Record<string, string>>({});
   const [sameQty, setSameQty] = useState("");
+  const [payOpen, setPayOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<Result[] | null>(null);
@@ -722,6 +726,24 @@ export function BulkAddGrid({
             </form>
           )}
         </div>
+        <div>
+          <label className="mb-1 block text-[13px] font-medium text-ink-2" htmlFor="bulk-currency">這批商品的幣別</label>
+          <select
+            id="bulk-currency"
+            aria-label="這批商品的幣別"
+            className={inputCls}
+            value={supplierCurrency}
+            onChange={(e) => {
+              const v = e.target.value as Currency;
+              setSupplierCurrency(v);
+              // 整批一起換；之後要單獨改某一列，到那一列的細項改
+              setRows((rs) => rs.map((r) => ({ ...r, currency: v, curSet: false })));
+            }}
+          >
+            <option value="TWD">台幣</option>
+            <option value="JPY">日幣</option>
+          </select>
+        </div>
       </div>
 
       {draft && (
@@ -833,8 +855,9 @@ export function BulkAddGrid({
       )}
 
       {/* 5：表格 */}
-      <label className="flex items-center gap-2 text-[14px]" data-testid="same-price">
-        <span className="shrink-0">{typeName || "這批"}都是</span>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px]">
+      <label className="flex items-center gap-2" data-testid="same-price">
+        <span className="shrink-0 font-medium text-ink-2">整批設定單價</span><span className="shrink-0 text-mute">{typeName || "這批"}都是</span>
         <input
           className={`${inputCls} num w-28 text-right`}
           inputMode="numeric"
@@ -845,6 +868,20 @@ export function BulkAddGrid({
         />
         <span className="shrink-0 text-mute">{supplierCurrency === "JPY" ? "日幣" : "元"}</span>
       </label>
+      {/* 套用全部：連自己改過單價的列也一起改成這個價（之後每一列還能再改） */}
+      <Button
+        small
+        disabled={!sameOf({ ...blankRow(supplierCurrency), typeId })}
+        onClick={() => {
+          const v = sameOf({ ...blankRow(supplierCurrency), typeId });
+          if (!v) return;
+          setRows((rs) => rs.map((r) => (!isBlank(r) && (r.typeId ?? typeId) === typeId ? { ...r, unitCost: v, touched: false, hint: "" } : r)));
+        }}
+      >
+        套用全部
+      </Button>
+      <span className="w-full text-[12px] text-mute">沒自己填單價的列都用這個價；按「套用全部」連改過的也一起改，之後每個角色還是可以單獨改。</span>
+      </div>
       {/* 每個角色買一樣多：一次把這個品項的每一列數量改掉（不用一列一列按＋） */}
       <label className="flex items-center gap-2 text-[14px]" data-testid="same-qty">
         <span className="shrink-0">每個買</span>
@@ -898,7 +935,8 @@ export function BulkAddGrid({
           const cell = (col: number) => ({ "data-row": i, "data-col": col, onKeyDown: (e: React.KeyboardEvent) => onKeyDown(e, i, col), onPaste: (e: React.ClipboardEvent) => onPaste(e, i, col) });
           const lbl = "sr-only";
           const lblX = "mb-0.5 block text-[12px] text-mute xl:sr-only"; // 展開的細項在手機上顯示標籤
-          const extra = r.more || r.spec.trim() || r.salePrice.trim() || r.currency !== supplierCurrency ? "" : "hidden xl:block";
+          // 手機：規格、幣別、想賣價預設收起來（帶入的參考價也不自動打開），名稱下面寫摘要；點名稱才展開。幣別跟整批不一樣時直接打開提醒
+          const extra = r.more || (r.currency !== supplierCurrency && !(sameOn(r) && !r.curSet)) ? "" : "hidden xl:block";
           const charName = r.characterId === "__new__" ? r.newName.trim() : nameOf(r.characterId);
           const rowTid = r.typeId ?? typeId;
           const typeName = types.find((x) => x.id === rowTid)?.name ?? "";
@@ -960,7 +998,7 @@ export function BulkAddGrid({
                 )}
                 {preview && (
                   <button type="button" className="mt-0.5 block max-w-full truncate text-left text-[11.5px] text-mute xl:pointer-events-none" onClick={() => update(r.key, { more: !r.more })} title="存好後的商品名稱；點一下填規格、日幣、想賣價" data-testid="name-preview">
-                    {preview}<span className="text-ai xl:hidden">{extra ? "　＋細項" : "　收起"}</span>
+                    {preview}{extra && r.salePrice.trim() ? <span className="xl:hidden">，想賣 {r.salePrice.trim()}</span> : null}<span className="text-ai xl:hidden">{extra ? "　＋細項" : "　收起"}</span>
                   </button>
                 )}
                 {joint && (
@@ -1043,8 +1081,12 @@ export function BulkAddGrid({
           {stats.invalid > 0 && <span className="ml-2 text-bad">{stats.invalid} 列需要修正</span>}
           {pay && pay.extraTwd > 0 && <span className="text-mute">＋運費 {formatTwd(pay.extraTwd)}＝<b className="text-ink">{formatTwd(grandTwd)}</b></span>}
         </div>
+        {/* 手機：已付收在「付款資訊」，儲存列不會太高擋住表格；有填就直接顯示 */}
+        {pay && !(payOpen || paid || overpaid) && (
+          <button type="button" aria-expanded={false} onClick={() => setPayOpen(true)} className="min-h-10 rounded-lg border border-line px-3 text-[13.5px] text-ink-2 md:hidden" data-testid="pay-toggle">付款資訊 ▾</button>
+        )}
         {pay && (
-          <label className="flex items-center gap-1.5 whitespace-nowrap text-sm">
+          <label className={`items-center gap-1.5 whitespace-nowrap text-sm ${payOpen || paid || overpaid ? "flex" : "hidden md:flex"}`}>
             <span className="shrink-0">已付</span>
             <input
               inputMode="numeric"

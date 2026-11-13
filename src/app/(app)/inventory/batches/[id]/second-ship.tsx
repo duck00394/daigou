@@ -8,7 +8,7 @@ import { formatTwd } from "@/lib/money";
 
 type Row = { typeId: string; typeName: string; qty: number; items: { id: string; qty: number }[] };
 
-export function SecondShip({ batchId, rows, saved, recorded, open }: { batchId: string; rows: Row[]; saved: Record<string, number>; recorded: number | null; open: boolean }) {
+export function SecondShip({ batchId, rows, saved, recorded, open, onRecorded }: { batchId: string; rows: Row[]; saved: Record<string, number>; recorded: number | null; open: boolean; onRecorded?: () => void }) {
   const [fee, setFee] = useState<Record<string, string>>(Object.fromEntries(rows.map((r) => [r.typeId, saved[r.typeId] != null ? String(saved[r.typeId]) : ""])));
   const { run, pending } = useRun();
   const idem = useIdemKey();
@@ -75,7 +75,7 @@ export function SecondShip({ batchId, rows, saved, recorded, open }: { batchId: 
                     note: "二補運費",
                     requestKey: idem.key,
                   }),
-                { success: `已記到這團的運費 ${formatTwd(total)}`, onOk: () => idem.renew() },
+                { success: `已記到這團的運費 ${formatTwd(total)}`, onOk: () => { idem.renew(); onRecorded?.(); } },
               )
             }
           >

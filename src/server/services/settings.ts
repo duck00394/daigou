@@ -117,3 +117,31 @@ export async function setNavPins(t: Tx, actor: Actor, operatorId: string, pins: 
   await audit(t, actor, "settings.navPins", "AppSetting", key, { pins: clean });
   return clean;
 }
+
+/** 二補運費（只有日本官網買的團）：照品項分組的隻數、每個品項記住的每隻幾元、這團已經記過多少。採購團明細和新增採購共用 */
+export async function secondShipInfo(db: Db, batchId: string) {
+  const b = await db.purchaseBatch.findUnique({
+    where: { id: batchId },
+    select: {
+      status: true,
+      supplierRef: { select: { kind: true } },
+      items: { select: { id: true, qty: true, cancelledQty: true, product: { select: { productType: { select: { id: true, name: true, sortOrder: true } } } } } },
+      costs: { select: { note: true, amount: true } },
+    },
+  });
+  if (!b || b.supplierRef?.kind !== "OFFICIAL_ONLINE") return null;
+  const m = new Map<string, { typeId: string; typeName: string; sort: number; qty: number; items: { id: string; qty: number }[] }>();
+  for (const i of b.items) {
+    const q = i.qty - i.cancelledQty;
+    if (q <= 0) continue;
+    const t = i.product.productType;
+    const k = t?.id ?? "-";
+    const r = m.get(k) ?? { typeId: k, typeName: t?.name ?? "其他", sort: t?.sortOrder ?? 9999, qty: 0, items: [] };
+    r.qty += q;
+    r.items.push({ id: i.id, qty: q });
+    m.set(k, r);
+  }
+  const rows = [...m.values()].sort((a, c) => a.sort - c.sort).map((r) => ({ typeId: r.typeId, typeName: r.typeName, qty: r.qty, items: r.items }));
+  const recorded = b.costs.filter((c) => c.note === "二補運費").reduce((a, c) => a + c.amount, 0);
+  return { rows, saved: await getSecondShipFees(db), recorded: recorded || null, open: b.status !== "CANCELLED" };
+}

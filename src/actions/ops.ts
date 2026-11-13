@@ -295,3 +295,9 @@ export async function setNavPinsAction(pins: string[] | null) {
     return tx((t) => setNavPins(t, a, me, pins === null ? null : z.array(z.string().max(80)).max(60).parse(pins)));
   });
 }
+
+/** 新增採購存好品項後：這團是日本官網買的就回傳二補運費要用的資料（不是官網的回 null） */
+export async function secondShipInfoAction(batchId: string) {
+  const { secondShipInfo } = await import("@/server/services/settings");
+  return run(() => tx((t) => secondShipInfo(t, z.string().min(1).max(40).parse(batchId))));
+}

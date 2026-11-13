@@ -58,7 +58,7 @@ export default async function PurchasePage({ searchParams }: { searchParams: Pro
         shipping={shipping.map((x) => ({ id: x.id, name: x.name, kind: x.kind, currency: x.currency === "JPY" ? "JPY" : "TWD", amount: x.amount }))}
         lastSeriesId={lastItem?.product.seriesId ?? null}
         lastTypeId={lastItem?.product.productTypeId ?? null}
-        suppliers={sortedSups.map((s) => ({ id: s.id, name: s.name, currency: (s.defaultCurrency as "JPY" | "TWD") ?? "TWD", store: isStoreKind(s.kind), favorite: s.favorite, lastNote: lastNote.get(s.id) ?? null }))}
+        suppliers={sortedSups.map((s) => ({ id: s.id, name: s.name, currency: (s.defaultCurrency as "JPY" | "TWD") ?? "TWD", store: isStoreKind(s.kind), favorite: s.favorite, lastNote: lastNote.get(s.id) ?? null, official: s.kind === "OFFICIAL_ONLINE" }))}
         batches={batches.map((b) => ({
           id: b.id,
           label: `${b.name}`,
@@ -72,6 +72,7 @@ export default async function PurchasePage({ searchParams }: { searchParams: Pro
           currency: (b.supplierRef?.defaultCurrency as "JPY" | "TWD") ?? "TWD",
           rateMicro: b.rateMicro,
           items: b._count.items,
+          official: b.supplierRef?.kind === "OFFICIAL_ONLINE",
         }))}
         series={series}
         types={types}

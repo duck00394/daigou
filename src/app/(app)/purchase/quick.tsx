@@ -6,7 +6,8 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { Button, TextField, inputCls, notify, useIdemKey } from "@/components/client";
 import { BulkAddGrid } from "../inventory/batches/[id]/bulk-add";
-import { createBatchAction, setBatchDutyAction } from "@/actions/ops";
+import { createBatchAction, secondShipInfoAction, setBatchDutyAction } from "@/actions/ops";
+import { SecondShip } from "../inventory/batches/[id]/second-ship";
 import { saveSupplierAction, setSupplierFavoriteAction } from "@/actions/series";
 import { SeriesPicker, type SeriesOpt } from "@/components/series-picker";
 import { renameCategoryAction, saveCategoryAction } from "@/actions/catalog";
@@ -18,8 +19,9 @@ import { Choice } from "@/components/choice";
 import { ActingChoice } from "@/components/acting";
 
 type Op = { id: string; name: string; code: string };
-type BatchOpt = { id: string; label: string; code: string; categoryId: string | null; owner: string; ownerKey: string; stage: string; supplierId: string | null; supplierName: string | null; currency: "JPY" | "TWD"; rateMicro: number; items: number };
-type Supplier = { id: string; name: string; currency: "JPY" | "TWD"; store: boolean; favorite: boolean; lastNote?: string | null };
+type BatchOpt = { id: string; label: string; code: string; categoryId: string | null; owner: string; ownerKey: string; stage: string; supplierId: string | null; supplierName: string | null; currency: "JPY" | "TWD"; rateMicro: number; items: number; official?: boolean };
+type SecondInfo = { batchId: string; rows: { typeId: string; typeName: string; qty: number; items: { id: string; qty: number }[] }[]; saved: Record<string, number>; recorded: number | null; open: boolean };
+type Supplier = { id: string; name: string; currency: "JPY" | "TWD"; store: boolean; favorite: boolean; lastNote?: string | null; official?: boolean };
 type Ship = { id: string; name: string; kind: string; currency: "TWD" | "JPY"; amount: number };
 const NEW = "__new__";
 const JOINT = "JOINT";
@@ -77,9 +79,14 @@ export function QuickPurchase(props: {
   const [mainFee, setMainFee] = useState("38");
   const mainShip = props.shipping.find((x) => x.name.includes("賣貨便"));
   const [saved, setSaved] = useState<{ id: string; name: string; count: number; stocked: boolean; paid: boolean } | null>(null);
+  // 日本官網買的：存好品項後，下面直接算二補運費（跟採購團明細同一個框）
+  const [second, setSecond] = useState<SecondInfo | null>(null);
   // 跟誰買：代購（要等寄來）或自己去實體店買（買了就拿到、當場付清）
   const [via, setVia] = useState<"AGENT" | "STORE">("AGENT");
   const [paidAtStore, setPaidAtStore] = useState(true);
+  // 手機「訂單與進階設定」、電腦「進階設定」打開了沒
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [advOpen, setAdvOpen] = useState(false);
   const payIdem = useIdemKey();
   const created = useRef<string | null>(null);
   const recvIdem = useIdemKey();
@@ -243,7 +250,19 @@ export function QuickPurchase(props: {
         </div>
       )}
 
-      <section className="space-y-2 rounded-xl border border-line bg-card p-4" data-tour="buy-series">
+      {/* 電腦：三個步驟一眼看到做到哪（點了跳到那一段） */}
+      <nav aria-label="新增採購步驟" className="hidden items-center gap-2 text-[13.5px] md:flex" data-testid="buy-steps">
+        {([["buy-1", "1. 選系列", !!categoryId], ["buy-2", "2. 這一團", ready && (pick !== NEW || !!f.supplierId || !!created.current)], ["buy-3", "3. 買了什麼？", !!saved]] as const).map(([id, label, done], k) => (
+          <span key={id} className="flex items-center gap-2">
+            {k > 0 && <span aria-hidden className="h-px w-8 bg-line" />}
+            <a href={`#${id}`} className={`flex min-h-9 items-center gap-1.5 rounded-full border px-3 ${done ? "border-ai-soft bg-ai-soft text-ink" : "border-line text-ink-2 hover:bg-line-2"}`}>
+              {done && <span aria-hidden className="text-ai"><Icon name="check" /></span>}
+              {label}
+            </a>
+          </span>
+        ))}
+      </nav>
+      <section id="buy-1" className="scroll-mt-20 space-y-2 rounded-xl border border-line bg-card p-4" data-tour="buy-series">
         <h2 className="text-[15px] font-semibold">1. 系列</h2>
         {newCat === null && categoryId && !changingCat && renaming === null ? (
           <div className="flex items-center justify-between gap-2 rounded-lg bg-ai-soft px-3 py-2.5" data-testid="chosen-series">
@@ -318,126 +337,122 @@ export function QuickPurchase(props: {
         )}
       </section>
 
-      <section className="space-y-3 rounded-xl border border-line bg-card p-4">
-        <h2 className="text-[15px] font-semibold">2. 這一團</h2>
-        <Choice
-          label="哪一團"
-          value={pick}
-          options={[{ value: NEW, label: "開新的一團" }, ...inCat.map((b) => ({ value: b.id, label: `加到：${b.label}（${(b.categoryId ?? "") !== categoryId && cats.find((c) => c.id === b.categoryId) ? `${cats.find((c) => c.id === b.categoryId)!.name}，` : ""}${b.owner}的，${b.stage}，${b.items} 項）` }))]}
-          onChange={(v) => { setPick(v); setSaved(null); if (v === NEW) created.current = null; }}
-        />
+      <section id="buy-2" className="scroll-mt-20 space-y-3 rounded-xl border border-line bg-card p-4">
+        <h2 className="flex items-baseline justify-between gap-2 text-[15px] font-semibold">2. 這一團<span className="text-[12.5px] font-normal text-mute md:hidden">基本資料</span></h2>
+        {/* 電腦：兩欄（哪一團｜代購、訂單編號｜在哪訂的、運費｜關稅、在哪裡買的｜進度），進階設定收起來
+            手機：只放哪一團、代購、誰的、運費；訂單編號等收在「訂單與進階設定」 */}
+        <div className="grid gap-3 md:grid-cols-2 md:items-start">
+          <div>
+            <Choice
+              label="哪一團"
+              value={pick}
+              options={[{ value: NEW, label: "開新的一團" }, ...inCat.map((b) => ({ value: b.id, label: `加到：${b.label}（${(b.categoryId ?? "") !== categoryId && cats.find((c) => c.id === b.categoryId) ? `${cats.find((c) => c.id === b.categoryId)!.name}，` : ""}${b.owner}的，${b.stage}，${b.items} 項）` }))]}
+              onChange={(v) => { setPick(v); setSaved(null); setSecond(null); if (v === NEW) created.current = null; }}
+            />
+          </div>
+          {pick === NEW && !created.current && (
+              <div>
+                <label className="mb-1 block text-[13px] font-medium text-ink-2" htmlFor="pick-supplier">{store ? "哪家店" : "代購"}</label>
+                {newSup === null ? (
+                  <>
+                    {/* 選代購：按一下打開清單，上面可以打字找，最下面才是新增 */}
+                    <button
+                      type="button"
+                      id="pick-supplier"
+                      aria-label={store ? "哪家店" : "向哪個代購買"}
+                      aria-expanded={supOpen}
+                      data-value={f.supplierId}
+                      className={`${inputCls} flex min-h-11 items-center justify-between text-left ${supErr && !f.supplierId ? "border-bad ring-1 ring-bad" : ""}`}
+                      onClick={() => { setSupOpen(!supOpen); setSupQ(""); setSupErr(false); }}
+                    >
+                      <span className={pickedSup ? "" : "text-mute"} data-testid="supplier-current">{pickedSup?.name ?? (store ? "請選店家" : "請選代購")}</span>
+                      <span aria-hidden className="text-mute">{supOpen ? "▴" : "▾"}</span>
+                    </button>
+                    {supErr && !f.supplierId && <p role="alert" className="mt-1 text-[13px] text-bad" data-testid="supplier-error">{store ? "請選是哪家店" : "請選跟哪個代購買的"}</p>}
+                    {supOpen && (
+                      <div className="mt-1 overflow-hidden rounded-xl border border-ai bg-card shadow-lg" data-testid="supplier-panel">
+                        <div className="border-b border-line-2 p-2">
+                          <input
+                            autoFocus
+                            type="search"
+                            aria-label={store ? "搜尋店家" : "搜尋代購"}
+                            placeholder={store ? "搜尋店家名字" : "搜尋代購名字"}
+                            className={`${inputCls} min-h-10`}
+                            value={supQ}
+                            onChange={(e) => setSupQ(e.target.value)}
+                          />
+                        </div>
+                        <ul className="max-h-72 overflow-y-auto" role="listbox" aria-label={store ? "店家" : "代購"}>
+                          {(supQ.trim() ? [["搜尋結果", supHits] as const] : ([["常用", favs], ["其他", shown.filter((x) => !favs.includes(x))]] as const)).map(([title, list]) =>
+                            list.length ? (
+                              <li key={title}>
+                                <div className="bg-paper px-3 py-1 text-[12px] text-mute">{title}</div>
+                                <ul>
+                                  {list.map((x) => (
+                                    <li key={x.id}>
+                                      <button type="button" role="option" aria-selected={f.supplierId === x.id} className={`flex w-full items-center justify-between px-3 py-2.5 text-left text-[15px] ${f.supplierId === x.id ? "bg-ai-soft font-semibold text-ai" : "hover:bg-line-2"}`} onClick={() => { setF({ ...f, supplierId: x.id }); setSupOpen(false); setSupQ(""); }}>
+                                        {x.name}{f.supplierId === x.id && <span className="text-[12px]">已選</span>}
+                                      </button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </li>
+                            ) : null,
+                          )}
+                          {supQ.trim() && !supHits.length && <li className="px-3 py-2.5 text-[14px] text-mute">找不到「{supQ.trim()}」</li>}
+                        </ul>
+                        <button type="button" className="block w-full border-t border-line-2 px-3 py-2.5 text-left text-[14px] text-ai" onClick={() => { setNewSup(supQ.trim()); setSupQ(""); setSupOpen(false); }}>
+                          {supQ.trim() ? `＋ 新增${store ? "店家" : "代購"}「${supQ.trim()}」` : `＋ 新增${store ? "店家" : "代購"}`}
+                        </button>
+                      </div>
+                    )}
+                    {pickedSup && !pickedSup.favorite && (
+                      <button
+                        type="button"
+                        className="mt-1 text-[13px] text-ai"
+                        onClick={async () => {
+                          const r = await setSupplierFavoriteAction(pickedSup.id, true);
+                          if (!r.ok) return notify(r.error);
+                          setSuppliers((l) => l.map((x) => (x.id === pickedSup.id ? { ...x, favorite: true } : x)));
+                        }}
+                      >
+                        把「{pickedSup.name}」設成常用（排在最上面）
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex items-end gap-2">
+                    <label className="flex-1 text-[13px] font-medium text-ink-2">
+                      {store ? "店名" : "代購名稱"}
+                      <input autoFocus className={`${inputCls} mt-1`} value={newSup} onChange={(e) => setNewSup(e.target.value)} placeholder={store ? "例：吉伊卡哇樂園、常設店" : "例：YUANS、QQ Shop"} />
+                    </label>
+                    <Button
+                      variant="primary"
+                      onClick={async () => {
+                        if (!newSup.trim()) return notify(store ? "請填寫店名" : "請填寫代購名稱");
+                        const r = await saveSupplierAction(null, { name: newSup.trim(), defaultCurrency: "TWD", kind: store ? "STORE" : "AGENT" });
+                        if (!r.ok) return notify(r.error);
+                        setSuppliers((l) => [{ id: r.data.id, name: r.data.name, currency: "TWD", store, favorite: false }, ...l]);
+                        setF((x) => ({ ...x, supplierId: r.data.id }));
+                        setNewSup(null);
+                      }}
+                    >
+                      建立
+                    </Button>
+                    <Button onClick={() => setNewSup(null)}>取消</Button>
+                  </div>
+                )}
+              </div>
+          )}
+        </div>
 
         {pick === NEW && !created.current && (
           <div className="space-y-3">
-            <div>
-              <label className="mb-1 block text-[13px] font-medium text-ink-2" htmlFor="pick-supplier">{store ? "哪家店" : "代購"}</label>
-              {newSup === null ? (
-                <>
-                  {/* 選代購：按一下打開清單，上面可以打字找，最下面才是新增 */}
-                  <button
-                    type="button"
-                    id="pick-supplier"
-                    aria-label={store ? "哪家店" : "向哪個代購買"}
-                    aria-expanded={supOpen}
-                    data-value={f.supplierId}
-                    className={`${inputCls} flex min-h-11 items-center justify-between text-left ${supErr && !f.supplierId ? "border-bad ring-1 ring-bad" : ""}`}
-                    onClick={() => { setSupOpen(!supOpen); setSupQ(""); setSupErr(false); }}
-                  >
-                    <span className={pickedSup ? "" : "text-mute"} data-testid="supplier-current">{pickedSup?.name ?? (store ? "請選店家" : "請選代購")}</span>
-                    <span aria-hidden className="text-mute">{supOpen ? "▴" : "▾"}</span>
-                  </button>
-                  {supErr && !f.supplierId && <p role="alert" className="mt-1 text-[13px] text-bad" data-testid="supplier-error">{store ? "請選是哪家店" : "請選跟哪個代購買的"}</p>}
-                  {supOpen && (
-                    <div className="mt-1 overflow-hidden rounded-xl border border-ai bg-card shadow-lg" data-testid="supplier-panel">
-                      <div className="border-b border-line-2 p-2">
-                        <input
-                          autoFocus
-                          type="search"
-                          aria-label={store ? "搜尋店家" : "搜尋代購"}
-                          placeholder={store ? "搜尋店家名字" : "搜尋代購名字"}
-                          className={`${inputCls} min-h-10`}
-                          value={supQ}
-                          onChange={(e) => setSupQ(e.target.value)}
-                        />
-                      </div>
-                      <ul className="max-h-72 overflow-y-auto" role="listbox" aria-label={store ? "店家" : "代購"}>
-                        {(supQ.trim() ? [["搜尋結果", supHits] as const] : ([["常用", favs], ["其他", shown.filter((x) => !favs.includes(x))]] as const)).map(([title, list]) =>
-                          list.length ? (
-                            <li key={title}>
-                              <div className="bg-paper px-3 py-1 text-[12px] text-mute">{title}</div>
-                              <ul>
-                                {list.map((x) => (
-                                  <li key={x.id}>
-                                    <button type="button" role="option" aria-selected={f.supplierId === x.id} className={`flex w-full items-center justify-between px-3 py-2.5 text-left text-[15px] ${f.supplierId === x.id ? "bg-ai-soft font-semibold text-ai" : "hover:bg-line-2"}`} onClick={() => { setF({ ...f, supplierId: x.id }); setSupOpen(false); setSupQ(""); }}>
-                                      {x.name}{f.supplierId === x.id && <span className="text-[12px]">已選</span>}
-                                    </button>
-                                  </li>
-                                ))}
-                              </ul>
-                            </li>
-                          ) : null,
-                        )}
-                        {supQ.trim() && !supHits.length && <li className="px-3 py-2.5 text-[14px] text-mute">找不到「{supQ.trim()}」</li>}
-                      </ul>
-                      <button type="button" className="block w-full border-t border-line-2 px-3 py-2.5 text-left text-[14px] text-ai" onClick={() => { setNewSup(supQ.trim()); setSupQ(""); setSupOpen(false); }}>
-                        {supQ.trim() ? `＋ 新增${store ? "店家" : "代購"}「${supQ.trim()}」` : `＋ 新增${store ? "店家" : "代購"}`}
-                      </button>
-                    </div>
-                  )}
-                  {pickedSup && !pickedSup.favorite && (
-                    <button
-                      type="button"
-                      className="mt-1 text-[13px] text-ai"
-                      onClick={async () => {
-                        const r = await setSupplierFavoriteAction(pickedSup.id, true);
-                        if (!r.ok) return notify(r.error);
-                        setSuppliers((l) => l.map((x) => (x.id === pickedSup.id ? { ...x, favorite: true } : x)));
-                      }}
-                    >
-                      把「{pickedSup.name}」設成常用（排在最上面）
-                    </button>
-                  )}
-                </>
-              ) : (
-                <div className="flex items-end gap-2">
-                  <label className="flex-1 text-[13px] font-medium text-ink-2">
-                    {store ? "店名" : "代購名稱"}
-                    <input autoFocus className={`${inputCls} mt-1`} value={newSup} onChange={(e) => setNewSup(e.target.value)} placeholder={store ? "例：吉伊卡哇樂園、常設店" : "例：YUANS、QQ Shop"} />
-                  </label>
-                  <Button
-                    variant="primary"
-                    onClick={async () => {
-                      if (!newSup.trim()) return notify(store ? "請填寫店名" : "請填寫代購名稱");
-                      const r = await saveSupplierAction(null, { name: newSup.trim(), defaultCurrency: "TWD", kind: store ? "STORE" : "AGENT" });
-                      if (!r.ok) return notify(r.error);
-                      setSuppliers((l) => [{ id: r.data.id, name: r.data.name, currency: "TWD", store, favorite: false }, ...l]);
-                      setF((x) => ({ ...x, supplierId: r.data.id }));
-                      setNewSup(null);
-                    }}
-                  >
-                    建立
-                  </Button>
-                  <Button onClick={() => setNewSup(null)}>取消</Button>
-                </div>
-              )}
-            </div>
-            {!store && (
-              <label className="block text-[13px] font-medium text-ink-2">
-                訂單編號（賣貨便等平台的，選填）
-                <input aria-label="訂單編號" className={`${inputCls} mt-1 min-h-11`} value={f.orderNo} onChange={(e) => setF({ ...f, orderNo: e.target.value })} placeholder="例：20261023A1B2C3" />
-              </label>
-            )}
-            <div>
-              <label className="block text-[13px] font-medium text-ink-2">
-                在哪訂的（選填）
-                <input aria-label="在哪訂的" className={`${inputCls} mt-1 min-h-11`} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} placeholder="例：Threads @xxx、IG xxx、LINE 群「吉伊代購團」" />
-              </label>
-              {pickedSup?.lastNote && f.notes.trim() !== pickedSup.lastNote && (
-                <button type="button" className="mt-1 max-w-full truncate text-left text-[13px] text-ai" onClick={() => setF({ ...f, notes: pickedSup.lastNote ?? "" })}>用上次的：{pickedSup.lastNote}</button>
-              )}
-            </div>
-            <div>
-              <ActingChoice label="這團是誰的" noun="採購" testid="buy-owner" defaultValue={props.acting ?? props.me ?? ""} value={f.owner} options={owners.map(([v, l]) => ({ value: v, label: l }))} onChange={(v) => setF({ ...f, owner: v })} />
+            {pickedSup?.official && <p className="text-[13px] text-mute" data-testid="buy-second-hint">日本官網買的：品項存好後，下面會照品項算二補運費（每隻幾元會沿用上次設定的）。</p>}
+            <div className="space-y-3 md:order-none">
+              <div>
+                <ActingChoice label="這團是誰的" noun="採購" testid="buy-owner" defaultValue={props.acting ?? props.me ?? ""} value={f.owner} options={owners.map(([v, l]) => ({ value: v, label: l }))} onChange={(v) => setF({ ...f, owner: v })} />
+              </div>
             </div>
             {f.owner === JOINT && jointBox()}
             {!store && (
@@ -456,76 +471,115 @@ export function QuickPurchase(props: {
                 <span className="text-[12px] text-mute">（存好就進庫存{paidAtStore ? "、記成已付款" : ""}）</span>
               </label>
             )}
-            <details className="rounded-xl border border-line-2 bg-paper px-3 py-2 text-[14px]" open={store || undefined}>
-              <summary className="cursor-pointer select-none py-1 text-ai">更多：實體店買的、到哪了、運費、訂金、團名、預計到貨</summary>
-              <div className="mt-2 space-y-3">
-                <Choice
-                  label="在哪裡買的"
-                  value={via}
-                  options={[{ value: "AGENT", label: "跟代購買（要等代購寄來）" }, { value: "STORE", label: "實體店買（買了就拿到）" }]}
-                  onChange={(v) => { setVia(v as "AGENT" | "STORE"); setF((x) => ({ ...x, supplierId: "" })); setNewSup(null); }}
-                />
+            {/* 手機：訂單編號、在哪訂的、關稅、在哪裡買的、進度、其他運費、團名…收在這裡（電腦直接顯示） */}
+            <button type="button" aria-expanded={moreOpen || store} onClick={() => setMoreOpen((x) => !x)} className="flex min-h-11 w-full items-center justify-between rounded-xl border border-line-2 bg-paper px-3 text-left text-[14px] md:hidden" data-testid="buy-more-toggle">
+              <span><span className="font-medium text-ink">訂單與進階設定</span><span className="mt-0.5 block text-[12px] text-mute">訂單編號、在哪訂的、關稅、進度、在哪裡買的、其他運費、團名、預計到貨</span></span>
+              <span aria-hidden className="text-mute">{moreOpen || store ? "▴" : "▾"}</span>
+            </button>
+            {/* 收起來時也留著「用上次的」：一下就帶入上次在哪訂的，不用先打開 */}
+            {!(moreOpen || store) && pickedSup?.lastNote && f.notes.trim() !== pickedSup.lastNote && (
+              <button type="button" className="-mt-1 max-w-full truncate text-left text-[13px] text-ai md:hidden" onClick={() => setF({ ...f, notes: pickedSup.lastNote ?? "" })}>在哪訂的，用上次的：{pickedSup.lastNote}</button>
+            )}
+            {!(moreOpen || store) && f.notes.trim() && <p className="-mt-1 truncate text-[13px] text-mute md:hidden">在哪訂的：{f.notes}</p>}
+            <div className={`space-y-3 ${moreOpen || store ? "" : "max-md:hidden"}`} data-testid="buy-more">
+              <div className="grid gap-3 md:grid-cols-2 md:items-start">
                 {!store && (
-                  <>
-                    <Choice label="進度" value={f.progress} options={Object.entries(batchProgress).map(([v, l]) => ({ value: v, label: l }))} onChange={(v) => setF({ ...f, progress: v })} />
-                    <div className="space-y-2">
-                      <div className="text-[13px] font-medium text-ink-2">其他運費（賣貨便已經在上面了；點常用的就帶入，可以再改）</div>
-                      <div className="flex flex-wrap gap-1.5" aria-label="常用運費">
-                        {props.shipping.filter((x) => x.id !== mainShip?.id).map((x) => {
-                          const on = fees[x.id] !== undefined;
-                          return (
-                            <button
-                              key={x.id}
-                              type="button"
-                              aria-pressed={on}
-                              className={pill(on)}
-                              onClick={() => setFees((y) => {
-                                const n = { ...y };
-                                if (on) delete n[x.id];
-                                else n[x.id] = String(x.amount);
-                                return n;
-                              })}
-                            >
-                              {x.name} {x.currency === "JPY" ? formatJpy(x.amount) : formatTwd(x.amount)}
-                            </button>
-                          );
-                        })}
-                        <button type="button" aria-pressed={customFee !== null} className={pill(customFee !== null)} onClick={() => setCustomFee(customFee === null ? "" : null)}>＋ 自己填</button>
-                      </div>
-                      {props.shipping.length === 0 && <p className="text-[12px] text-mute">可以到「設定」先建常用運費方式（例：賣貨便、交貨便）。</p>}
-                      {Object.entries(fees).map(([k, v]) => (
-                        <label key={k} className="flex items-center justify-between gap-2 text-[14px]">
-                          {props.shipping.find((x) => x.id === k)?.name}
-                          <input className={`${inputCls} num w-28 text-right`} inputMode="numeric" aria-label={`${props.shipping.find((x) => x.id === k)?.name} 運費`} value={v} onChange={(e) => setFees({ ...fees, [k]: e.target.value })} />
-                        </label>
-                      ))}
-                      {customFee !== null && (
-                        <label className="flex items-center justify-between gap-2 text-[14px]">
-                          運費（自己填）
-                          <input autoFocus className={`${inputCls} num w-28 text-right`} inputMode="numeric" aria-label="運費金額" value={customFee} onChange={(e) => setCustomFee(e.target.value)} />
-                        </label>
-                      )}
-                      <p className="text-[12px] text-mute">運費：不攤、算這團主人的。付了多少（訂金或全額）填在最下面儲存旁邊的「已付」。</p>
-                    </div>
-                  </>
+                  <label className="block text-[13px] font-medium text-ink-2">
+                    訂單編號（賣貨便等平台的，選填）
+                    <input aria-label="訂單編號" className={`${inputCls} mt-1 min-h-11`} value={f.orderNo} onChange={(e) => setF({ ...f, orderNo: e.target.value })} placeholder="例：20261023A1B2C3" />
+                  </label>
                 )}
                 <div>
-                  <label className="flex items-center justify-between gap-2 text-[14px] font-medium text-ink-2">
-                    關稅／稅金
-                    <span className="flex items-center gap-1.5">
-                      <input className={`${inputCls} num w-20 text-right`} inputMode="decimal" aria-label="關稅 %" value={f.duty} onChange={(e) => setF({ ...f, duty: e.target.value.replace(/[^\d.]/g, "") })} placeholder="0" />
-                      <span>%</span>
-                    </span>
+                  <label className="block text-[13px] font-medium text-ink-2">
+                    在哪訂的（選填）
+                    <input aria-label="在哪訂的" className={`${inputCls} mt-1 min-h-11`} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} placeholder="例：Threads @xxx、IG xxx、LINE 群「吉伊代購團」" />
                   </label>
-                  <p className="mt-1 text-[12px] text-mute">填了會用商品金額自動估出關稅，攤到每件的成本；之後加商品、改價格會自動重算。個別商品不同 % 到團頁面「編輯」另外填。</p>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <TextField label="團名（可不填，預設用代購名稱）" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder={supplier?.name ?? "例：ANA 第 2 團"} />
-                  <TextField label="預計到貨日" type="date" value={f.expectedAt} onChange={(e) => setF({ ...f, expectedAt: e.target.value })} />
-                  {currency === "JPY" && <TextField label="匯率（這家代購用日幣）" inputMode="decimal" value={f.rate} onChange={(e) => setF({ ...f, rate: e.target.value })} />}
+                  {pickedSup?.lastNote && f.notes.trim() !== pickedSup.lastNote && (
+                    <button type="button" className="mt-1 max-w-full truncate text-left text-[13px] text-ai" onClick={() => setF({ ...f, notes: pickedSup.lastNote ?? "" })}>用上次的：{pickedSup.lastNote}</button>
+                  )}
                 </div>
               </div>
-            </details>
+              <div className="space-y-3 md:border-t md:border-line-2 md:pt-3">
+                <h3 className="hidden text-[14px] font-semibold md:block">費用與進度</h3>
+                <div className="grid gap-3 md:grid-cols-2 md:items-start">
+                  <div>
+                    <label className="flex items-center justify-between gap-2 text-[14px] font-medium text-ink-2">
+                      關稅／稅金
+                      <span className="flex items-center gap-1.5">
+                        <input className={`${inputCls} num w-20 text-right`} inputMode="decimal" aria-label="關稅 %" value={f.duty} onChange={(e) => setF({ ...f, duty: e.target.value.replace(/[^\d.]/g, "") })} placeholder="0" />
+                        <span>%</span>
+                      </span>
+                    </label>
+                    <p className="mt-1 text-[12px] text-mute">填了會用商品金額自動估出關稅，攤到每件的成本；之後加商品、改價格會自動重算。個別商品不同 % 到團頁面「編輯」另外填。</p>
+                  </div>
+                  <Choice
+                    label="在哪裡買的"
+                    value={via}
+                    options={[{ value: "AGENT", label: "跟代購買（要等代購寄來）" }, { value: "STORE", label: "實體店買（買了就拿到）" }]}
+                    onChange={(v) => { setVia(v as "AGENT" | "STORE"); setF((x) => ({ ...x, supplierId: "" })); setNewSup(null); }}
+                  />
+                  {!store && (
+                    <div>
+                      <Choice label="進度" value={f.progress} options={Object.entries(batchProgress).map(([v, l]) => ({ value: v, label: l }))} onChange={(v) => setF({ ...f, progress: v })} />
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* 電腦：進階設定再收一層；手機：打開「訂單與進階設定」就全部看得到 */}
+              <button type="button" aria-expanded={advOpen} onClick={() => setAdvOpen((x) => !x)} className="hidden min-h-10 w-full items-center gap-2 rounded-xl border border-line-2 bg-paper px-3 text-left text-[14px] text-ai md:flex" data-testid="buy-adv-toggle">
+                <span aria-hidden>{advOpen ? "▾" : "▸"}</span>進階設定<span className="text-[12.5px] text-mute">（其他運費、團名、預計到貨{currency === "JPY" ? "、匯率" : ""}）</span>
+              </button>
+              <div className={`space-y-3 rounded-xl border border-line-2 bg-paper p-3 ${advOpen ? "" : "md:hidden"}`}>
+                {!store && (
+                  <div className="space-y-2">
+                    <div className="text-[13px] font-medium text-ink-2">其他運費（賣貨便已經在上面了；點常用的就帶入，可以再改）</div>
+                    <div className="flex flex-wrap gap-1.5" aria-label="常用運費">
+                      {props.shipping.filter((x) => x.id !== mainShip?.id).map((x) => {
+                        const on = fees[x.id] !== undefined;
+                        return (
+                          <button
+                            key={x.id}
+                            type="button"
+                            aria-pressed={on}
+                            className={pill(on)}
+                            onClick={() => setFees((y) => {
+                              const n = { ...y };
+                              if (on) delete n[x.id];
+                              else n[x.id] = String(x.amount);
+                              return n;
+                            })}
+                          >
+                            {x.name} {x.currency === "JPY" ? formatJpy(x.amount) : formatTwd(x.amount)}
+                          </button>
+                        );
+                      })}
+                      <button type="button" aria-pressed={customFee !== null} className={pill(customFee !== null)} onClick={() => setCustomFee(customFee === null ? "" : null)}>＋ 自己填</button>
+                    </div>
+                    {props.shipping.length === 0 && <p className="text-[12px] text-mute">可以到「設定」先建常用運費方式（例：賣貨便、交貨便）。</p>}
+                    {Object.entries(fees).map(([k, v]) => (
+                      <label key={k} className="flex items-center justify-between gap-2 text-[14px]">
+                        {props.shipping.find((x) => x.id === k)?.name}
+                        <input className={`${inputCls} num w-28 text-right`} inputMode="numeric" aria-label={`${props.shipping.find((x) => x.id === k)?.name} 運費`} value={v} onChange={(e) => setFees({ ...fees, [k]: e.target.value })} />
+                      </label>
+                    ))}
+                    {customFee !== null && (
+                      <label className="flex items-center justify-between gap-2 text-[14px]">
+                        運費（自己填）
+                        <input autoFocus className={`${inputCls} num w-28 text-right`} inputMode="numeric" aria-label="運費金額" value={customFee} onChange={(e) => setCustomFee(e.target.value)} />
+                      </label>
+                    )}
+                    <p className="text-[12px] text-mute">運費：不攤、算這團主人的。付了多少（訂金或全額）填在最下面儲存旁邊的「已付」。</p>
+                  </div>
+                )}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <TextField label="團名（可不填，預設用代購名稱）" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder={supplier?.name ?? "例：ANA 第 2 團"} />
+                <TextField label="預計到貨日" type="date" value={f.expectedAt} onChange={(e) => setF({ ...f, expectedAt: e.target.value })} />
+                {currency === "JPY" && <TextField label="匯率（這家代購用日幣）" inputMode="decimal" value={f.rate} onChange={(e) => setF({ ...f, rate: e.target.value })} />}
+              </div>
+              </div>
+            </div>
+            {/* 手機：填好直接跳到「3. 買了什麼？」 */}
+            <a href="#buy-3" className="flex min-h-12 items-center justify-center rounded-xl bg-ai text-[15px] font-semibold text-on-fill md:hidden" data-testid="buy-next">下一步：買了什麼？</a>
           </div>
         )}
         {pick === NEW && created.current && f.owner === JOINT && jointBox()}
@@ -536,7 +590,7 @@ export function QuickPurchase(props: {
         )}
       </section>
 
-      <section className="space-y-3 rounded-xl border border-line bg-card p-4">
+      <section id="buy-3" className="scroll-mt-20 space-y-3 rounded-xl border border-line bg-card p-4">
         <h2 className="text-[15px] font-semibold">3. 買了什麼？</h2>
         {!ready ? (
           <p className="text-sm text-mute">先在上面選一團，或開新的一團。</p>
@@ -580,6 +634,11 @@ export function QuickPurchase(props: {
                 }
               }
               setSaved({ id, name, count, stocked, paid });
+              const official = pick === NEW ? !!pickedSup?.official : !!chosen?.official;
+              if (official) {
+                const si = await secondShipInfoAction(id);
+                setSecond(si.ok && si.data && si.data.rows.length ? { batchId: id, ...si.data } : null);
+              } else setSecond(null);
             }}
             supplierId={chosen?.supplierId ?? (f.supplierId || null)}
             supplierCurrency={currency}
@@ -599,6 +658,9 @@ export function QuickPurchase(props: {
               <button type="button" className="underline" onClick={() => { setPick(NEW); created.current = null; setSaved(null); setFees({}); setCustomFee(null); setMainFee("38"); setF((x) => ({ ...x, name: "", supplierId: "", deposit: "", orderNo: "", notes: "", duty: "" })); }}>再開新的一團</button>
             </span>
           </div>
+        )}
+        {saved && second && second.batchId === saved.id && (
+          <SecondShip key={`${second.batchId}:${second.rows.map((r) => `${r.typeId}-${r.qty}`).join(",")}`} batchId={second.batchId} rows={second.rows} saved={second.saved} recorded={second.recorded} open={second.open} onRecorded={async () => { const si = await secondShipInfoAction(second.batchId); if (si.ok && si.data) setSecond({ batchId: second.batchId, ...si.data }); }} />
         )}
       </section>
     </div>

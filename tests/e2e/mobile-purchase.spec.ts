@@ -1,6 +1,6 @@
 // 手機：一個畫面新增採購（活動 → 哪一團 → 買了什麼），三團分別是我的、對方的、合資；活動總表看總額、各團與誰買的
 import { test, expect, type Page } from "@playwright/test";
-import { openAllTodos, login, toast, pickIp, newSupplierPick, openSeries, openMore, pickSupplier, openSeriesPage, choose, chosen, pickChar } from "./helpers";
+import { openAllTodos, login, toast, pickIp, newSupplierPick, openSeries, openMore, openPay, pickSupplier, openSeriesPage, choose, chosen, pickChar } from "./helpers";
 
 async function addRow(page: Page, character: string, price: string, qty: string, paid?: string) {
   await pickIp(page);
@@ -10,7 +10,10 @@ async function addRow(page: Page, character: string, price: string, qty: string,
   await expect(r1.getByLabel("數量")).toHaveValue("1"); // 選了角色數量先帶 1
   await r1.getByLabel("單價").fill(price);
   await r1.getByLabel("數量").fill(qty);
-  if (paid) await page.getByLabel("已付多少").fill(paid);
+  if (paid) {
+    await openPay(page);
+    await page.getByLabel("已付多少").fill(paid);
+  }
   await page.getByRole("button", { name: "儲存 1 項" }).click();
   // 有填已付：確認清單寫出已付，按確認才存
   if (paid) {
@@ -187,7 +190,8 @@ test("手機：開團時一起記運費（常用運費方式）和訂金；實�
   await newSupplierPick(page, `砂糖 ${tag}`);
   // 賣貨便運費每一團預設 38，直接顯示在「這一團」裡
   await expect(page.getByLabel("賣貨便運費")).toHaveValue("38");
-  // 訂單編號、在哪訂的
+  // 訂單編號、在哪訂的（手機收在「訂單與進階設定」）
+  await openMore(page);
   await page.getByLabel("訂單編號").fill(`MHB${tag}`);
   await page.getByLabel("在哪訂的").fill(`IP @sugar${tag}`);
   // 已付（訂金）填在儲存旁邊

@@ -1,6 +1,6 @@
 import { DeleteBatchButton, UndoReceivingButton } from "./undo";
 import { SecondShip } from "./second-ship";
-import { getSecondShipFees } from "@/server/services/settings";
+import { secondShipInfo } from "@/server/services/settings";
 import { CopyButton } from "@/components/copy-button";
 import { RefundButton } from "../../../reconcile/reset";
 import { seriesOptions, typeOptions } from "@/server/services/catalog-tree";
@@ -127,20 +127,8 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
   // 這團有哪些系列（團本身的＋品項各自指定的）
   const batchSeries = [...new Set([b.categoryId, ...b.items.map((i) => i.categoryId)].filter((x): x is string => !!x))].map((cid) => ({ id: cid, name: categoriesList.find((c) => c.id === cid)?.name ?? "" })).filter((x) => x.name);
   const open = b.status !== "CANCELLED";
-  // 二補運費：只有日本官網買的團才顯示；照品項（吊娃、S 娃…）分組
-  const official = b.supplierRef?.kind === "OFFICIAL_ONLINE";
-  const shipRows = official
-    ? [...b.items.filter((i) => i.qty - i.cancelledQty > 0).reduce((m, i) => {
-        const t = i.product.productType;
-        const k = t?.id ?? "-";
-        const r = m.get(k) ?? { typeId: k, typeName: t?.name ?? "其他", sort: t?.sortOrder ?? 9999, qty: 0, items: [] as { id: string; qty: number }[] };
-        r.qty += i.qty - i.cancelledQty;
-        r.items.push({ id: i.id, qty: i.qty - i.cancelledQty });
-        return m.set(k, r);
-      }, new Map<string, { typeId: string; typeName: string; sort: number; qty: number; items: { id: string; qty: number }[] }>()).values()].sort((a, c) => a.sort - c.sort)
-    : [];
-  const secondFees = official ? await getSecondShipFees(prisma) : {};
-  const secondRecorded = b.costs.filter((c) => c.note === "二補運費").reduce((a, c) => a + c.amount, 0);
+  // 二補運費：只有日本官網買的團才顯示；照品項（吊娃、S 娃…）分組（跟新增採購同一套）
+  const second = await secondShipInfo(prisma, b.id);
   const totalLanded = [...landed.values()].reduce((s, l) => s + l.totalTwd, 0);
   const totalQty = editItems.reduce((s, i) => s + i.qty, 0);
   const received = editItems.reduce((s, i) => s + i.received, 0);
@@ -266,7 +254,7 @@ export default async function BatchPage({ params, searchParams }: { params: Prom
         </Section>
       </div>
 
-      {official && shipRows.length > 0 && <SecondShip batchId={b.id} rows={shipRows} saved={secondFees} recorded={secondRecorded || null} open={open} />}
+      {second && second.rows.length > 0 && <SecondShip batchId={b.id} rows={second.rows} saved={second.saved} recorded={second.recorded} open={second.open} />}
 
       <Section id="costs" title="運費、代購費" pad={false} actions={open && <AddCost batchId={b.id} items={b.items.filter((i) => i.qty - i.cancelledQty > 0).map((i) => ({ id: i.id, name: i.product.name }))} operators={ops.filter((o) => o.active).map((o) => ({ id: o.id, name: o.name }))} owner={{ id: b.ownership === "JOINT" ? null : b.orderedById, label: ownerLabel }} presets={shippingPresets} />}>
         {!isStoreKind(b.supplierRef?.kind) && <DutyBar batchId={b.id} pct={b.dutyBp == null ? null : b.dutyBp / 100} goods={editItems.reduce((a, i) => a + i.goodsTwd, 0)} editable={open} />}

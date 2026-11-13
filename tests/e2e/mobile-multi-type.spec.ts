@@ -1,7 +1,7 @@
 // 手機：同一團一次買吊娃＋另一個品項，表格照品項分組；儲存列直接填已付，確認清單分組，存好後付款一起記好
 import { test, expect } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
-import { login, toast, pickIp, newSupplierPick, openSeries } from "./helpers";
+import { login, toast, pickIp, newSupplierPick, openSeries, openPay } from "./helpers";
 
 const url = process.env.TEST_DATABASE_URL ?? "postgresql://daigou:daigou_dev@localhost:5432/daigou_test";
 
@@ -54,7 +54,8 @@ test("手機：一次買兩個品項＋已付", async ({ page }) => {
     await expect(groups.nth(0)).toContainText("2 列，3 件");
 
     await newSupplierPick(page, `多品項代購 ${tag}`);
-    // 總額＝650×3＋380＋運費 38＝2,368；已付打太多會提醒
+    // 總額＝650×3＋380＋運費 38＝2,368；已付打太多會提醒（手機收在「付款資訊」）
+    await openPay(page);
     await page.getByLabel("已付多少").fill("9999");
     await expect(page.getByTestId("overpaid")).toBeVisible();
     await page.getByLabel("已付多少").fill("2368");

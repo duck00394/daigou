@@ -48,10 +48,18 @@ export async function openSeries(page: Page) {
   if (await chosen.isVisible()) await chosen.getByRole("button", { name: "換" }).click();
 }
 
-/** 新增採購：打開「更多」（實體店、到哪了、運費、訂金…） */
+/** 新增採購：打開手機的「訂單與進階設定」和電腦的「進階設定」（訂單編號、實體店、到哪了、運費、團名…） */
 export async function openMore(page: Page) {
-  const d = page.locator("details", { hasText: "更多：實體店買的" });
-  if ((await d.getAttribute("open")) === null) await d.locator("summary").click();
+  for (const id of ["buy-more-toggle", "buy-adv-toggle"]) {
+    const b = page.getByTestId(id);
+    if ((await b.isVisible()) && (await b.getAttribute("aria-expanded")) === "false") await b.click();
+  }
+}
+
+/** 新增採購：手機的「付款資訊」（已付）收起來時打開 */
+export async function openPay(page: Page) {
+  const b = page.getByTestId("pay-toggle");
+  if (await b.isVisible()) await b.click();
 }
 
 /** 新增採購：打開代購（或店家）清單，按最下面的「＋ 新增」建立 */
