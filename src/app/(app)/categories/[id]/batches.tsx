@@ -6,6 +6,7 @@ import { PickBox, PickProvider, PickSpacer, PickToggle, SetButton } from "./pick
 import { seriesProfit, seriesTotals } from "@/server/services/preorder";
 import { ProfitCard } from "./profit";
 import { categoryOverview } from "@/server/services/batch-ops";
+import { summarizeProducts } from "@/server/services/series-cost";
 import { Section, StatusBadge, Empty, LinkButton } from "@/components/ui";
 import { batchStageLabel, fmtDay, type BatchStage } from "@/lib/labels";
 import { listOperators } from "@/server/services/operators";
@@ -64,21 +65,8 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
   };
   // 每個商品：總數量、平均成本、最低～最高，各團價格展開才看
   const nameOf = (k: string) => (k === JOINT ? "合資" : k === NONE ? "未指定" : (operators.find((x) => x.id === k)?.name ?? "未指定"));
-  const colById = new Map(cols.map((b) => [b.id, b]));
-  const summary = o.matrix
-    .map((r) => {
-      const cells = Object.entries(r.cells).flatMap(([bid, cs]) => (colById.has(bid) ? cs.map((c) => ({ ...c, batch: colById.get(bid)! })) : []));
-      const qty = cells.reduce((a, c) => a + c.qty, 0);
-      const vals = cells.map((c) => (fullView ? c.fullUnitTwd : c.unitTwd));
-      // 平均成本只算到貨＋一定到的；對單還沒確定的另外列
-      const unsure = cells.reduce((a, c) => a + c.unsure, 0);
-      const sureQty = qty - unsure;
-      const amount = cells.reduce((a, c) => a + (fullView ? c.fullUnitTwd : c.unitTwd) * (c.qty - c.unsure), 0);
-      const sureCells = cells.filter((c) => c.qty > c.unsure);
-      const allAmount = cells.reduce((a, c) => a + (fullView ? c.fullUnitTwd : c.unitTwd) * c.qty, 0);
-      return { product: r.product, cells, qty, unsure, sureQty, amount, estAvg: qty ? Math.round(allAmount / qty) : null, avg: sureQty ? Math.round(amount / sureQty) : null, min: Math.min(...vals), max: Math.max(...vals), tentative: sureCells.some((c) => c.estimated || (fullView && !c.feesConfirmed)) };
-    })
-    .filter((r) => r.qty > 0);
+  // 跟「系列成本比較」同一套算法
+  const summary = summarizeProducts(o, cols, fullView);
   // 依品項分組（吊娃、S 娃…），組內照角色順序；售價：商品自己的，沒填用這系列這個品項的售價
   const typePrices = new Map((await prisma.categoryTypePrice.findMany({ where: { categoryId }, select: { productTypeId: true, salePriceTwd: true } })).map((x) => [x.productTypeId, x.salePriceTwd]));
   const priceOf = (p: (typeof summary)[number]["product"]) => p.salePriceTwd ?? (p.productType ? (typePrices.get(p.productType.id) ?? null) : null);

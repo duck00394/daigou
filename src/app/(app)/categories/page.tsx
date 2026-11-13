@@ -10,12 +10,22 @@ import { listCustomCategoryTypes } from "@/server/services/catalog";
 import { PageHeader } from "@/components/ui";
 import { CategoryEditButton } from "./forms";
 import { SeriesList, type KindGroup } from "./list";
+import { CostCompare } from "./cost-compare";
 
 export const metadata = { title: "系列" };
 
-export default async function Categories() {
+export default async function Categories({ searchParams }: { searchParams: Promise<{ view?: string; char?: string; type?: string; series?: string; calc?: string; scope?: string; sort?: string }> }) {
   await requireUser();
   const vk = (await getView()).key;
+  const sp = await searchParams;
+  // 系列成本比較：同一頁的另一個檢視（不另外開頁面）
+  if (sp.view === "cost")
+    return (
+      <div className="space-y-3">
+        <PageHeader title="系列成本比較" sub="同一個角色、同一個品項，在各系列每隻成本差多少。" back={{ href: "/categories", label: "系列" }} />
+        <CostCompare sp={sp} owner={vk === "all" ? "" : vk} />
+      </div>
+    );
   const [sum, opts, customTypes] = await Promise.all([tx((t) => seriesSummary(t, vk)), seriesOptions(prisma, await getMe()), tx((t) => listCustomCategoryTypes(t))]);
   const zero = { batches: 0, totalTwd: 0, dueTwd: 0, refundTwd: 0, ordered: 0, received: 0, pendingBatches: 0 };
   // 照「調整順序」排的；已過期的放在最後一組
@@ -44,6 +54,14 @@ export default async function Categories() {
           </>
         }
       />
+      {/* 跨系列比成本的入口：原本的系列列表不變 */}
+      <Link href="/categories?view=cost" className="flex items-center justify-between gap-3 rounded-xl border border-line bg-card px-4 py-3 transition-colors duration-150 hover:bg-line-2" data-testid="cost-compare-link">
+        <span>
+          <span className="block text-[15px] font-semibold">系列成本比較</span>
+          <span className="block text-[13px] text-mute">同一個角色在各系列每隻成本、各團價格、每隻可賺</span>
+        </span>
+        <span aria-hidden className="text-mute">›</span>
+      </Link>
       <div data-tour="series-list"><SeriesList groups={groups} /></div>
     </div>
   );

@@ -275,6 +275,11 @@ export async function switchShipmentOwnerAction(shipmentId: string, owner: strin
 }
 
 /** 販售平台抽成（%）；pct 空白／0＝不抽 */
+export async function setSecondShipFeeAction(typeId: string, fee: number | null) {
+  const { setSecondShipFee } = await import("@/server/services/settings");
+  return run((a) => tx((t) => setSecondShipFee(t, a, z.string().min(1).max(40).parse(typeId), z.number().int().min(0).nullable().parse(fee))));
+}
+
 export async function setPlatformFeeAction(channel: string, pct: number | null) {
   const { setPlatformFee } = await import("@/server/services/settings");
   return run((a) => tx((t) => setPlatformFee(t, a, z.string().max(40).parse(channel), z.number().nullable().parse(pct))));

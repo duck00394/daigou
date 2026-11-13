@@ -66,3 +66,25 @@ export async function setPlatformFee(t: Tx, actor: Actor, channel: string, pct: 
 
 /** 商品金額×抽成%，小數捨去 */
 export const platformFeeOf = (goods: number, pct: number | undefined) => (pct ? Math.floor((goods * pct) / 100) : 0);
+
+/** 二補運費（官網買的，從集運寄回台灣）：每個品項每隻幾元台幣，{ 品項id: 30 }。沒設的品項不算；不給預設值 */
+export async function getSecondShipFees(db: Db): Promise<Record<string, number>> {
+  const s = await db.appSetting.findUnique({ where: { key: "secondShipFees" } });
+  try {
+    const v = s ? (JSON.parse(s.value) as Record<string, number>) : {};
+    return Object.fromEntries(Object.entries(v).filter(([k, n]) => k && Number.isInteger(n) && n >= 0));
+  } catch {
+    return {};
+  }
+}
+
+export async function setSecondShipFee(t: Tx, actor: Actor, typeId: string, fee: number | null) {
+  if (fee !== null && (!Number.isInteger(fee) || fee < 0 || fee > 100000)) throw new BizError("二補運費請填 0 以上的整數");
+  const all = await getSecondShipFees(t);
+  const before = all[typeId] ?? null;
+  if (fee === null) delete all[typeId];
+  else all[typeId] = fee;
+  await t.appSetting.upsert({ where: { key: "secondShipFees" }, update: { value: JSON.stringify(all) }, create: { key: "secondShipFees", value: JSON.stringify(all) } });
+  await audit(t, actor, "settings.secondShipFee", "AppSetting", "secondShipFees", { typeId, from: before, to: fee });
+  return all;
+}
