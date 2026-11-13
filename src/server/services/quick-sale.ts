@@ -11,7 +11,7 @@ import { addPayment, voidPayment } from "./payments";
 import { productLots, reserveForItem } from "./inventory";
 import { filterLotsByOwner, ownerAttributor, type OwnerMoney } from "./ownership";
 import { recomputeOrder } from "./recompute";
-import { landedCosts } from "./purchase";
+import { pooledCosts } from "./avg-cost";
 import { costOfMove } from "./reports";
 import { createBuyer } from "./buyers";
 
@@ -106,7 +106,7 @@ export async function saleSummary(t: Tx, orderId: string) {
     where: { kind: "SHIP", orderItemId: { in: order.items.map((i) => i.id) } },
     select: { onHandDelta: true, purchaseBatchItemId: true, unitCostTwd: true, orderItem: { select: { estUnitCostTwd: true } } },
   });
-  const landed = await landedCosts(t, [...new Set(moves.map((m) => m.purchaseBatchItemId).filter(Boolean) as string[])]);
+  const landed = await pooledCosts(t, moves.map((m) => m.purchaseBatchItemId));
   let cost = 0;
   let estimatedUnits = 0;
   for (const m of moves) {
@@ -207,7 +207,7 @@ export async function listQuickSales(t: Tx, opts: { q?: string | null; from?: Da
   const itemIds = orders.flatMap((o) => o.items.map((i) => i.id));
   const moves = itemIds.length ? await t.inventoryMovement.findMany({ where: { kind: "SHIP", orderItemId: { in: itemIds } }, select: { orderItemId: true, onHandDelta: true, purchaseBatchItemId: true, unitCostTwd: true } }) : [];
   const lotIds = [...new Set(moves.map((m) => m.purchaseBatchItemId).filter(Boolean) as string[])];
-  const landed = await landedCosts(t, lotIds);
+  const landed = await pooledCosts(t, lotIds);
   const lotInfo = lotIds.length ? await t.purchaseBatchItem.findMany({ where: { id: { in: lotIds } }, select: { id: true, actualUnitCost: true, batch: { select: { costs: { select: { id: true }, take: 1 } } } } }) : [];
   const tentativeLot = new Set(lotInfo.filter((b) => b.actualUnitCost === null || b.batch.costs.length === 0).map((b) => b.id));
   const movesByItem = new Map<string, typeof moves>();

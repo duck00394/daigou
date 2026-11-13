@@ -38,6 +38,9 @@ export function SumProvider({ children, itemWord = "項", qtyWord = "件", qtyLa
   const total = priced.reduce((a, r) => a + r.cost! * r.qty, 0);
   const pricedQty = priced.reduce((a, r) => a + r.qty, 0);
   const noCost = rows.filter((r) => r.cost == null && r.qty > 0).length;
+  // 每樣各一件加起來（像一套的成本）：不管手上幾件，勾的每列只算一次
+  const each = rows.filter((r) => r.cost != null);
+  const eachTotal = each.reduce((a, r) => a + r.cost!, 0);
   return (
     <SumCtx.Provider value={ctx}>
       {children}
@@ -54,6 +57,11 @@ export function SumProvider({ children, itemWord = "項", qtyWord = "件", qtyLa
             <span className="text-[14px]">成本合計 <b className="num text-[20px]" data-testid="quick-sum-total">{formatTwd(Math.round(total))}</b></span>
             <span className="text-[14px]">{avgLabel} <b className="num text-[17px]" data-testid="quick-sum-avg">{pricedQty ? formatTwd(Math.round(total / pricedQty)) : "無"}</b></span>
           </div>
+          {each.length > 0 && (
+            <div className="text-[14px]">
+              各一{qtyWord}合計 <b className="num text-[17px]" data-testid="quick-sum-each">{formatTwd(Math.round(eachTotal))}</b>
+            </div>
+          )}
         </div>
       )}
     </SumCtx.Provider>

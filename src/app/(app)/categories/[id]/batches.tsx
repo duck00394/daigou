@@ -96,15 +96,19 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
   const listed = [...summary.map((r) => r.product.id), ...extra.map((x) => x.id)];
   const pickItems = [...pickItemsBase, ...extra.map((e) => ({ id: e.id, name: e.name, cost: prof?.rows.get(e.id)?.avg ?? null, price: prof?.rows.get(e.id)?.price ?? null, tentative: false }))];
   const profShown = prof ? { ...seriesTotals(listed.map((id) => prof.rows.get(id)).filter((x): x is NonNullable<typeof x> => !!x)) } : null;
-  // 這個角色算得出可賺嗎（有賣掉的、有成本的客人預訂、或有售價又有成本的剩貨）
-  const canProfitOf = (x: ReturnType<typeof P>) => !!x && (x.sold.qty > 0 || (x.pre.qty > 0 && x.pre.cost != null) || (x.free.qty > 0 && x.free.revenue != null && x.free.cost != null));
+  // 每隻可賺＝現在的售價 − 平均成本（跟「每隻成本」那欄同一個數字）；以前賣掉的是實際已賺，不算在這裡
+  const unitProfitCell = (price: number | null | undefined, avg: number | null | undefined) => {
+    if (price == null) return <span className="text-[13px] text-mute">沒售價</span>;
+    if (avg == null) return <span className="text-[13px] text-mute">無</span>;
+    const v = price - avg;
+    return <span className={v < 0 ? "text-bad" : "text-good"}>{v.toLocaleString()}</span>;
+  };
   const allSure = summary.reduce((a, r) => a + r.sureQty, 0);
   const allAmount = summary.reduce((a, r) => a + r.amount, 0);
   const allQty = summary.reduce((a, r) => a + r.qty, 0);
   const allEstAmount = summary.reduce((a, r) => a + (r.estAvg ?? 0) * r.qty, 0);
   // 「確定的」或「預估的」（還在等代購確認的也算買到）
   const leftOf = (x: ReturnType<typeof P>) => (x ? (est ? x.est.left : x.left) : 0);
-  const profitOf = (x: ReturnType<typeof P>) => (x ? (est ? x.est.profit : x.profit) : 0);
   return (
     <>
       <Section>
@@ -208,14 +212,14 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
               <h2 className="text-[16px] font-semibold">每個角色</h2>
               <PickToggle />
             </div>
-            <div aria-label="每個角色：有幾隻、每隻成本、可賺" role="table" className="text-[15px]">
+            <div aria-label="每個角色：有幾隻、每隻成本、每隻可賺" role="table" className="text-[15px]">
               <div role="row" className="flex border-b border-line text-[12px] text-ink-2">
                 <PickSpacer />
                 <div className="grid flex-1 grid-cols-[minmax(0,1fr)_3.25rem_4.25rem_4.5rem] gap-2 px-4 py-1.5">
                   <span role="columnheader">角色</span>
                   <span role="columnheader" className="text-right">有幾隻</span>
                   <span role="columnheader" className="text-right">每隻成本</span>
-                  <span role="columnheader" className="text-right">可賺</span>
+                  <span role="columnheader" className="text-right">每隻可賺</span>
                 </div>
               </div>
               {typeGroups.map((g) => (
@@ -226,7 +230,6 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
                   </div>
                   {g.rows.map((r) => {
                     const x = P(r);
-                    const canProfit = canProfitOf(x);
                     const name = r.product.characters.length === 1 ? r.product.characters[0].character.name : r.product.name;
                     return (
                       <div key={r.product.id} className="flex items-start border-b border-line-2">
@@ -236,7 +239,7 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
                             <span role="cell" className="min-w-0 truncate"><span title={r.product.name}>{name}</span></span>
                             <span role="cell" className={`num text-right ${leftOf(x) < 0 ? "font-semibold text-bad" : ""}`} data-k="left">{leftOf(x)}</span>
                             <span role="cell" className="num text-right" data-k="avg">{(est ? r.estAvg : r.avg) == null ? <span className="text-mute">無</span> : (est ? r.estAvg : r.avg)!.toLocaleString()}</span>
-                            <span role="cell" className={`num text-right ${canProfit ? (profitOf(x) < 0 ? "text-bad" : "text-good") : "text-[13px] text-mute"}`} data-k="profit">{canProfit ? profitOf(x).toLocaleString() : x?.price == null ? "沒售價" : "無"}</span>
+                            <span role="cell" className="num text-right" data-k="profit">{unitProfitCell(x?.price ?? priceOf(r.product), est ? r.estAvg : r.avg)}</span>
                           </summary>
                           <div className="space-y-1 border-t border-line-2 bg-paper px-4 py-2.5 text-[13.5px]" data-testid="product-numbers">
                             {x && <div>手上 {x.onHand}，確定買到還沒到 {x.sure}{x.est.unsure ? `，還在等確認 ${x.est.unsure}` : ""}，客人訂 {x.ordered}，已賣 {x.sold.qty}{x.sold.qty ? `（實際已賺 ${formatTwd(x.sold.revenue - x.sold.cost)}）` : ""}</div>}
@@ -283,7 +286,7 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
                           <span className="min-w-0 truncate" title={e.name}>{e.name}</span>
                           <span className={`num text-right ${leftOf(x) < 0 ? "font-semibold text-bad" : ""}`}>{leftOf(x)}</span>
                           <span className="num text-right">{(est ? x.est.avg : x.avg) == null ? <span className="text-mute">無</span> : (est ? x.est.avg : x.avg)!.toLocaleString()}</span>
-                          <span className={`num text-right ${canProfitOf(x) ? (profitOf(x) < 0 ? "text-bad" : "text-good") : "text-[13px] text-mute"}`}>{canProfitOf(x) ? profitOf(x).toLocaleString() : x.price == null ? "沒售價" : "無"}</span>
+                          <span className="num text-right">{unitProfitCell(x.price, est ? x.est.avg : x.avg)}</span>
                         </Link>
                       </div>
                     );
@@ -296,13 +299,14 @@ export async function CategoryBatches({ categoryId, view, est = false, owner = "
                   <span role="cell">合計</span>
                   <span role="cell" className="num text-right" data-testid="summary-left">{listed.reduce((a, id) => a + leftOf(prof?.rows.get(id)), 0)}</span>
                   <span role="cell" className="num text-right">{est ? (allQty ? Math.round(allEstAmount / allQty).toLocaleString() : "無") : allSure ? Math.round(allAmount / allSure).toLocaleString() : "無"}</span>
-                  <span role="cell" className="num text-right text-good">{listed.some((id) => canProfitOf(prof?.rows.get(id))) ? listed.reduce((a, id) => a + (canProfitOf(prof?.rows.get(id)) ? profitOf(prof!.rows.get(id)) : 0), 0).toLocaleString() : <span className="text-mute">無</span>}</span>
+                  <span role="cell" aria-hidden />
                 </div>
               </div>
             </div>
             <div className="space-y-0.5 border-t border-line-2 px-4 py-2.5 text-[12.5px] text-ink-2">
               <div><b className="font-medium">有幾隻</b>＝手上的＋確定買到的{est ? "＋還在等確認的" : ""}，扣掉客人訂的；負的＝叫的貨不夠</div>
               <div><b className="font-medium">每隻成本</b>＝{fullView ? "買價＋運費、關稅平均分到每隻" : "只看買價（不含運費、關稅）"}，台幣{summary.some((r) => r.tentative) ? "；有些價格還沒確定，先用預估的" : ""}</div>
+              <div><b className="font-medium">每隻可賺</b>＝現在的售價－每隻成本；已經賣掉的算在上面「實際已賺」</div>
               <div className="flex flex-wrap gap-x-4 pt-0.5">
                 <span className="text-mute">點角色看詳細</span>
                 <Link href={q({ view: fullView ? "unit" : "" })} className="text-ai">{fullView ? "改成只看買價" : "改成含運費、關稅"}</Link>

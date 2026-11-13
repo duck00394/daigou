@@ -1,7 +1,7 @@
 // 賺多少：照系列算。每張單＝已出貨的（實際成本）＋還沒給的（預估：預購平均成本）
 // 收入用商品售價×件數（跟現貨出售、客人預訂同一套；運費不算，多半是付給賣貨便的）
 import type { Tx } from "@/server/db";
-import { landedCosts } from "./purchase";
+import { pooledCosts } from "./avg-cost";
 import { costOfMove } from "./reports";
 import { lotOwners } from "./ownership";
 import { preorderDetail } from "./preorder";
@@ -46,7 +46,7 @@ export async function orderProfits(t: Tx, opts: { owner?: string | null; categor
   const ids = items.map((i) => i.id);
   const moves = ids.length ? await t.inventoryMovement.findMany({ where: { kind: "SHIP", orderItemId: { in: ids } }, select: { orderItemId: true, onHandDelta: true, purchaseBatchItemId: true, unitCostTwd: true } }) : [];
   const lots = [...new Set(moves.map((m) => m.purchaseBatchItemId).filter(Boolean) as string[])];
-  const [landed, owners] = await Promise.all([landedCosts(t, lots), lotOwners(t, lots)]);
+  const [landed, owners] = await Promise.all([pooledCosts(t, lots), lotOwners(t, lots)]);
   const tentativeLots = new Set(
     (lots.length ? await t.purchaseBatchItem.findMany({ where: { id: { in: lots } }, select: { id: true, actualUnitCost: true, batch: { select: { costs: { select: { id: true }, take: 1 } } } } }) : [])
       .filter((b) => b.actualUnitCost === null || !b.batch.costs.length)

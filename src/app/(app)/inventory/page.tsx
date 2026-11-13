@@ -11,7 +11,8 @@ import { ownerTone } from "@/lib/owner-colors";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { inventorySummary } from "@/server/services/inventory";
-import { landedCosts, purchaseDemand } from "@/server/services/purchase";
+import { purchaseDemand } from "@/server/services/purchase";
+import { pooledCosts } from "@/server/services/avg-cost";
 import { listOperators } from "@/server/services/operators";
 import { getDefaultRateMicro } from "@/server/services/settings";
 import { PageHeader, Section, TableWrap, Empty, StatusBadge, LinkButton, Badge } from "@/components/ui";
@@ -150,7 +151,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
       where: { productId: { in: ids }, batch: { status: { not: "CANCELLED" }, ...viewBatchWhere(owner || "all") } },
       select: { id: true, productId: true, qty: true, cancelledQty: true, confirmedQty: true, actualUnitCost: true, batch: { select: { status: true, supplierRef: { select: { kind: true } }, costs: { select: { id: true }, take: 1 } } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
     });
-    const landed = await tx((t) => landedCosts(t, items.map((i) => i.id)));
+    const landed = await tx((t) => pooledCosts(t, items.map((i) => i.id)));
     for (const i of items) {
       const rec = i.movements.reduce((a, m) => a + m.onHandDelta, 0);
       const pend = pendingQty(i, rec);

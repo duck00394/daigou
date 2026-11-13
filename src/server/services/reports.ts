@@ -3,7 +3,7 @@ import { allCancelled, feeTwd } from "./fees";
 import type { Db, Tx } from "@/server/db";
 import { divRound, mulDiv } from "@/lib/money";
 import { computeOrder, realizedRevenue, type OrderResult } from "@/server/calc/order";
-import { landedCosts } from "./purchase";
+import { pooledCosts } from "./avg-cost";
 
 // ── 時間區間（台北時間） ──
 export function monthRange(ym: string): { start: Date; end: Date } {
@@ -241,7 +241,7 @@ export async function monthlyReport(db: Db, ym: string, owner?: string | null) {
     where: { kind: "SHIP", shipmentItemId: { in: sItems.map((s) => s.id) } },
     select: { onHandDelta: true, purchaseBatchItemId: true, unitCostTwd: true, orderItemId: true, orderItem: { select: { estUnitCostTwd: true } } },
   });
-  const landed = await landedCosts(db as Tx, [...new Set(monthMoves.map((m) => m.purchaseBatchItemId).filter(Boolean) as string[])]);
+  const landed = await pooledCosts(db as Tx, monthMoves.map((m) => m.purchaseBatchItemId));
   let cogs = 0;
   let estimatedUnits = 0;
   for (const m of monthMoves) {
@@ -434,7 +434,7 @@ export async function stockValuation(db: Db, productIds?: string[], owner?: stri
     lots = lotsAll.filter((l) => [owner, "joint", "none"].includes(ownerOfLot(os, l.purchaseBatchItemId)));
   }
   const lotIds = [...new Set(lots.map((l) => l.purchaseBatchItemId).filter(Boolean) as string[])];
-  const landed = await landedCosts(t, lotIds);
+  const landed = await pooledCosts(t, lotIds);
   const info = lotIds.length ? await t.purchaseBatchItem.findMany({ where: { id: { in: lotIds } }, select: { id: true, actualUnitCost: true, batch: { select: { costs: { select: { id: true }, take: 1 } } } } }) : [];
   const tentativeLot = new Set(info.filter((i) => i.actualUnitCost === null || i.batch.costs.length === 0).map((i) => i.id));
   const manualAvg = new Map<string, { qty: number; sum: number }>();

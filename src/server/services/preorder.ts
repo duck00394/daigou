@@ -3,7 +3,7 @@
 import type { Tx } from "@/server/db";
 import type { Prisma } from "@prisma/client";
 import { stockValuation } from "./reports";
-import { landedCosts } from "./purchase";
+import { pooledCosts } from "./avg-cost";
 import { pendingQty } from "./batch-ops";
 
 export type PreorderCost = { avg: number; tentative: boolean };
@@ -28,7 +28,7 @@ export async function preorderDetail(t: Tx, productIds: string[], opts: { itemWh
       select: { id: true, productId: true, qty: true, cancelledQty: true, confirmedQty: true, actualUnitCost: true, batch: { select: { status: true, supplierRef: { select: { kind: true } }, costs: { select: { id: true }, take: 1 } } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } },
     }),
   ]);
-  const landed = await landedCosts(t, items.map((i) => i.id));
+  const landed = await pooledCosts(t, items.map((i) => i.id));
   const sure = new Map<string, { qty: number; val: number; tentative: boolean }>();
   const unsure = new Map<string, { qty: number; val: number }>();
   for (const i of items) {
@@ -190,7 +190,7 @@ export async function seriesProfit(t: Tx, categoryId: string, opts: { owner?: st
   }
   // 已經賣掉：出貨流水（作廢退回的會抵掉）× 成交價；成本照出貨批次
   const lots = [...new Set(moves.map((m) => m.purchaseBatchItemId).filter((x): x is string => !!x))];
-  const landed = await landedCosts(t, lots);
+  const landed = await pooledCosts(t, lots);
   const { costOfMove } = await import("./reports");
   const net = new Map<string, { productId: string; qty: number; lot: string | null; unitCost: number | null; price: number; est: number | null }>();
   for (const m of moves) {

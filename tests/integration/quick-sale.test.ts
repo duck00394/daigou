@@ -42,9 +42,10 @@ afterEach(async () => {
 });
 
 describe("現貨直接出售", () => {
-  it("扣可售庫存、先進先出取批次成本、記錄收入與毛利；重送不重複", async () => {
+  it("扣可售庫存、成本用平均成本（所有團買價＋運費平均）、記錄收入與毛利；重送不重複", async () => {
     const r = await sell({ qty: 3, idemKey: "sale-key-1" });
-    expect(r).toMatchObject({ duplicated: false, qty: 3, revenue: 750, cost: 110 + 110 + 150, profit: 750 - 370, tentative: true });
+    // 平均成本：A 團 2 件共 220（含運費）＋ B 團 3 件共 450 ＝ 670 ÷ 5 ＝ 每件 134，不管出貨扣到哪一團
+    expect(r).toMatchObject({ duplicated: false, qty: 3, revenue: 750, cost: 134 * 3, profit: 750 - 402, tentative: true });
     const again = await sell({ qty: 3, idemKey: "sale-key-1" });
     expect(again.duplicated).toBe(true);
     const st = await stock();
@@ -55,9 +56,9 @@ describe("現貨直接出售", () => {
     expect(o.buyer.name).toBe("散客");
     expect(o.payments.map((p) => p.amount)).toEqual([750]);
     expect(o.paymentStatusCache).toBe("PAID");
-    // 月報口徑一致（收入依出貨、成本依批次）
+    // 月報口徑一致（收入依出貨、成本用平均成本）
     const m = await monthlyReport(prisma, ym());
-    expect([m.revenue, m.cogs]).toEqual([750, 370]);
+    expect([m.revenue, m.cogs]).toEqual([750, 402]);
   });
 
   it("不能賣到已保留給買家或自留的數量", async () => {
@@ -93,12 +94,12 @@ describe("現貨直接出售", () => {
   it("更正：作廢舊的並建立正確的一筆，庫存只扣一次", async () => {
     const r = await sell({ qty: 1, unitPrice: 25 });
     const c = await tx((t) => correctQuickSale(t, actor, r.orderId, { productId: s.p3.id, qty: 2, unitPrice: 250, idemKey: "sale-key-2", reason: "價格少打一個 0" }));
-    expect(c).toMatchObject({ qty: 2, revenue: 500, cost: 220 });
+    expect(c).toMatchObject({ qty: 2, revenue: 500, cost: 268 });
     const st = await stock();
     expect([st.onHand, st.shipped]).toEqual([3, 2]);
     const list = await tx((t) => listQuickSales(t, { includeVoided: true }));
     expect(list.rows.map((x) => x.voided).sort()).toEqual([false, true]);
-    expect(list.total).toMatchObject({ count: 1, qty: 2, revenue: 500, cost: 220, profit: 280 });
+    expect(list.total).toMatchObject({ count: 1, qty: 2, revenue: 500, cost: 268, profit: 232 });
   });
 
   it("一般訂單不能用現貨出售的作廢功能", async () => {

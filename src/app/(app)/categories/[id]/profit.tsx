@@ -1,4 +1,4 @@
-// 系列算起來：上面切換「確定的／預估的」，三個數字（預計可賺、實際已賺、還可以賣），叫的貨不夠的角色一行紅字
+// 系列算起來：上面切換「確定的／預估的」，三個數字（預計可賺＝還沒賣的、實際已賺＝已經賣掉的、還可以賣），叫的貨不夠的角色一行紅字
 import Link from "next/link";
 import { formatTwd } from "@/lib/money";
 import type { seriesTotals } from "@/server/services/preorder";
@@ -26,7 +26,8 @@ function Tile({ label, children, testid }: { label: string; children: React.Reac
 export function ProfitCard({ p, categoryId, est = false, sureHref, estHref, names = {} }: { p: P; categoryId: string; est?: boolean; sureHref?: string; estHref?: string; names?: Record<string, string> }) {
   const unpriced = p.free.unpriced;
   const noCost = p.free.uncosted + p.pre.uncosted;
-  const profit = est ? p.est.profit : p.profit;
+  // 預計可賺＝客人訂的＋剩下照售價賣；以前賣掉的是「實際已賺」，分開算
+  const profit = (est ? p.est.profit : p.profit) - p.actual;
   const free = est ? p.est.free : p.free.qty;
   const short = (est ? p.estShort : p.short).map((x) => ({ name: names[x.id] ?? "", n: x.n })).filter((x) => x.name);
   const seg = (on: boolean) => `flex-1 rounded-lg py-2 text-center text-[14.5px] ${on ? "bg-card font-semibold text-ink shadow-sm" : "text-ink-2"}`;
@@ -56,11 +57,10 @@ export function ProfitCard({ p, categoryId, est = false, sureHref, estHref, name
       <details className="rounded-xl border border-line bg-card px-3 py-2 text-[14px]">
         <summary className="cursor-pointer text-[13px] text-ai">預計可賺怎麼算的</summary>
         <div className="mt-1 divide-y divide-line-2">
-          {p.sold.qty > 0 && <Line href="/sales?ym=all" testid="profit-sold" profit={p.sold.revenue - p.sold.cost}>已經賣掉 {p.sold.qty} 隻</Line>}
           {p.pre.qty - p.pre.uncosted > 0 && <Line href="/sales#preorder" testid="profit-pre" profit={p.pre.revenue - p.pre.cost}>客人訂了 {p.pre.qty - p.pre.uncosted} 隻</Line>}
           {p.free.qty - unpriced - p.free.uncosted > 0 && <Line href={`/inventory?tab=stock&cat=${categoryId}&v=1`} testid="profit-free" profit={p.free.revenue - p.free.cost}>還沒人訂 {p.free.qty - unpriced - p.free.uncosted} 隻，照售價賣</Line>}
         </div>
-        <p className="mt-1 text-[12.5px] text-mute">{est ? "預估＝還在等代購確認的也全部買到的話。" : "確定的＝手上的＋對單確定買到的。"}{noCost > 0 && !est ? `${noCost} 隻還沒有成本，先不算。` : ""}</p>
+        <p className="mt-1 text-[12.5px] text-mute">成本都用所有團（含運費、關稅）的平均。{p.sold.qty ? `已經賣掉的 ${p.sold.qty} 隻算在「實際已賺」。` : ""}{est ? "預估＝還在等代購確認的也全部買到的話。" : "確定的＝手上的＋對單確定買到的。"}{noCost > 0 && !est ? `${noCost} 隻還沒有成本，先不算。` : ""}</p>
       </details>
     </section>
   );

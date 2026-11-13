@@ -6,6 +6,7 @@ import { actor, resetDb, seedBasics } from "../helpers";
 import { checkIntegrity } from "@/server/services/integrity";
 import { ensureDefaultOperators } from "@/server/services/operators";
 import { addBatchCost, addBatchItem, createBatch, landedCosts, updateBatchItem } from "@/server/services/purchase";
+import { pooledCosts } from "@/server/services/avg-cost";
 import { cancelBatchItem } from "@/server/services/batch-ops";
 import { addSupplierPayment } from "@/server/services/supplier-payments";
 import { createReceivingRecord } from "@/server/services/receiving";
@@ -159,16 +160,18 @@ describe.sequential("收藏與轉售完整情境", () => {
     expect(m.revenue).toBe(1300 + 1000);
     expect(list.total.revenue).toBe(1300);
     expect(list.total.cost).toBe(after.cost);
-    // 本月銷貨成本 = 現貨出售成本 ＋ 小美那 2 件的成本（同一套批次成本）
+    // 本月銷貨成本 = 現貨出售成本 ＋ 小美那 2 件的成本（同一套平均成本）
     const o1Moves = await prisma.inventoryMovement.findMany({ where: { kind: "SHIP", orderItemId: ctx.o1i } });
-    const lc = await tx((t) => landedCosts(t));
+    const lc = await tx((t) => pooledCosts(t, o1Moves.map((mv) => mv.purchaseBatchItemId)));
     const o1Cost = o1Moves.reduce((sum, mv) => {
       const l = lc.get(mv.purchaseBatchItemId!)!;
       return sum + Math.round((l.totalTwd * -mv.onHandDelta) / l.qty);
     }, 0);
     expect(m.cogs).toBe(after.cost + o1Cost);
-    const saleLots = await prisma.inventoryMovement.findMany({ where: { kind: "SHIP", orderItem: { orderId: ctx.sale } }, select: { purchaseBatchItemId: true } });
-    if (saleLots.some((x) => x.purchaseBatchItemId === ctx.bP1)) expect(after.cost).not.toBe(before.cost); // 用到 B 團的批次，成本隨實際單價更新
+    // 平均成本：賣掉的商品只要有在 B 團買，B 團實際單價改了，平均成本就跟著變（不管出貨扣到哪一團）
+    const saleLots = await prisma.inventoryMovement.findMany({ where: { kind: "SHIP", orderItem: { orderId: ctx.sale } }, select: { productId: true } });
+    const bP1Product = (await prisma.purchaseBatchItem.findUniqueOrThrow({ where: { id: ctx.bP1 } })).productId;
+    if (saleLots.some((x) => x.productId === bP1Product)) expect(after.cost).not.toBe(before.cost);
     else expect(after.cost).toBe(before.cost);
     await healthy();
   });
