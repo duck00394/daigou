@@ -16,7 +16,7 @@ import { pooledCosts } from "@/server/services/avg-cost";
 import { listOperators } from "@/server/services/operators";
 import { getDefaultRateMicro } from "@/server/services/settings";
 import { PageHeader, Section, TableWrap, Empty, StatusBadge, LinkButton, Badge } from "@/components/ui";
-import { ReceiveForm, AdjustForm, CreateBatchFromDemand, KeepButton } from "./parts";
+import { ReceiveForm, AdjustForm, CreateBatchFromDemand } from "./parts";
 import { SellButton } from "@/components/quick-sale";
 import { getMe } from "@/server/me";
 import { readyToShip } from "@/server/services/order-flow";
@@ -259,6 +259,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
   })();
   // 「不一定」欄（還在等代購確認的）：預設藏起來，只看確定的；按一下可以顯示（只在這次網址有效）。篩選「預購・不一定」時才預設顯示
   const COLS = hideUnsure ? 8 : 9;
+  const STOCK_COL = hideUnsure ? 4 : 5; // 「庫存」前面有幾欄（手機平均成本那一列要對齊）
   const unsureHref = (() => {
     const sp = new URLSearchParams({ tab: "stock", v: "1" });
     for (const [key, val] of Object.entries({ kind, cat, type, q, only })) if (val) sp.set(key, val);
@@ -295,19 +296,21 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
         <Section><Empty action={only === "all" ? undefined : <LinkButton href="/purchase" primary>＋ 新增採購</LinkButton>}>{only === "all" ? "沒有符合的商品。換個關鍵字或系列試試。" : "這裡目前沒有庫存，也沒有還沒到的貨。新增採購後，買的東西會出現在這裡。"}</Empty></Section>
       ) : (
         <SumProvider qtyLabel="現有 " avgLabel="平均每支">
-        <div className="overflow-hidden rounded-xl border border-line bg-card">
+        {/* overflow-clip（不是 hidden）：表頭才能往下滑時固定在上面 */}
+        <div className="overflow-clip rounded-xl border border-line bg-card">
           <table className="w-full text-[15px]" aria-label="庫存表">
             <thead>
-              <tr className="border-b border-line bg-paper text-[12px] text-mute">
-                <th className="px-3 py-2 text-left font-medium">角色</th>
-                <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium">現有</th>
-                <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium text-good">一定到</th>
-                {!hideUnsure && <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium text-warn">不一定</th>}
-                <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-medium text-info">客人訂</th>
-                <th className="whitespace-nowrap px-1 py-2 text-right text-[11.5px] font-semibold text-ink">庫存</th>
-                <th className="hidden px-2 py-2 text-right font-medium md:table-cell">自留</th>
-                <th className="hidden px-2 py-2 text-right font-medium md:table-cell">平均成本</th>
-                <th className="px-2 py-2"><span className="sr-only">動作</span></th>
+              {/* 往下滑時表頭固定在上面（手機在頂列下面），才看得到每一欄是什麼 */}
+              <tr className="text-[12px] text-mute [&>th]:sticky [&>th]:top-(--mobile-header-h) [&>th]:z-10 [&>th]:shadow-[inset_0_-1px_0_var(--color-line)] md:[&>th]:top-0">
+                <th className="bg-paper px-3 py-2 text-left font-medium">角色</th>
+                <th className="whitespace-nowrap bg-paper px-1 py-2 text-right text-[11.5px] font-medium">現有</th>
+                <th className="whitespace-nowrap bg-paper px-1 py-2 text-right text-[11.5px] font-medium text-good">一定到</th>
+                {!hideUnsure && <th className="whitespace-nowrap bg-paper px-1 py-2 text-right text-[11.5px] font-medium text-warn">不一定</th>}
+                <th className="whitespace-nowrap bg-paper px-1 py-2 text-right text-[11.5px] font-medium text-info">客人訂</th>
+                <th className="whitespace-nowrap bg-ai-soft px-1.5 py-2 text-right text-[11.5px] font-semibold text-ink">庫存</th>
+                <th className="hidden bg-paper px-2 py-2 text-right font-medium md:table-cell">自留</th>
+                <th className="hidden bg-paper px-2 py-2 text-right font-medium md:table-cell">平均成本</th>
+                <th className="bg-paper px-2 py-2"><span className="sr-only">動作</span></th>
               </tr>
             </thead>
             <tbody>
@@ -369,18 +372,20 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                                   <td className="num px-1.5 py-2 text-right align-top" data-k="ordered">
                                     <DemandButton name={label(r)} shown={r.s.openDemand} cls={r.s.openDemand ? (left(r) < 0 ? "font-semibold text-bad" : "font-semibold text-info") : "text-mute"} operators={activeOps} viewer={owner} rows={(demandAll.get(r.p.id) ?? []).map((d) => ({ ...d, at: fmtMonthDay(d.at) }))} />
                                   </td>
-                                  <td className={`num px-1.5 py-2 text-right align-top ${left(r) < 0 ? "font-semibold text-bad" : left(r) ? "font-semibold" : "text-mute"}`} data-k="free">{left(r)}</td>
+                                  <td className={`num bg-ai-soft px-1.5 py-2 text-right align-top ${left(r) < 0 ? "font-semibold text-bad" : left(r) ? "font-semibold" : "text-mute"}`} data-k="free">{left(r)}</td>
                                   <td className="num hidden px-2 py-2 text-right align-top md:table-cell" data-k="kept">{r.s.kept}</td>
                                   <td className="num hidden px-2 py-2 text-right align-top md:table-cell" data-k="avg">{avgOf(r) ? `${formatTwd(avgOf(r)!.avg)}${avgOf(r)!.tentative ? "*" : ""}` : "無"}</td>
                                   <td className="whitespace-nowrap px-2 py-1.5 text-right align-top">
                                     <SellButton small primary={r.s.available > 0} label="賣" me={owner || me} product={product} />
-                                    <KeepButton tiny productId={r.p.id} name={r.p.name} available={r.s.available} kept={r.s.kept} owners={owners} me={owner || me} />
                                   </td>
                                 </tr>
                                 {/* 手機：平均成本、自留等放在這一列下面，佔滿寬度，不會擠成好幾行 */}
                                 {meta && (
                                   <tr className="border-b border-line-2 md:hidden" data-testid="stock-meta" data-name={r.p.name}>
-                                    <td colSpan={COLS} className="pt-0 pr-3 pb-2 pl-9 text-[12px] leading-snug text-mute">{meta}</td>
+                                    {/* 拆成三格：庫存那欄的底色才會一路連下來 */}
+                                    <td colSpan={STOCK_COL} className="pt-0 pr-3 pb-2 pl-9 text-[12px] leading-snug text-mute">{meta}</td>
+                                    <td className="bg-ai-soft" aria-hidden />
+                                    <td colSpan={COLS - STOCK_COL - 1} aria-hidden />
                                   </tr>
                                 )}
                                 </Fragment>
@@ -399,7 +404,7 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                 <td className="num px-1.5 py-2 text-right text-good">{all.incoming - all.unsure}</td>
                 {!hideUnsure && <td className="num px-1.5 py-2 text-right text-warn">{all.unsure}</td>}
                 <td className="num px-1.5 py-2 text-right text-info">{all.ordered}</td>
-                <td className={`num px-1.5 py-2 text-right ${all.left < 0 ? "text-bad" : ""}`} data-testid="stock-total-free">{all.left}</td>
+                <td className={`num bg-ai-soft px-1.5 py-2 text-right ${all.left < 0 ? "text-bad" : ""}`} data-testid="stock-total-free">{all.left}</td>
                 <td className="num hidden px-2 py-2 text-right md:table-cell">{all.kept}</td>
                 <td className="hidden md:table-cell" />
                 <td />

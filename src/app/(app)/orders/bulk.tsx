@@ -4,7 +4,7 @@ import { createContext, useContext, useState } from "react";
 import { DateTimeField, Modal, SelectField, useIdemKey } from "@/components/client";
 import { toDateTimeInput } from "@/lib/labels";
 import { Button, useRun } from "@/components/client";
-import { assignUnassignedDemandAction, bulkConfirmAction, bulkGroupBuyAction, bulkPayAction, bulkPayPreviewAction, bulkShipAction, bulkShipPreviewAction } from "@/actions/orders";
+import { assignUnassignedDemandAction, mergeOrdersAction, mergePreviewAction, bulkConfirmAction, bulkGroupBuyAction, bulkPayAction, bulkPayPreviewAction, bulkShipAction, bulkShipPreviewAction } from "@/actions/orders";
 import { Choice } from "@/components/choice";
 
 type Ctx = { sel: Set<string>; toggle: (id: string, on: boolean) => void; setAll: (on: boolean) => void; ids: string[]; clear: () => void };
@@ -89,6 +89,7 @@ export function BulkBar({ groupBuys = [], owners, acting = "", pendingIds = [], 
           </span>
         )}
         <span className="flex flex-wrap items-center gap-2">
+          {!owners && n >= 2 && <BulkMerge ids={[...c.sel]} onDone={c.clear} />}
           {!owners && <BulkShip ids={[...c.sel]} methods={methods} onDone={c.clear} />}
           {!owners && <BulkPay ids={[...c.sel]} onDone={c.clear} />}
           {[...c.sel].some((id) => pendingIds.includes(id)) && (
@@ -169,6 +170,48 @@ export function BulkShip({ ids, methods, onDone, label = "出貨", primary, wide
           <DateTimeField label="出貨時間" value={f.at || toDateTimeInput(new Date())} onChange={(v) => setF({ ...f, at: v })} />
           <p className="text-[12.5px] text-mute">單號要填的，到訂單裡再補。</p>
         </div>
+      </Modal>
+    </>
+  );
+}
+
+type MergePv = { keep: { id: string; orderNo: string }; others: string[]; buyer: string; count: number; lines: { name: string; qty: number; amount: number }[]; qty: number; receivable: number; paid: number };
+
+/** 合併訂單：同一位客人的幾張單合成一張；先列出合併後的內容，確認再合 */
+export function BulkMerge({ ids, onDone }: { ids: string[]; onDone?: () => void }) {
+  const { run, pending } = useRun();
+  const [pv, setPv] = useState<MergePv | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const open = async () => {
+    const r = await mergePreviewAction(ids);
+    if (r.ok) { setErr(null); setPv(r.data); } else setErr(r.error);
+  };
+  return (
+    <>
+      <Button small variant="primary" onClick={open} data-testid="merge-open">合併成一張</Button>
+      {err && <span className="w-full text-[13px] text-bad md:w-auto" role="alert">{err}</span>}
+      <Modal
+        open={pv !== null}
+        onClose={() => setPv(null)}
+        title={pv ? `把 ${pv.buyer} 的 ${pv.count} 張單合成一張` : ""}
+        footer={
+          <Button variant="primary" loading={pending} onClick={() => run(() => mergeOrdersAction(ids), { success: (d) => `已合併成 ${d.orderNo}（併入 ${d.merged} 張）`, onOk: () => { setPv(null); onDone?.(); } })}>
+            合併成一張
+          </Button>
+        }
+      >
+        {pv && (
+          <div className="grid gap-2" data-testid="merge-preview">
+            <ul className="divide-y divide-line-2 text-[14px]">
+              {pv.lines.map((l, i) => (
+                <li key={i} className="flex justify-between gap-2 py-1.5"><span>{l.name} ×{l.qty}</span><span className="num">NT${l.amount.toLocaleString()}</span></li>
+              ))}
+              <li className="flex justify-between gap-2 py-1.5 font-semibold"><span>共 {pv.qty} 件，應收</span><span className="num">NT${pv.receivable.toLocaleString()}</span></li>
+              <li className="flex justify-between gap-2 py-1.5"><span>已收</span><span className="num">NT${pv.paid.toLocaleString()}</span></li>
+            </ul>
+            <p className="text-[13px] text-mute">合併後留最早的單號 {pv.keep.orderNo}，其他 {pv.others.length} 張（{pv.others.join("、")}）單號不再用。已經收的錢、出貨紀錄、運費都一起搬過去，金額不會變。</p>
+          </div>
+        )}
       </Modal>
     </>
   );

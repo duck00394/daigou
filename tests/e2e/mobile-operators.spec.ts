@@ -59,7 +59,7 @@ test("手機：建團選負責人、登記付款與收貨，對帳頁不橫向�
   await page.screenshot({ path: "test-results/mobile_operators.png", fullPage: true });
 });
 
-test("手機：庫存是表格，可直接按「賣」、小小的「留」與改回出售", async ({ page }) => {
+test("手機：庫存是表格，可直接按「賣」；自留與改回出售在商品頁", async ({ page }) => {
   const name = `E2E 手機現貨 ${Date.now().toString(36)}`; // 每次不同，重複執行也不會互相干擾
   await seedStock(name, 3, 300, 450);
   await login(page);
@@ -67,14 +67,18 @@ test("手機：庫存是表格，可直接按「賣」、小小的「留」與�
   const card = page.locator(`[data-testid="stock-row"][data-name="${name}"]`);
   await expect(card.locator('[data-k="free"]')).toHaveText("3");
   await expect(card).toContainText("成本 NT$300");
-  await card.getByRole("button", { name: /^自留/ }).click();
+  // 庫存表不放「留」：自留、改回出售都在商品頁
+  await expect(card.getByRole("button", { name: /^自留/ })).toHaveCount(0);
+  await card.locator('a[href^="/products/"]').first().click();
+  await page.getByRole("button", { name: /^自留/ }).first().click();
   const dlg = page.getByRole("dialog");
   await dlg.getByRole("button", { name: "自留 1 件" }).click();
   await toast(page, "已自留 1 件");
-  await card.getByRole("button", { name: "自留 1" }).click();
+  await page.getByRole("button", { name: "自留 1" }).click();
   await choose(dlg, "操作", "改回出售");
   await dlg.getByRole("button", { name: "改回出售 1 件" }).click();
   await toast(page, "已改回出售 1 件");
+  await page.goto(`/inventory?tab=stock&q=${encodeURIComponent(name)}`);
   // 卡片上直接出售 1 件：售價自動帶入參考售價、顯示預估毛利；日期設在過去月份，不影響其他測試的本月報表
   await card.getByRole("button", { name: "賣", exact: true }).click();
   await expect(dlg.getByLabel("每件售價（台幣）")).toHaveValue("450");

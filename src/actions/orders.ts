@@ -6,6 +6,7 @@ import { tx, prisma, BizError } from "@/server/db";
 import * as o from "@/server/services/orders";
 import * as pay from "@/server/services/payments";
 import * as flow from "@/server/services/order-flow";
+import { mergeOrders, mergePreview } from "@/server/services/order-merge";
 import { buyerWarnings } from "@/server/services/buyers";
 import { parseDateTimeInput } from "@/lib/labels";
 
@@ -260,4 +261,12 @@ export async function bulkPayPreviewAction(orderIds: string[]) {
 export async function bulkPayAction(input: { orderIds: string[]; method: string | null; paidAt: string | null; dedupeKey: string }) {
   const f = z.object({ orderIds: z.array(z.string()).min(1).max(500), method: z.string().max(60).nullable(), paidAt: z.string().nullable(), dedupeKey: z.string().min(8).max(100) }).parse(input);
   return run((a) => tx((t) => flow.bulkPay(t, a, { ...f, paidAt: parseDateTimeInput(f.paidAt) ?? undefined }), { timeout: 180_000 }));
+}
+
+/** 合併訂單：同一位客人的幾張單合成一張（先看內容再按） */
+export async function mergePreviewAction(orderIds: string[]) {
+  return run(() => tx((t) => mergePreview(t, z.array(z.string().min(1).max(64)).min(1).max(100).parse(orderIds))), "read");
+}
+export async function mergeOrdersAction(orderIds: string[]) {
+  return run((a) => tx((t) => mergeOrders(t, a, z.array(z.string().min(1).max(64)).min(2).max(100).parse(orderIds)), { timeout: 60_000 }));
 }

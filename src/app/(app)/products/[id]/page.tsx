@@ -3,7 +3,10 @@ import { notFound } from "next/navigation";
 import { prisma, tx } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { inventoryFor, mineBatchWhere, mineItemWhere, stockKeys } from "@/server/services/mine";
-import { lotOwners, ownerOfLot } from "@/server/services/ownership";
+import { JOINT, NONE, lotOwners, ownerOfLot, stockByOwner } from "@/server/services/ownership";
+import { getMe } from "@/server/me";
+import { listOperators } from "@/server/services/operators";
+import { KeepButton } from "../../inventory/parts";
 import { viewOwner } from "@/server/view";
 import { productLots } from "@/server/services/inventory";
 import { productBuyers } from "@/server/services/reports";
@@ -43,6 +46,16 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
     productBuyers(prisma, id, sp.categoryId, owner),
     prisma.purchaseBatchItem.findMany({ where: { productId: id, batch: { status: { not: "CANCELLED" }, ...mineBatchWhere(owner) } }, include: { batch: { include: { supplierRef: true } }, movements: { where: { kind: "RECEIVE" }, select: { onHandDelta: true } } }, orderBy: { createdAt: "desc" }, take: 30 }),
   ]);
+  // 自留（從庫存表移到這裡）：照「現在看誰的」只列那個人的貨
+  const [byOwner, me, operators] = await Promise.all([tx((t) => stockByOwner(t, { productIds: [id] })), getMe(), listOperators(prisma)]);
+  const ownerName = (k: string) => (k === JOINT ? "合資" : k === NONE ? "未指定" : (operators.find((o) => o.id === k)?.name ?? "未指定"));
+  const keepKeys = stockKeys(owner);
+  const keepOwners = [...(byOwner.get(id)?.entries() ?? [])]
+    .filter(([k, x]) => (x.free > 0 || x.kept > 0) && (!keepKeys || keepKeys.includes(k)))
+    .map(([k, x]) => ({ key: k, label: k === me ? `${ownerName(k)}（我）` : ownerName(k), free: x.free, kept: x.kept }))
+    .sort((a, z) => (a.key === me ? -1 : z.key === me ? 1 : 0));
+  const keepFree = keepOwners.reduce((a, o) => a + o.free, 0);
+  const keptN = keepOwners.reduce((a, o) => a + o.kept, 0);
   const s = inv.get(id) ?? { onHand: 0, reserved: 0, available: 0, incoming: 0, shipped: 0, activeOrdered: 0, openDemand: 0, unallocated: 0, shortage: 0 };
   const batchName = new Map(batches.map((b) => [b.id, `${b.batch.code} ${b.batch.name}`]));
 
@@ -61,6 +74,7 @@ export default async function ProductPage({ params, searchParams }: { params: Pr
         actions={
           <>
             <LinkButton href={`/inventory?tab=receive&productId=${id}`}>登記到貨</LinkButton>
+            <KeepButton small productId={id} name={p.name} available={keepFree} kept={keptN} owners={keepOwners} me={owner || me} />
             <ArchiveButton id={id} archived={!!p.archivedAt} />
           </>
         }

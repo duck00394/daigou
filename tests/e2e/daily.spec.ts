@@ -103,10 +103,13 @@ test("桌面：砍單、跨團複製、活動頁比價、自留", async ({ page 
 
   await page.goto("/inventory?tab=stock&q=萬聖節吉伊 吊娃");
   const stockRow = page.locator('[data-testid="stock-row"][data-name="萬聖節吉伊 吊娃"]');
-  await stockRow.getByRole("button", { name: "自留" }).click();
+  // 自留在商品頁（庫存表不放「留」）
+  await stockRow.locator('a[href^="/products/"]').first().click();
+  await page.getByRole("button", { name: /^自留/ }).first().click();
   await dlg.getByLabel("數量").fill("2");
   await dlg.getByRole("button", { name: "自留 2 件" }).click();
   await toast(page, "已自留 2 件");
+  await page.goto("/inventory?tab=stock&q=萬聖節吉伊 吊娃");
   await expect(stockRow.locator('[data-k="kept"]')).toHaveText(String(before.kept + 2)); // 自留
   await expect(stockRow.locator('[data-k="free"]')).toHaveText(String(before.avail + 1)); // 可售：到貨 3 − 自留 2
 
