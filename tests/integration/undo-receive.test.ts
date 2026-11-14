@@ -54,4 +54,30 @@ describe("撤回收貨、刪除取消的團", () => {
     expect(await checkIntegrity(prisma)).toEqual([]);
   });
 
+  it("這團的貨已經賣掉、別團手上還有：從同一個人別團補過來，撤回成功；別人的貨不拿來補", async () => {
+    const { quickSale } = await import("@/server/services/quick-sale");
+    const a = await prisma.operator.create({ data: { code: "A", name: "小明" } });
+    const bOp = await prisma.operator.create({ data: { code: "B", name: "小華" } });
+    const first = await tx((t) => createBatch(t, actor, { name: "先到團", supplier: "代購", orderedById: a.id, items: [{ productId: s.p1.id, qty: 2, unitCost: 100, currency: "TWD" }] }));
+    await tx((t) => receiveAll(t, actor, first.id, { receivedById: a.id }));
+    const later = await tx((t) => createBatch(t, actor, { name: "後到團", supplier: "代購", orderedById: a.id, items: [{ productId: s.p1.id, qty: 3, unitCost: 120, currency: "TWD" }] }));
+    await tx((t) => receiveAll(t, actor, later.id, { receivedById: a.id }));
+    const other = await tx((t) => createBatch(t, actor, { name: "別人的團", supplier: "代購", orderedById: bOp.id, items: [{ productId: s.p1.id, qty: 5, unitCost: 90, currency: "TWD" }] }));
+    await tx((t) => receiveAll(t, actor, other.id, { receivedById: bOp.id }));
+    // 賣 1 件（先進先出扣到「先到團」），手上：小明 4、小華 5
+    await tx((t) => quickSale(t, actor, { productId: s.p1.id, qty: 1, unitPrice: 300, idemKey: "undo-sale-0001", owner: a.id }));
+    // 撤回「先到團」：這團剩 1 件，差的 1 件從「後到團」補
+    const r = await tx((t) => undoReceiving(t, actor, { batchId: first.id }));
+    expect(r.qty).toBe(2);
+    expect((await tx((t) => inventorySummary(t, [s.p1.id]))).get(s.p1.id)!.onHand).toBe(2 + 5);
+    expect((await prisma.purchaseBatch.findUniqueOrThrow({ where: { id: first.id } })).status).toBe("ORDERED");
+    const laterItem = await prisma.purchaseBatchItem.findFirstOrThrow({ where: { batchId: later.id } });
+    const laterLeft = await prisma.inventoryMovement.aggregate({ where: { purchaseBatchItemId: laterItem.id }, _sum: { onHandDelta: true } });
+    expect(laterLeft._sum.onHandDelta).toBe(2);
+    expect(await checkIntegrity(prisma)).toEqual([]);
+    // 小明手上的 2 件都賣掉，再撤回「後到團」：小明別團沒貨了，小華的貨不能拿來補
+    await tx((t) => quickSale(t, actor, { productId: s.p1.id, qty: 2, unitPrice: 300, idemKey: "undo-sale-0002", owner: a.id }));
+    await expect(tx((t) => undoReceiving(t, actor, { batchId: later.id }))).rejects.toThrow("還差 3 件");
+    expect(await checkIntegrity(prisma)).toEqual([]);
+  });
 });

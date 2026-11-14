@@ -4,6 +4,7 @@ import { BizError, lockRows, type Tx } from "@/server/db";
 import { audit, emptyToNull, type Actor } from "./common";
 import { checkOperator } from "./operators";
 import { receiveStock, refreshBatchStatusById } from "./inventory";
+import { lotOwners, ownerOfLot } from "./ownership";
 
 export interface ReceivingLineInput {
   batchItemId: string;
@@ -119,11 +120,40 @@ export async function undoReceiving(t: Tx, actor: Actor, input: { batchId: strin
   const free = new Map(lots.map((l) => [l.purchaseBatchItemId, (l._sum.onHandDelta ?? 0) - (l._sum.reservedDelta ?? 0)]));
   const want = new Map<string, number>();
   for (const m of recv) want.set(m.purchaseBatchItemId!, (want.get(m.purchaseBatchItemId!) ?? 0) + m.onHandDelta);
-  for (const [id, q] of want) {
-    const f = free.get(id) ?? 0;
-    if (q > f) {
-      const name = b.items.find((i) => i.id === id)?.product.name ?? "";
-      throw new BizError(`「${name}」這批只剩 ${Math.max(0, f)} 件在手上（其他已賣出、自留或留給買家），要先作廢出售或取消自留，才能撤回`);
+  // 這批的貨已經賣掉（或自留、保留）：從同一個人別團手上的同款補過來（成本用平均，記在哪團不影響賺多少）
+  // 補的方式：別團 −n、這團 +n（兩筆盤點調整），之後這團的收貨就能拿掉；別團也不夠才擋
+  const short = [...want].map(([id, q]) => ({ id, need: q - Math.max(0, free.get(id) ?? 0) })).filter((x) => x.need > 0);
+  const moves: { from: string; to: string; productId: string; qty: number }[] = [];
+  if (short.length) {
+    const pidOf = new Map(b.items.map((i) => [i.id, i.productId]));
+    const others = await t.purchaseBatchItem.findMany({ where: { productId: { in: short.map((s) => pidOf.get(s.id)!) }, id: { notIn: [...want.keys()] } }, select: { id: true, productId: true } });
+    const owners = await lotOwners(t, [...short.map((s) => s.id), ...others.map((o) => o.id)]);
+    const oLots = others.length
+      ? await t.inventoryMovement.groupBy({ by: ["purchaseBatchItemId"], where: { purchaseBatchItemId: { in: others.map((o) => o.id) } }, _sum: { onHandDelta: true, reservedDelta: true }, _min: { createdAt: true } })
+      : [];
+    const oFree = new Map(oLots.map((l) => [l.purchaseBatchItemId!, (l._sum.onHandDelta ?? 0) - (l._sum.reservedDelta ?? 0)]));
+    const oldest = (id: string) => oLots.find((l) => l.purchaseBatchItemId === id)?._min.createdAt?.getTime() ?? 0;
+    for (const s of short) {
+      const pid = pidOf.get(s.id)!;
+      const own = ownerOfLot(owners, s.id);
+      let left = s.need;
+      const cands = others.filter((o) => o.productId === pid && ownerOfLot(owners, o.id) === own && (oFree.get(o.id) ?? 0) > 0).sort((a, z) => oldest(a.id) - oldest(z.id));
+      for (const c of cands) {
+        if (left <= 0) break;
+        const take = Math.min(left, oFree.get(c.id)!);
+        moves.push({ from: c.id, to: s.id, productId: pid, qty: take });
+        oFree.set(c.id, oFree.get(c.id)! - take);
+        left -= take;
+      }
+      if (left > 0) {
+        const name = b.items.find((i) => i.id === s.id)?.product.name ?? "";
+        throw new BizError(`「${name}」這批已經賣掉（或自留、留給買家），別團手上的也不夠補，還差 ${left} 件；要先作廢出售或取消自留，才能撤回`);
+      }
+    }
+    for (const m of moves) {
+      const reason = "撤回收貨：這團的貨已經賣掉，從別團補過來";
+      await t.inventoryMovement.create({ data: { productId: m.productId, kind: "ADJUST", onHandDelta: -m.qty, purchaseBatchItemId: m.from, reason, actorId: actor.userId } });
+      await t.inventoryMovement.create({ data: { productId: m.productId, kind: "ADJUST", onHandDelta: m.qty, purchaseBatchItemId: m.to, reason, actorId: actor.userId } });
     }
   }
   await t.inventoryMovement.deleteMany({ where: { id: { in: recv.map((m) => m.id) } } });
@@ -135,6 +165,6 @@ export async function undoReceiving(t: Tx, actor: Actor, input: { batchId: strin
   await t.receivingRecord.deleteMany({ where: { id: { in: recs.map((r) => r.id) } } });
   await refreshBatchStatusById(t, b.id);
   const qty = [...want.values()].reduce((a, x) => a + x, 0);
-  await audit(t, actor, "batch.undoReceiving", "PurchaseBatch", b.id, { recordId: input.recordId ?? null, qty });
+  await audit(t, actor, "batch.undoReceiving", "PurchaseBatch", b.id, { recordId: input.recordId ?? null, qty, ...(moves.length ? { backfill: moves } : {}) });
   return { qty };
 }

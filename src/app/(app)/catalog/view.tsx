@@ -425,8 +425,10 @@ function ReorderList({ tree, pins, me, operators, onDone }: { tree: TreeKind[]; 
         </div>
         {pinned.map((s) => (
           <div key={s.id} className="flex items-center justify-between gap-2 border-t border-line-2 px-3 py-2 text-[15px]" data-testid="pinned-row">
-            <span className="min-w-0 truncate">{s.name}</span>
+            <span className="min-w-0 flex-1 truncate">{s.name}</span>
             {pinBox(s)}
+            {/* 一個一個拿掉（不用清空全部）；拿掉後回到下面原本的種類 */}
+            <button type="button" aria-label={`${s.name} 拿出常用`} disabled={pending} className={`${b} shrink-0 border-line bg-card text-ink-2`} onClick={() => run(() => setSeriesPinAction(s.id, null), { success: `「${s.name}」拿出常用` })} data-testid="unpin">拿掉</button>
           </div>
         ))}
         {!me && (
