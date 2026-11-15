@@ -52,6 +52,13 @@ export async function updateBuyer(t: Tx, actor: Actor, id: string, input: BuyerI
   await audit(t, actor, "buyer.update", "Buyer", id, { name: [before.name, data.name], lineName: [before.lineName, data.lineName] });
 }
 
+/** 只改內部備註（客人頁總覽直接編輯用） */
+export async function updateBuyerNotes(t: Tx, actor: Actor, id: string, notes: string | null) {
+  const v = notes?.trim() ? notes.trim() : null;
+  await t.buyer.update({ where: { id }, data: { notes: v } });
+  await audit(t, actor, "buyer.notes", "Buyer", id, {});
+}
+
 export async function addBuyerAlias(t: Tx, actor: Actor, buyerId: string, alias: string) {
   const a = alias.trim();
   const normalized = normalizeKey(a);

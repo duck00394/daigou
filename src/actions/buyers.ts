@@ -29,6 +29,12 @@ export async function saveBuyerAction(id: string | null, form: BuyerForm) {
     return { id: row.id, name: row.name, code: row.code };
   });
 }
+export async function saveBuyerNotesAction(id: string, notes: string | null) {
+  return run(async (a) => {
+    const v = z.string().max(5000).nullable().parse(notes);
+    await tx((t) => b.updateBuyerNotes(t, a, z.string().min(1).max(64).parse(id), v));
+  });
+}
 export async function addBuyerAliasAction(buyerId: string, alias: string) {
   return run((a) => tx((t) => b.addBuyerAlias(t, a, buyerId, z.string().max(100).parse(alias))));
 }

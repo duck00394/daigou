@@ -4,7 +4,7 @@ import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth";
 import { viewOwner } from "@/server/view";
 import { PageHeader, Section, TableWrap, Twd, Empty, Stat, StatusBadge, LinkButton, Badge } from "@/components/ui";
-import { BuyerFormView, BuyerAliases, TagManager, IncidentForm, MergeButton } from "../forms";
+import { BuyerFormView, BuyerAliases, BuyerNotes, TagManager, IncidentForm, MergeButton } from "../forms";
 import { fmtDate, incidentKind, orderStatus, paymentStatus, shipStatus, procurementStatus, refundStatus, flagLabel } from "@/lib/labels";
 
 const TABS = [
@@ -144,7 +144,7 @@ export default async function BuyerPage({ params, searchParams }: { params: Prom
               <TagManager buyerId={id} tags={tagRows} available={tagsAll.filter((t) => !activeTagIds.has(t.id))} />
             </Section>
             <Section title="內部備註">
-              <p className="text-sm whitespace-pre-wrap">{b.notes ?? <span className="text-mute">沒有備註。</span>}</p>
+              <BuyerNotes buyerId={id} notes={b.notes} />
             </Section>
             <Section title="別名">
               <BuyerAliases buyerId={id} aliases={b.aliases} />

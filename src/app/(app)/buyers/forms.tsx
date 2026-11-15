@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Button, ConfirmButton, Modal, TextField, TextArea, SelectField, useRun, inputCls, notify } from "@/components/client";
 import { BuyerPicker, type BuyerOpt } from "@/components/pickers";
 import { ChannelPicker } from "@/components/channel-picker";
-import { saveBuyerAction, addBuyerAliasAction, removeBuyerAliasAction, addBuyerTagAction, removeBuyerTagAction, addIncidentAction, mergePreviewAction, mergeBuyersAction, type BuyerForm } from "@/actions/buyers";
+import { saveBuyerAction, saveBuyerNotesAction, addBuyerAliasAction, removeBuyerAliasAction, addBuyerTagAction, removeBuyerTagAction, addIncidentAction, mergePreviewAction, mergeBuyersAction, type BuyerForm } from "@/actions/buyers";
 import { incidentKind } from "@/lib/labels";
 
 export function BuyerFormView({ id, initial, channels = [] }: { id: string | null; initial: BuyerForm; channels?: string[] }) {
@@ -47,6 +47,35 @@ export function BuyerFormView({ id, initial, channels = [] }: { id: string | nul
       <Button type="submit" variant="primary" loading={pending}>
         {id ? "儲存買家" : "新增買家"}
       </Button>
+    </form>
+  );
+}
+
+/** 總覽的內部備註：按「編輯」直接在這裡寫、存（不用跑到基本資料） */
+export function BuyerNotes({ buyerId, notes }: { buyerId: string; notes: string | null }) {
+  const { run, pending } = useRun();
+  const [editing, setEditing] = useState(false);
+  const [v, setV] = useState(notes ?? "");
+  if (!editing)
+    return (
+      <div className="flex items-start justify-between gap-3">
+        <p className="min-w-0 text-sm whitespace-pre-wrap">{notes ?? <span className="text-mute">沒有備註。</span>}</p>
+        <Button small onClick={() => { setV(notes ?? ""); setEditing(true); }} data-testid="notes-edit">{notes ? "編輯" : "寫備註"}</Button>
+      </div>
+    );
+  return (
+    <form
+      className="grid gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => saveBuyerNotesAction(buyerId, v), { success: "備註已儲存", onOk: () => setEditing(false) });
+      }}
+    >
+      <TextArea label="內部備註（只有你看得到）" rows={4} value={v} onChange={(e) => setV(e.target.value)} autoFocus />
+      <div className="flex gap-2">
+        <Button type="submit" variant="primary" loading={pending}>儲存</Button>
+        <Button type="button" onClick={() => setEditing(false)}>取消</Button>
+      </div>
     </form>
   );
 }
