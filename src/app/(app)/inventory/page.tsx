@@ -296,12 +296,12 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
         <Section><Empty action={only === "all" ? undefined : <LinkButton href="/purchase" primary>＋ 新增採購</LinkButton>}>{only === "all" ? "沒有符合的商品。換個關鍵字或系列試試。" : "這裡目前沒有庫存，也沒有還沒到的貨。新增採購後，買的東西會出現在這裡。"}</Empty></Section>
       ) : (
         <SumProvider qtyLabel="現有 " avgLabel="平均每支">
-        {/* overflow-clip（不是 hidden）：表頭才能往下滑時固定在上面 */}
-        <div className="overflow-clip rounded-xl border border-line bg-card">
+        {/* 外框不設 overflow（iPhone Safari 有 overflow 時表頭不會固定）；四個角改由表頭、合計的格子自己圓 */}
+        <div className="rounded-xl border border-line bg-card">
           <table className="w-full text-[15px]" aria-label="庫存表">
             <thead>
               {/* 往下滑時表頭固定在上面（手機在頂列下面），才看得到每一欄是什麼 */}
-              <tr className="text-[12px] text-mute [&>th]:sticky [&>th]:top-(--mobile-header-h) [&>th]:z-10 [&>th]:shadow-[inset_0_-1px_0_var(--color-line)] md:[&>th]:top-0">
+              <tr className="text-[12px] text-mute [&>th]:sticky [&>th]:top-(--mobile-header-h) [&>th]:z-10 [&>th]:shadow-[inset_0_-1px_0_var(--color-line)] md:[&>th]:top-0 [&>th:first-child]:rounded-tl-[11px] [&>th:last-child]:rounded-tr-[11px]">
                 <th className="bg-paper px-3 py-2 text-left font-medium">角色</th>
                 <th className="whitespace-nowrap bg-paper px-1 py-2 text-right text-[11.5px] font-medium">現有</th>
                 <th className="whitespace-nowrap bg-paper px-1 py-2 text-right text-[11.5px] font-medium text-good">一定到</th>
@@ -398,13 +398,13 @@ async function StockTab({ q, only, cat = "", type = "", owner = "", kind = "", v
                   })}
                 </Fragment>
               ))}
-              <tr className="border-t border-line bg-paper font-semibold">
+              <tr className="border-t border-line font-semibold [&>td]:bg-paper [&>td:first-child]:rounded-bl-[11px] [&>td:last-child]:rounded-br-[11px]">
                 <td className="px-3 py-2">合計<span className="ml-1 text-[12px] font-normal text-mute">成本 {formatTwd(all.cost)}</span></td>
                 <td className="num px-1.5 py-2 text-right" data-testid="stock-total-onhand">{all.onHand}</td>
                 <td className="num px-1.5 py-2 text-right text-good">{all.incoming - all.unsure}</td>
                 {!hideUnsure && <td className="num px-1.5 py-2 text-right text-warn">{all.unsure}</td>}
                 <td className="num px-1.5 py-2 text-right text-info">{all.ordered}</td>
-                <td className={`num bg-ai-soft px-1.5 py-2 text-right ${all.left < 0 ? "text-bad" : ""}`} data-testid="stock-total-free">{all.left}</td>
+                <td className={`num px-1.5 py-2 text-right [tr>&]:bg-ai-soft! ${all.left < 0 ? "text-bad" : ""}`} data-testid="stock-total-free">{all.left}</td>
                 <td className="num hidden px-2 py-2 text-right md:table-cell">{all.kept}</td>
                 <td className="hidden md:table-cell" />
                 <td />
